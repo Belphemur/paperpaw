@@ -117,3 +117,5 @@ fn a_highlight_keeps_its_text_when_the_books_styles_are_switched() {
 
 #[path = "index_reads.rs"]
 mod index_reads;
+#[path = "ended.rs"]
+mod ended;

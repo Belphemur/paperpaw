@@ -90,6 +90,36 @@ impl Document for Text {
     }
 }
 
+/// One block that begins at offset 8 of its section, as the first of a
+/// converted chapter does: the text, or the picture.
+struct Late {
+    image: Option<ImageRef>,
+    metadata: Metadata,
+}
+
+impl Document for Late {
+    fn metadata(&self) -> &Metadata {
+        &self.metadata
+    }
+
+    fn sections(&self) -> u32 {
+        1
+    }
+
+    fn section_len(&self, _: u32) -> u32 {
+        18
+    }
+
+    fn block_at(&self, _: &dyn Storage, at: Locator) -> Result<Option<Block>, DocumentError> {
+        let kind = match self.image {
+            Some(_) => BlockKind::Image,
+            None => BlockKind::Paragraph,
+        };
+        let block = Block::new(kind, 8, 18, String::from("aaaa bbbb"));
+        Ok((at.offset < 18).then(|| block.image(self.image.clone())))
+    }
+}
+
 /// Body text: 1 unit per character (bold 2), lines of 10 with ascent 8;
 /// headings: 2 units, lines of 20.
 struct Units;
@@ -947,5 +977,30 @@ fn script_option_bits_do_what_their_names_say() {
         ScriptOptions::KEEP_ALL.with(ScriptOptions::LINE_BREAK_STRICT),
     ] {
         assert_eq!(lines(latin, options), plain);
+fn before_a_block_the_line_start_is_where_a_page_from_there_starts() {
+    let picture = ImageRef {
+        path: String::from("p.gray"),
+        width: 10,
+        height: 10,
+    };
+    for image in [None, Some(picture)] {
+        let doc = Late {
+            image,
+            metadata: Metadata::default(),
+        };
+        let storage = paperpaw_document::NoStorage;
+        let cx = LayoutContext {
+            document: &doc,
+            storage: &storage,
+            width: 100.0,
+            style: &STYLE,
+            typesetter: &Units,
+            hyphenate: None,
+        };
+        let at = Locator::new(0, 0);
+        let start = line_start(&cx, at).unwrap();
+        assert_eq!(start, Locator::new(0, 8));
+        assert_eq!(start, layout_page(&cx, at, 100.0).unwrap().start);
+        assert_eq!(line_start(&cx, start).unwrap(), start, "it stays");
     }
 }

@@ -6,6 +6,13 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+### Added
+
+- *End of book*, a new plugin: when the last page of a book is reached, a screen offers the next book of its
+  series (or the library), a rating of one to five (`4 / 5`, kept as a book field and shown as a badge on the
+  book's row and on its information page) and whether the book counts as finished. Two settings in the reading
+  group: *Show a screen at the end of a book* and *Mark the book as finished* (both on). It needs no SDK change.
+
 ### Changed
 
 - Line breaking follows Unicode (UAX #14) where the text needs it: Korean breaks between syllables, Chinese and
@@ -288,7 +295,30 @@ change the plugin SDK.
   came to nothing) and leave out a word drawn between two of a line that
   runs both ways; left and right move the selection to the word drawn
   beside.
+- SDK: `layout::line_start` of a position before a block (a section's start,
+  say) gives that block's start, where a page laid out from there starts, not
+  the position itself. Comparing it with a page's start or looking it up in a
+  `PageIndex` then needs no more care.
+
+### Fixed
+
+- Choosing text with the buttons: the page buttons (the X4's side buttons) now move by line, as Up and Down do,
+  not word by word, and Left from the first word of the page reaches the last word (Right from the last
+  reaches the first), instead of stopping there.
+- *Page with a picture*: a picture made for the whole screen (the X4's 480 × 800, as CrossPoint's) now covers the
+  whole screen at size 100 %. The size was a share of the screen's shorter side, so it was drawn in a square
+  and covered only the middle; it is now a share of the screen, and at 100 % no margin is left. Pictures
+  that are wider than high keep their size.
+- A book read to its last page is now recorded as read to 100 % (it was recorded as how far the start of its last page
+  is, often 95 %, so the library did not list it as finished). The reader's `core.book-finished` and
+  `core.book-closed` now carry 100 once the last page was reached.
 - A time zone rule with an offset of more than 24 hours (such as `<>200`) is now refused instead of read as an offset of days.
+- Reader: going to a chapter whose table of contents entry names no place in
+  it (a whole chapter of an EPUB) showed the last page of the chapter before,
+  from the contents, a link and *Next chapter* alike, and *Next chapter* and
+  *Previous chapter* could go no further from there.
+- Reader: status lines show the page in the chapter in a book's first chapter
+  too, where it starts at the book's start.
 
 ## [0.5.0-beta.12] - 2026-10-28
 

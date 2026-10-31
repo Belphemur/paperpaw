@@ -2544,7 +2544,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-reader"
-version = "1.0.3"
+version = "1.0.5"
 dependencies = [
  "paperpaw-sdk",
 ]
@@ -2565,7 +2565,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-sleep"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
  "paperpaw-sdk",
 ]
