@@ -142,6 +142,17 @@ pub enum BlockKind {
     Preformatted,
     /// An image ([`Block::image`]); `text` is its alternative text.
     Image,
+    /// A kind a later build adds, by its number, whose content is in the
+    /// block's text, runs and annotations as a paragraph's is. Numbers are
+    /// given here when first used and never reused; these are reserved:
+    /// 0 unspecified, 1 a table's row, 2 a list
+    /// item, 3 a rule (a line across), 4 a figure's caption, 5 an aside
+    /// (a sidebar, a note shown in place), 6 a verse line, 7 maths.
+    ///
+    /// A build that doesn't know a kind lays it out as a paragraph
+    /// without a first-line indent, as it does headings and preformatted
+    /// text.
+    Extended(u16),
 }
 
 /// A decoded image in storage, in the `paperpaw-image` gray format.

@@ -98,6 +98,12 @@ change the plugin SDK.
   `Params`). A build that doesn't know a value
   falls back: the default sort and filter, a gray tone, a solid line,
   a setting's value kept as text, a status value left out.
+- Plugin interface 5: `BlockKind::Extended(u16)`: a block kind of a
+  later build by its number (reserved: 1 a table's row, 2 a list item,
+  3 a rule, 4 a figure's caption, 5 an aside, 6 a verse line, 7 maths),
+  its content in the block's text, runs and annotations. A build that
+  doesn't know it lays it out as a paragraph without a first-line indent
+  (#33).
 - Plugin interface 5: `MenuNeed::Has(Capability)`: a menu entry can need
   any capability, also one a later build adds (not met where unknown).
   `SystemStatus` holds four named values (`value`, `with_value`:

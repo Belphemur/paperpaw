@@ -224,10 +224,11 @@ fn para() -> impl Strategy<Value = Para> {
             }
             Para {
                 text,
-                kind: if kind == 0 {
-                    BlockKind::Heading(1 + align % 3)
-                } else {
-                    BlockKind::Paragraph
+                kind: match kind {
+                    0 => BlockKind::Heading(1 + align % 3),
+                    // A kind of a later build: laid out as a paragraph.
+                    1 => BlockKind::Extended(u16::from(align)),
+                    _ => BlockKind::Paragraph,
                 },
                 runs,
                 align: Align::from_bits(align),
