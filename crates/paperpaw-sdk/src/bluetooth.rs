@@ -649,7 +649,7 @@ impl ParamValue for BtError {
                 crate::work::Retry::WhenAllowed,
             )),
             other => match other.strip_prefix("other-") {
-                Some(code) => BtError::Other(code.parse().ok()?),
+                Some(code) => BtError::Other(crate::replies::other_code(code)?),
                 None => BtError::Att(AttError(
                     u8::from_str_radix(other.strip_prefix("att-")?, 16).ok()?,
                 )),

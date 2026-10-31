@@ -103,10 +103,24 @@ impl HttpError {
     /// writes it).
     pub fn parse(name: &str) -> Option<Self> {
         if let Some(code) = name.strip_prefix("other-") {
-            return code.parse().ok().map(HttpError::Other);
+            return other_code(code).map(HttpError::Other);
         }
         Self::ALL.into_iter().find(|e| e.as_str() == name)
     }
+}
+
+/// The code of an `Other` error as its `Display` writes it, after
+/// `other-`: read by hand, as `str::parse` would grow every plugin that
+/// reads replies.
+pub(crate) fn other_code(text: &str) -> Option<u16> {
+    if text.is_empty() {
+        return None;
+    }
+    text.bytes().try_fold(0u16, |code, b| {
+        let digit = b.wrapping_sub(b'0');
+        (digit < 10).then_some(())?;
+        code.checked_mul(10)?.checked_add(u16::from(digit))
+    })
 }
 
 impl core::fmt::Display for HttpError {
@@ -817,6 +831,13 @@ mod tests {
         let back = HttpReply::from_params(&newer.to_params()).unwrap();
         assert_eq!(back.error, Some(HttpError::Other(7)));
         assert_eq!(HttpError::Other(7).as_str(), "other");
+        assert_eq!(
+            HttpError::parse("other-65535"),
+            Some(HttpError::Other(65535))
+        );
+        for wrong in ["other-", "other-65536", "other-7a", "other--7", "other-+7"] {
+            assert_eq!(HttpError::parse(wrong), None, "{wrong}");
+        }
         let refusal = crate::work::Refusal::new(
             crate::work::Reason::Offline,
             crate::work::Retry::WhenAllowed,

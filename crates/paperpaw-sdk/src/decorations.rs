@@ -118,7 +118,10 @@ impl Tone {
 
     /// The tone of a setting's value.
     pub fn from_id(id: &str) -> Option<Tone> {
-        Tone::ALL.iter().copied().find(|tone| tone.id() == id)
+        // By the names, not the tones: a loop over values of two words
+        // each is unrolled into every caller's plugin.
+        let at = TONES[1..].iter().position(|name| *name == id)?;
+        Tone::ALL.get(at).copied()
     }
 }
 
