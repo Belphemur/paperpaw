@@ -27,9 +27,6 @@ use crate::package::resolve;
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(crate) struct Props {
     pub align: Option<Align>,
-    /// `align` was given as `left` or `right`: the start or the end of a
-    /// left-to-right line, the other way round in a right-to-left one.
-    pub align_sides: bool,
     /// `direction`: `ltr` or `rtl`.
     pub direction: Option<Direction>,
     pub bold: Option<bool>,
@@ -127,8 +124,6 @@ impl Props {
     pub fn set_align(&mut self, value: &str) {
         if let Some(align) = parse_align(value) {
             self.align = Some(align);
-            self.align_sides =
-                matches!(value.trim().to_ascii_lowercase().as_str(), "left" | "right");
         }
     }
 
@@ -136,7 +131,6 @@ impl Props {
     pub fn apply(&mut self, other: &Props) {
         if other.align.is_some() {
             self.align = other.align;
-            self.align_sides = other.align_sides;
         }
         self.direction = other.direction.or(self.direction);
         self.bold = other.bold.or(self.bold);
@@ -281,9 +275,6 @@ impl Props {
     pub fn encode(&self, out: &mut String) {
         if let Some(align) = self.align {
             out.push_str(&alloc::format!(" a{}", align.bits()));
-            if self.align_sides {
-                out.push_str(" A1");
-            }
         }
         match self.direction {
             Some(Direction::Ltr) => out.push_str(" d1"),
@@ -343,7 +334,6 @@ impl Props {
             let flag = value == '1';
             match key {
                 'a' => props.align = value.to_digit(10).map(|d| Align::from_bits(d as u8)),
-                'A' => props.align_sides = flag,
                 'd' => {
                     props.direction = match value {
                         '1' => Some(Direction::Ltr),
@@ -542,8 +532,10 @@ pub(crate) fn parse_direction(value: &str) -> Option<Direction> {
 pub(crate) fn parse_align(value: &str) -> Option<Align> {
     match value.trim().to_ascii_lowercase().as_str() {
         "center" => Some(Align::Center),
-        "right" | "end" => Some(Align::End),
-        "left" | "start" => Some(Align::Start),
+        "right" => Some(Align::Right),
+        "left" => Some(Align::Left),
+        "end" => Some(Align::End),
+        "start" => Some(Align::Start),
         "justify" => Some(Align::Justify),
         _ => None,
     }
@@ -1034,7 +1026,7 @@ mod tests {
         css.push_str(&" ".repeat(10_000));
         css.push_str(".e { text-align: right }");
         let r = rules(&css);
-        assert_eq!(r.props("p", "e").align, Some(Align::End));
+        assert_eq!(r.props("p", "e").align, Some(Align::Right));
     }
 
     #[test]
@@ -1179,9 +1171,27 @@ mod tests {
     }
 
     #[test]
+    fn sides_are_absolute_and_start_and_end_logical() {
+        for (value, align) in [
+            ("left", Align::Left),
+            ("right", Align::Right),
+            ("LEFT ", Align::Left),
+            ("start", Align::Start),
+            ("end", Align::End),
+            ("center", Align::Center),
+            ("justify", Align::Justify),
+        ] {
+            let r = rules(&alloc::format!("p {{ text-align: {value} }}"));
+            assert_eq!(r.props("p", "").align, Some(align), "{value}");
+            let copy = Rules::decode(&r.encode());
+            assert_eq!(copy.props("p", "").align, Some(align), "{value} cached");
+        }
+    }
+
+    #[test]
     fn classes_outrank_elements_and_survive_the_cache() {
         let r = rules(".left { text-align: left } p { text-align: center }");
-        assert_eq!(r.props("p", "left").align, Some(Align::Start));
+        assert_eq!(r.props("p", "left").align, Some(Align::Left));
         assert_eq!(r.props("p", "").align, Some(Align::Center));
         let copy = Rules::decode(&r.encode());
         assert_eq!(copy.rules, r.rules);

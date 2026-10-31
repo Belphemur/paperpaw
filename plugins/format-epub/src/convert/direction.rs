@@ -5,7 +5,7 @@
 
 use alloc::vec::Vec;
 
-use paperpaw_sdk::document::{Align, MAX_INLINE_LANGS};
+use paperpaw_sdk::document::MAX_INLINE_LANGS;
 use paperpaw_sdk::lang::{Direction, Lang};
 use paperpaw_sdk::xml::{Attrs, decode, local_name};
 
@@ -56,17 +56,6 @@ pub(crate) fn own_lang(attrs: &Attrs<'_>) -> Option<Lang> {
         .find(|(name, _)| local_name(name) == "lang")
         .map(|(_, value)| Lang::parse(&decode(value)))
         .filter(|lang| !lang.is_none())
-}
-
-/// `align` of a block running right to left (`rtl`) or not: given as
-/// `left` or `right` (`sides`), the start of a right-to-left line is at
-/// the right.
-pub(crate) fn resolve_align(align: Align, sides: bool, rtl: bool) -> Align {
-    match (sides && rtl, align) {
-        (true, Align::Start) => Align::End,
-        (true, Align::End) => Align::Start,
-        _ => align,
-    }
 }
 
 /// The place of `lang` among a block's inline languages, from 1 as
