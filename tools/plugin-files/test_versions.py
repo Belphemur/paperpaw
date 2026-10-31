@@ -194,6 +194,29 @@ class Repository(unittest.TestCase):
         self.commit("fonts-extra 1.0.1")
         self.assertTrue(self.check())
 
+    def test_a_commit_listed_as_unchanged_needs_no_newer_version(self):
+        self.data("1.0.0")
+        self.write("tools/extra.py", "# one\n")
+        self.write("fonts/extra.ttf", "one")
+        self.commit("data plugin")
+        self.git("tag", "v0.5.0-beta.3")
+        self.write("fonts/extra.ttf", "two")
+        self.commit("a font change with the same output")
+        self.assertFalse(self.check())
+        commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=self.root, text=True,
+                                capture_output=True).stdout.strip()
+        # Another plugin's name, or a too short hash, does not count.
+        self.write("tools/plugin-files/unchanged.txt", f"{commit[:12]} other  # proof\n")
+        self.commit("list it for another plugin")
+        self.assertFalse(self.check())
+        self.write("tools/plugin-files/unchanged.txt", f"{commit[:12]} other, fonts-extra  # proof\n")
+        self.commit("list it")
+        self.assertTrue(self.check())
+        # A later change is still held to the rule.
+        self.write("fonts/extra.ttf", "three")
+        self.commit("another change")
+        self.assertFalse(self.check())
+
 
 if __name__ == "__main__":
     unittest.main()

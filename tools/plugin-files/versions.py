@@ -31,6 +31,12 @@ The data plugins of data.toml are held to the same: one whose builder or
 inputs changed since the release needs a newer version in data.toml (or
 the trailer in each commit no reader sees). They have no code, so a
 raised interface leaves them as they are.
+
+A commit that changed a data plugin's inputs without changing what the
+build writes, and that is in shared history (its message cannot take the
+trailer any more), is listed in unchanged.txt: its hash and the plugins,
+and the proof (the build's output compared with the release's) as a
+comment.
 """
 
 import pathlib
@@ -45,6 +51,7 @@ VERSION = re.compile(r"\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?")
 TRAILER = re.compile(r"^Plugin-unchanged:\s*(.+)$", re.IGNORECASE | re.MULTILINE)
 INTERFACE = re.compile(r"pub const INTERFACE: u16 = (\d+);")
 NATIVE = "crates/paperpaw-sdk/src/native.rs"
+UNCHANGED = "tools/plugin-files/unchanged.txt"
 
 
 def git(*args):
@@ -90,6 +97,22 @@ def unchanged(message, plugin):
         if plugin in ids or "all" in ids:
             return True
     return False
+
+
+def exempt_commits(text):
+    """Of unchanged.txt's `text` (lines `<hash> <id>, <id>  # proof`), the
+    (hash, plugin) pairs; a hash may be an abbreviation."""
+    out = set()
+    for line in text.splitlines():
+        words = line.split("#", 1)[0].replace(",", " ").split()
+        out.update((words[0], plugin) for plugin in words[1:])
+    return out
+
+
+def exempted(commit, plugin, pairs):
+    """Whether `pairs` (exempt_commits) say the `commit` (its full hash)
+    changed nothing a reader of `plugin` sees."""
+    return any(plugin == who and len(h) >= 7 and commit.startswith(h) for h, who in pairs)
 
 
 def interface_at(text):
@@ -176,13 +199,19 @@ def data_problems(since):
         before = data_versions(git("show", f"{since}:{path}"))
     except subprocess.CalledProcessError:
         before = {}
+    listed = ROOT / UNCHANGED
+    pairs = exempt_commits(listed.read_text(encoding="utf-8") if listed.exists() else "")
     out = []
     for plugin, fields in now.items():
         if plugin not in before:
             continue  # new since the release
         paths = [fields["build"], *fields.get("inputs", [])]
-        log = git("log", "--no-merges", "--format=%B%x00", f"{since}..HEAD", "--", *paths)
-        changes = [m.strip() for m in log.split("\0") if m.strip()]
+        log = git("log", "--no-merges", "--format=%H %B%x00", f"{since}..HEAD", "--", *paths)
+        changes = []
+        for entry in log.split("\0"):
+            commit, _, message = entry.strip().partition(" ")
+            if message.strip() and not exempted(commit, plugin, pairs):
+                changes.append(message.strip())
         found = problem(plugin, before[plugin], fields["version"], changes)
         if found:
             out.append((plugin, found.replace(
