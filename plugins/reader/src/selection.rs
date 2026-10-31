@@ -96,17 +96,23 @@ impl Selection {
             (true, s) if s == actions::RIGHT => actions::LEFT,
             (_, s) => s,
         };
-        Some(if [actions::PREVIOUS].contains(a) || *a == visual(actions::LEFT) {
-            self.cursor.checked_sub(1).unwrap_or(last)
-        } else if [actions::NEXT].contains(a) || *a == visual(actions::RIGHT) {
-            if self.cursor >= last { 0 } else { self.cursor + 1 }
-        } else if [actions::UP, actions::PREV_PAGE].contains(a) {
-            nearest_on_line(words, self.cursor, false)
-        } else if [actions::DOWN, actions::NEXT_PAGE].contains(a) {
-            nearest_on_line(words, self.cursor, true)
-        } else {
-            return None;
-        })
+        Some(
+            if [actions::PREVIOUS].contains(a) || *a == visual(actions::LEFT) {
+                self.cursor.checked_sub(1).unwrap_or(last)
+            } else if [actions::NEXT].contains(a) || *a == visual(actions::RIGHT) {
+                if self.cursor >= last {
+                    0
+                } else {
+                    self.cursor + 1
+                }
+            } else if [actions::UP, actions::PREV_PAGE].contains(a) {
+                nearest_on_line(words, self.cursor, false)
+            } else if [actions::DOWN, actions::NEXT_PAGE].contains(a) {
+                nearest_on_line(words, self.cursor, true)
+            } else {
+                return None;
+            },
+        )
     }
 }
 

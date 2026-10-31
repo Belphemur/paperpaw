@@ -977,6 +977,10 @@ fn script_option_bits_do_what_their_names_say() {
         ScriptOptions::KEEP_ALL.with(ScriptOptions::LINE_BREAK_STRICT),
     ] {
         assert_eq!(lines(latin, options), plain);
+    }
+}
+
+#[test]
 fn before_a_block_the_line_start_is_where_a_page_from_there_starts() {
     let picture = ImageRef {
         path: String::from("p.gray"),
