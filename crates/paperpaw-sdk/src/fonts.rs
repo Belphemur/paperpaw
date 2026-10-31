@@ -176,10 +176,7 @@ pub struct Fonts {
     /// What a font pack read from the storage may take of memory: the
     /// device's ([`Fonts::with_pack_limits`]).
     pack_limits: PackLimits,
-    /// How the interface's letters are inked: what the kernel made of the
-    /// setting `core.ui-text-curve` ([`Fonts::set_ui_ink`]), which the
-    /// handles of the UI font ([`roles::UI`](crate::builtin::fonts::UI))
-    /// carry, so no plugin parses the setting.
+    /// How the UI font's letters are inked ([`Fonts::set_ui_ink`]).
     ui_ink: paperpaw_text::TextInk,
 }
 
@@ -421,11 +418,8 @@ impl Fonts {
         self.status = Some(String::from(choice));
     }
 
-    /// How the interface's letters are inked from now on, as
-    /// [`ui::text_ink`](crate::ui::text_ink) makes it of the setting
-    /// `core.ui-text-curve` and the interface's language: the handles
-    /// [`Fonts::role`] gives for the UI font carry it. The kernel calls
-    /// it when either changes.
+    /// How the UI font's letters are inked from now on
+    /// ([`ui::text_ink`](crate::ui::text_ink)), which its handles carry.
     #[cfg(any(test, feature = "kernel"))]
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn set_ui_ink(&mut self, ink: paperpaw_text::TextInk) {
@@ -580,15 +574,10 @@ impl Fonts {
     /// family's face, else the best proposal, else the first font.
     pub fn role(&self, role: &str) -> Option<FontHandle<'_>> {
         let font = self.role_plain(role)?;
-        // The interface's font carries its ink (the settings' theme).
-        Some(if role == crate::builtin::fonts::UI.as_str() {
-            font.inked(self.ui_ink)
-        } else {
-            font
-        })
+        let ui = role == crate::builtin::fonts::UI.as_str();
+        Some(if ui { font.inked(self.ui_ink) } else { font })
     }
 
-    /// [`Fonts::role`] without the ink of the interface's font.
     fn role_plain(&self, role: &str) -> Option<FontHandle<'_>> {
         if role == roles::STATUS.as_str() {
             return self.status_face();
