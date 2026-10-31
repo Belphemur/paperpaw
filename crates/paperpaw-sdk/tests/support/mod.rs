@@ -185,6 +185,11 @@ impl Harness {
 
     /// Defines a text setting `id` set to `value`.
     pub fn define_text(&mut self, id: &str, value: &str) {
+        // The kernel makes the interface's ink of this setting.
+        if id == core_settings::UI_TEXT_CURVE.as_str() {
+            self.fonts
+                .set_ui_ink(paperpaw_sdk::ui::text_ink(value, "en"));
+        }
         self.settings
             .define(SettingSpec::new(
                 Id::parse(id).unwrap(),

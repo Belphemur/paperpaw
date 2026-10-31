@@ -1087,6 +1087,7 @@ impl Kernel {
         self.framebuffer
             .set_pictures_kept(!settings.bool(core_settings::NIGHT_PICTURES.as_str()));
         self.framebuffer.set_mono_coverage(mono_coverage(settings));
+        self.apply_ui_text_curve();
         if let Some(panel) = self.shared.device.display.color {
             self.framebuffer.set_saturation(panel.boost_percent());
         }

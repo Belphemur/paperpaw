@@ -422,20 +422,19 @@ impl Default for Palette {
 }
 
 /// How the interface's text is inked: the tone curve of the setting
-/// `core.ui-text-curve` (see
+/// `core.ui-text-curve`, `value` (see
 /// [`ToneCurve::parse_for`](paperpaw_text::ToneCurve::parse_for)), for the
-/// script of the interface's language; the stock ink where it is empty or
-/// says nothing usable.
-pub fn text_ink(env: &Env<'_>) -> TextInk {
-    let value = env.settings().text(settings::UI_TEXT_CURVE.as_str());
+/// script of the interface's `language` (a code as a catalog names it,
+/// `ar`); the stock ink where it is empty or says nothing usable. The
+/// kernel makes it once, when the setting or the language changes
+/// ([`Fonts::set_ui_ink`](crate::Fonts::set_ui_ink)); the UI font's
+/// handles carry it, so plugins do not parse the setting.
+pub fn text_ink(value: &str, language: &str) -> TextInk {
     if value.is_empty() {
         return TextInk::DEFAULT;
     }
-    ToneCurve::parse_for(
-        value,
-        paperpaw_lang::likely_script_of(env.i18n().language()),
-    )
-    .map_or(TextInk::DEFAULT, TextInk::new)
+    ToneCurve::parse_for(value, paperpaw_lang::likely_script_of(language))
+        .map_or(TextInk::DEFAULT, TextInk::new)
 }
 
 /// What a text is (see [`UiStyle::size`]): its size follows from the
@@ -775,12 +774,10 @@ impl UiStyle {
         Rect::new(area.x, area.y, area.width, area.height.saturating_sub(line))
     }
 
-    /// The UI font, inked as the setting `core.ui-text-curve` says
-    /// ([`text_ink`]).
+    /// The UI font, inked as the setting `core.ui-text-curve` says (the
+    /// kernel has made it: [`text_ink`]).
     pub fn font<'a>(&self, env: &Env<'a>) -> Option<FontHandle<'a>> {
-        env.fonts()
-            .role(fonts::UI.as_str())
-            .map(|font| font.inked(text_ink(env)))
+        env.fonts().role(fonts::UI.as_str())
     }
 
     /// Height of a row with a note: the title line, then up to

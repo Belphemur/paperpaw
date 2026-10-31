@@ -72,6 +72,9 @@ change the plugin SDK.
   - **Script:** `Lang::likely_script()` (and `paperpaw_lang::likely_script_of(tag)`, which reads a tag without the language tables, so a plugin does not carry them) gives the script of a language (the tag's, else the one the language is usually
     written in: `ar`, `fa`, `ur` and `ps` are `Arab`, `he` is `Hebr`), so `arab=contrast:1` in the curve settings reaches an
     Arabic book and interface; `PageType.script` and `HookCx::script()` use it. Languages in Latin letters have none.
+  - **Smaller plugins:** the kernel makes how the interface's letters are inked of `core.ui-text-curve` and the language
+    (`ui::text_ink(value, language)`, `Fonts::set_ui_ink`), and the handles of the UI font carry it, so no plugin carries the
+    parser (about 3 KB of each code plugin); `Fonts` gained a field for it.
   - **Rebuild all plugins:** `FontHandle` gained a field (its `TextInk`) that the firmware's `draw` reads, so every plugin has to
     be built against interface 5 again; one built before would pass a shorter handle.
   - **Render hooks:** a plugin can register a hook (`Registrar::add_render_hook`, `RenderHookSpec`, `HookStage`, `BandView`,
