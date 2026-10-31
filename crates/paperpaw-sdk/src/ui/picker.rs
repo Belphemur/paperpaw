@@ -11,7 +11,8 @@ use crate::widgets::largest_size;
 use crate::{Canvas, Env, Point, Rect};
 
 use super::{
-    Response, Stack, TextRole, UiStyle, button_height, columns, draw_button, draw_focus, draw_label,
+    Response, Stack, TextRole, UiStyle, button_height, columns, draw_button, draw_focus,
+    draw_label_in,
 };
 
 /// The answer to an action the wheels `taken`, the picker `changed` or not.
@@ -199,24 +200,44 @@ impl Wheels {
             return;
         };
         let ink = style.focus_ink(focused);
-        let small = style.size(TextRole::Small);
+        let small = style.size(TextRole::SMALL);
         let mark_width = if mark.is_empty() {
             0.0
         } else {
             font.measure(small, mark) + style.gap as f32 / 2.0
         };
         let room = f32::from(value.width) - 2.0 * style.gap as f32;
-        let large = style.size(TextRole::Headline);
+        let large = style.size(TextRole::HEADLINE);
         let size = largest_size(large, style.text, |size| {
             font.measure(size, text) + mark_width <= room
         })
         .unwrap_or(style.text);
         let text_width = font.measure(size, text);
         let x = f32::from(value.x) + (f32::from(value.width) - text_width - mark_width) / 2.0;
-        draw_label(canvas, font, size, x, value, text, ink);
+        draw_label_in(
+            canvas,
+            font,
+            style,
+            TextRole::BODY,
+            size,
+            x,
+            value,
+            text,
+            ink,
+        );
         if !mark.is_empty() {
             let at = x + text_width + style.gap as f32 / 2.0;
-            draw_label(canvas, font, small, at, value, mark, ink);
+            draw_label_in(
+                canvas,
+                font,
+                style,
+                TextRole::SMALL,
+                small,
+                at,
+                value,
+                mark,
+                ink,
+            );
         }
     }
 }
@@ -230,7 +251,7 @@ fn button_size(style: &UiStyle) -> u16 {
 
 /// The height of a picker: its `+`, its value and its `−`.
 fn picker_height(style: &UiStyle) -> u16 {
-    let value = ((style.size(TextRole::Headline) * 1.5) as u16).max(style.row as u16);
+    let value = ((style.size(TextRole::HEADLINE) * 1.5) as u16).max(style.row as u16);
     2 * button_size(style) + 2 * style.gap as u16 + value
 }
 
@@ -647,7 +668,7 @@ impl TimePicker {
         // The `:` in the middle of the room between the values.
         let (_, left, _) = wheels.parts(0);
         let (_, right, _) = wheels.parts(1);
-        let size = style.size(TextRole::Headline);
+        let size = style.size(TextRole::HEADLINE);
         let room = f32::from(right.x) - left.right() as f32;
         let x = left.right() as f32 + (room - font.measure(size, ":")) / 2.0;
         let band = Rect::new(
@@ -656,7 +677,17 @@ impl TimePicker {
             right.x - left.right() as u16,
             left.height,
         );
-        draw_label(canvas, font, size, x, band, ":", style.focus_ink(false));
+        draw_label_in(
+            canvas,
+            font,
+            style,
+            TextRole::BODY,
+            size,
+            x,
+            band,
+            ":",
+            style.focus_ink(false),
+        );
     }
 }
 

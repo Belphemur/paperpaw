@@ -49,6 +49,7 @@ pub(crate) fn draw_header(
         draw_label_on(
             &mut canvas,
             &font,
+            Some((style, TextRole::SMALL)),
             style.small,
             x,
             area,
@@ -85,14 +86,24 @@ fn draw_title(
         // As many lines as the bar holds, in the small size, then in the
         // size of captions.
         let high = area.height.max(band.height);
-        for size in [least, style.size(super::TextRole::Caption).min(least)] {
+        for size in [least, style.size(super::TextRole::CAPTION).min(least)] {
             let lines = font.wrap(size, title, room.max(1.0));
             let line = font.line_metrics(size).line_height as u16;
             let count = lines.len() as u16;
             if count < 2 {
                 // On one line in this size.
                 let baseline = cap_baseline(font, band, size);
-                draw_label_on(canvas, font, size, x, area, baseline, title, ink);
+                draw_label_on(
+                    canvas,
+                    font,
+                    Some((style, TextRole::HEAD)),
+                    size,
+                    x,
+                    area,
+                    baseline,
+                    title,
+                    ink,
+                );
                 return;
             }
             // Its lines a heading's apart.
@@ -105,14 +116,34 @@ fn draw_title(
             for (i, range) in lines.into_iter().enumerate() {
                 let at = Rect::new(area.x, top + i as u16 * apart, area.width, line);
                 let baseline = cap_baseline(font, at, size);
-                draw_label_on(canvas, font, size, x, area, baseline, &title[range], ink);
+                draw_label_on(
+                    canvas,
+                    font,
+                    Some((style, TextRole::HEAD)),
+                    size,
+                    x,
+                    area,
+                    baseline,
+                    &title[range],
+                    ink,
+                );
             }
             return;
         }
     }
     let (size, title) = title_fitting(font, style, title, room);
     let baseline = cap_baseline(font, band, size);
-    draw_label_on(canvas, font, size, x, area, baseline, &title, ink);
+    draw_label_on(
+        canvas,
+        font,
+        Some((style, TextRole::HEAD)),
+        size,
+        x,
+        area,
+        baseline,
+        &title,
+        ink,
+    );
 }
 
 /// Whether [`draw_title`] shows `title` whole in `room`, on lines as
@@ -122,7 +153,7 @@ fn title_fits(font: &FontHandle<'_>, style: &UiStyle, high: u16, room: f32, titl
     if font.measure(least, title) <= room + 1.0 {
         return true;
     }
-    [least, style.size(super::TextRole::Caption).min(least)]
+    [least, style.size(super::TextRole::CAPTION).min(least)]
         .into_iter()
         .any(|size| {
             let lines = font.wrap(size, title, room.max(1.0)).len() as u16;
@@ -287,6 +318,10 @@ impl Header {
     /// Draws the header: the title, an optional note right of it (e.g. a
     /// sort order) and the page number of a paged list (`page` is the
     /// page shown and the number of pages).
+    #[expect(
+        clippy::too_many_lines,
+        reason = "grew by the role each label now names; split it when it is next changed"
+    )]
     pub fn draw(
         &self,
         ui: &mut super::Ui<'_>,
@@ -358,14 +393,24 @@ impl Header {
         if let (Some((_, at, _)), Some(page), Some(text)) = (parts.pager, page, &label) {
             if self.arrows {
                 // At the first or last page, the arrow is gray.
-                let color = |end: bool| if end { style.ink(Ink::Disabled) } else { ink };
+                let color = |end: bool| if end { style.ink(Ink::DISABLED) } else { ink };
                 let (first, last) = (color(page.is_first()), color(page.is_last()));
                 arrow(canvas, prev_x, crate::icons::PREV, true, first);
                 arrow(canvas, next_x, crate::icons::NEXT, false, last);
             }
             let x = f32::from(at.x);
             let y = baseline(style.small);
-            draw_label_on(canvas, &font, style.small, x, at, y, text, ink);
+            draw_label_on(
+                canvas,
+                &font,
+                Some((style, TextRole::SMALL)),
+                style.small,
+                x,
+                at,
+                y,
+                text,
+                ink,
+            );
         }
         let mut canvas = canvas.clipped(t);
         if let (Some(note), Some(x)) = (note.as_deref(), note_x) {
@@ -392,7 +437,17 @@ impl Header {
                 ink
             };
             let y = baseline(style.small);
-            draw_label_on(&mut canvas, &font, style.small, x, t, y, note, note_ink);
+            draw_label_on(
+                &mut canvas,
+                &font,
+                Some((style, TextRole::SMALL)),
+                style.small,
+                x,
+                t,
+                y,
+                note,
+                note_ink,
+            );
         }
         let x = f32::from(t.x);
         draw_title(
@@ -504,7 +559,7 @@ impl Pager {
                 i32::from(a.y),
                 u32::from(a.width).saturating_sub(style.margin * 2),
                 style.line.max(1),
-                style.ink(Ink::Rule),
+                style.ink(Ink::RULE),
             );
         }
         let Some(font) = style.font(env) else {
@@ -512,13 +567,23 @@ impl Pager {
         };
         let label = Header::page_label(env, page);
         let x = f32::from(a.x) + (f32::from(a.width) - font.measure(style.small, &label)) / 2.0;
-        draw_label(canvas, &font, style.small, x, a, &label, Color::BLACK);
+        draw_label_in(
+            canvas,
+            &font,
+            style,
+            TextRole::SMALL,
+            style.small,
+            x,
+            a,
+            &label,
+            Color::BLACK,
+        );
         if self.arrows {
             let side = i32::from(a.width) / 4;
             let (_, y) = center(a);
             let dim = |end: bool| {
                 if end {
-                    style.ink(Ink::Disabled)
+                    style.ink(Ink::DISABLED)
                 } else {
                     Color::BLACK
                 }

@@ -450,6 +450,9 @@ impl Kernel {
         if *id == core_settings::STATUS_FONT {
             self.apply_status_font();
         }
+        if *id == core_settings::UI_TEXT_CURVE || *id == core_settings::LANGUAGE {
+            self.apply_ui_text_curve();
+        }
         if *id == core_settings::READING_FONT {
             self.apply_reading_font();
         }

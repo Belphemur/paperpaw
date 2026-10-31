@@ -126,7 +126,7 @@ pub(crate) fn draw_faint_button(
         .describe(Role::Button, label, rect)
         .focused(focused)
         .disabled(true);
-    let faint = style.faint(Ink::Note);
+    let faint = style.faint(Ink::NOTE);
     framed(canvas, style, rect, (Color::WHITE, faint), focused);
     let Some(font) = style.font(env) else {
         return;
@@ -329,9 +329,11 @@ pub(super) fn button_label(
                 let part = label[range].trim();
                 let x =
                     f32::from(rect.x) + (f32::from(rect.width) - font.measure(size, part)) / 2.0;
-                draw_label(
+                draw_label_in(
                     canvas,
                     font,
+                    style,
+                    TextRole::BUTTON,
                     size,
                     x,
                     Rect::new(rect.x, y, rect.width, line),
@@ -345,7 +347,17 @@ pub(super) fn button_label(
     }
     let label = fit(font, size, label, room);
     let label_x = f32::from(rect.x) + (f32::from(rect.width) - font.measure(size, &label)) / 2.0;
-    draw_label(canvas, font, size, label_x, rect, &label, ink);
+    draw_label_in(
+        canvas,
+        font,
+        style,
+        TextRole::BUTTON,
+        size,
+        label_x,
+        rect,
+        &label,
+        ink,
+    );
 }
 
 #[cfg(test)]

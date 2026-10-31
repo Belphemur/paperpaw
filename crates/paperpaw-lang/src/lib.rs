@@ -9,6 +9,8 @@
 
 #![no_std]
 
+mod likely;
+pub use likely::likely_script_of;
 #[rustfmt::skip]
 mod tables;
 
@@ -165,6 +167,20 @@ impl Lang {
         let i = ((self.0 >> SCRIPT_SHIFT) & SCRIPT_MASK) as usize;
         let code = tables::SCRIPTS.get(i.checked_sub(1)?)?;
         core::str::from_utf8(code).ok()
+    }
+
+    /// The script the text is written in: the one the tag named, else the
+    /// one its language is usually written in (`ar`, `fa`, `ur` and `ps`
+    /// are `Arab`, `he` is `Hebr`, `sr` is `Cyrl`); `None` for a language
+    /// written in Latin letters, one this release does not list, and
+    /// [`Lang::NONE`]. Use this where the script decides how text is
+    /// drawn; [`Lang::script`] says only what the tag wrote.
+    #[must_use]
+    pub fn likely_script(&self) -> Option<&'static str> {
+        if let Some(script) = self.script() {
+            return Some(script);
+        }
+        likely::of_code(self.language().as_str())
     }
 
     /// The region (`IR`, `419`), if the tag named a known one.

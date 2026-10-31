@@ -229,7 +229,7 @@ like PaperPaw's own, follow the reader's text size and the look chosen
 (a theme paints switches, the focus, buttons, headers, frames and more),
 and work by touch and with the buttons alone. Sizes come from
 `UiStyle::new(env)`: `margin`, `gap`, `row`, `header`, the text sizes
-(`style.size(TextRole::Body)` and the others). No block shortens a
+(`style.size(TextRole::BODY)` and the others). No block shortens a
 title or a button's word: a title is measured first and keeps its whole
 width, a box or control beside it takes what is left, and where that is
 too little the row takes a second line (ask the block for its row's
@@ -245,7 +245,7 @@ shortened.
 | Equal columns side by side, e.g. two buttons | `ui::columns(area, count, gap)` |
 | A list that pages and holds the focus | `ui::ListView`, `ui::list_step` |
 | What a screen draws with | `ui::Ui` (`Ui::new(canvas, env, &style)`; the parts below are its methods: `ui.button(..)`, `ui.message(..)` …) |
-| Text, on a line or wrapped | `ui::Label` (`Label::new(text).role(TextRole::Small).align(..).wrap()`) |
+| Text, on a line or wrapped | `ui::Label` (`Label::new(text).role(TextRole::SMALL).align(..).wrap()`) |
 | Rows of a list | `ui::Row` (`Row::value`, `Row::switch`, `Row::number`, with `.note(..)`; `height`, `draw`, `hit`) |
 | Rows of settings | `ui::draw_setting_row`, `ui::draw_stepper`, `ui::slider::Slider` |
 | Sections with headings | `ui::sections::Sections`, `ui.heading(..)` |
@@ -1542,6 +1542,55 @@ script presses with `ble-key:right` (or `left`, `page-down`,
 `volume-up` …) once they go to the key maps, and `Pulse HR`, a
 heart-rate belt that answers the example above, notifying a rate each
 second.
+
+### Looking different: tone, look, hooks
+
+Three ways to change how things look, from the least to the most code. Each
+changes how a thing *looks*, never where it goes or how wide it is.
+
+- **Numbers (no code).** A theme or a reader sets `core.text-curve` (book
+  text; in place of *Text contrast* when set) or `core.ui-text-curve` (the
+  interface) to a list of `[script=]curve` entries separated by `;`, e.g.
+  `smooth; arab=contrast:1`. A curve is `smooth`, `contrast:-1` to
+  `contrast:2`, `sharp:128` or 16 numbers from 0 to 255 (the opacity of
+  each of the 16 coverage levels of a letter's edge). On a black-and-white
+  panel the curve decides which edge pixels turn black, so it is also the
+  knob for thicker or thinner letters. In code: `ToneCurve::parse_for`,
+  `FontHandle::inked(TextInk::new(curve))`.
+- **A look.** `Painters::text` paints the text that `ui::Label` draws (a
+  shadow, an outline): draw with `part.font.draw(..)` and return `true`; the
+  width stays the stock one. `Painters::extras` takes a `static` list of
+  `ExtraPaint`s for parts of kinds that come later (scrollbars, tabs): a
+  look made now works when the SDK learns to ask
+  (`Capability::LOOK_EXTRAS`). The SDK's own rows, headers,
+  buttons, hints and widgets' captions pass it too, with their role
+  (`TextRole::BUTTON`, `HINT`, …); text a plugin draws itself does so with
+  `ui::draw_label_in(canvas, font, style, role, ..)`. `ui::draw_label` is the
+  stock look.
+- **A render hook.** `Registrar::add_render_hook` with a `RenderHookSpec`
+  changes each finished band (night or sepia tint, grain, a better dither of
+  the four-gray pass). **Check `Capability::RENDER_HOOK`:** without it the
+  hook is accepted and never run (today's firmware). A hook sees pixels, not
+  coverage, so it cannot make letter edges softer (use the tone curve for
+  that); it must give the same rows for the same band and carry (no clock or
+  random: `HookCx` has none); state across bands goes in `BandView::carry`,
+  which the kernel zeroes at the start of each pass; a panic aborts the
+  device.
+
+**Colour roles.** `style.ink(Ink::MUTED)` gives the colour of a role of the
+interface; a theme sets them in `core.ui-palette` (`muted=60 link=#2a6f97`,
+a gray or `#rrggbb`; a gray panel uses the brightness). `Ink` is a number
+with constants, so roles can be added: `ACCENT`, `ON_ACCENT`, `LINK`,
+`SELECTION` and `WARNING` exist (14 to 18, 19 to 31 are free). A role a theme
+does not set reads the colour of `Ink::fallback()` (`LINK` reads `TEXT`), so
+draw with the role that says what a thing *is* and a theme made for fewer
+roles still looks right; a role you do not know the name of also works.
+Do not mix this up with `TextInk`: that is *how text is inked* (its tone), an
+`Ink` is a colour role.
+
+`Canvas::pixel` and `gray_at` read back what *this band* drew, to composite
+pixels you drew, never to decide what to draw (a point in another band is
+`None`, and decisions would show seams).
 
 ### Screens that run in real time
 

@@ -647,6 +647,19 @@ impl Kernel {
         }
     }
 
+    /// Makes how the interface's letters are inked of `core.ui-text-curve`
+    /// and the interface's language, for the UI font's handles (plugins
+    /// do not parse it).
+    pub(crate) fn apply_ui_text_curve(&mut self) {
+        let ink = paperpaw_sdk::ui::text_ink(
+            self.shared
+                .settings
+                .text(core_settings::UI_TEXT_CURVE.as_str()),
+            self.shared.translator.language(),
+        );
+        self.shared.fonts.set_ui_ink(ink);
+    }
+
     /// Loads the data plugin in `folder` while running (see
     /// [`Command::LoadPlugin`](paperpaw_sdk::Command::LoadPlugin)).
     pub(crate) fn load_plugin(&mut self, folder: &str) {
@@ -944,6 +957,7 @@ impl Kernel {
         self.keep_offered_choices();
         self.apply_reading_font();
         self.apply_status_font();
+        self.apply_ui_text_curve();
         self.rebuild_keymap();
         self.output.commands.push(events::PLUGINS_CHANGED.emit(()));
     }

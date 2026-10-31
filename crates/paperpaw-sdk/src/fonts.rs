@@ -176,6 +176,8 @@ pub struct Fonts {
     /// What a font pack read from the storage may take of memory: the
     /// device's ([`Fonts::with_pack_limits`]).
     pack_limits: PackLimits,
+    /// How the UI font's letters are inked ([`Fonts::set_ui_ink`]).
+    ui_ink: paperpaw_text::TextInk,
 }
 
 impl Fonts {
@@ -213,6 +215,7 @@ impl Fonts {
             status: None,
             cache: RefCell::new(GlyphCache::new(cache_bytes)),
             describing: core::cell::Cell::new(false),
+            ui_ink: paperpaw_text::TextInk::DEFAULT,
             pack_limits: PackLimits::SMALL,
         }
     }
@@ -415,6 +418,14 @@ impl Fonts {
         self.status = Some(String::from(choice));
     }
 
+    /// How the UI font's letters are inked from now on
+    /// ([`ui::text_ink`](crate::ui::text_ink)), which its handles carry.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+    pub fn set_ui_ink(&mut self, ink: paperpaw_text::TextInk) {
+        self.ui_ink = ink;
+    }
+
     /// The family of its own the status lines are in, if one is chosen.
     fn status_family(&self) -> Option<&str> {
         use crate::builtin::settings::{STATUS_FONT_BOOK, STATUS_FONT_UI};
@@ -562,6 +573,12 @@ impl Fonts {
     /// The font bound to `role`: the user's choice, else the chosen
     /// family's face, else the best proposal, else the first font.
     pub fn role(&self, role: &str) -> Option<FontHandle<'_>> {
+        let font = self.role_plain(role)?;
+        let ui = role == crate::builtin::fonts::UI.as_str();
+        Some(if ui { font.inked(self.ui_ink) } else { font })
+    }
+
+    fn role_plain(&self, role: &str) -> Option<FontHandle<'_>> {
         if role == roles::STATUS.as_str() {
             return self.status_face();
         }
@@ -676,6 +693,7 @@ impl Fonts {
             display: false,
             kerning: true,
             ligatures: false,
+            ink: paperpaw_text::TextInk::DEFAULT,
         }
     } @ text::FONTS_HANDLE
     }
@@ -769,6 +787,7 @@ impl FontSet {
             display: false,
             kerning: true,
             ligatures: false,
+            ink: paperpaw_text::TextInk::DEFAULT,
         })
     }
 }
@@ -798,6 +817,8 @@ pub struct FontHandle<'a> {
     kerning: bool,
     /// Ligatures drawn (see [`FontHandle::ligatures`]).
     ligatures: bool,
+    /// How its text is inked (see [`FontHandle::inked`]).
+    ink: paperpaw_text::TextInk,
 }
 
 /// The ligature of two characters, if there is one: drawn in their place
@@ -958,6 +979,20 @@ impl<'a> FontHandle<'a> {
             ligatures: true,
             ..self
         }
+    }
+
+    /// This font drawing its text as `ink` says: the tone of the letters'
+    /// edges (for `draw` and `draw_bolder`; `draw_toned` has its own),
+    /// and what a later release gives the rest. Every caller that draws
+    /// with the handle inks so, e.g. the interface's font (setting
+    /// `core.ui-text-curve`).
+    pub fn inked(self, ink: paperpaw_text::TextInk) -> Self {
+        Self { ink, ..self }
+    }
+
+    /// How its text is inked (see [`FontHandle::inked`]).
+    pub fn text_ink(&self) -> paperpaw_text::TextInk {
+        self.ink
     }
 
     paperpaw_table::shared! {
@@ -1203,7 +1238,7 @@ impl<'a> FontHandle<'a> {
         color: Color,
         extra: u16,
     ) -> f32 {
-        let tone = paperpaw_text::ToneCurve::SMOOTH;
+        let tone = self.ink.tone();
         self.draw_toned(canvas, size, x, baseline, text, color, extra, tone)
     } @ text::HANDLE_DRAW_BOLDER
     }

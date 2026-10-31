@@ -36,10 +36,12 @@ mod bitmap;
 mod cache;
 pub mod charset;
 mod curve;
+mod curve_text;
 mod font;
 #[cfg(fuzzing)]
 pub mod fuzz;
 mod glyph;
+mod ink;
 mod kern_table;
 #[cfg(feature = "outline")]
 mod kerning;
@@ -74,6 +76,7 @@ pub use bitmap::{BitmapFont, PackBuilder};
 pub use cache::GlyphCache;
 pub use curve::ToneCurve;
 pub use font::{Font, FontError, LineMetrics};
+pub use ink::TextInk;
 pub use stored::{PackLimits, PackSource, StoredPack};
 
 /// Whether this build renders scalable (OpenType/TrueType) fonts.
@@ -298,15 +301,14 @@ fn paint(
             u32::from(glyph.height),
             color,
             |px, py| {
-                // The strongest coverage of the pixels up to `extra`
-                // to the left, on its curve (curves rise, so the
-                // strongest stays the strongest).
-                let level = (0..=u32::from(extra))
+                // The strongest ink of the pixels up to `extra` to the
+                // left, each on its curve (a curve of one's own need
+                // not rise, so the curve comes first).
+                (0..=u32::from(extra))
                     .filter(|k| *k <= px && px - k < width)
-                    .map(|k| glyph.level((px - k) as u16, py as u16))
+                    .map(|k| tone.alpha(glyph.level((px - k) as u16, py as u16)))
                     .max()
-                    .unwrap_or(0);
-                tone.alpha(level)
+                    .unwrap_or(0)
             },
         );
     }
