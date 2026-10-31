@@ -126,8 +126,9 @@ change the plugin SDK.
   `native::Chip` (a file for an unknown chip is still refused),
   `image::Format` (decoded as unsupported), `document::LinkKind`
   (followed as a plain link), `document::AnnotationKind` (shown as a
-  gloss), `annotations::Kind` (kept with its file letter and written back
-  on save, so annotations of a newer kind are not lost) and `PluginKind`;
+  gloss), `annotations::Kind` (by its file letter: a mark of it is
+  written with that letter; lines of a kind this build doesn't know stay
+  as they are, as before) and `PluginKind`;
   and, as for the other errors, in `SettingError`, `data::Error`,
   `GraphicsError`, `config::ErrorKind` and `MemoryError`.
   `WritingMode` gains `SidewaysRl` and `SidewaysLr` (all of CSS Writing
