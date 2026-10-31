@@ -5,7 +5,7 @@ pub const REVISIONS: crate::Revisions = [1, 0, 0, 0, 0, 0, 0, 0];
 /// The oldest revision of each family whose plugins still run.
 pub const OLDEST: crate::Revisions = [1, 0, 0, 0, 0, 0, 0, 0];
 /// Eight hex digits naming the tables of this build, for logs.
-pub const HASH: &str = "6e151a88";
+pub const HASH: &str = "c147d9f0";
 
 /// The text family's table.
 pub mod text {
