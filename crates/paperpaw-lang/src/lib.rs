@@ -10,6 +10,7 @@
 #![no_std]
 
 mod likely;
+pub use likely::likely_script_of;
 #[rustfmt::skip]
 mod tables;
 
@@ -179,12 +180,7 @@ impl Lang {
         if let Some(script) = self.script() {
             return Some(script);
         }
-        let code = self.language();
-        likely::LIKELY
-            .binary_search_by(|(language, _)| (*language).cmp(code.as_str()))
-            .ok()
-            .and_then(|at| likely::LIKELY.get(at))
-            .map(|(_, script)| *script)
+        likely::of_code(self.language().as_str())
     }
 
     /// The region (`IR`, `419`), if the tag named a known one.

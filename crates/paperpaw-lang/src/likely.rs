@@ -6,7 +6,7 @@
 //! is one more row, never a change of shape. Languages written in Latin
 //! letters are not listed (nor are languages not listed): they have none.
 
-pub(crate) const LIKELY: &[(&str, &str)] = &[
+const LIKELY: &[(&str, &str)] = &[
     ("am", "Ethi"),
     ("ar", "Arab"),
     ("as", "Beng"),
@@ -62,9 +62,48 @@ pub(crate) const LIKELY: &[(&str, &str)] = &[
     ("zh", "Hans"),
 ];
 
+/// The script of text in the language of `tag` (BCP 47: `ar`, `fa-IR`,
+/// `sr-Latn`): the script the tag names (four letters), else the one its
+/// language is usually written in; `None` for a language written in Latin
+/// letters, one not listed, or no language.
+///
+/// It reads the tag as it is, without [`Lang::parse`](crate::Lang::parse)
+/// and its tables, so a plugin that only needs this does not carry them:
+/// the language must be the code a catalog or a tag uses today (`fa`, not
+/// `per`; `Lang::parse` knows the old and three-letter spellings).
+#[must_use]
+pub fn likely_script_of(tag: &str) -> Option<&str> {
+    let mut parts = tag.split(['-', '_']);
+    let language = parts.next()?;
+    if let Some(script) = parts.find(|p| p.len() == 4 && p.bytes().all(|b| b.is_ascii_alphabetic()))
+    {
+        return Some(script);
+    }
+    of_code(language)
+}
+
+/// The script the language `code` (two or three letters, any case) is
+/// usually written in.
+pub(crate) fn of_code(code: &str) -> Option<&'static str> {
+    let mut lower = [0u8; 3];
+    let bytes = code.as_bytes();
+    if bytes.len() > lower.len() {
+        return None;
+    }
+    for (slot, b) in lower.iter_mut().zip(bytes) {
+        *slot = b.to_ascii_lowercase();
+    }
+    let lower = lower.get(..bytes.len())?;
+    LIKELY
+        .binary_search_by(|(language, _)| language.as_bytes().cmp(lower))
+        .ok()
+        .and_then(|at| LIKELY.get(at))
+        .map(|(_, script)| *script)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::LIKELY;
+    use super::{LIKELY, likely_script_of};
     use crate::Lang;
 
     #[test]
@@ -95,5 +134,40 @@ mod tests {
         assert_eq!(script(""), None);
         assert_eq!(script("not a tag"), None);
         assert_eq!(Lang::NONE.likely_script(), None);
+    }
+
+    #[test]
+    fn a_tag_gives_the_same_script_without_parsing_it() {
+        for tag in [
+            "ar",
+            "fa",
+            "fa-IR",
+            "ur",
+            "ps",
+            "ckb",
+            "ug",
+            "he",
+            "sr",
+            "sr-Latn",
+            "zh-Hant",
+            "hi",
+            "de",
+            "en-GB",
+            "",
+            "AR",
+            "Fa_ir",
+            "ko-KR",
+            "ja",
+            "not a tag",
+            "xyz",
+        ] {
+            assert_eq!(
+                likely_script_of(tag),
+                Lang::parse(tag).likely_script(),
+                "{tag:?}"
+            );
+        }
+        // What the tag names, even a script this release has no name for.
+        assert_eq!(likely_script_of("xx-Qaaa"), Some("Qaaa"));
     }
 }

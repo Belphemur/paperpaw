@@ -69,7 +69,7 @@ change the plugin SDK.
     reserved. `TextRole` is now an open `TextRole(u8)` with constants (`TextRole::BODY`, new `HINT`, `BUTTON`, `ICON`).
     **Breaking for plugin authors:** `TextRole::Body` is now `TextRole::BODY` (and so on for every role); rename it, the compiler
     finds each one.
-  - **Script:** `Lang::likely_script()` gives the script of a language (the tag's, else the one the language is usually
+  - **Script:** `Lang::likely_script()` (and `paperpaw_lang::likely_script_of(tag)`, which reads a tag without the language tables, so a plugin does not carry them) gives the script of a language (the tag's, else the one the language is usually
     written in: `ar`, `fa`, `ur` and `ps` are `Arab`, `he` is `Hebr`), so `arab=contrast:1` in the curve settings reaches an
     Arabic book and interface; `PageType.script` and `HookCx::script()` use it. Languages in Latin letters have none.
   - **Rebuild all plugins:** `FontHandle` gained a field (its `TextInk`) that the firmware's `draw` reads, so every plugin has to
