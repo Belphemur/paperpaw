@@ -19,15 +19,10 @@ pub fn paperpaw_text::bidi::state_len() -> usize
 pub fn paperpaw_text::bidi::state_paragraph(&[u8]) -> core::option::Option<paperpaw_text::bidi::Level>
 pub fn paperpaw_text::bidi::visual_order(&[paperpaw_text::bidi::Level], &mut [u16]) -> usize
 pub mod paperpaw_text::charset
-pub const paperpaw_text::charset::ARABIC: &[core::ops::range::RangeInclusive<char>]
-pub const paperpaw_text::charset::CYRILLIC: &[core::ops::range::RangeInclusive<char>]
-pub const paperpaw_text::charset::GREEK: &[core::ops::range::RangeInclusive<char>]
-pub const paperpaw_text::charset::HEBREW: &[core::ops::range::RangeInclusive<char>]
-pub const paperpaw_text::charset::LATIN: &[core::ops::range::RangeInclusive<char>]
-pub const paperpaw_text::charset::LIGATURES: &[core::ops::range::RangeInclusive<char>]
 pub fn paperpaw_text::charset::chars(&[core::ops::range::RangeInclusive<char>]) -> impl core::iter::traits::iterator::Iterator<Item = char> + core::clone::Clone + '_
 pub fn paperpaw_text::charset::code_points(&str) -> core::option::Option<core::ops::range::RangeInclusive<char>>
 pub fn paperpaw_text::charset::named(&str) -> core::option::Option<&'static [core::ops::range::RangeInclusive<char>]>
+pub fn paperpaw_text::charset::names() -> impl core::iter::traits::iterator::Iterator<Item = &'static str>
 pub fn paperpaw_text::charset::stand_in(char) -> core::option::Option<char>
 pub mod paperpaw_text::sfnt
 #[non_exhaustive] pub struct paperpaw_text::sfnt::FontInfo
@@ -44,6 +39,7 @@ pub paperpaw_text::Font::Bitmap(paperpaw_text::BitmapFont)
 pub paperpaw_text::Font::Stored(paperpaw_text::StoredPack)
 impl paperpaw_text::Font
 pub fn paperpaw_text::Font::advance(&self, char, f32) -> f32
+pub fn paperpaw_text::Font::failed_reads(&self) -> u32
 pub fn paperpaw_text::Font::from_cow(alloc::borrow::Cow<'static, [u8]>, &[(&str, f32)]) -> core::result::Result<paperpaw_text::Font, paperpaw_text::FontError>
 pub fn paperpaw_text::Font::from_data(impl core::convert::Into<alloc::borrow::Cow<'static, [u8]>>, &[(&str, f32)]) -> core::result::Result<paperpaw_text::Font, paperpaw_text::FontError>
 pub fn paperpaw_text::Font::has_char(&self, char) -> bool
@@ -55,7 +51,10 @@ pub fn paperpaw_text::Font::size_for(&self, f32, &str, bool) -> f32
 #[non_exhaustive] pub enum paperpaw_text::FontError
 pub paperpaw_text::FontError::Invalid
 pub paperpaw_text::FontError::NoCharmap
+pub paperpaw_text::FontError::Other(u16)
+pub paperpaw_text::FontError::OutOfMemory
 pub paperpaw_text::FontError::OutlinesNotSupported
+pub paperpaw_text::FontError::TooLarge
 pub paperpaw_text::FontError::UnsupportedVersion
 impl core::error::Error for paperpaw_text::FontError
 impl core::fmt::Display for paperpaw_text::FontError
@@ -108,12 +107,17 @@ impl paperpaw_text::Glyph
 pub fn paperpaw_text::Glyph::as_ref(&self) -> paperpaw_text::GlyphRef<'_>
 pub fn paperpaw_text::Glyph::byte_size(&self) -> usize
 pub fn paperpaw_text::Glyph::empty(f32) -> Self
-pub struct paperpaw_text::GlyphCache
+pub struct paperpaw_text::GlyphCache(_)
 impl paperpaw_text::GlyphCache
 pub fn paperpaw_text::GlyphCache::bytes(&self) -> usize
+pub fn paperpaw_text::GlyphCache::capacity(&self) -> usize
 pub fn paperpaw_text::GlyphCache::clear(&mut self)
 pub fn paperpaw_text::GlyphCache::glyph<'a>(&'a mut self, u16, &'a paperpaw_text::Font, char, f32) -> paperpaw_text::GlyphRef<'a>
-pub fn paperpaw_text::GlyphCache::new(usize) -> Self
+pub fn paperpaw_text::GlyphCache::new(usize) -> paperpaw_text::GlyphCache
+pub fn paperpaw_text::GlyphCache::set_capacity(&mut self, usize)
+pub fn paperpaw_text::GlyphCache::trim(&mut self, usize)
+impl core::fmt::Debug for paperpaw_text::GlyphCache
+pub fn paperpaw_text::GlyphCache::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[non_exhaustive] pub struct paperpaw_text::GlyphRef<'a>
 pub paperpaw_text::GlyphRef::advance: f32
 pub paperpaw_text::GlyphRef::height: u16
@@ -144,17 +148,40 @@ pub fn paperpaw_text::PackBuilder::build(&self) -> alloc::vec::Vec<u8>
 pub fn paperpaw_text::PackBuilder::kerning(&mut self, &[(char, char, f32)])
 pub fn paperpaw_text::PackBuilder::new() -> Self
 pub fn paperpaw_text::PackBuilder::table(&mut self, usize, u8, &[u8])
-pub struct paperpaw_text::StoredPack
+pub struct paperpaw_text::PackLimits
+impl paperpaw_text::PackLimits
+pub const paperpaw_text::PackLimits::LARGE: paperpaw_text::PackLimits
+pub const paperpaw_text::PackLimits::SMALL: paperpaw_text::PackLimits
+pub const fn paperpaw_text::PackLimits::advances_bytes(self) -> usize
+pub const fn paperpaw_text::PackLimits::for_memory(paperpaw_platform::MemoryClass) -> paperpaw_text::PackLimits
+pub const fn paperpaw_text::PackLimits::index_bytes(self) -> usize
+pub struct paperpaw_text::StoredPack(_)
 impl paperpaw_text::StoredPack
 pub fn paperpaw_text::StoredPack::advance(&self, char, f32) -> f32
+pub fn paperpaw_text::StoredPack::bytes(&self) -> usize
+pub fn paperpaw_text::StoredPack::failed_reads(&self) -> u32
 pub fn paperpaw_text::StoredPack::has_char(&self, char) -> bool
 pub fn paperpaw_text::StoredPack::largest_size(&self) -> core::option::Option<f32>
 pub fn paperpaw_text::StoredPack::line_metrics(&self, f32) -> paperpaw_text::LineMetrics
 pub fn paperpaw_text::StoredPack::open(alloc::rcs::rc::Rc<dyn paperpaw_text::PackSource>) -> core::result::Result<paperpaw_text::StoredPack, paperpaw_text::FontError>
-pub fn paperpaw_text::StoredPack::render(&self, char, f32) -> paperpaw_text::Glyph
+pub fn paperpaw_text::StoredPack::open_within(alloc::rcs::rc::Rc<dyn paperpaw_text::PackSource>, paperpaw_text::PackLimits) -> core::result::Result<paperpaw_text::StoredPack, paperpaw_text::FontError>
+pub fn paperpaw_text::StoredPack::render(&self, char, f32) -> core::option::Option<paperpaw_text::Glyph>
 pub fn paperpaw_text::StoredPack::table(&self, usize) -> core::option::Option<u64>
+pub fn paperpaw_text::StoredPack::trim(&self)
 impl core::fmt::Debug for paperpaw_text::StoredPack
 pub fn paperpaw_text::StoredPack::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct paperpaw_text::TextInk
+impl paperpaw_text::TextInk
+pub const paperpaw_text::TextInk::DEFAULT: paperpaw_text::TextInk
+pub const fn paperpaw_text::TextInk::dither(&self) -> paperpaw_graphics::blit::Dither
+pub const fn paperpaw_text::TextInk::flags(&self) -> u32
+pub const fn paperpaw_text::TextInk::new(paperpaw_text::ToneCurve) -> paperpaw_text::TextInk
+pub const fn paperpaw_text::TextInk::tone(&self) -> paperpaw_text::ToneCurve
+pub const fn paperpaw_text::TextInk::with_dither(self, paperpaw_graphics::blit::Dither) -> paperpaw_text::TextInk
+pub const fn paperpaw_text::TextInk::with_flags(self, u32) -> paperpaw_text::TextInk
+pub const fn paperpaw_text::TextInk::with_tone(self, paperpaw_text::ToneCurve) -> paperpaw_text::TextInk
+impl core::default::Default for paperpaw_text::TextInk
+pub fn paperpaw_text::TextInk::default() -> Self
 #[non_exhaustive] pub struct paperpaw_text::TextStyle<'a>
 pub paperpaw_text::TextStyle::based: bool
 pub paperpaw_text::TextStyle::bolder: u16
@@ -176,13 +203,20 @@ pub const paperpaw_text::ToneCurve::DARKEST: i8
 pub const paperpaw_text::ToneCurve::LIGHTEST: i8
 pub const paperpaw_text::ToneCurve::SMOOTH: paperpaw_text::ToneCurve
 pub fn paperpaw_text::ToneCurve::alpha(&self, u8) -> u8
+pub const fn paperpaw_text::ToneCurve::alphas(&self) -> [u8; 16]
 pub fn paperpaw_text::ToneCurve::contrast(i8) -> paperpaw_text::ToneCurve
+pub const fn paperpaw_text::ToneCurve::from_alphas([u8; 16]) -> paperpaw_text::ToneCurve
 pub fn paperpaw_text::ToneCurve::is_sharp(&self) -> bool
 pub fn paperpaw_text::ToneCurve::sharp(self, u8) -> paperpaw_text::ToneCurve
+impl paperpaw_text::ToneCurve
+pub fn paperpaw_text::ToneCurve::parse(&str) -> core::option::Option<paperpaw_text::ToneCurve>
+pub fn paperpaw_text::ToneCurve::parse_for(&str, core::option::Option<&str>) -> core::option::Option<paperpaw_text::ToneCurve>
+pub fn paperpaw_text::ToneCurve::to_text(&self, &mut alloc::string::String)
 impl core::default::Default for paperpaw_text::ToneCurve
 pub fn paperpaw_text::ToneCurve::default() -> Self
 pub const paperpaw_text::MAX_BREAKS: usize
 pub const paperpaw_text::OUTLINES: bool
+pub const paperpaw_text::UNICODE_VERSION: (u8, u8, u8)
 pub trait paperpaw_text::PackSource
 pub fn paperpaw_text::PackSource::read_at(&self, u64, &mut [u8]) -> bool
 pub fn paperpaw_text::draw_text(&mut paperpaw_graphics::canvas::Canvas<'_>, &mut paperpaw_text::GlyphCache, &paperpaw_text::TextStyle<'_>, f32, i32, &str) -> f32
@@ -195,10 +229,12 @@ pub fn paperpaw_text::measure_in(&paperpaw_text::Font, f32, &str, &paperpaw_text
 pub fn paperpaw_text::wrap(&str, f32, impl core::ops::function::Fn(&str) -> f32) -> alloc::vec::Vec<core::ops::range::Range<usize>>
 pub fn paperpaw_text::wrap_lines(&str, impl core::ops::function::Fn(usize) -> f32, impl core::ops::function::Fn(char) -> f32) -> alloc::vec::Vec<paperpaw_text::Line>
 pub fn paperpaw_text::wrap_lines_balanced(&str, impl core::ops::function::Fn(usize) -> f32, impl core::ops::function::Fn(usize, char) -> f32, core::option::Option<paperpaw_text::Hyphenate<'_>>) -> alloc::vec::Vec<paperpaw_text::Line>
-pub fn paperpaw_text::wrap_lines_balanced_in(&str, &dyn core::ops::function::Fn(usize) -> f32, &dyn core::ops::function::Fn(usize, char) -> f32, &dyn core::ops::function::Fn(usize, char, char) -> f32, core::option::Option<paperpaw_text::Hyphenate<'_>>, &dyn core::ops::function::Fn(f32, usize) -> f32) -> alloc::vec::Vec<paperpaw_text::Line>
+pub fn paperpaw_text::wrap_lines_balanced_in(&str, &dyn core::ops::function::Fn(usize) -> f32, &dyn core::ops::function::Fn(usize, char) -> f32, &dyn core::ops::function::Fn(usize, char, char) -> f32, core::option::Option<paperpaw_text::Hyphenate<'_>>, &dyn core::ops::function::Fn(f32, usize) -> f32, u32) -> alloc::vec::Vec<paperpaw_text::Line>
 pub fn paperpaw_text::wrap_lines_balanced_kerned(&str, impl core::ops::function::Fn(usize) -> f32, impl core::ops::function::Fn(usize, char) -> f32, impl core::ops::function::Fn(usize, char, char) -> f32, core::option::Option<paperpaw_text::Hyphenate<'_>>) -> alloc::vec::Vec<paperpaw_text::Line>
 pub fn paperpaw_text::wrap_lines_balanced_kerned_with_cost(&str, impl core::ops::function::Fn(usize) -> f32, impl core::ops::function::Fn(usize, char) -> f32, impl core::ops::function::Fn(usize, char, char) -> f32, core::option::Option<paperpaw_text::Hyphenate<'_>>, impl core::ops::function::Fn(f32, usize) -> f32) -> alloc::vec::Vec<paperpaw_text::Line>
+pub fn paperpaw_text::wrap_lines_balanced_opts(&str, impl core::ops::function::Fn(usize) -> f32, impl core::ops::function::Fn(usize, char) -> f32, impl core::ops::function::Fn(usize, char, char) -> f32, core::option::Option<paperpaw_text::Hyphenate<'_>>, impl core::ops::function::Fn(f32, usize) -> f32, u32) -> alloc::vec::Vec<paperpaw_text::Line>
 pub fn paperpaw_text::wrap_lines_hyphenated(&str, impl core::ops::function::Fn(usize) -> f32, impl core::ops::function::Fn(usize, char) -> f32, core::option::Option<paperpaw_text::Hyphenate<'_>>) -> alloc::vec::Vec<paperpaw_text::Line>
 pub fn paperpaw_text::wrap_lines_kerned(&str, impl core::ops::function::Fn(usize) -> f32, impl core::ops::function::Fn(usize, char) -> f32, impl core::ops::function::Fn(usize, char, char) -> f32, core::option::Option<paperpaw_text::Hyphenate<'_>>) -> alloc::vec::Vec<paperpaw_text::Line>
-pub fn paperpaw_text::wrap_lines_kerned_in(&str, &dyn core::ops::function::Fn(usize) -> f32, &dyn core::ops::function::Fn(usize, char) -> f32, &dyn core::ops::function::Fn(usize, char, char) -> f32, core::option::Option<paperpaw_text::Hyphenate<'_>>) -> alloc::vec::Vec<paperpaw_text::Line>
+pub fn paperpaw_text::wrap_lines_kerned_in(&str, &dyn core::ops::function::Fn(usize) -> f32, &dyn core::ops::function::Fn(usize, char) -> f32, &dyn core::ops::function::Fn(usize, char, char) -> f32, core::option::Option<paperpaw_text::Hyphenate<'_>>, u32) -> alloc::vec::Vec<paperpaw_text::Line>
+pub fn paperpaw_text::wrap_lines_kerned_opts(&str, impl core::ops::function::Fn(usize) -> f32, impl core::ops::function::Fn(usize, char) -> f32, impl core::ops::function::Fn(usize, char, char) -> f32, core::option::Option<paperpaw_text::Hyphenate<'_>>, u32) -> alloc::vec::Vec<paperpaw_text::Line>
 pub type paperpaw_text::Hyphenate<'a> = &'a dyn core::ops::function::Fn(&str, &mut dyn core::ops::function::FnMut(usize))

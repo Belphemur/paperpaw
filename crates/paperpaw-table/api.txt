@@ -10,10 +10,11 @@ pub mod paperpaw_table::index::graphics
 pub const paperpaw_table::index::graphics::COUNT: usize
 pub const paperpaw_table::index::graphics::FAMILY: paperpaw_table::Family
 pub mod paperpaw_table::index::text
-pub const paperpaw_table::index::text::CACHE_GLYPH: usize
+pub const paperpaw_table::index::text::CACHE_NEW: usize
 pub const paperpaw_table::index::text::CHARSET_STAND_IN: usize
 pub const paperpaw_table::index::text::COUNT: usize
 pub const paperpaw_table::index::text::FAMILY: paperpaw_table::Family
+pub const paperpaw_table::index::text::FONTS_FAILED_READS: usize
 pub const paperpaw_table::index::text::FONTS_HANDLE: usize
 pub const paperpaw_table::index::text::FONT_ADVANCE: usize
 pub const paperpaw_table::index::text::FONT_FROM_COW: usize
@@ -26,6 +27,7 @@ pub const paperpaw_table::index::text::FONT_SIZE_FOR: usize
 pub const paperpaw_table::index::text::HANDLE_ADVANCE: usize
 pub const paperpaw_table::index::text::HANDLE_DRAW: usize
 pub const paperpaw_table::index::text::HANDLE_DRAW_BOLDER: usize
+pub const paperpaw_table::index::text::HANDLE_DRAW_IN: usize
 pub const paperpaw_table::index::text::HANDLE_DRAW_TONED: usize
 pub const paperpaw_table::index::text::HANDLE_HAS_CHAR: usize
 pub const paperpaw_table::index::text::HANDLE_HEADING_LINE_HEIGHT: usize
@@ -35,6 +37,7 @@ pub const paperpaw_table::index::text::HANDLE_KERN: usize
 pub const paperpaw_table::index::text::HANDLE_LARGEST_SIZE: usize
 pub const paperpaw_table::index::text::HANDLE_LINE_METRICS: usize
 pub const paperpaw_table::index::text::HANDLE_MEASURE: usize
+pub const paperpaw_table::index::text::HANDLE_MEASURE_IN: usize
 pub const paperpaw_table::index::text::HANDLE_SIZE_FOR: usize
 pub const paperpaw_table::index::text::HANDLE_WRAP: usize
 pub const paperpaw_table::index::text::LAYOUT_WRAP_BALANCED: usize
@@ -46,11 +49,7 @@ pub const paperpaw_table::index::text::PACK_KERN: usize
 pub const paperpaw_table::index::text::PACK_LARGEST_SIZE: usize
 pub const paperpaw_table::index::text::PACK_LINE_METRICS: usize
 pub const paperpaw_table::index::text::PACK_SIZE_FOR: usize
-pub const paperpaw_table::index::text::STORED_ADVANCE: usize
-pub const paperpaw_table::index::text::STORED_HAS_CHAR: usize
-pub const paperpaw_table::index::text::STORED_LARGEST_SIZE: usize
-pub const paperpaw_table::index::text::STORED_LINE_METRICS: usize
-pub const paperpaw_table::index::text::STORED_RENDER: usize
+pub const paperpaw_table::index::text::STORED_OPEN: usize
 pub const paperpaw_table::index::text::TEXT_DRAW_TEXT: usize
 pub const paperpaw_table::index::text::TEXT_DRAW_TEXT_IN: usize
 pub const paperpaw_table::index::text::TEXT_GLYPH_X: usize

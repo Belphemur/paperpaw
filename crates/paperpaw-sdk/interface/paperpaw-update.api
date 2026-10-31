@@ -4,6 +4,7 @@ pub paperpaw_update::Problem::Length
 pub paperpaw_update::Problem::NewerFormat
 pub paperpaw_update::Problem::NotAnImage
 pub paperpaw_update::Problem::NotAnUpdate
+pub paperpaw_update::Problem::Other(u16)
 pub paperpaw_update::Problem::Signature
 impl core::fmt::Display for paperpaw_update::Problem
 pub fn paperpaw_update::Problem::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result

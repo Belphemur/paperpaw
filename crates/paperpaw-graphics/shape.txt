@@ -2,6 +2,13 @@
 # tools/interface.py writes them: fields, variants and trait items in
 # the source's order, private fields and the private types they reach
 # too, every feature on (ADR 0026).
+const paperpaw_graphics::band::FramePass::COLOUR: Self = Self(4)
+const paperpaw_graphics::band::FramePass::GRAY: Self = Self(2)
+const paperpaw_graphics::band::FramePass::MONO: Self = Self(1)
+const paperpaw_graphics::band::RegionKind::CHROME: Self = Self(3)
+const paperpaw_graphics::band::RegionKind::IMAGE: Self = Self(2)
+const paperpaw_graphics::band::RegionKind::KEYBOARD: Self = Self(4)
+const paperpaw_graphics::band::RegionKind::PAGE_TEXT: Self = Self(1)
 const paperpaw_graphics::blit::BitmapFormat::GRAY1: Self = Self::gray(1)
 const paperpaw_graphics::blit::BitmapFormat::GRAY2: Self = Self::gray(2)
 const paperpaw_graphics::blit::BitmapFormat::GRAY4: Self = Self::gray(4)
@@ -10,9 +17,13 @@ const paperpaw_graphics::blit::Dither::NONE: Self = Self(1)
 const paperpaw_graphics::blit::Dither::ORDERED: Self = Self(0)
 const paperpaw_graphics::framebuffer::MONO_COVERAGE: u8 = 96u8
 const paperpaw_graphics::round::UNIT: i32 = 10_000i32
-enum paperpaw_graphics::GraphicsError { OutOfMemory { bytes: usize }, UnsupportedFormat(0: paperpaw_platform::pixel::PixelFormat) }
+enum paperpaw_graphics::GraphicsError { OutOfMemory { bytes: usize }, UnsupportedFormat(0: paperpaw_platform::pixel::PixelFormat), Other(0: u16) }
 enum paperpaw_graphics::blit::BitmapError { ZeroSize, StrideTooSmall { stride: usize, needed: usize }, DataTooShort { len: usize, needed: usize }, PaletteTooShort { len: usize, needed: usize } }
-enum paperpaw_graphics::canvas::Role { Heading, Row, Button, Switch, Slider, Text, Check, Radio, Field, Image, Link, Dialog, Progress }
+enum paperpaw_graphics::canvas::Role { Heading, Row, Button, Switch, Slider, Text, Check, Radio, Field, Image, Link, Dialog, Progress, Other(0: &'static str) }
+struct paperpaw_graphics::band::BandView<'a> { rows: &'a mut [u8], above: &'a [u8], carry: &'a mut [u8], regions: &'a [paperpaw_graphics::band::Region], stride: u32, area: paperpaw_platform::geometry::Rect, format: paperpaw_platform::pixel::PixelFormat, pass: paperpaw_graphics::band::FramePass, inverted: bool, flags: u32, slots: [u32; 4] }
+struct paperpaw_graphics::band::FramePass(0: u16)
+struct paperpaw_graphics::band::Region { kind: paperpaw_graphics::band::RegionKind, rect: paperpaw_platform::geometry::Rect, spare: u32 }
+struct paperpaw_graphics::band::RegionKind(0: u16)
 struct paperpaw_graphics::blit::Bitmap<'a> { format: paperpaw_graphics::blit::BitmapFormat, width: u16, height: u16, stride: usize, data: &'a [u8], palette: core::option::Option<&'a [u8]> }
 struct paperpaw_graphics::blit::BitmapFormat { bits: u8, kind: u8 }
 struct paperpaw_graphics::blit::Blit { at: paperpaw_platform::geometry::Point, scale: u8, dither: paperpaw_graphics::blit::Dither }

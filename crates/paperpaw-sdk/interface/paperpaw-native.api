@@ -114,6 +114,7 @@ pub fn paperpaw_native::signature::sign(&[u8], &[u8; 32]) -> paperpaw_native::si
 #[non_exhaustive] pub enum paperpaw_native::Chip
 pub paperpaw_native::Chip::Esp32C3
 pub paperpaw_native::Chip::Esp32S3
+pub paperpaw_native::Chip::Other(u16)
 impl paperpaw_native::Chip
 pub const fn paperpaw_native::Chip::from_id(u16) -> core::option::Option<paperpaw_native::Chip>
 pub const fn paperpaw_native::Chip::id(self) -> u16
@@ -135,6 +136,7 @@ pub paperpaw_native::Problem::Malformed
 pub paperpaw_native::Problem::NewerFormat
 pub paperpaw_native::Problem::NotAPlugin
 pub paperpaw_native::Problem::OlderFormat
+pub paperpaw_native::Problem::Other(u16)
 pub paperpaw_native::Problem::Relocation
 pub paperpaw_native::Problem::Signature
 pub paperpaw_native::Problem::UnknownChip

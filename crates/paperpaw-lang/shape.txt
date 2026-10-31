@@ -4,6 +4,6 @@
 # too, every feature on (ADR 0026).
 const paperpaw_lang::Lang::NONE: paperpaw_lang::Lang = Lang(0)
 enum paperpaw_lang::Direction { Auto, Ltr, Rtl }
-enum paperpaw_lang::WritingMode { HorizontalTb, VerticalRl, VerticalLr }
+enum paperpaw_lang::WritingMode { HorizontalTb, VerticalRl, VerticalLr, SidewaysRl, SidewaysLr }
 struct paperpaw_lang::Lang(0: u32)
 struct paperpaw_lang::LanguageCode { code: [u8; 3], len: usize }

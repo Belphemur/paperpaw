@@ -14,6 +14,7 @@ pub paperpaw_i18n::Arg::Int(i64)
 pub paperpaw_i18n::Arg::Str(&'a str)
 #[non_exhaustive] pub enum paperpaw_i18n::CatalogError
 pub paperpaw_i18n::CatalogError::MissingLanguage
+pub paperpaw_i18n::CatalogError::Other(u16)
 pub paperpaw_i18n::CatalogError::Syntax(paperpaw_config::ParseError)
 pub paperpaw_i18n::CatalogError::UnexpectedSection
 pub paperpaw_i18n::CatalogError::UnexpectedSection::line: u32
@@ -46,7 +47,7 @@ pub const fn paperpaw_i18n::PluralRule::id(self) -> &'static str
 pub struct paperpaw_i18n::Catalog
 impl paperpaw_i18n::Catalog
 pub fn paperpaw_i18n::Catalog::calendar(&self) -> &'static str
-pub fn paperpaw_i18n::Catalog::digits(&self) -> &'static str
+pub fn paperpaw_i18n::Catalog::digits(&self) -> [char; 10]
 pub fn paperpaw_i18n::Catalog::direction(&self) -> paperpaw_lang::Direction
 pub fn paperpaw_i18n::Catalog::get(&self, &str) -> core::option::Option<&str>
 pub fn paperpaw_i18n::Catalog::index_on_heap(&self) -> usize
@@ -79,9 +80,9 @@ pub fn paperpaw_i18n::Translator::plural(&self, &str, i64, &[(&str, paperpaw_i18
 pub fn paperpaw_i18n::Translator::set_language(&mut self, &str)
 pub fn paperpaw_i18n::Translator::shrink_to_fit(&mut self)
 pub fn paperpaw_i18n::Translator::tr<'a>(&'a self, &'a str) -> &'a str
-pub const paperpaw_i18n::CALENDARS: [&str; 3]
-pub const paperpaw_i18n::DIGITS: [&str; 6]
 pub const paperpaw_i18n::FALLBACK_LANGUAGE: &str
+pub fn paperpaw_i18n::calendars() -> impl core::iter::traits::iterator::Iterator<Item = &'static str>
 pub fn paperpaw_i18n::cldr_rules() -> impl core::iter::traits::iterator::Iterator<Item = &'static str>
+pub fn paperpaw_i18n::digit_systems() -> impl core::iter::traits::iterator::Iterator<Item = &'static str>
 pub fn paperpaw_i18n::fingerprint(&str) -> u64
 pub type paperpaw_i18n::FixedIndexes = &'static [(u64, &'static [u16])]

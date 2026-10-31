@@ -3,9 +3,7 @@
 # the source's order, private fields and the private types they reach
 # too, every feature on (ADR 0026).
 const paperpaw_i18n::FALLBACK_LANGUAGE: &str = "en"
-const paperpaw_i18n::catalog::CALENDARS: [&str; 3] = ["gregorian", "islamic", "persian"]
-const paperpaw_i18n::catalog::DIGITS: [&str; 6] = ["latn", "arab", "arabext", "deva", "beng", "thai"]
-enum paperpaw_i18n::catalog::CatalogError { Syntax(0: paperpaw_config::ParseError), MissingLanguage, UnknownPluralRule { line: u32 }, UnexpectedSection { line: u32 } }
+enum paperpaw_i18n::catalog::CatalogError { Syntax(0: paperpaw_config::ParseError), MissingLanguage, UnknownPluralRule { line: u32 }, UnexpectedSection { line: u32 }, Other(0: u16) }
 enum paperpaw_i18n::check::Issue { Missing(0: alloc::string::String), Unknown(0: alloc::string::String), Placeholders(0: alloc::string::String) }
 enum paperpaw_i18n::format::Arg<'a> { Str(0: &'a str), Int(0: i64) }
 enum paperpaw_i18n::plural::PluralCategory { Zero, One, Two, Few, Many, Other }

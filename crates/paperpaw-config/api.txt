@@ -4,6 +4,7 @@ pub paperpaw_config::ErrorKind::InvalidEscape
 pub paperpaw_config::ErrorKind::InvalidKey
 pub paperpaw_config::ErrorKind::InvalidLine
 pub paperpaw_config::ErrorKind::InvalidSection
+pub paperpaw_config::ErrorKind::Other(u16)
 pub paperpaw_config::ErrorKind::UnterminatedString
 pub struct paperpaw_config::Entry<'a>
 pub paperpaw_config::Entry::key: &'a str

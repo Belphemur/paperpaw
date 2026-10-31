@@ -3,8 +3,8 @@
 # the source's order, private fields and the private types they reach
 # too, every feature on (ADR 0026).
 enum paperpaw_image::Decoded { Gray(0: paperpaw_image::gray::GrayFile), Color(0: paperpaw_image::color::ColorFile), Alpha(0: paperpaw_image::alpha::AlphaFile) }
-enum paperpaw_image::Format { Jpeg, Png, Gif }
-enum paperpaw_image::ImageError { Invalid(0: &'static str), Unsupported(0: &'static str), Io, Storage(0: paperpaw_platform::storage::StorageError), OutOfMemory, Stopped }
+enum paperpaw_image::Format { Jpeg, Png, Gif, Other(0: u16) }
+enum paperpaw_image::ImageError { Invalid(0: &'static str), Unsupported(0: &'static str), Io, Storage(0: paperpaw_platform::storage::StorageError), OutOfMemory, Stopped, Other(0: u16) }
 struct paperpaw_image::Downscaler { width: u32, height: u32, channels: usize, out_width: u32, out_height: u32, columns: alloc::vec::Vec<u16>, counts: alloc::vec::Vec<u16>, sums: alloc::vec::Vec<u32>, rows: u32, seen: u32, out: alloc::vec::Vec<u8> }
 struct paperpaw_image::Fit { short: u32, long: u32 }
 struct paperpaw_image::ImageFile { path: alloc::string::String, width: u32, height: u32, color: bool, alpha: bool }
@@ -15,5 +15,5 @@ struct paperpaw_image::color::ColorWriter<'a> { storage: &'a dyn paperpaw_platfo
 struct paperpaw_image::gray::GrayFile { path: alloc::string::String, width: u32, height: u32 }
 struct paperpaw_image::gray::GrayWriter<'a> { storage: &'a dyn paperpaw_platform::storage::Storage, path: &'a str, buffer: alloc::vec::Vec<u8> }
 struct paperpaw_image::png_write::PngWriter { width: u32, rows_left: u32, adler: (u32, u32) }
-trait paperpaw_image::ImageSink { function start, function row, function wants_color, function row_rgb, function wants_alpha, function row_alpha }
-trait paperpaw_image::Source { function read }
+trait paperpaw_image::ImageSink { function start(&mut Self, u32, u32) -> core::result::Result<(), paperpaw_image::ImageError>, function row(&mut Self, &[u8]) -> core::result::Result<(), paperpaw_image::ImageError>, function wants_color(&Self) -> bool, function row_rgb(&mut Self, &[u8]) -> core::result::Result<(), paperpaw_image::ImageError>, function wants_alpha(&Self) -> bool, function row_alpha(&mut Self, &[u8]) -> core::result::Result<(), paperpaw_image::ImageError> }
+trait paperpaw_image::Source { function read(&mut Self, &mut [u8]) -> core::result::Result<usize, paperpaw_image::ImageError> }

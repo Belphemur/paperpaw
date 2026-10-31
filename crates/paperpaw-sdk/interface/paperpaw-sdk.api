@@ -21,6 +21,7 @@ pub use paperpaw_sdk::Lang
 pub use paperpaw_sdk::LineMetrics
 pub use paperpaw_sdk::MemoryClass
 pub use paperpaw_sdk::NoStorage
+pub use paperpaw_sdk::PackLimits
 pub use paperpaw_sdk::PixelFormat
 pub use paperpaw_sdk::Point
 pub use paperpaw_sdk::PointerEvent
@@ -39,6 +40,7 @@ pub mod paperpaw_sdk::annotations
 #[non_exhaustive] pub enum paperpaw_sdk::annotations::Kind
 pub paperpaw_sdk::annotations::Kind::Bookmark
 pub paperpaw_sdk::annotations::Kind::Highlight
+pub paperpaw_sdk::annotations::Kind::Other(u16)
 #[non_exhaustive] pub struct paperpaw_sdk::annotations::Annotation
 pub paperpaw_sdk::annotations::Annotation::created: i64
 pub paperpaw_sdk::annotations::Annotation::mark: paperpaw_sdk::annotations::Mark
@@ -136,6 +138,7 @@ pub paperpaw_sdk::bluetooth::BtError::Lost
 pub paperpaw_sdk::bluetooth::BtError::NotAllowed
 pub paperpaw_sdk::bluetooth::BtError::NotFound
 pub paperpaw_sdk::bluetooth::BtError::Off
+pub paperpaw_sdk::bluetooth::BtError::Other(u16)
 pub paperpaw_sdk::bluetooth::BtError::Timeout
 pub paperpaw_sdk::bluetooth::BtError::Unsupported
 impl paperpaw_sdk::bluetooth::BtError
@@ -1037,6 +1040,9 @@ pub const paperpaw_sdk::builtin::settings::INDENT_SIZE: paperpaw_sdk::setting::S
 pub const paperpaw_sdk::builtin::settings::JUSTIFY: paperpaw_sdk::setting::Setting<bool>
 pub const paperpaw_sdk::builtin::settings::KERNING: paperpaw_sdk::setting::Setting<bool>
 pub const paperpaw_sdk::builtin::settings::KEYMAP_PRESET: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
+pub const paperpaw_sdk::builtin::settings::KOREAN_BREAKS: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
+pub const paperpaw_sdk::builtin::settings::KOREAN_BREAKS_SYLLABLE: &str
+pub const paperpaw_sdk::builtin::settings::KOREAN_BREAKS_WORD: &str
 pub const paperpaw_sdk::builtin::settings::LANGUAGE: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::LETTER_SPACING: paperpaw_sdk::setting::Setting<i64>
 pub const paperpaw_sdk::builtin::settings::LIBRARY_FOLDER: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
@@ -1088,6 +1094,7 @@ pub const paperpaw_sdk::builtin::settings::TEXT_COLORS: &[&str]
 pub const paperpaw_sdk::builtin::settings::TEXT_COLOR_OWN: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::TEXT_CONTRAST: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::TEXT_CONTRAST_LEVELS: &[&str]
+pub const paperpaw_sdk::builtin::settings::TEXT_CURVE: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::TIME_ZONE: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::TIME_ZONE_RULE: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::UI_CONTRAST: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
@@ -1101,6 +1108,7 @@ pub const paperpaw_sdk::builtin::settings::UI_PALETTE: paperpaw_sdk::setting::Se
 pub const paperpaw_sdk::builtin::settings::UI_ROW: paperpaw_sdk::setting::Setting<i64>
 pub const paperpaw_sdk::builtin::settings::UI_SEPARATORS: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::UI_SIZE: paperpaw_sdk::setting::Setting<i64>
+pub const paperpaw_sdk::builtin::settings::UI_TEXT_CURVE: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::UI_TITLE: paperpaw_sdk::setting::Setting<i64>
 pub const paperpaw_sdk::builtin::settings::VOICE: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::VOICE_SYSTEM: &str
@@ -1255,6 +1263,7 @@ pub fn paperpaw_sdk::contribution::Registrar::add_preset(&mut self, paperpaw_sdk
 pub fn paperpaw_sdk::contribution::Registrar::add_presets(&mut self, &'static [paperpaw_sdk::presets::Preset]) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_reader(&mut self, paperpaw_sdk::readers::ReaderSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_refresh_filter(&mut self, paperpaw_sdk::filters::RefreshFilterSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
+pub fn paperpaw_sdk::contribution::Registrar::add_render_hook(&mut self, paperpaw_sdk::render::RenderHookSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_screen(&mut self, paperpaw_sdk::ScreenSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_screens(&mut self, &'static [paperpaw_sdk::FixedScreen]) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_setting(&mut self, paperpaw_sdk::SettingSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
@@ -1296,6 +1305,7 @@ pub fn paperpaw_sdk::contribution::Registrar::subscribe(&mut self, impl core::co
 pub mod paperpaw_sdk::data
 #[non_exhaustive] pub enum paperpaw_sdk::data::Error
 pub paperpaw_sdk::data::Error::Newer(u32)
+pub paperpaw_sdk::data::Error::Other(u16)
 pub paperpaw_sdk::data::Error::Storage(paperpaw_platform::storage::StorageError)
 pub paperpaw_sdk::data::Error::Unreadable
 impl core::convert::From<paperpaw_platform::storage::StorageError> for paperpaw_sdk::data::Error
@@ -1321,6 +1331,7 @@ pub mod paperpaw_sdk::decorations
 pub paperpaw_sdk::decorations::LineKind::Dashed
 pub paperpaw_sdk::decorations::LineKind::Dotted
 pub paperpaw_sdk::decorations::LineKind::Double
+pub paperpaw_sdk::decorations::LineKind::Other(&'static str)
 pub paperpaw_sdk::decorations::LineKind::Solid
 pub paperpaw_sdk::decorations::LineKind::Wavy
 impl paperpaw_sdk::decorations::LineKind
@@ -1335,6 +1346,7 @@ pub paperpaw_sdk::decorations::Tone::Gray
 pub paperpaw_sdk::decorations::Tone::Green
 pub paperpaw_sdk::decorations::Tone::LightGray
 pub paperpaw_sdk::decorations::Tone::Orange
+pub paperpaw_sdk::decorations::Tone::Other(&'static str)
 pub paperpaw_sdk::decorations::Tone::Pink
 pub paperpaw_sdk::decorations::Tone::Red
 pub paperpaw_sdk::decorations::Tone::White
@@ -1458,6 +1470,7 @@ pub paperpaw_sdk::developer::DevError::NotAllowed
 pub paperpaw_sdk::developer::DevError::NotAvailable
 pub paperpaw_sdk::developer::DevError::NotDeclared
 pub paperpaw_sdk::developer::DevError::NotOpen
+pub paperpaw_sdk::developer::DevError::Other(u16)
 #[non_exhaustive] pub enum paperpaw_sdk::developer::DevEvent
 pub paperpaw_sdk::developer::DevEvent::Closed
 pub paperpaw_sdk::developer::DevEvent::Closed::link: paperpaw_sdk::Id
@@ -1949,6 +1962,7 @@ pub paperpaw_sdk::firmware::InstallFailure::LowBattery
 pub paperpaw_sdk::firmware::InstallFailure::NewerFormat
 pub paperpaw_sdk::firmware::InstallFailure::NotAnUpdate
 pub paperpaw_sdk::firmware::InstallFailure::NotNewer
+pub paperpaw_sdk::firmware::InstallFailure::Other(u16)
 pub paperpaw_sdk::firmware::InstallFailure::OtherDevice
 pub paperpaw_sdk::firmware::InstallFailure::TooLarge
 pub paperpaw_sdk::firmware::InstallFailure::Unreadable
@@ -2309,11 +2323,13 @@ pub paperpaw_sdk::library::catalog::Reading::Unread
 pub paperpaw_sdk::library::catalog::Show::All
 pub paperpaw_sdk::library::catalog::Show::Favourites
 pub paperpaw_sdk::library::catalog::Show::Finished
+pub paperpaw_sdk::library::catalog::Show::Other(&'static str)
 pub paperpaw_sdk::library::catalog::Show::Reading
 pub paperpaw_sdk::library::catalog::Show::Unread
 #[non_exhaustive] pub enum paperpaw_sdk::library::catalog::Sort
 pub paperpaw_sdk::library::catalog::Sort::Added
 pub paperpaw_sdk::library::catalog::Sort::Author
+pub paperpaw_sdk::library::catalog::Sort::Other(&'static str)
 pub paperpaw_sdk::library::catalog::Sort::Series
 pub paperpaw_sdk::library::catalog::Sort::Title
 #[non_exhaustive] pub enum paperpaw_sdk::library::catalog::State
@@ -2781,6 +2797,7 @@ pub mod paperpaw_sdk::memory
 #[non_exhaustive] pub enum paperpaw_sdk::memory::MemoryError
 pub paperpaw_sdk::memory::MemoryError::Full
 pub paperpaw_sdk::memory::MemoryError::Full::bytes: usize
+pub paperpaw_sdk::memory::MemoryError::Other(u16)
 pub paperpaw_sdk::memory::MemoryError::TooLarge
 impl core::error::Error for paperpaw_sdk::memory::MemoryError
 impl core::fmt::Display for paperpaw_sdk::memory::MemoryError
@@ -3077,6 +3094,7 @@ pub fn paperpaw_sdk::readers::remembered(&dyn paperpaw_platform::storage::Storag
 pub fn paperpaw_sdk::readers::resolve(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params) -> paperpaw_sdk::Command
 pub fn paperpaw_sdk::readers::show_text(&dyn paperpaw_platform::storage::Storage, &str, &str) -> core::result::Result<paperpaw_sdk::Command, paperpaw_platform::storage::StorageError>
 pub mod paperpaw_sdk::reading
+pub use paperpaw_sdk::reading::LineBidi
 pub struct paperpaw_sdk::reading::DroppedRuns
 impl paperpaw_sdk::reading::DroppedRuns
 pub fn paperpaw_sdk::reading::DroppedRuns::clear(&self)
@@ -3145,11 +3163,13 @@ impl paperpaw_sdk::reading::Word
 pub fn paperpaw_sdk::reading::Word::new(impl core::convert::Into<alloc::string::String>, paperpaw_document::Locator, paperpaw_document::Locator) -> Self
 #[non_exhaustive] pub struct paperpaw_sdk::reading::WordBox
 pub paperpaw_sdk::reading::WordBox::area: paperpaw_platform::geometry::Rect
+pub paperpaw_sdk::reading::WordBox::bidi: paperpaw_layout::LineBidi
 pub paperpaw_sdk::reading::WordBox::end: paperpaw_document::Locator
 pub paperpaw_sdk::reading::WordBox::rtl: bool
 pub paperpaw_sdk::reading::WordBox::start: paperpaw_document::Locator
 pub paperpaw_sdk::reading::WordBox::text: alloc::string::String
 impl paperpaw_sdk::reading::WordBox
+pub fn paperpaw_sdk::reading::WordBox::bidi(self, paperpaw_layout::LineBidi) -> Self
 pub fn paperpaw_sdk::reading::WordBox::lookup_text(&self) -> &str
 pub fn paperpaw_sdk::reading::WordBox::new(paperpaw_platform::geometry::Rect, impl core::convert::Into<alloc::string::String>, paperpaw_document::Locator, paperpaw_document::Locator) -> Self
 pub fn paperpaw_sdk::reading::WordBox::rtl(self, bool) -> Self
@@ -3238,12 +3258,56 @@ pub struct paperpaw_sdk::realtime::Squeeze
 impl paperpaw_sdk::realtime::Squeeze
 pub const fn paperpaw_sdk::realtime::Squeeze::asked(&self) -> u32
 pub const paperpaw_sdk::realtime::ESCAPE_HOLD: core::time::Duration
+pub mod paperpaw_sdk::render
+pub use paperpaw_sdk::render::BandView
+pub use paperpaw_sdk::render::FramePass
+pub use paperpaw_sdk::render::Region
+pub use paperpaw_sdk::render::RegionKind
+pub struct paperpaw_sdk::render::HookCx<'a>
+impl<'a> paperpaw_sdk::render::HookCx<'a>
+pub fn paperpaw_sdk::render::HookCx<'a>::lang(&self) -> paperpaw_lang::Lang
+pub fn paperpaw_sdk::render::HookCx<'a>::new(&'a paperpaw_sdk::Settings, paperpaw_lang::Lang, u16) -> Self
+pub fn paperpaw_sdk::render::HookCx<'a>::revision(&self) -> u16
+pub fn paperpaw_sdk::render::HookCx<'a>::script(&self) -> core::option::Option<&'static str>
+pub fn paperpaw_sdk::render::HookCx<'a>::setting<T: paperpaw_sdk::setting::SettingType>(&self, &paperpaw_sdk::setting::Setting<T>) -> <T as paperpaw_sdk::setting::SettingType>::Value
+impl core::fmt::Debug for paperpaw_sdk::render::HookCx<'_>
+pub fn paperpaw_sdk::render::HookCx<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct paperpaw_sdk::render::HookStage(_)
+impl paperpaw_sdk::render::HookStage
+pub const paperpaw_sdk::render::HookStage::AFTER_BAND: Self
+pub const paperpaw_sdk::render::HookStage::AFTER_FRAME: Self
+pub const paperpaw_sdk::render::HookStage::AFTER_SCREEN: Self
+pub const paperpaw_sdk::render::HookStage::BEFORE_BAND: Self
+pub const paperpaw_sdk::render::HookStage::BEFORE_CHROME: Self
+pub const fn paperpaw_sdk::render::HookStage::from_value(u16) -> Self
+pub const fn paperpaw_sdk::render::HookStage::value(self) -> u16
+#[non_exhaustive] pub struct paperpaw_sdk::render::RenderHookSpec
+pub paperpaw_sdk::render::RenderHookSpec::carry: u16
+pub paperpaw_sdk::render::RenderHookSpec::flags: u32
+pub paperpaw_sdk::render::RenderHookSpec::hook: paperpaw_sdk::render::RenderHookFn
+pub paperpaw_sdk::render::RenderHookSpec::id: paperpaw_sdk::Id
+pub paperpaw_sdk::render::RenderHookSpec::order: i16
+pub paperpaw_sdk::render::RenderHookSpec::overlap: u8
+pub paperpaw_sdk::render::RenderHookSpec::passes: paperpaw_graphics::band::FramePass
+pub paperpaw_sdk::render::RenderHookSpec::stage: paperpaw_sdk::render::HookStage
+pub paperpaw_sdk::render::RenderHookSpec::switch: paperpaw_sdk::Id
+pub paperpaw_sdk::render::RenderHookSpec::title: alloc::borrow::Cow<'static, str>
+impl paperpaw_sdk::render::RenderHookSpec
+pub fn paperpaw_sdk::render::RenderHookSpec::new(paperpaw_sdk::Id, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, paperpaw_sdk::render::HookStage, paperpaw_sdk::Id, paperpaw_sdk::render::RenderHookFn) -> Self
+pub fn paperpaw_sdk::render::RenderHookSpec::with_carry(self, u16) -> Self
+pub fn paperpaw_sdk::render::RenderHookSpec::with_order(self, i16) -> Self
+pub fn paperpaw_sdk::render::RenderHookSpec::with_overlap(self, u8) -> Self
+pub fn paperpaw_sdk::render::RenderHookSpec::with_passes(self, paperpaw_graphics::band::FramePass) -> Self
+impl core::fmt::Debug for paperpaw_sdk::render::RenderHookSpec
+pub fn paperpaw_sdk::render::RenderHookSpec::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub type paperpaw_sdk::render::RenderHookFn = alloc::boxed::Box<dyn core::ops::function::Fn(&mut paperpaw_graphics::band::BandView<'_>, &paperpaw_sdk::render::HookCx<'_>)>
 pub mod paperpaw_sdk::replies
 #[non_exhaustive] pub enum paperpaw_sdk::replies::HttpError
 pub paperpaw_sdk::replies::HttpError::Cancelled
 pub paperpaw_sdk::replies::HttpError::Dns
 pub paperpaw_sdk::replies::HttpError::Io
 pub paperpaw_sdk::replies::HttpError::NoNetwork
+pub paperpaw_sdk::replies::HttpError::Other(u16)
 pub paperpaw_sdk::replies::HttpError::Refused
 pub paperpaw_sdk::replies::HttpError::Replaced
 pub paperpaw_sdk::replies::HttpError::Timeout
@@ -3578,6 +3642,9 @@ pub const paperpaw_sdk::status::context::PAGE: &str
 #[non_exhaustive] pub enum paperpaw_sdk::status::StatusValue
 pub paperpaw_sdk::status::StatusValue::Bar
 pub paperpaw_sdk::status::StatusValue::Bar::permille: u16
+pub paperpaw_sdk::status::StatusValue::Extended
+pub paperpaw_sdk::status::StatusValue::Extended::key: paperpaw_sdk::Id
+pub paperpaw_sdk::status::StatusValue::Extended::params: paperpaw_sdk::Params
 pub paperpaw_sdk::status::StatusValue::Icon(alloc::borrow::Cow<'static, str>)
 pub paperpaw_sdk::status::StatusValue::Labelled
 pub paperpaw_sdk::status::StatusValue::Labelled::icon: alloc::borrow::Cow<'static, str>
@@ -3684,6 +3751,7 @@ pub type paperpaw_sdk::status::StatusTargetsFn = alloc::boxed::Box<dyn core::ops
 pub mod paperpaw_sdk::text
 pub use paperpaw_sdk::text::Around
 pub use paperpaw_sdk::text::OUTLINES
+pub use paperpaw_sdk::text::TextInk
 pub use paperpaw_sdk::text::ToneCurve
 pub use paperpaw_sdk::text::bidi
 pub use paperpaw_sdk::text::is_invisible
@@ -3911,6 +3979,25 @@ pub paperpaw_sdk::ui::look::CheckPart::rect: paperpaw_platform::geometry::Rect
 pub paperpaw_sdk::ui::look::CoverPart::inverted: bool
 pub paperpaw_sdk::ui::look::CoverPart::rect: paperpaw_platform::geometry::Rect
 pub paperpaw_sdk::ui::look::CoverPart::title_rect: paperpaw_platform::geometry::Rect
+pub struct paperpaw_sdk::ui::look::ExtraPaint
+impl paperpaw_sdk::ui::look::ExtraPaint
+pub const fn paperpaw_sdk::ui::look::ExtraPaint::kind(&self) -> paperpaw_sdk::ui::look::PartKind
+pub const fn paperpaw_sdk::ui::look::ExtraPaint::new(paperpaw_sdk::ui::look::PartKind, paperpaw_sdk::ui::look::ExtraPainter) -> Self
+impl core::fmt::Debug for paperpaw_sdk::ui::look::ExtraPaint
+pub fn paperpaw_sdk::ui::look::ExtraPaint::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub struct paperpaw_sdk::ui::look::ExtraPart<'t>
+pub paperpaw_sdk::ui::look::ExtraPart::kind: paperpaw_sdk::ui::look::PartKind
+pub paperpaw_sdk::ui::look::ExtraPart::label: &'t str
+pub paperpaw_sdk::ui::look::ExtraPart::rect: paperpaw_platform::geometry::Rect
+pub paperpaw_sdk::ui::look::ExtraPart::state: u32
+pub paperpaw_sdk::ui::look::ExtraPart::values: [i32; 4]
+impl<'t> paperpaw_sdk::ui::look::ExtraPart<'t>
+pub const fn paperpaw_sdk::ui::look::ExtraPart<'t>::new(paperpaw_sdk::ui::look::PartKind, paperpaw_platform::geometry::Rect) -> Self
+pub const fn paperpaw_sdk::ui::look::ExtraPart<'t>::with_label(self, &'t str) -> Self
+pub const fn paperpaw_sdk::ui::look::ExtraPart<'t>::with_state(self, u32) -> Self
+pub const fn paperpaw_sdk::ui::look::ExtraPart<'t>::with_values(self, [i32; 4]) -> Self
+impl core::fmt::Debug for paperpaw_sdk::ui::look::ExtraPart<'_>
+pub fn paperpaw_sdk::ui::look::ExtraPart<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[non_exhaustive] pub struct paperpaw_sdk::ui::look::FocusPart
 pub paperpaw_sdk::ui::look::FocusPart::rect: paperpaw_platform::geometry::Rect
 #[non_exhaustive] pub struct paperpaw_sdk::ui::look::FramePart
@@ -3925,11 +4012,13 @@ pub paperpaw_sdk::ui::look::HintRowPart::area: paperpaw_platform::geometry::Rect
 pub struct paperpaw_sdk::ui::look::Look(_)
 impl paperpaw_sdk::ui::look::Look
 pub fn paperpaw_sdk::ui::look::Look::cover(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_sdk::ui::look::CoverPart) -> core::option::Option<paperpaw_platform::pixel::Color>
+pub fn paperpaw_sdk::ui::look::Look::extra(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, &paperpaw_sdk::ui::look::ExtraPart<'_>) -> bool
 pub const fn paperpaw_sdk::ui::look::Look::none() -> Self
 pub const fn paperpaw_sdk::ui::look::Look::of(&'static paperpaw_sdk::ui::look::Painters) -> Self
 pub fn paperpaw_sdk::ui::look::Look::painters(&self) -> core::option::Option<&'static paperpaw_sdk::ui::look::Painters>
 pub fn paperpaw_sdk::ui::look::Look::pill(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_sdk::ui::look::PillPart) -> core::option::Option<paperpaw_platform::pixel::Color>
 pub fn paperpaw_sdk::ui::look::Look::sheet(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_sdk::ui::look::SheetPart) -> bool
+pub fn paperpaw_sdk::ui::look::Look::text(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, &paperpaw_sdk::ui::look::TextPart<'_>) -> bool
 pub fn paperpaw_sdk::ui::look::Look::ticks(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_sdk::ui::look::TicksPart) -> bool
 impl core::cmp::PartialEq for paperpaw_sdk::ui::look::Look
 pub fn paperpaw_sdk::ui::look::Look::eq(&self, &Self) -> bool
@@ -3945,6 +4034,9 @@ impl paperpaw_sdk::ui::look::Painters
 pub const fn paperpaw_sdk::ui::look::Painters::button(self, paperpaw_sdk::ui::look::InkPainter<paperpaw_sdk::ui::look::ButtonPart>) -> Self
 pub const fn paperpaw_sdk::ui::look::Painters::check(self, paperpaw_sdk::ui::look::Painter<paperpaw_sdk::ui::look::CheckPart>) -> Self
 pub const fn paperpaw_sdk::ui::look::Painters::cover(self, paperpaw_sdk::ui::look::InkPainter<paperpaw_sdk::ui::look::CoverPart>) -> Self
+pub const fn paperpaw_sdk::ui::look::Painters::extras(self, &'static [paperpaw_sdk::ui::look::ExtraPaint]) -> Self
+pub const fn paperpaw_sdk::ui::look::Painters::flag_bits(&self) -> u32
+pub const fn paperpaw_sdk::ui::look::Painters::flags(self, u32) -> Self
 pub const fn paperpaw_sdk::ui::look::Painters::focus(self, paperpaw_sdk::ui::look::Painter<paperpaw_sdk::ui::look::FocusPart>) -> Self
 pub const fn paperpaw_sdk::ui::look::Painters::frame(self, paperpaw_sdk::ui::look::Painter<paperpaw_sdk::ui::look::FramePart>) -> Self
 pub const fn paperpaw_sdk::ui::look::Painters::header(self, paperpaw_sdk::ui::look::InkPainter<paperpaw_sdk::ui::look::HeaderPart>) -> Self
@@ -3956,11 +4048,21 @@ pub const fn paperpaw_sdk::ui::look::Painters::separator(self, paperpaw_sdk::ui:
 pub const fn paperpaw_sdk::ui::look::Painters::sheet(self, paperpaw_sdk::ui::look::Painter<paperpaw_sdk::ui::look::SheetPart>) -> Self
 pub const fn paperpaw_sdk::ui::look::Painters::slider(self, paperpaw_sdk::ui::look::Painter<paperpaw_sdk::ui::look::SliderPart>) -> Self
 pub const fn paperpaw_sdk::ui::look::Painters::switch(self, paperpaw_sdk::ui::look::Painter<paperpaw_sdk::ui::look::SwitchPart>) -> Self
+pub const fn paperpaw_sdk::ui::look::Painters::text(self, paperpaw_sdk::ui::look::TextPainter) -> Self
 pub const fn paperpaw_sdk::ui::look::Painters::ticks(self, paperpaw_sdk::ui::look::Painter<paperpaw_sdk::ui::look::TicksPart>) -> Self
 impl core::default::Default for paperpaw_sdk::ui::look::Painters
 pub fn paperpaw_sdk::ui::look::Painters::default() -> Self
 impl core::fmt::Debug for paperpaw_sdk::ui::look::Painters
 pub fn paperpaw_sdk::ui::look::Painters::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct paperpaw_sdk::ui::look::PartKind(_)
+impl paperpaw_sdk::ui::look::PartKind
+pub const paperpaw_sdk::ui::look::PartKind::BADGE: Self
+pub const paperpaw_sdk::ui::look::PartKind::DIALOG: Self
+pub const paperpaw_sdk::ui::look::PartKind::SCROLLBAR: Self
+pub const paperpaw_sdk::ui::look::PartKind::TAB: Self
+pub const paperpaw_sdk::ui::look::PartKind::TOAST: Self
+pub const fn paperpaw_sdk::ui::look::PartKind::from_value(u16) -> Self
+pub const fn paperpaw_sdk::ui::look::PartKind::value(self) -> u16
 #[non_exhaustive] pub struct paperpaw_sdk::ui::look::PillPart
 pub paperpaw_sdk::ui::look::PillPart::inverted: bool
 pub paperpaw_sdk::ui::look::PillPart::rect: paperpaw_platform::geometry::Rect
@@ -3984,13 +4086,29 @@ pub paperpaw_sdk::ui::look::SliderPart::track: paperpaw_platform::geometry::Rect
 pub paperpaw_sdk::ui::look::SwitchPart::inverted: bool
 pub paperpaw_sdk::ui::look::SwitchPart::on: bool
 pub paperpaw_sdk::ui::look::SwitchPart::rect: paperpaw_platform::geometry::Rect
+#[non_exhaustive] pub struct paperpaw_sdk::ui::look::TextPart<'t>
+pub paperpaw_sdk::ui::look::TextPart::area: paperpaw_platform::geometry::Rect
+pub paperpaw_sdk::ui::look::TextPart::baseline: i32
+pub paperpaw_sdk::ui::look::TextPart::color: paperpaw_platform::pixel::Color
+pub paperpaw_sdk::ui::look::TextPart::font: &'t paperpaw_sdk::FontHandle<'t>
+pub paperpaw_sdk::ui::look::TextPart::inverted: bool
+pub paperpaw_sdk::ui::look::TextPart::role: paperpaw_sdk::ui::TextRole
+pub paperpaw_sdk::ui::look::TextPart::size: f32
+pub paperpaw_sdk::ui::look::TextPart::text: &'t str
+pub paperpaw_sdk::ui::look::TextPart::x: f32
+impl<'t> paperpaw_sdk::ui::look::TextPart<'t>
+pub fn paperpaw_sdk::ui::look::TextPart<'t>::new(&'t str, f32, i32, f32, paperpaw_platform::pixel::Color, paperpaw_platform::geometry::Rect, &'t paperpaw_sdk::FontHandle<'t>, paperpaw_sdk::ui::TextRole) -> Self
+impl core::fmt::Debug for paperpaw_sdk::ui::look::TextPart<'_>
+pub fn paperpaw_sdk::ui::look::TextPart<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[non_exhaustive] pub struct paperpaw_sdk::ui::look::TicksPart
 pub paperpaw_sdk::ui::look::TicksPart::at: u16
 pub paperpaw_sdk::ui::look::TicksPart::count: u16
 pub paperpaw_sdk::ui::look::TicksPart::inverted: bool
 pub paperpaw_sdk::ui::look::TicksPart::rect: paperpaw_platform::geometry::Rect
+pub type paperpaw_sdk::ui::look::ExtraPainter = for<'t> fn(&mut paperpaw_sdk::ui::look::PaintCx<'_, '_>, &paperpaw_sdk::ui::look::ExtraPart<'t>) -> bool
 pub type paperpaw_sdk::ui::look::InkPainter<P> = fn(&mut paperpaw_sdk::ui::look::PaintCx<'_, '_>, &P) -> core::option::Option<paperpaw_platform::pixel::Color>
 pub type paperpaw_sdk::ui::look::Painter<P> = fn(&mut paperpaw_sdk::ui::look::PaintCx<'_, '_>, &P) -> bool
+pub type paperpaw_sdk::ui::look::TextPainter = for<'t> fn(&mut paperpaw_sdk::ui::look::PaintCx<'_, '_>, &paperpaw_sdk::ui::look::TextPart<'t>) -> bool
 pub mod paperpaw_sdk::ui::offline
 #[non_exhaustive] pub enum paperpaw_sdk::ui::offline::Offer
 pub paperpaw_sdk::ui::offline::Offer::NotNow
@@ -4186,24 +4304,6 @@ pub paperpaw_sdk::ui::Focus::Soft
 pub paperpaw_sdk::ui::HeaderKind::Dark
 pub paperpaw_sdk::ui::HeaderKind::Light
 pub paperpaw_sdk::ui::HeaderKind::Plain
-#[non_exhaustive] pub enum paperpaw_sdk::ui::Ink
-pub paperpaw_sdk::ui::Ink::Card
-pub paperpaw_sdk::ui::Ink::Detail
-pub paperpaw_sdk::ui::Ink::Disabled
-pub paperpaw_sdk::ui::Ink::Faint
-pub paperpaw_sdk::ui::Ink::Line
-pub paperpaw_sdk::ui::Ink::LineFaint
-pub paperpaw_sdk::ui::Ink::Muted
-pub paperpaw_sdk::ui::Ink::Note
-pub paperpaw_sdk::ui::Ink::OnDarkMuted
-pub paperpaw_sdk::ui::Ink::OnFocusMuted
-pub paperpaw_sdk::ui::Ink::Paper
-pub paperpaw_sdk::ui::Ink::Rule
-pub paperpaw_sdk::ui::Ink::Section
-pub paperpaw_sdk::ui::Ink::Text
-impl paperpaw_sdk::ui::Ink
-pub const paperpaw_sdk::ui::Ink::ALL: &'static [paperpaw_sdk::ui::Ink]
-pub const fn paperpaw_sdk::ui::Ink::name(self) -> &'static str
 #[non_exhaustive] pub enum paperpaw_sdk::ui::ListChange
 #[non_exhaustive] pub paperpaw_sdk::ui::ListChange::Focus
 pub paperpaw_sdk::ui::ListChange::Focus::left: paperpaw_platform::geometry::Rect
@@ -4247,15 +4347,6 @@ pub paperpaw_sdk::ui::RowPart::Switch
 pub paperpaw_sdk::ui::Separators::Inset
 pub paperpaw_sdk::ui::Separators::Line
 pub paperpaw_sdk::ui::Separators::None
-#[non_exhaustive] pub enum paperpaw_sdk::ui::TextRole
-pub paperpaw_sdk::ui::TextRole::Body
-pub paperpaw_sdk::ui::TextRole::Caption
-pub paperpaw_sdk::ui::TextRole::Display
-pub paperpaw_sdk::ui::TextRole::Head
-pub paperpaw_sdk::ui::TextRole::Headline
-pub paperpaw_sdk::ui::TextRole::Numeral
-pub paperpaw_sdk::ui::TextRole::Small
-pub paperpaw_sdk::ui::TextRole::Title
 pub struct paperpaw_sdk::ui::CellGrid
 impl paperpaw_sdk::ui::CellGrid
 pub fn paperpaw_sdk::ui::CellGrid::cell(&self, usize) -> paperpaw_platform::geometry::Rect
@@ -4314,6 +4405,34 @@ pub fn paperpaw_sdk::ui::Header::note_focused(self, bool) -> Self
 pub fn paperpaw_sdk::ui::Header::on_page_number(&self, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Point, core::option::Option<paperpaw_sdk::ui::Paging>) -> bool
 pub fn paperpaw_sdk::ui::Header::on_title(&self, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Point, core::option::Option<paperpaw_sdk::ui::Paging>) -> bool
 pub fn paperpaw_sdk::ui::Header::tap(&self, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Point, core::option::Option<paperpaw_sdk::ui::Paging>) -> core::option::Option<paperpaw_sdk::Id>
+pub struct paperpaw_sdk::ui::Ink(_)
+impl paperpaw_sdk::ui::Ink
+pub const paperpaw_sdk::ui::Ink::ACCENT: paperpaw_sdk::ui::Ink
+pub const paperpaw_sdk::ui::Ink::ALL: &'static [paperpaw_sdk::ui::Ink]
+pub const paperpaw_sdk::ui::Ink::CARD: paperpaw_sdk::ui::Ink
+pub const paperpaw_sdk::ui::Ink::DETAIL: paperpaw_sdk::ui::Ink
+pub const paperpaw_sdk::ui::Ink::DISABLED: paperpaw_sdk::ui::Ink
+pub const paperpaw_sdk::ui::Ink::FAINT: paperpaw_sdk::ui::Ink
+pub const paperpaw_sdk::ui::Ink::LINE: paperpaw_sdk::ui::Ink
+pub const paperpaw_sdk::ui::Ink::LINE_FAINT: paperpaw_sdk::ui::Ink
+pub const paperpaw_sdk::ui::Ink::LINK: paperpaw_sdk::ui::Ink
+pub const paperpaw_sdk::ui::Ink::MUTED: paperpaw_sdk::ui::Ink
+pub const paperpaw_sdk::ui::Ink::NOTE: paperpaw_sdk::ui::Ink
+pub const paperpaw_sdk::ui::Ink::ON_ACCENT: paperpaw_sdk::ui::Ink
+pub const paperpaw_sdk::ui::Ink::ON_DARK_MUTED: paperpaw_sdk::ui::Ink
+pub const paperpaw_sdk::ui::Ink::ON_FOCUS_MUTED: paperpaw_sdk::ui::Ink
+pub const paperpaw_sdk::ui::Ink::PAPER: paperpaw_sdk::ui::Ink
+pub const paperpaw_sdk::ui::Ink::RULE: paperpaw_sdk::ui::Ink
+pub const paperpaw_sdk::ui::Ink::SECTION: paperpaw_sdk::ui::Ink
+pub const paperpaw_sdk::ui::Ink::SELECTION: paperpaw_sdk::ui::Ink
+pub const paperpaw_sdk::ui::Ink::TEXT: paperpaw_sdk::ui::Ink
+pub const paperpaw_sdk::ui::Ink::WARNING: paperpaw_sdk::ui::Ink
+pub const fn paperpaw_sdk::ui::Ink::fallback(self) -> paperpaw_sdk::ui::Ink
+pub const fn paperpaw_sdk::ui::Ink::from_value(u8) -> paperpaw_sdk::ui::Ink
+pub const fn paperpaw_sdk::ui::Ink::name(self) -> &'static str
+pub const fn paperpaw_sdk::ui::Ink::value(self) -> u8
+impl core::fmt::Debug for paperpaw_sdk::ui::Ink
+pub fn paperpaw_sdk::ui::Ink::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct paperpaw_sdk::ui::Label<'t>
 impl<'t> paperpaw_sdk::ui::Label<'t>
 pub const fn paperpaw_sdk::ui::Label<'t>::align(self, paperpaw_sdk::widgets::Align) -> Self
@@ -4383,9 +4502,10 @@ impl paperpaw_sdk::ui::Paging
 pub const fn paperpaw_sdk::ui::Paging::is_first(&self) -> bool
 pub const fn paperpaw_sdk::ui::Paging::is_last(&self) -> bool
 pub const fn paperpaw_sdk::ui::Paging::new(usize, usize) -> Self
-pub struct paperpaw_sdk::ui::Palette(_)
+pub struct paperpaw_sdk::ui::Palette
 impl paperpaw_sdk::ui::Palette
 pub const paperpaw_sdk::ui::Palette::DEFAULT: paperpaw_sdk::ui::Palette
+pub const paperpaw_sdk::ui::Palette::SLOTS: usize
 pub fn paperpaw_sdk::ui::Palette::color(&self, paperpaw_sdk::ui::Ink) -> paperpaw_platform::pixel::Color
 pub fn paperpaw_sdk::ui::Palette::parse(&str) -> paperpaw_sdk::ui::Palette
 impl core::default::Default for paperpaw_sdk::ui::Palette
@@ -4448,6 +4568,23 @@ pub fn paperpaw_sdk::ui::Stack::new(paperpaw_platform::geometry::Rect, u16) -> S
 pub fn paperpaw_sdk::ui::Stack::rest(&self) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_sdk::ui::Stack::take(&mut self, u16) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_sdk::ui::Stack::take_bottom(&mut self, u16) -> paperpaw_platform::geometry::Rect
+pub struct paperpaw_sdk::ui::TextRole(_)
+impl paperpaw_sdk::ui::TextRole
+pub const paperpaw_sdk::ui::TextRole::BODY: Self
+pub const paperpaw_sdk::ui::TextRole::BUTTON: Self
+pub const paperpaw_sdk::ui::TextRole::CAPTION: Self
+pub const paperpaw_sdk::ui::TextRole::DISPLAY: Self
+pub const paperpaw_sdk::ui::TextRole::HEAD: Self
+pub const paperpaw_sdk::ui::TextRole::HEADLINE: Self
+pub const paperpaw_sdk::ui::TextRole::HINT: Self
+pub const paperpaw_sdk::ui::TextRole::ICON: Self
+pub const paperpaw_sdk::ui::TextRole::NUMERAL: Self
+pub const paperpaw_sdk::ui::TextRole::SMALL: Self
+pub const paperpaw_sdk::ui::TextRole::TITLE: Self
+pub const fn paperpaw_sdk::ui::TextRole::from_value(u8) -> Self
+pub const fn paperpaw_sdk::ui::TextRole::value(self) -> u8
+impl core::fmt::Debug for paperpaw_sdk::ui::TextRole
+pub fn paperpaw_sdk::ui::TextRole::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct paperpaw_sdk::ui::TextView
 impl paperpaw_sdk::ui::TextView
 pub fn paperpaw_sdk::ui::TextView::draw(&self, &mut paperpaw_sdk::ui::Ui<'_>, &str)
@@ -4589,6 +4726,7 @@ pub fn paperpaw_sdk::ui::draw_icon_at(&mut paperpaw_graphics::canvas::Canvas<'_>
 pub fn paperpaw_sdk::ui::draw_image(&mut paperpaw_graphics::canvas::Canvas<'_>, &dyn paperpaw_platform::storage::Storage, &paperpaw_document::ImageRef, paperpaw_platform::geometry::Rect)
 pub fn paperpaw_sdk::ui::draw_image_over(&mut paperpaw_graphics::canvas::Canvas<'_>, &dyn paperpaw_platform::storage::Storage, &paperpaw_document::ImageRef, paperpaw_platform::geometry::Rect, u8)
 pub fn paperpaw_sdk::ui::draw_label(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::FontHandle<'_>, f32, f32, paperpaw_platform::geometry::Rect, &str, paperpaw_platform::pixel::Color) -> f32
+pub fn paperpaw_sdk::ui::draw_label_in(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::FontHandle<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_sdk::ui::TextRole, f32, f32, paperpaw_platform::geometry::Rect, &str, paperpaw_platform::pixel::Color) -> f32
 pub fn paperpaw_sdk::ui::draw_lines_note(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, paperpaw_sdk::ui::RowLines, bool, &str)
 pub fn paperpaw_sdk::ui::draw_note(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, bool, &str)
 pub fn paperpaw_sdk::ui::draw_number_lines(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_sdk::ui::RowLines, &str, &str, &str, core::option::Option<bool>)
@@ -4641,6 +4779,7 @@ pub fn paperpaw_sdk::ui::stroke_round(&mut paperpaw_graphics::canvas::Canvas<'_>
 pub fn paperpaw_sdk::ui::switch_rect(&paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_sdk::ui::text_field_height(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, u16, &str) -> u16
 pub fn paperpaw_sdk::ui::text_field_layout(&paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, f32, u16, u16) -> (paperpaw_platform::geometry::Rect, paperpaw_platform::geometry::Rect, bool)
+pub fn paperpaw_sdk::ui::text_ink(&str, &str) -> paperpaw_text::ink::TextInk
 pub fn paperpaw_sdk::ui::title_area(&paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_sdk::ui::tr_input<'a>(&paperpaw_sdk::Env<'a>, &'a str) -> &'a str
 pub fn paperpaw_sdk::ui::two_options(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::SettingSpec) -> bool
@@ -5306,6 +5445,7 @@ pub fn paperpaw_sdk::Action<'a>::title_key(self) -> alloc::borrow::Cow<'static, 
 pub paperpaw_sdk::ActionHint::Hidden
 pub paperpaw_sdk::ActionHint::Icon(&'static str)
 pub paperpaw_sdk::ActionHint::Label(alloc::borrow::Cow<'static, str>)
+pub paperpaw_sdk::ActionHint::Other(&'static str)
 pub paperpaw_sdk::ActionHint::Title
 #[non_exhaustive] pub enum paperpaw_sdk::Choices
 pub paperpaw_sdk::Choices::Fixed(&'static [&'static str])
@@ -5439,6 +5579,7 @@ pub fn paperpaw_sdk::Editor::open(&self, &paperpaw_sdk::Id) -> paperpaw_sdk::Com
 #[non_exhaustive] pub enum paperpaw_sdk::GestureKind
 pub paperpaw_sdk::GestureKind::DoubleTap
 pub paperpaw_sdk::GestureKind::LongPress
+pub paperpaw_sdk::GestureKind::Other(&'static str)
 pub paperpaw_sdk::GestureKind::Pinch
 pub paperpaw_sdk::GestureKind::Pinch::out: bool
 pub paperpaw_sdk::GestureKind::Swipe(paperpaw_sdk::Direction)
@@ -5451,6 +5592,7 @@ pub paperpaw_sdk::Handled::Yes
 pub paperpaw_sdk::Hint::Default
 pub paperpaw_sdk::Hint::Hidden
 pub paperpaw_sdk::Hint::Icon(&'static str)
+pub paperpaw_sdk::Hint::Other(&'static str)
 pub paperpaw_sdk::Hint::Text(alloc::string::String)
 impl paperpaw_sdk::Hint
 pub fn paperpaw_sdk::Hint::only_back(&paperpaw_sdk::Id) -> paperpaw_sdk::Hint
@@ -5463,6 +5605,7 @@ pub paperpaw_sdk::HttpError::Cancelled
 pub paperpaw_sdk::HttpError::Dns
 pub paperpaw_sdk::HttpError::Io
 pub paperpaw_sdk::HttpError::NoNetwork
+pub paperpaw_sdk::HttpError::Other(u16)
 pub paperpaw_sdk::HttpError::Refused
 pub paperpaw_sdk::HttpError::Replaced
 pub paperpaw_sdk::HttpError::Timeout
@@ -5482,6 +5625,7 @@ pub paperpaw_sdk::MenuNeed::ButtonRow
 pub paperpaw_sdk::MenuNeed::Colors
 pub paperpaw_sdk::MenuNeed::Firmware
 pub paperpaw_sdk::MenuNeed::Frontlight
+pub paperpaw_sdk::MenuNeed::Has(paperpaw_sdk::Capability)
 pub paperpaw_sdk::MenuNeed::NoTouch
 pub paperpaw_sdk::MenuNeed::Rotation
 pub paperpaw_sdk::MenuNeed::Sleep
@@ -5497,6 +5641,7 @@ pub paperpaw_sdk::MenuPlace::First
 pub paperpaw_sdk::MenuPlace::InSection(paperpaw_sdk::Id)
 pub paperpaw_sdk::MenuPlace::Last
 pub paperpaw_sdk::MenuPlace::Order(i16)
+pub paperpaw_sdk::MenuPlace::Other(&'static str)
 #[non_exhaustive] pub enum paperpaw_sdk::Outside
 pub paperpaw_sdk::Outside::Close
 pub paperpaw_sdk::Outside::Ignore
@@ -5505,6 +5650,7 @@ pub paperpaw_sdk::Outside::PassThrough
 pub paperpaw_sdk::PluginKind::BuiltIn
 pub paperpaw_sdk::PluginKind::Code
 pub paperpaw_sdk::PluginKind::Data
+pub paperpaw_sdk::PluginKind::Other(u16)
 #[non_exhaustive] pub enum paperpaw_sdk::PluginProblem
 pub paperpaw_sdk::PluginProblem::Changed
 pub paperpaw_sdk::PluginProblem::Crashed
@@ -5515,6 +5661,7 @@ pub paperpaw_sdk::PluginProblem::NoRoom
 pub paperpaw_sdk::PluginProblem::NotInstalled
 pub paperpaw_sdk::PluginProblem::OlderInterface
 pub paperpaw_sdk::PluginProblem::OlderInterface::built_for: u16
+pub paperpaw_sdk::PluginProblem::Other(u16)
 pub paperpaw_sdk::PluginProblem::OtherBuild
 pub paperpaw_sdk::PluginProblem::SafeMode
 pub paperpaw_sdk::PluginProblem::Unsupported
@@ -5529,6 +5676,7 @@ pub paperpaw_sdk::RegisterError::Invalid
 pub paperpaw_sdk::RegisterError::Invalid::message: alloc::borrow::Cow<'static, str>
 pub paperpaw_sdk::RegisterError::Namespace
 pub paperpaw_sdk::RegisterError::Namespace::id: paperpaw_sdk::Id
+pub paperpaw_sdk::RegisterError::Other(u16)
 pub paperpaw_sdk::RegisterError::Parse
 pub paperpaw_sdk::RegisterError::Parse::line: u32
 pub paperpaw_sdk::RegisterError::Parse::message: alloc::borrow::Cow<'static, str>
@@ -5559,6 +5707,7 @@ pub fn paperpaw_sdk::replies::ServerNotice::to_params(&self) -> paperpaw_sdk::Pa
 #[non_exhaustive] pub enum paperpaw_sdk::SettingError
 pub paperpaw_sdk::SettingError::Full
 pub paperpaw_sdk::SettingError::InvalidValue
+pub paperpaw_sdk::SettingError::Other(u16)
 pub paperpaw_sdk::SettingError::Refused(&'static str)
 pub paperpaw_sdk::SettingError::Unknown
 impl core::error::Error for paperpaw_sdk::SettingError
@@ -5567,6 +5716,9 @@ pub fn paperpaw_sdk::SettingError::fmt(&self, &mut core::fmt::Formatter<'_>) -> 
 #[non_exhaustive] pub enum paperpaw_sdk::SettingKind
 pub paperpaw_sdk::SettingKind::Bool
 pub paperpaw_sdk::SettingKind::Choice(paperpaw_sdk::Choices)
+pub paperpaw_sdk::SettingKind::Extended
+pub paperpaw_sdk::SettingKind::Extended::key: &'static str
+pub paperpaw_sdk::SettingKind::Extended::params: &'static [(&'static str, &'static str)]
 pub paperpaw_sdk::SettingKind::Int
 pub paperpaw_sdk::SettingKind::Int::max: i64
 pub paperpaw_sdk::SettingKind::Int::min: i64
@@ -5623,6 +5775,9 @@ pub paperpaw_sdk::SocketRead::Text::max: u32
 #[non_exhaustive] pub enum paperpaw_sdk::StatusValue
 pub paperpaw_sdk::StatusValue::Bar
 pub paperpaw_sdk::StatusValue::Bar::permille: u16
+pub paperpaw_sdk::StatusValue::Extended
+pub paperpaw_sdk::StatusValue::Extended::key: paperpaw_sdk::Id
+pub paperpaw_sdk::StatusValue::Extended::params: paperpaw_sdk::Params
 pub paperpaw_sdk::StatusValue::Icon(alloc::borrow::Cow<'static, str>)
 pub paperpaw_sdk::StatusValue::Labelled
 pub paperpaw_sdk::StatusValue::Labelled::icon: alloc::borrow::Cow<'static, str>
@@ -5702,7 +5857,10 @@ pub const paperpaw_sdk::Capability::BUTTONS: Self
 pub const paperpaw_sdk::Capability::CHARGE_LIMIT: Self
 pub const paperpaw_sdk::Capability::HOT_CODE: Self
 pub const paperpaw_sdk::Capability::KEYBOARD: Self
+pub const paperpaw_sdk::Capability::LOOK_EXTRAS: Self
 pub const paperpaw_sdk::Capability::PAGE_KEYS: Self
+pub const paperpaw_sdk::Capability::RENDER_HOOK: Self
+pub const paperpaw_sdk::Capability::RENDER_REGIONS: Self
 pub const paperpaw_sdk::Capability::USB_LINK: Self
 pub const paperpaw_sdk::Capability::WARMTH: Self
 pub struct paperpaw_sdk::Commands
@@ -5902,6 +6060,7 @@ pub fn paperpaw_sdk::FontHandle<'a>::heading_line_height(&self, f32) -> f32
 pub fn paperpaw_sdk::FontHandle<'a>::id(&self) -> &'a paperpaw_sdk::Id
 pub fn paperpaw_sdk::FontHandle<'a>::ink(&self, f32, &str) -> core::option::Option<(i32, i32)>
 pub fn paperpaw_sdk::FontHandle<'a>::ink_across(&self, f32, &str) -> core::option::Option<(i32, i32)>
+pub fn paperpaw_sdk::FontHandle<'a>::inked(self, paperpaw_text::ink::TextInk) -> Self
 pub fn paperpaw_sdk::FontHandle<'a>::kern(&self, f32, char, char) -> f32
 pub fn paperpaw_sdk::FontHandle<'a>::largest_size(&self) -> core::option::Option<f32>
 pub fn paperpaw_sdk::FontHandle<'a>::ligatures(self) -> Self
@@ -5909,6 +6068,7 @@ pub fn paperpaw_sdk::FontHandle<'a>::line_metrics(&self, f32) -> paperpaw_text::
 pub fn paperpaw_sdk::FontHandle<'a>::measure(&self, f32, &str) -> f32
 pub fn paperpaw_sdk::FontHandle<'a>::measure_in(&self, f32, &str, &paperpaw_text::around::Around) -> f32
 pub fn paperpaw_sdk::FontHandle<'a>::size_for(&self, f32, &str) -> f32
+pub fn paperpaw_sdk::FontHandle<'a>::text_ink(&self) -> paperpaw_text::ink::TextInk
 pub fn paperpaw_sdk::FontHandle<'a>::unkerned(self) -> Self
 pub fn paperpaw_sdk::FontHandle<'a>::wrap(&self, f32, &str, f32) -> alloc::vec::Vec<core::ops::range::Range<usize>>
 impl core::fmt::Debug for paperpaw_sdk::FontHandle<'_>
@@ -5936,13 +6096,16 @@ impl paperpaw_sdk::Fonts
 pub fn paperpaw_sdk::Fonts::bound(&self, &str) -> core::option::Option<paperpaw_sdk::FontHandle<'_>>
 pub fn paperpaw_sdk::Fonts::cache_bytes(&self) -> usize
 pub fn paperpaw_sdk::Fonts::contains(&self, &str) -> bool
+pub fn paperpaw_sdk::Fonts::failed_reads(&self) -> u32
 pub fn paperpaw_sdk::Fonts::families(&self) -> alloc::vec::Vec<&str>
 pub fn paperpaw_sdk::Fonts::family(&self) -> core::option::Option<&str>
 pub fn paperpaw_sdk::Fonts::get(&self, &str) -> core::option::Option<paperpaw_sdk::FontHandle<'_>>
 pub fn paperpaw_sdk::Fonts::ids(&self) -> impl core::iter::traits::iterator::Iterator<Item = &paperpaw_sdk::Id>
 pub fn paperpaw_sdk::Fonts::new(usize) -> Self
+pub fn paperpaw_sdk::Fonts::pack_limits(&self) -> paperpaw_text::stored::PackLimits
 pub fn paperpaw_sdk::Fonts::role(&self, &str) -> core::option::Option<paperpaw_sdk::FontHandle<'_>>
 pub fn paperpaw_sdk::Fonts::user_bound(&self, &str) -> bool
+pub fn paperpaw_sdk::Fonts::with_pack_limits(self, paperpaw_text::stored::PackLimits) -> Self
 impl core::fmt::Debug for paperpaw_sdk::Fonts
 pub fn paperpaw_sdk::Fonts::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[non_exhaustive] pub struct paperpaw_sdk::FormatSpec
@@ -6343,6 +6506,7 @@ pub fn paperpaw_sdk::contribution::Registrar::add_preset(&mut self, paperpaw_sdk
 pub fn paperpaw_sdk::contribution::Registrar::add_presets(&mut self, &'static [paperpaw_sdk::presets::Preset]) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_reader(&mut self, paperpaw_sdk::readers::ReaderSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_refresh_filter(&mut self, paperpaw_sdk::filters::RefreshFilterSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
+pub fn paperpaw_sdk::contribution::Registrar::add_render_hook(&mut self, paperpaw_sdk::render::RenderHookSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_screen(&mut self, paperpaw_sdk::ScreenSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_screens(&mut self, &'static [paperpaw_sdk::FixedScreen]) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_setting(&mut self, paperpaw_sdk::SettingSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>

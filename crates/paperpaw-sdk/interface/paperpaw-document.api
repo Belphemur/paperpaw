@@ -10,15 +10,19 @@ pub paperpaw_document::Align::Auto
 pub paperpaw_document::Align::Center
 pub paperpaw_document::Align::End
 pub paperpaw_document::Align::Justify
+pub paperpaw_document::Align::Left
+pub paperpaw_document::Align::Right
 pub paperpaw_document::Align::Start
 impl paperpaw_document::Align
 pub const fn paperpaw_document::Align::bits(self) -> u8
 pub const fn paperpaw_document::Align::from_bits(u8) -> paperpaw_document::Align
 #[non_exhaustive] pub enum paperpaw_document::AnnotationKind
 pub paperpaw_document::AnnotationKind::Gloss
+pub paperpaw_document::AnnotationKind::Other(u16)
 pub paperpaw_document::AnnotationKind::Phonetic
 pub paperpaw_document::AnnotationKind::Ruby
 #[non_exhaustive] pub enum paperpaw_document::BlockKind
+pub paperpaw_document::BlockKind::Extended(u16)
 pub paperpaw_document::BlockKind::Heading(u8)
 pub paperpaw_document::BlockKind::Image
 pub paperpaw_document::BlockKind::Paragraph
@@ -26,6 +30,7 @@ pub paperpaw_document::BlockKind::Preformatted
 #[non_exhaustive] pub enum paperpaw_document::DocumentError
 pub paperpaw_document::DocumentError::Malformed(alloc::borrow::Cow<'static, str>)
 pub paperpaw_document::DocumentError::NotReady
+pub paperpaw_document::DocumentError::Other(u16)
 pub paperpaw_document::DocumentError::OutOfMemory
 pub paperpaw_document::DocumentError::Storage(paperpaw_platform::storage::StorageError)
 pub paperpaw_document::DocumentError::UnsupportedFormat
@@ -37,6 +42,7 @@ pub fn paperpaw_document::DocumentError::fmt(&self, &mut core::fmt::Formatter<'_
 #[non_exhaustive] pub enum paperpaw_document::LinkKind
 pub paperpaw_document::LinkKind::Back
 pub paperpaw_document::LinkKind::NoteRef
+pub paperpaw_document::LinkKind::Other(u16)
 pub paperpaw_document::LinkKind::Plain
 #[non_exhaustive] pub enum paperpaw_document::PageProgression
 pub paperpaw_document::PageProgression::LeftToRight

@@ -13,7 +13,7 @@ const paperpaw_update::plugins::PLUGINS_FORMAT: u16 = 1u16
 const paperpaw_update::plugins::PLUGINS_HEAD_LEN: usize = 12usize
 const paperpaw_update::plugins::PLUGINS_MAGIC: [u8; 8] = *b"PPlugins"
 const paperpaw_update::plugins::PLUGINS_MAX_LEN: usize = 16_384usize
-enum paperpaw_update::Problem { NotAnUpdate, NewerFormat, NotAnImage, Length, Signature }
+enum paperpaw_update::Problem { NotAnUpdate, NewerFormat, NotAnImage, Length, Signature, Other(0: u16) }
 struct paperpaw_update::AppInfo { chip: u16, version: alloc::string::String, project: alloc::string::String }
 struct paperpaw_update::Check { state: ed25519_compact::ed25519::VerifyingState, signed: [u8; 48], image_len: u32, absorbed: u64 }
 struct paperpaw_update::Trailer { image_len: u32, key: [u8; 32], signature: [u8; 64] }

@@ -3,7 +3,7 @@
 # the source's order, private fields and the private types they reach
 # too, every feature on (ADR 0026).
 enum paperpaw_zip::Method { Stored, Deflate }
-enum paperpaw_zip::ZipError { Storage(0: paperpaw_platform::storage::StorageError), Invalid(0: &'static str), Unsupported(0: &'static str), TooLarge, OutOfMemory }
+enum paperpaw_zip::ZipError { Storage(0: paperpaw_platform::storage::StorageError), Invalid(0: &'static str), Unsupported(0: &'static str), TooLarge, OutOfMemory, Other(0: u16) }
 struct paperpaw_zip::Entry { name: alloc::string::String, method: paperpaw_zip::Method, compressed_size: u32, size: u32, crc: u32, header_offset: u32, record: u32 }
 struct paperpaw_zip::EntryReader<'a> { path: &'a str, offset: u64, remaining: u64, input: alloc::vec::Vec<u8>, start: usize, end: usize, inflate: core::option::Option<(alloc::vec::Vec<miniz_oxide::inflate::core::DecompressorOxide>, alloc::vec::Vec<u8>)>, position: usize, ready: usize, left: usize, done: bool, size: u64, crc: u32, made: u64, made_crc: u32 }
 struct paperpaw_zip::ZipArchive { path: alloc::string::String, index: alloc::vec::Vec<(u32, u32)> }

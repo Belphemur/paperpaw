@@ -18,6 +18,7 @@ pub paperpaw_platform::display::RefreshMode::Fast
 pub paperpaw_platform::display::RefreshMode::Full
 pub paperpaw_platform::display::RefreshMode::Gray
 pub paperpaw_platform::display::RefreshMode::Mono
+pub paperpaw_platform::display::RefreshMode::Other(u16)
 pub paperpaw_platform::display::RefreshMode::Partial
 impl paperpaw_platform::display::RefreshMode
 pub fn paperpaw_platform::display::RefreshMode::cleans(self) -> bool
@@ -157,6 +158,9 @@ pub paperpaw_platform::pixel::PixelFormat::Gray2
 pub paperpaw_platform::pixel::PixelFormat::Gray4
 pub paperpaw_platform::pixel::PixelFormat::Gray8
 pub paperpaw_platform::pixel::PixelFormat::Mono1
+pub paperpaw_platform::pixel::PixelFormat::Other
+pub paperpaw_platform::pixel::PixelFormat::Other::bits: u8
+pub paperpaw_platform::pixel::PixelFormat::Other::code: u16
 pub paperpaw_platform::pixel::PixelFormat::Rgb565
 pub paperpaw_platform::pixel::PixelFormat::Rgb888
 impl paperpaw_platform::pixel::PixelFormat
@@ -164,6 +168,8 @@ pub const fn paperpaw_platform::pixel::PixelFormat::bits_per_pixel(self) -> u8
 pub const fn paperpaw_platform::pixel::PixelFormat::gray_levels(self) -> core::option::Option<u16>
 pub const fn paperpaw_platform::pixel::PixelFormat::is_color(self) -> bool
 pub const fn paperpaw_platform::pixel::PixelFormat::stride(self, u16) -> usize
+impl core::fmt::Debug for paperpaw_platform::pixel::PixelFormat
+pub fn paperpaw_platform::pixel::PixelFormat::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct paperpaw_platform::pixel::Color
 pub paperpaw_platform::pixel::Color::b: u8
 pub paperpaw_platform::pixel::Color::g: u8
@@ -190,8 +196,10 @@ pub paperpaw_platform::status::SystemStatus::battery: core::option::Option<paper
 pub paperpaw_platform::status::SystemStatus::clock: core::option::Option<paperpaw_platform::status::WallClock>
 impl paperpaw_platform::status::SystemStatus
 pub const fn paperpaw_platform::status::SystemStatus::new(core::option::Option<paperpaw_platform::status::WallClock>, core::option::Option<paperpaw_platform::status::Battery>) -> Self
+pub fn paperpaw_platform::status::SystemStatus::value(&self, &str) -> core::option::Option<i64>
 pub const fn paperpaw_platform::status::SystemStatus::with_battery(self, core::option::Option<paperpaw_platform::status::Battery>) -> Self
 pub const fn paperpaw_platform::status::SystemStatus::with_clock(self, core::option::Option<paperpaw_platform::status::WallClock>) -> Self
+pub fn paperpaw_platform::status::SystemStatus::with_value(self, &'static str, i64) -> Self
 #[non_exhaustive] pub struct paperpaw_platform::status::WallClock
 pub paperpaw_platform::status::WallClock::at: paperpaw_platform::input::Instant
 pub paperpaw_platform::status::WallClock::unix_millis: i64
@@ -210,9 +218,12 @@ pub paperpaw_platform::storage::StorageError::InvalidData
 pub paperpaw_platform::storage::StorageError::InvalidPath
 pub paperpaw_platform::storage::StorageError::Io
 pub paperpaw_platform::storage::StorageError::NotFound
+pub paperpaw_platform::storage::StorageError::Other(u16)
 pub paperpaw_platform::storage::StorageError::TooLarge
 pub paperpaw_platform::storage::StorageError::Unsupported
 impl core::error::Error for paperpaw_platform::storage::StorageError
+impl core::fmt::Debug for paperpaw_platform::storage::StorageError
+pub fn paperpaw_platform::storage::StorageError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::fmt::Display for paperpaw_platform::storage::StorageError
 pub fn paperpaw_platform::storage::StorageError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[non_exhaustive] pub struct paperpaw_platform::storage::DirEntry<'a>
@@ -340,6 +351,9 @@ pub paperpaw_platform::PixelFormat::Gray2
 pub paperpaw_platform::PixelFormat::Gray4
 pub paperpaw_platform::PixelFormat::Gray8
 pub paperpaw_platform::PixelFormat::Mono1
+pub paperpaw_platform::PixelFormat::Other
+pub paperpaw_platform::PixelFormat::Other::bits: u8
+pub paperpaw_platform::PixelFormat::Other::code: u16
 pub paperpaw_platform::PixelFormat::Rgb565
 pub paperpaw_platform::PixelFormat::Rgb888
 impl paperpaw_platform::pixel::PixelFormat
@@ -347,6 +361,8 @@ pub const fn paperpaw_platform::pixel::PixelFormat::bits_per_pixel(self) -> u8
 pub const fn paperpaw_platform::pixel::PixelFormat::gray_levels(self) -> core::option::Option<u16>
 pub const fn paperpaw_platform::pixel::PixelFormat::is_color(self) -> bool
 pub const fn paperpaw_platform::pixel::PixelFormat::stride(self, u16) -> usize
+impl core::fmt::Debug for paperpaw_platform::pixel::PixelFormat
+pub fn paperpaw_platform::pixel::PixelFormat::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[non_exhaustive] pub enum paperpaw_platform::PointerPhase
 pub paperpaw_platform::PointerPhase::Cancel
 pub paperpaw_platform::PointerPhase::Down
@@ -363,6 +379,7 @@ pub paperpaw_platform::RefreshMode::Fast
 pub paperpaw_platform::RefreshMode::Full
 pub paperpaw_platform::RefreshMode::Gray
 pub paperpaw_platform::RefreshMode::Mono
+pub paperpaw_platform::RefreshMode::Other(u16)
 pub paperpaw_platform::RefreshMode::Partial
 impl paperpaw_platform::display::RefreshMode
 pub fn paperpaw_platform::display::RefreshMode::cleans(self) -> bool
@@ -377,9 +394,12 @@ pub paperpaw_platform::StorageError::InvalidData
 pub paperpaw_platform::StorageError::InvalidPath
 pub paperpaw_platform::StorageError::Io
 pub paperpaw_platform::StorageError::NotFound
+pub paperpaw_platform::StorageError::Other(u16)
 pub paperpaw_platform::StorageError::TooLarge
 pub paperpaw_platform::StorageError::Unsupported
 impl core::error::Error for paperpaw_platform::storage::StorageError
+impl core::fmt::Debug for paperpaw_platform::storage::StorageError
+pub fn paperpaw_platform::storage::StorageError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::fmt::Display for paperpaw_platform::storage::StorageError
 pub fn paperpaw_platform::storage::StorageError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[non_exhaustive] pub struct paperpaw_platform::Battery
@@ -560,8 +580,10 @@ pub paperpaw_platform::SystemStatus::battery: core::option::Option<paperpaw_plat
 pub paperpaw_platform::SystemStatus::clock: core::option::Option<paperpaw_platform::status::WallClock>
 impl paperpaw_platform::status::SystemStatus
 pub const fn paperpaw_platform::status::SystemStatus::new(core::option::Option<paperpaw_platform::status::WallClock>, core::option::Option<paperpaw_platform::status::Battery>) -> Self
+pub fn paperpaw_platform::status::SystemStatus::value(&self, &str) -> core::option::Option<i64>
 pub const fn paperpaw_platform::status::SystemStatus::with_battery(self, core::option::Option<paperpaw_platform::status::Battery>) -> Self
 pub const fn paperpaw_platform::status::SystemStatus::with_clock(self, core::option::Option<paperpaw_platform::status::WallClock>) -> Self
+pub fn paperpaw_platform::status::SystemStatus::with_value(self, &'static str, i64) -> Self
 #[non_exhaustive] pub struct paperpaw_platform::WallClock
 pub paperpaw_platform::WallClock::at: paperpaw_platform::input::Instant
 pub paperpaw_platform::WallClock::unix_millis: i64

@@ -16,6 +16,7 @@ pub const paperpaw_layout::BookStyles::NONE: paperpaw_layout::BookStyles
 pub const paperpaw_layout::BookStyles::SIZE: paperpaw_layout::BookStyles
 pub const paperpaw_layout::BookStyles::SPACING: paperpaw_layout::BookStyles
 pub const fn paperpaw_layout::BookStyles::bits(self) -> u16
+pub const fn paperpaw_layout::BookStyles::from_bits(u16) -> paperpaw_layout::BookStyles
 pub const fn paperpaw_layout::BookStyles::has(self, paperpaw_layout::BookStyles) -> bool
 pub const fn paperpaw_layout::BookStyles::with(self, paperpaw_layout::BookStyles) -> paperpaw_layout::BookStyles
 pub const fn paperpaw_layout::BookStyles::without(self, paperpaw_layout::BookStyles) -> paperpaw_layout::BookStyles
@@ -39,6 +40,16 @@ pub fn paperpaw_layout::LayoutContext<'a>::new(&'a dyn paperpaw_document::Docume
 pub fn paperpaw_layout::LayoutContext<'a>::pieces(self, &'a paperpaw_layout::PieceStarts) -> Self
 impl core::fmt::Debug for paperpaw_layout::LayoutContext<'_>
 pub fn paperpaw_layout::LayoutContext<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct paperpaw_layout::LayoutOptions(_)
+impl paperpaw_layout::LayoutOptions
+pub const paperpaw_layout::LayoutOptions::NONE: paperpaw_layout::LayoutOptions
+pub const fn paperpaw_layout::LayoutOptions::bits(self) -> u32
+pub const fn paperpaw_layout::LayoutOptions::from_bits(u32) -> paperpaw_layout::LayoutOptions
+pub const fn paperpaw_layout::LayoutOptions::group(self, paperpaw_layout::LayoutOptions) -> paperpaw_layout::LayoutOptions
+pub const fn paperpaw_layout::LayoutOptions::has(self, paperpaw_layout::LayoutOptions) -> bool
+pub const fn paperpaw_layout::LayoutOptions::set_group(self, paperpaw_layout::LayoutOptions, paperpaw_layout::LayoutOptions) -> paperpaw_layout::LayoutOptions
+pub const fn paperpaw_layout::LayoutOptions::with(self, paperpaw_layout::LayoutOptions) -> paperpaw_layout::LayoutOptions
+pub const fn paperpaw_layout::LayoutOptions::without(self, paperpaw_layout::LayoutOptions) -> paperpaw_layout::LayoutOptions
 #[non_exhaustive] pub struct paperpaw_layout::LineAnnotation
 pub paperpaw_layout::LineAnnotation::baseline: f32
 pub paperpaw_layout::LineAnnotation::kind: paperpaw_document::AnnotationKind
@@ -116,26 +127,50 @@ pub fn paperpaw_layout::PieceStarts::len(&self) -> usize
 pub const fn paperpaw_layout::PieceStarts::new() -> Self
 impl core::fmt::Debug for paperpaw_layout::PieceStarts
 pub fn paperpaw_layout::PieceStarts::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct paperpaw_layout::ScriptOptions(_)
+impl paperpaw_layout::ScriptOptions
+pub const paperpaw_layout::ScriptOptions::AUTOSPACE: paperpaw_layout::ScriptOptions
+pub const paperpaw_layout::ScriptOptions::BREAK_ALL: paperpaw_layout::ScriptOptions
+pub const paperpaw_layout::ScriptOptions::HANGING_PUNCTUATION: paperpaw_layout::ScriptOptions
+pub const paperpaw_layout::ScriptOptions::JUSTIFY_INTER_CHARACTER: paperpaw_layout::ScriptOptions
+pub const paperpaw_layout::ScriptOptions::KASHIDA: paperpaw_layout::ScriptOptions
+pub const paperpaw_layout::ScriptOptions::KEEP_ALL: paperpaw_layout::ScriptOptions
+pub const paperpaw_layout::ScriptOptions::LINE_BREAK_ANYWHERE: paperpaw_layout::ScriptOptions
+pub const paperpaw_layout::ScriptOptions::LINE_BREAK_LOOSE: paperpaw_layout::ScriptOptions
+pub const paperpaw_layout::ScriptOptions::LINE_BREAK_MASK: paperpaw_layout::ScriptOptions
+pub const paperpaw_layout::ScriptOptions::LINE_BREAK_NORMAL: paperpaw_layout::ScriptOptions
+pub const paperpaw_layout::ScriptOptions::LINE_BREAK_STRICT: paperpaw_layout::ScriptOptions
+pub const paperpaw_layout::ScriptOptions::NONE: paperpaw_layout::ScriptOptions
+pub const paperpaw_layout::ScriptOptions::SEGMENT_WORDS: paperpaw_layout::ScriptOptions
+pub const paperpaw_layout::ScriptOptions::TRIM_CJK_PUNCTUATION: paperpaw_layout::ScriptOptions
+pub const fn paperpaw_layout::ScriptOptions::bits(self) -> u32
+pub const fn paperpaw_layout::ScriptOptions::from_bits(u32) -> paperpaw_layout::ScriptOptions
+pub const fn paperpaw_layout::ScriptOptions::group(self, paperpaw_layout::ScriptOptions) -> paperpaw_layout::ScriptOptions
+pub const fn paperpaw_layout::ScriptOptions::has(self, paperpaw_layout::ScriptOptions) -> bool
+pub const fn paperpaw_layout::ScriptOptions::set_group(self, paperpaw_layout::ScriptOptions, paperpaw_layout::ScriptOptions) -> paperpaw_layout::ScriptOptions
+pub const fn paperpaw_layout::ScriptOptions::with(self, paperpaw_layout::ScriptOptions) -> paperpaw_layout::ScriptOptions
+pub const fn paperpaw_layout::ScriptOptions::without(self, paperpaw_layout::ScriptOptions) -> paperpaw_layout::ScriptOptions
 #[non_exhaustive] pub struct paperpaw_layout::Style
 pub paperpaw_layout::Style::balanced: bool
 pub paperpaw_layout::Style::book: paperpaw_layout::BookStyles
 pub paperpaw_layout::Style::em: f32
-pub paperpaw_layout::Style::hanging_punctuation: bool
 pub paperpaw_layout::Style::indent: f32
 pub paperpaw_layout::Style::justify: bool
 pub paperpaw_layout::Style::justify_cap: f32
-pub paperpaw_layout::Style::kashida: bool
+pub paperpaw_layout::Style::options: paperpaw_layout::LayoutOptions
 pub paperpaw_layout::Style::orphans: u8
 pub paperpaw_layout::Style::paragraph_spacing: f32
+pub paperpaw_layout::Style::script_options: paperpaw_layout::ScriptOptions
+pub paperpaw_layout::Style::values: [i16; 4]
 pub paperpaw_layout::Style::widows: u8
 impl paperpaw_layout::Style
 pub const fn paperpaw_layout::Style::balanced(self, bool) -> Self
 pub const fn paperpaw_layout::Style::book(self, paperpaw_layout::BookStyles) -> Self
-pub const fn paperpaw_layout::Style::hanging_punctuation(self, bool) -> Self
 pub const fn paperpaw_layout::Style::justify_cap(self, f32) -> Self
-pub const fn paperpaw_layout::Style::kashida(self, bool) -> Self
 pub const fn paperpaw_layout::Style::lines_kept(self, u8, u8) -> Self
 pub const fn paperpaw_layout::Style::new(f32, f32, f32, bool) -> Self
+pub const fn paperpaw_layout::Style::options(self, paperpaw_layout::LayoutOptions) -> Self
+pub const fn paperpaw_layout::Style::script_options(self, paperpaw_layout::ScriptOptions) -> Self
 pub const paperpaw_layout::VERSION: u32
 pub trait paperpaw_layout::Typesetter
 pub fn paperpaw_layout::Typesetter::advance(&self, paperpaw_layout::Face, char) -> f32

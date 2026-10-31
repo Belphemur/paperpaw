@@ -2,7 +2,7 @@
 # tools/interface.py writes them: fields, variants and trait items in
 # the source's order, private fields and the private types they reach
 # too, every feature on (ADR 0026).
-enum paperpaw_config::ErrorKind { InvalidLine, InvalidSection, InvalidKey, UnterminatedString, InvalidEscape }
+enum paperpaw_config::ErrorKind { InvalidLine, InvalidSection, InvalidKey, UnterminatedString, InvalidEscape, Other(0: u16) }
 struct paperpaw_config::Entry<'a> { section: &'a str, key: &'a str, value: paperpaw_config::Value<'a>, line: u32 }
 struct paperpaw_config::ParseError { line: u32, kind: paperpaw_config::ErrorKind }
 struct paperpaw_config::Parser<'a> { lines: core::str::iter::Lines<'a>, line: u32, section: &'a str }

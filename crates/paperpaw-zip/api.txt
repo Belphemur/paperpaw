@@ -4,6 +4,7 @@ pub paperpaw_zip::Method::Deflate
 pub paperpaw_zip::Method::Stored
 #[non_exhaustive] pub enum paperpaw_zip::ZipError
 pub paperpaw_zip::ZipError::Invalid(&'static str)
+pub paperpaw_zip::ZipError::Other(u16)
 pub paperpaw_zip::ZipError::OutOfMemory
 pub paperpaw_zip::ZipError::Storage(paperpaw_platform::storage::StorageError)
 pub paperpaw_zip::ZipError::TooLarge

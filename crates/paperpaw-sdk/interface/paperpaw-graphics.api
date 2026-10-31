@@ -27,6 +27,7 @@ impl core::error::Error for paperpaw_graphics::BitmapError
 impl core::fmt::Display for paperpaw_graphics::BitmapError
 pub fn paperpaw_graphics::BitmapError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[non_exhaustive] pub enum paperpaw_graphics::GraphicsError
+pub paperpaw_graphics::GraphicsError::Other(u16)
 pub paperpaw_graphics::GraphicsError::OutOfMemory
 pub paperpaw_graphics::GraphicsError::OutOfMemory::bytes: usize
 pub paperpaw_graphics::GraphicsError::UnsupportedFormat(paperpaw_platform::pixel::PixelFormat)
@@ -41,12 +42,38 @@ pub paperpaw_graphics::Role::Field
 pub paperpaw_graphics::Role::Heading
 pub paperpaw_graphics::Role::Image
 pub paperpaw_graphics::Role::Link
+pub paperpaw_graphics::Role::Other(&'static str)
 pub paperpaw_graphics::Role::Progress
 pub paperpaw_graphics::Role::Radio
 pub paperpaw_graphics::Role::Row
 pub paperpaw_graphics::Role::Slider
 pub paperpaw_graphics::Role::Switch
 pub paperpaw_graphics::Role::Text
+pub struct paperpaw_graphics::BandView<'a>
+impl<'a> paperpaw_graphics::BandView<'a>
+pub fn paperpaw_graphics::BandView<'a>::area(&self) -> paperpaw_platform::geometry::Rect
+pub fn paperpaw_graphics::BandView<'a>::carry(&self) -> &[u8]
+pub fn paperpaw_graphics::BandView<'a>::carry_mut(&mut self) -> &mut [u8]
+pub fn paperpaw_graphics::BandView<'a>::format(&self) -> paperpaw_platform::pixel::PixelFormat
+pub fn paperpaw_graphics::BandView<'a>::gray(&self, u16, u16) -> u8
+pub fn paperpaw_graphics::BandView<'a>::height(&self) -> u16
+pub fn paperpaw_graphics::BandView<'a>::inverted(&self) -> bool
+pub fn paperpaw_graphics::BandView<'a>::is_first(&self) -> bool
+pub fn paperpaw_graphics::BandView<'a>::map_gray(&mut self, impl core::ops::function::FnMut(u8) -> u8)
+pub fn paperpaw_graphics::BandView<'a>::new(&'a mut [u8], paperpaw_platform::geometry::Rect, paperpaw_platform::pixel::PixelFormat, paperpaw_graphics::FramePass) -> Self
+pub fn paperpaw_graphics::BandView<'a>::pass(&self) -> paperpaw_graphics::FramePass
+pub fn paperpaw_graphics::BandView<'a>::put_gray(&mut self, u16, u16, u8)
+pub fn paperpaw_graphics::BandView<'a>::regions(&self) -> &[paperpaw_graphics::Region]
+pub fn paperpaw_graphics::BandView<'a>::rotation(&self) -> paperpaw_platform::display::Rotation
+pub fn paperpaw_graphics::BandView<'a>::row(&self, u16) -> core::option::Option<&[u8]>
+pub fn paperpaw_graphics::BandView<'a>::row_mut(&mut self, u16) -> core::option::Option<&mut [u8]>
+pub fn paperpaw_graphics::BandView<'a>::width(&self) -> u16
+pub fn paperpaw_graphics::BandView<'a>::with_above(self, &'a [u8]) -> Self
+pub fn paperpaw_graphics::BandView<'a>::with_carry(self, &'a mut [u8], bool) -> Self
+pub fn paperpaw_graphics::BandView<'a>::with_regions(self, &'a [paperpaw_graphics::Region]) -> Self
+pub fn paperpaw_graphics::BandView<'a>::with_screen(self, paperpaw_platform::display::Rotation, bool) -> Self
+impl core::fmt::Debug for paperpaw_graphics::BandView<'_>
+pub fn paperpaw_graphics::BandView<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct paperpaw_graphics::Bitmap<'a>
 impl<'a> paperpaw_graphics::Bitmap<'a>
 pub fn paperpaw_graphics::Bitmap<'a>::format(&self) -> paperpaw_graphics::BitmapFormat
@@ -86,6 +113,7 @@ pub fn paperpaw_graphics::Canvas<'a>::draw_rgb_row(&mut self, i32, i32, &[u8])
 pub fn paperpaw_graphics::Canvas<'a>::fill(&mut self, paperpaw_platform::geometry::Rect, paperpaw_platform::pixel::Color)
 pub fn paperpaw_graphics::Canvas<'a>::fill_circle(&mut self, paperpaw_platform::geometry::Point, u32, paperpaw_platform::pixel::Color)
 pub fn paperpaw_graphics::Canvas<'a>::fill_corners(&mut self, paperpaw_platform::geometry::Rect, u32, paperpaw_platform::pixel::Color)
+pub fn paperpaw_graphics::Canvas<'a>::fill_dithered(&mut self, paperpaw_platform::geometry::Rect, u8, paperpaw_graphics::Dither)
 pub fn paperpaw_graphics::Canvas<'a>::fill_rect(&mut self, i32, i32, u32, u32, paperpaw_platform::pixel::Color)
 pub fn paperpaw_graphics::Canvas<'a>::fill_ring(&mut self, paperpaw_platform::geometry::Point, u32, u32, i32, u32, paperpaw_platform::pixel::Color)
 pub fn paperpaw_graphics::Canvas<'a>::fill_round(&mut self, paperpaw_platform::geometry::Rect, u32, paperpaw_platform::pixel::Color)
@@ -93,11 +121,13 @@ pub fn paperpaw_graphics::Canvas<'a>::fill_round_rect(&mut self, i32, i32, u32, 
 pub fn paperpaw_graphics::Canvas<'a>::fill_round_shaded(&mut self, paperpaw_platform::geometry::Rect, u32, paperpaw_platform::pixel::Color)
 pub fn paperpaw_graphics::Canvas<'a>::fill_shaded(&mut self, paperpaw_platform::geometry::Rect, paperpaw_platform::pixel::Color)
 pub fn paperpaw_graphics::Canvas<'a>::fill_tint(&mut self, paperpaw_platform::geometry::Rect, paperpaw_platform::pixel::Color)
+pub fn paperpaw_graphics::Canvas<'a>::gray_at(&self, paperpaw_platform::geometry::Point) -> core::option::Option<u8>
 pub fn paperpaw_graphics::Canvas<'a>::is_describing(&self) -> bool
 pub fn paperpaw_graphics::Canvas<'a>::mono_coverage(&self) -> u8
 pub fn paperpaw_graphics::Canvas<'a>::offset(self, i32, i32) -> Self
 pub fn paperpaw_graphics::Canvas<'a>::origin(&self) -> paperpaw_platform::geometry::Point
 pub fn paperpaw_graphics::Canvas<'a>::picture_levels(&self) -> core::option::Option<u8>
+pub fn paperpaw_graphics::Canvas<'a>::pixel(&self, paperpaw_platform::geometry::Point) -> core::option::Option<paperpaw_platform::pixel::Color>
 pub fn paperpaw_graphics::Canvas<'a>::set_pixel(&mut self, paperpaw_platform::geometry::Point, paperpaw_platform::pixel::Color)
 pub fn paperpaw_graphics::Canvas<'a>::stroke(&mut self, paperpaw_platform::geometry::Rect, u32, paperpaw_platform::pixel::Color)
 pub fn paperpaw_graphics::Canvas<'a>::stroke_circle(&mut self, paperpaw_platform::geometry::Point, u32, u32, paperpaw_platform::pixel::Color)
@@ -132,8 +162,22 @@ pub struct paperpaw_graphics::Dither(_)
 impl paperpaw_graphics::Dither
 pub const paperpaw_graphics::Dither::NONE: Self
 pub const paperpaw_graphics::Dither::ORDERED: Self
+impl paperpaw_graphics::Dither
+pub const fn paperpaw_graphics::Dither::from_value(u8) -> Self
+pub const fn paperpaw_graphics::Dither::value(self) -> u8
 impl core::default::Default for paperpaw_graphics::Dither
 pub fn paperpaw_graphics::Dither::default() -> Self
+pub struct paperpaw_graphics::FramePass(_)
+impl paperpaw_graphics::FramePass
+pub const paperpaw_graphics::FramePass::COLOUR: Self
+pub const paperpaw_graphics::FramePass::GRAY: Self
+pub const paperpaw_graphics::FramePass::MONO: Self
+pub const fn paperpaw_graphics::FramePass::contains(self, Self) -> bool
+pub const fn paperpaw_graphics::FramePass::from_value(u16) -> Self
+pub const fn paperpaw_graphics::FramePass::value(self) -> u16
+impl core::ops::bit::BitOr for paperpaw_graphics::FramePass
+pub type paperpaw_graphics::FramePass::Output = paperpaw_graphics::FramePass
+pub fn paperpaw_graphics::FramePass::bitor(self, Self) -> Self
 pub struct paperpaw_graphics::Framebuffer
 impl paperpaw_graphics::Framebuffer
 pub fn paperpaw_graphics::Framebuffer::band(&self) -> paperpaw_platform::geometry::Rect
@@ -165,4 +209,17 @@ pub fn paperpaw_graphics::Framebuffer::view(&self) -> paperpaw_platform::display
 pub fn paperpaw_graphics::Framebuffer::view_rows(&self, paperpaw_platform::geometry::Rect) -> paperpaw_platform::display::FrameView<'_>
 pub fn paperpaw_graphics::Framebuffer::width(&self) -> u16
 pub fn paperpaw_graphics::Framebuffer::write_rows(&mut self, u16, paperpaw_platform::display::FrameView<'_>)
+pub struct paperpaw_graphics::Region
+impl paperpaw_graphics::Region
+pub const fn paperpaw_graphics::Region::kind(&self) -> paperpaw_graphics::RegionKind
+pub const fn paperpaw_graphics::Region::new(paperpaw_graphics::RegionKind, paperpaw_platform::geometry::Rect) -> Self
+pub const fn paperpaw_graphics::Region::rect(&self) -> paperpaw_platform::geometry::Rect
+pub struct paperpaw_graphics::RegionKind(_)
+impl paperpaw_graphics::RegionKind
+pub const paperpaw_graphics::RegionKind::CHROME: Self
+pub const paperpaw_graphics::RegionKind::IMAGE: Self
+pub const paperpaw_graphics::RegionKind::KEYBOARD: Self
+pub const paperpaw_graphics::RegionKind::PAGE_TEXT: Self
+pub const fn paperpaw_graphics::RegionKind::from_value(u16) -> Self
+pub const fn paperpaw_graphics::RegionKind::value(self) -> u16
 pub const paperpaw_graphics::MONO_COVERAGE: u8
