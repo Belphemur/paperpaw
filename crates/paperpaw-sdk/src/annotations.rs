@@ -55,8 +55,8 @@ const BOOK: &str = "# book ";
 pub enum Kind {
     Bookmark,
     Highlight,
-    /// A kind a later build adds (an underline, a pen note), by the letter
-    /// its lines start with (its code point), as a later PaperPaw may hand
+    /// A kind a later build adds (an underline, a pen note), by the ASCII
+    /// letter its lines start with (its code), as a later PaperPaw may hand
     /// it to a plugin built now. Written with its letter; a line of a kind
     /// this build doesn't know is not read but kept as it is, whatever is
     /// changed (none is lost).
@@ -376,7 +376,7 @@ fn write(
             Kind::Highlight => 'h',
             // Its own letter (one this build would not make: left out).
             Kind::Other(code) => match char::from_u32(u32::from(code)) {
-                Some(letter) if letter.is_alphabetic() => letter,
+                Some(letter) if letter.is_ascii_alphabetic() => letter,
                 _ => continue,
             },
         };
