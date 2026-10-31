@@ -485,6 +485,8 @@ mod tests {
         ];
         let on = |word: usize, action: Id| Selection::choosing(word).moved(&action, &rtl_line);
         assert_eq!(on(2, actions::LEFT), Some(3));
-        assert_eq!(on(0, actions::RIGHT), Some(0));
+        // Right of the first word, in a right-to-left word, wraps to the last
+        // one, as left of the first word does in a left-to-right one (#55).
+        assert_eq!(on(0, actions::RIGHT), Some(3));
     }
 }
