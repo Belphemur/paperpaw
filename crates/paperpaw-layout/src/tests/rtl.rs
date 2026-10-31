@@ -41,6 +41,48 @@ fn right_to_left_lines_start_at_the_right() {
 }
 
 #[test]
+fn left_and_right_are_the_pages_edges_start_and_end_the_paragraphs() {
+    // "abc", 3 wide of 10: at 0 flush left, at 7 flush right.
+    let x = |dir: Direction, align: Align| {
+        let doc = Blocks::new(move |at: Locator| {
+            (at.offset < 3).then(|| block("abc", 0, 3).dir(dir).align(align))
+        });
+        layout_with(&doc, &Flat1, Locator::START, 100.0)
+            .unwrap()
+            .lines[0]
+            .x
+    };
+    for dir in [Direction::Ltr, Direction::Rtl] {
+        assert_eq!(x(dir, Align::Left), 0.0, "{dir:?}");
+        assert_eq!(x(dir, Align::Right), 7.0, "{dir:?}");
+    }
+    // Start and End follow the paragraph.
+    assert_eq!(
+        (
+            x(Direction::Ltr, Align::Start),
+            x(Direction::Ltr, Align::End)
+        ),
+        (0.0, 7.0)
+    );
+    assert_eq!(
+        (
+            x(Direction::Rtl, Align::Start),
+            x(Direction::Rtl, Align::End)
+        ),
+        (7.0, 0.0)
+    );
+    // A paragraph whose direction comes from its letters: Hebrew, flush
+    // right as asked, and its bits kept.
+    let hebrew = "\u{5d0}\u{5d1}\u{5d2}";
+    let doc = Blocks::new(move |at: Locator| {
+        (at.offset < 6).then(|| block(hebrew, 0, 6).align(Align::Left))
+    });
+    let page = layout_with(&doc, &Flat1, Locator::START, 100.0).unwrap();
+    assert!(page.lines[0].bidi.is_rtl());
+    assert_eq!(page.lines[0].x, 0.0);
+}
+
+#[test]
 fn runs_split_where_the_level_changes() {
     let page = one("\u{5d0} 12 \u{5d1}", Direction::Auto, &Flat1);
     assert_eq!(

@@ -940,13 +940,19 @@ fn justification_cost(free: f32, spaces: usize, limit: Option<f32>) -> f32 {
     extra * extra + left * left
 }
 
-/// How a block's lines are aligned.
-fn block_align(block: &Block, style: &Style, heading: u8) -> Align {
+/// How a block's lines are aligned, by the paragraph's direction: the
+/// page's edges (`Left`, `Right`) as its start or end.
+fn block_align(block: &Block, style: &Style, heading: u8, levels: &BlockLevels) -> Align {
     let align = match style.book.has(BookStyles::ALIGN) {
         true => block.align,
         false => Align::Auto,
     };
+    let rtl = levels.paragraph.is_rtl();
     match align {
+        Align::Left if rtl => Align::End,
+        Align::Right if rtl => Align::Start,
+        Align::Left => Align::Start,
+        Align::Right => Align::End,
         Align::Auto if heading > 0 => Align::Start,
         Align::Auto | Align::Justify if style.justify => Align::Justify,
         Align::Auto | Align::Justify => Align::Start,
@@ -1059,13 +1065,13 @@ pub fn line_start(cx: &LayoutContext<'_>, at: Locator) -> Result<Locator, Docume
         return Ok(at);
     }
     let (heading, base) = block_face(&block, style);
-    let align = block_align(&block, style, heading);
+    let levels = BlockLevels::in_context(&block, cx, at.section);
+    let align = block_align(&block, style, heading, &levels);
     let indent = first_indent(&block, style, align);
     let justify_limit = (align == Align::Justify).then(|| {
         let em = block_em(&block, style);
         block_line(&block, style, cx.typesetter.line(base), em).1 * MAX_JUSTIFY_GAP
     });
-    let levels = BlockLevels::in_context(&block, cx, at.section);
     let lines = block_lines(&block, 0, base, cx, heading, indent, justify_limit, &levels);
     let start = lines
         .iter()
@@ -1206,7 +1212,8 @@ pub fn layout_page(
                 y += body_line * HEADING_SPACE;
             }
         }
-        let align = block_align(&block, style, heading);
+        let levels = BlockLevels::in_context(&block, cx, at.section);
+        let align = block_align(&block, style, heading, &levels);
         let indent = if at_block_start {
             first_indent(&block, style, align)
         } else {
@@ -1219,7 +1226,6 @@ pub fn layout_page(
             false => indent,
         };
         let justify_limit = (align == Align::Justify).then_some(letters * MAX_JUSTIFY_GAP);
-        let levels = BlockLevels::in_context(&block, cx, at.section);
         let lines = block_lines(
             &block,
             from,
@@ -1398,10 +1404,10 @@ fn inserted_lines(
         let (ascent, line_height) = block_line(inserted, style, typesetter.line(base), em);
         let leading = block_leading(inserted, em);
         let (ascent, line_height) = (ascent + leading, line_height + leading);
-        let align = block_align(inserted, style, heading);
+        let levels = BlockLevels::of(inserted);
+        let align = block_align(inserted, style, heading, &levels);
         y += style.paragraph_spacing;
         let indent = first_indent(inserted, style, align);
-        let levels = BlockLevels::of(inserted);
         for (line, (first_x, available)) in
             block_lines(inserted, 0, base, cx, heading, indent, None, &levels)
         {

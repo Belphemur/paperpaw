@@ -112,6 +112,10 @@ change the plugin SDK.
   a file that sets them is refused as one of a newer format ("needs a
   newer PaperPaw", in the store a plugin for another build) rather than
   as malformed.
+- Plugin interface 5: `Align::Left` and `Align::Right` (`bits()` 5, 6):
+  the page's edges whatever the paragraph's direction, as CSS
+  `text-align: left`/`right`; `Start` and `End` stay the paragraph's.
+  Layout resolves them by the paragraph's resolved direction (#33).
 - Plugin interface 5: `MenuNeed::Has(Capability)`: a menu entry can need
   any capability, also one a later build adds (not met where unknown).
   `SystemStatus` holds four named values (`value`, `with_value`:
