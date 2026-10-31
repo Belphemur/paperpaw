@@ -795,6 +795,29 @@ mod tests {
     }
 
     #[test]
+    fn alignment_keeps_sides_and_logical_ends_apart() {
+        let body = |dir: &str| {
+            alloc::format!(
+                "<html dir=\"{dir}\"><body>\
+                 <p style=\"text-align: right\">{t}</p>\
+                 <p style=\"text-align: left\">{t}</p>\
+                 <p style=\"text-align: start\">{t}</p>\
+                 <p style=\"text-align: end\">{t}</p></body></html>",
+                t = "\u{646}\u{635}"
+            )
+        };
+        for dir in ["rtl", "ltr"] {
+            let blocks = chapter_blocks(&epub(body(dir)));
+            let found: Vec<Align> = blocks.iter().map(|b| b.align).collect();
+            assert_eq!(
+                found,
+                [Align::Right, Align::Left, Align::Start, Align::End],
+                "{dir}"
+            );
+        }
+    }
+
+    #[test]
     fn blocks_know_their_direction_and_language() {
         let ch2 = String::from(
             "<html lang=\"ar\" dir=\"rtl\"><body>\
@@ -812,10 +835,10 @@ mod tests {
             found,
             [
                 (Direction::Rtl, ar, Align::Auto),
-                // `right` is where right-to-left lines start, `left` where
-                // they end.
-                (Direction::Rtl, ar, Align::Start),
-                (Direction::Rtl, ar, Align::End),
+                // `right` and `left` are the page's sides in either direction;
+                // the layout puts them where the paragraph's lines start or end.
+                (Direction::Rtl, ar, Align::Right),
+                (Direction::Rtl, ar, Align::Left),
                 // An inline `dir` sets no paragraph's.
                 (Direction::Ltr, Lang::parse("de"), Align::Auto),
                 // `auto`: from the text, kept for its pieces.
@@ -986,7 +1009,7 @@ mod tests {
                 (Direction::Rtl, Align::Auto),
                 // Without a letter, the book's direction.
                 (Direction::Rtl, Align::Auto),
-                (Direction::Ltr, Align::Start),
+                (Direction::Ltr, Align::Left),
             ]
         );
         assert!(blocks.iter().take(2).all(|b| b.lang == Lang::parse("he")));
@@ -1026,7 +1049,7 @@ mod tests {
             .block_at(&storage, Locator::new(1, second.end))
             .unwrap()
             .unwrap();
-        assert_eq!((third.text.as_str(), third.align), ("Rechts", Align::End));
+        assert_eq!((third.text.as_str(), third.align), ("Rechts", Align::Right));
     }
 
     #[test]
@@ -1251,11 +1274,11 @@ mod tests {
         storage
             .write("books/styles.css", b"p.c { text-align: left }")
             .unwrap();
-        assert_eq!(align(&storage), Align::Start);
+        assert_eq!(align(&storage), Align::Left);
         storage
             .write("books/test.css", b"p.c { text-align: right }")
             .unwrap();
-        assert_eq!(align(&storage), Align::End);
+        assert_eq!(align(&storage), Align::Right);
         // Without them, the book's own again.
         storage.remove("books/styles.css").unwrap();
         storage.remove("books/test.css").unwrap();
@@ -1278,12 +1301,12 @@ mod tests {
                 .align
         };
         let themed = OpenOptions::default().css(String::from("p.c { text-align: right }"));
-        assert_eq!(align(&storage, &themed), Align::End);
+        assert_eq!(align(&storage, &themed), Align::Right);
         // One's own stylesheet comes after the plugins' and wins.
         storage
             .write("books/styles.css", b"p.c { text-align: left }")
             .unwrap();
-        assert_eq!(align(&storage, &themed), Align::Start);
+        assert_eq!(align(&storage, &themed), Align::Left);
         storage.remove("books/styles.css").unwrap();
         // Without the publisher's styles, none of them.
         let plain = themed.clone().publisher_styles(false);
@@ -1322,14 +1345,14 @@ mod tests {
             &options,
             &kept
         ));
-        assert_eq!(align(&storage, &options), Align::Start);
+        assert_eq!(align(&storage, &options), Align::Left);
         assert!(EpubDocument::prepared_keeping(
             &storage,
             "books/test.epub",
             &options,
             &kept
         ));
-        assert_eq!(align(&storage, &options), Align::Start);
+        assert_eq!(align(&storage, &options), Align::Left);
         // Each opening after that looks again.
         storage.remove("books/styles.css").unwrap();
         assert_eq!(align(&storage, &options), Align::Center);
@@ -1347,7 +1370,7 @@ mod tests {
             .write("books/styles.css", b"p.c { text-align: right }")
             .unwrap();
         let themed = OpenOptions::default().css(String::from("p { font-weight: bold }"));
-        assert_eq!(align(&storage, &themed), Align::End);
+        assert_eq!(align(&storage, &themed), Align::Right);
     }
 
     #[test]

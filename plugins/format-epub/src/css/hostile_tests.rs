@@ -199,7 +199,7 @@ fn nested_at_rules_are_skipped_whole() {
 #[test]
 fn an_unterminated_comment_swallows_the_rest() {
     let rules = whole(".a { text-align: right } /* .b { text-align: center }");
-    assert_eq!(rules.props("p", "a").align, Some(Align::End));
+    assert_eq!(rules.props("p", "a").align, Some(Align::Right));
     assert_eq!(rules.props("p", "b").align, None);
 }
 

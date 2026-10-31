@@ -219,8 +219,6 @@ struct Frame {
     tag: String,
     style: TextStyle,
     align: Align,
-    /// `align` was given as `left` or `right` (see [`direction`]).
-    align_sides: bool,
     /// The direction of the paragraphs it holds, inherited; a block
     /// element's `dir` or CSS `direction` sets it.
     dir: Direction,
@@ -339,10 +337,8 @@ struct Converter<'a> {
     text: String,
     /// Style runs of `text`.
     runs: Vec<Run>,
-    /// Alignment of the current block, set by its first character, and
-    /// whether it was given as `left` or `right`.
+    /// Alignment of the current block, set by its first character.
     align: Option<Align>,
-    align_sides: bool,
     /// The book's language and direction, for text that sets none.
     book: BookText,
     /// The direction and language of the current block, set by its first
@@ -413,15 +409,13 @@ impl Converter<'_> {
     /// Appends text in `style`.
     fn push_styled(&mut self, c: char, style: TextStyle) {
         let (_, align) = self.frame();
-        let (sides, dir, lang) = self
+        let (dir, lang) = self
             .stack
             .last()
-            .map_or((false, self.book.dir, self.book.lang), |f| {
-                (f.align_sides, f.dir, f.lang)
-            });
+            .map_or((self.book.dir, self.book.lang), |f| (f.dir, f.lang));
         if self.text.is_empty() {
             if self.align.is_none() {
-                (self.align, self.align_sides) = (Some(align), sides);
+                self.align = Some(align);
             }
             self.dir.get_or_insert(dir);
             self.lang.get_or_insert(lang);
@@ -693,12 +687,10 @@ impl Converter<'_> {
         // Paragraphs take the direction of the block elements around them
         // (inline ones are not set apart yet); text the language of the
         // innermost element that names one.
-        let (parent_dir, parent_lang, parent_sides) = self
+        let (parent_dir, parent_lang) = self
             .stack
             .last()
-            .map_or((self.book.dir, self.book.lang, false), |f| {
-                (f.dir, f.lang, f.align_sides)
-            });
+            .map_or((self.book.dir, self.book.lang), |f| (f.dir, f.lang));
         let paragraphs = is_block(&tag) || matches!(tag.as_str(), "html" | "body" | "li" | "pre");
         let dir = direction::own_dir(&attrs, props.direction)
             .filter(|_| paragraphs)
@@ -794,10 +786,6 @@ impl Converter<'_> {
             tag: tag.clone(),
             style: styled(style, &props),
             align: props.align.unwrap_or(align),
-            align_sides: match props.align {
-                Some(_) => props.align_sides,
-                None => parent_sides,
-            },
             dir,
             lang,
             indent,
@@ -1117,7 +1105,6 @@ impl Converter<'_> {
         self.origin_bytes = 0;
         self.since_origin = 0;
         self.align = None;
-        self.align_sides = false;
         self.dir = None;
         self.lang = None;
         self.inline_langs.clear();
@@ -1227,11 +1214,7 @@ impl Converter<'_> {
             .filter(|run| (run.start as usize) < len)
             .map(|run| Run::new(run.start, run.end.min(len as u32), run.style))
             .collect();
-        let align = direction::resolve_align(
-            self.align.unwrap_or_default(),
-            self.align_sides,
-            dir == Direction::Rtl,
-        );
+        let align = self.align.unwrap_or_default();
         self.out
             .extend_from_slice(&[kind, level, flags, align.bits()]);
         self.out.extend_from_slice(&(len as u16).to_le_bytes());
@@ -1425,7 +1408,6 @@ pub(crate) fn convert(
         text,
         runs: Vec::new(),
         align: None,
-        align_sides: false,
         book,
         dir: None,
         lang: None,
