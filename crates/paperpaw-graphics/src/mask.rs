@@ -77,7 +77,7 @@ impl Framebuffer {
         color: Color,
         coverage: impl Fn(u32, u32) -> u8,
     ) {
-        let bpp = usize::from(self.format().bits_per_pixel());
+        let bpp = usize::from(self.bpp());
         let max = (1u32 << bpp) - 1;
         let step = 255 / max;
         let full = self.encode(color) as u8;

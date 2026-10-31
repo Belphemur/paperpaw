@@ -360,7 +360,7 @@ impl Framebuffer {
             return;
         }
         let value = self.encode(color);
-        let bpp = self.format.bits_per_pixel();
+        let bpp = self.bpp();
         // Formats of several pixels a byte: whole bytes at once, the
         // pixels of the bytes at either end one by one (every band is
         // cleared before it is drawn).
@@ -518,7 +518,7 @@ impl Framebuffer {
         // small devices the round through red, green and blue is felt.
         if alpha != 255
             && let Some(levels) = self.format.gray_levels()
-            && self.format.bits_per_pixel() <= 8
+            && self.bpp() <= 8
         {
             let max = u32::from(levels - 1);
             let mut under = self.load(x, y) * 255 / max;
@@ -615,7 +615,7 @@ impl Framebuffer {
         self.count_picture(1);
         // What shows there now, as the page means it (not inverted).
         let under = match self.format.gray_levels() {
-            Some(levels) if self.format.bits_per_pixel() <= 8 => {
+            Some(levels) if self.bpp() <= 8 => {
                 let level = self.load(x, y) * 255 / u32::from(levels - 1);
                 if self.inverted { 255 - level } else { level }
             }
@@ -744,10 +744,23 @@ impl Framebuffer {
         (&mut self.data, self.stride, self.top)
     }
 
+    /// Bits per pixel of the format drawn in: a table on the variant, as
+    /// no framebuffer is made in an `Other` format ([`banded`](Self::banded)).
+    pub(crate) fn bpp(&self) -> u8 {
+        match self.format {
+            PixelFormat::Mono1 => 1,
+            PixelFormat::Gray2 => 2,
+            PixelFormat::Gray4 => 4,
+            PixelFormat::Gray8 => 8,
+            PixelFormat::Rgb565 => 16,
+            _ => 24,
+        }
+    }
+
     /// The stored value of a pixel of a format of 8 bits or fewer.
     fn load(&self, x: u16, y: u16) -> u32 {
         let row = usize::from(y - self.top) * self.stride;
-        let bpp = usize::from(self.format.bits_per_pixel());
+        let bpp = usize::from(self.bpp());
         let bit = usize::from(x) * bpp;
         let byte = self.data[row + bit / 8];
         u32::from(byte >> (8 - bpp - bit % 8)) & ((1 << bpp) - 1)
@@ -757,7 +770,7 @@ impl Framebuffer {
     fn store(&mut self, x: u16, y: u16, value: u32) {
         let row = usize::from(y - self.top) * self.stride;
         let x = usize::from(x);
-        match self.format.bits_per_pixel() as usize {
+        match self.bpp() as usize {
             bpp @ (1 | 2 | 4) => {
                 let bit = x * bpp;
                 let shift = 8 - bpp - bit % 8;

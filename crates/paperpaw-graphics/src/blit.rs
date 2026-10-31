@@ -403,7 +403,7 @@ fn repeated(values: [u32; 4], bpp: u32) -> u64 {
 
 /// Draws on a frame of 1, 2 or 4 bits a pixel, each row in words.
 fn packed(fb: &mut Framebuffer, job: &Job, bitmap: &Bitmap<'_>, dither: Dither) {
-    let bpp = u32::from(fb.format().bits_per_pixel());
+    let bpp = u32::from(fb.bpp());
     let grays = bitmap.grays();
     let offsets = offsets(fb, dither);
     if bitmap.format.bits_per_pixel() == 8 {
@@ -450,7 +450,7 @@ fn rows<const SB: u32>(
     pattern: impl Fn(usize, usize) -> u64,
     uniform: bool,
 ) {
-    let bpp = u32::from(fb.format().bits_per_pixel());
+    let bpp = u32::from(fb.bpp());
     let shown = job.shown;
     let bits = (
         usize::from(shown.x) * bpp as usize,
