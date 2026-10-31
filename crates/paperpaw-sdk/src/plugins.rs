@@ -84,6 +84,10 @@ pub enum PluginKind {
     Data,
     /// A folder on the storage with native code ([`native`](crate::native)).
     Code,
+    /// A kind a later build adds (a scripted plugin), by its number. Code
+    /// that doesn't know it treats it as a plugin on the storage that this
+    /// build cannot run.
+    Other(u16),
 }
 
 /// Why a code plugin does not run, for plugin managers to say.

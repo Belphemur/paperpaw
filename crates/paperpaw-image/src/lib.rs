@@ -155,6 +155,10 @@ pub enum Format {
     Jpeg,
     Png,
     Gif,
+    /// A format a later build adds (WebP, AVIF, ...), by its number;
+    /// [`Format::detect`] gives only those of this build, which decodes no
+    /// other ([`ImageError::Unsupported`]).
+    Other(u16),
 }
 
 /// The width and height of a JPEG, PNG or GIF from its first bytes
@@ -185,6 +189,7 @@ pub fn dimensions(head: &[u8]) -> Option<(u32, u32)> {
     let size = match Format::detect(head)? {
         Format::Png => (u32_be(16)?, u32_be(20)?),
         Format::Gif => (u16_le(6)?, u16_le(8)?),
+        Format::Other(_) => return None,
         Format::Jpeg => {
             // Segment by segment to the frame's header.
             let mut at = 2;
@@ -322,6 +327,7 @@ pub fn decode(
         Format::Jpeg => jpeg::decode(&mut reader, fit, sink),
         Format::Png => png::decode(&mut reader, fit, sink),
         Format::Gif => gif::decode(&mut reader, fit, sink),
+        Format::Other(_) => Err(ImageError::Unsupported("format")),
     }
 }
 

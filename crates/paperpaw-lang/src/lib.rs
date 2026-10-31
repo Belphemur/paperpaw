@@ -42,6 +42,13 @@ pub enum WritingMode {
     VerticalRl,
     /// Vertical lines, left to right (Mongolian).
     VerticalLr,
+    /// Vertical lines, right to left, all of the text turned a quarter
+    /// clockwise (CSS `sideways-rl`).
+    SidewaysRl,
+    /// Vertical lines, left to right, all of the text turned a quarter
+    /// anticlockwise (CSS `sideways-lr`). With the four above, every
+    /// writing mode of CSS Writing Modes 4: the list is complete.
+    SidewaysLr,
 }
 
 /// A language tag in 32 bits: the language (two or three letters), the

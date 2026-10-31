@@ -55,6 +55,12 @@ const BOOK: &str = "# book ";
 pub enum Kind {
     Bookmark,
     Highlight,
+    /// A kind a later build adds (an underline, a pen note), by the ASCII
+    /// letter its lines start with (its code), as a later PaperPaw may hand
+    /// it to a plugin built now. Written with its letter; a line of a kind
+    /// this build doesn't know is not read but kept as it is, whatever is
+    /// changed (none is lost).
+    Other(u16),
 }
 
 /// Where an annotation is.
@@ -221,6 +227,7 @@ fn fields(line: &str, version: u32) -> Option<(Mark, Vec<&str>)> {
     let kind = match *fields.first()? {
         "b" => Kind::Bookmark,
         "h" => Kind::Highlight,
+        // A kind of a later build: the line is kept as it is (`unread`).
         _ => return None,
     };
     let number = |i: usize| fields.get(i)?.parse::<u32>().ok();
@@ -367,6 +374,11 @@ fn write(
         let kind = match a.mark.kind {
             Kind::Bookmark => 'b',
             Kind::Highlight => 'h',
+            // Its own letter (one this build would not make: left out).
+            Kind::Other(code) => match char::from_u32(u32::from(code)) {
+                Some(letter) if letter.is_ascii_alphabetic() => letter,
+                _ => continue,
+            },
         };
         out.push_str(&format!(
             "{kind}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t",
@@ -764,6 +776,37 @@ mod tests {
         let big = MemoryStorage::new().with(&file(book), alloc::vec![b'\n'; (1 << 20) + 1]);
         assert!(add(&big, book, highlight(1, 2, "x")).is_err());
         assert_eq!(big.size(&file(book)), Ok((1 << 20) + 1));
+    }
+
+    /// A mark of a later build's kind is written with its letter, and
+    /// that line, which this build doesn't read, is kept as it is.
+    #[test]
+    fn a_kind_of_a_later_build_is_written_with_its_letter_and_kept() {
+        let book = "books/a.epub";
+        let storage = MemoryStorage::new();
+        let mut under = highlight(1, 2, "under");
+        under.mark.kind = Kind::Other(u16::from(b'u'));
+        add(&storage, book, under).unwrap();
+        add(&storage, book, highlight(10, 20, "new")).unwrap();
+        let text = String::from_utf8(storage.get(&file(book)).unwrap()).unwrap();
+        assert!(
+            text.lines().any(|l| l.starts_with("u\t1\t1\t1\t2\t")),
+            "{text}"
+        );
+        let kinds: Vec<Kind> = load(&storage, book).iter().map(|a| a.mark.kind).collect();
+        assert_eq!(kinds, [Kind::Highlight]);
+        add(&storage, book, highlight(30, 40, "more")).unwrap();
+        let again = String::from_utf8(storage.get(&file(book)).unwrap()).unwrap();
+        assert!(
+            again.lines().any(|l| l.starts_with("u\t1\t1\t1\t2\t")),
+            "{again}"
+        );
+        // Not a letter: not written.
+        let odd = MemoryStorage::new();
+        let mut seven = highlight(1, 2, "x");
+        seven.mark.kind = Kind::Other(u16::from(b'7'));
+        add(&odd, book, seven).unwrap();
+        assert!(load(&odd, book).is_empty());
     }
 
     /// Which book the annotations are of is said after the version, kept

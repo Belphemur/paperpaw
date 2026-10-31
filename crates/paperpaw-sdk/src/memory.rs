@@ -166,6 +166,11 @@ pub enum MemoryError {
     Full { bytes: usize },
     /// More than an address can count.
     TooLarge,
+    /// A cause this build has no variant for, by its code (0: not said).
+    /// Codes are listed here as they are given and never reused; a build
+    /// that doesn't know one treats it as the most general failure of its
+    /// kind.
+    Other(u16),
 }
 
 impl fmt::Display for MemoryError {
@@ -173,6 +178,7 @@ impl fmt::Display for MemoryError {
         match self {
             MemoryError::Full { bytes } => write!(f, "no room for {bytes} bytes"),
             MemoryError::TooLarge => write!(f, "more memory than can be counted"),
+            MemoryError::Other(code) => write!(f, "memory error {code}"),
         }
     }
 }
@@ -253,6 +259,14 @@ pub fn vec_in<T>(placement: Placement, capacity: usize) -> Result<alloc::vec::Ve
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_cause_of_a_later_build_says_its_code() {
+        assert_eq!(
+            alloc::format!("{}", MemoryError::Other(7)),
+            "memory error 7"
+        );
+    }
 
     #[test]
     fn vectors_go_anywhere_without_a_placer() {

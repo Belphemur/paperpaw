@@ -139,6 +139,11 @@ pub enum ErrorKind {
     UnterminatedString,
     /// An unknown or malformed escape sequence.
     InvalidEscape,
+    /// A cause this build has no variant for, by its code (0: not said).
+    /// Codes are listed here as they are given and never reused; a build
+    /// that doesn't know one treats it as the most general failure of its
+    /// kind.
+    Other(u16),
 }
 
 impl fmt::Display for ParseError {
@@ -149,6 +154,7 @@ impl fmt::Display for ParseError {
             ErrorKind::InvalidKey => "invalid key",
             ErrorKind::UnterminatedString => "missing closing quote",
             ErrorKind::InvalidEscape => "invalid escape sequence",
+            ErrorKind::Other(code) => return write!(f, "line {}: error {code}", self.line),
         };
         write!(f, "line {}: {}", self.line, message)
     }
@@ -499,6 +505,15 @@ mod tests {
 
     fn entries(source: &str) -> Vec<Entry<'_>> {
         parse(source).collect::<Result<_, _>>().unwrap()
+    }
+
+    #[test]
+    fn a_cause_of_a_later_build_says_its_code() {
+        let error = ParseError {
+            line: 3,
+            kind: ErrorKind::Other(7),
+        };
+        assert_eq!(std::format!("{error}"), "line 3: error 7");
     }
 
     #[test]

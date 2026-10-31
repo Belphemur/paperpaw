@@ -138,9 +138,30 @@ change the plugin SDK.
   a file that sets them is refused as one of a newer format ("needs a
   newer PaperPaw", in the store a plugin for another build) rather than
   as malformed.
+- Plugin interface 5: `Align::Left` and `Align::Right` (`bits()` 5, 6):
+  the page's edges whatever the paragraph's direction, as CSS
+  `text-align: left`/`right`; `Start` and `End` stay the paragraph's.
+  Layout resolves them by the paragraph's resolved direction (#33).
+- Plugin interface 5: `WordBox::bidi` (`LineBidi`, also as
+  `paperpaw_sdk::reading::LineBidi`): how the word's line goes, its
+  paragraph's direction included, so a selection on a line of an Arabic
+  book that holds only an English quote knows the line belongs to a
+  right-to-left paragraph. The layout digest covers `WordBox`,
+  `PageView`, `Page`, `PageLine`, `LineRun` and `LineBidi`.
+- Plugin interface 5, second sweep of open values (#33): `Other(u16)` in
+  `native::Chip` (a file for an unknown chip is still refused),
+  `image::Format` (decoded as unsupported), `document::LinkKind`
+  (followed as a plain link), `document::AnnotationKind` (shown as a
+  gloss), `annotations::Kind` (by its file letter: a mark of it is
+  written with that letter; lines of a kind this build doesn't know stay
+  as they are, as before) and `PluginKind`;
+  and, as for the other errors, in `SettingError`, `data::Error`,
+  `GraphicsError`, `config::ErrorKind` and `MemoryError`.
+  `WritingMode` gains `SidewaysRl` and `SidewaysLr` (all of CSS Writing
+  Modes 4).
 - Plugin interface 5: `MenuNeed::Has(Capability)`: a menu entry can need
   any capability, also one a later build adds (not met where unknown).
-  `SystemStatus` holds four named values (`value`, `with_value`:
+  `SystemStatus` holds eight named values (`value`, `with_value`:
   `temperature-c`, `frontlight-percent`) a later shell can fill without a
   new interface.
 

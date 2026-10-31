@@ -39,6 +39,10 @@ pub enum Chip {
     Esp32C3,
     /// The Xteink X4 Pro's (Xtensa).
     Esp32S3,
+    /// A chip a later build adds, by its id. A file for a chip this build
+    /// has no variant for is refused as [`Problem::UnknownChip`]; this
+    /// value is for code that tells of chips (the store, a later firmware).
+    Other(u16),
 }
 
 impl Chip {
@@ -47,9 +51,11 @@ impl Chip {
         match self {
             Chip::Esp32C3 => 5,
             Chip::Esp32S3 => 9,
+            Chip::Other(id) => id,
         }
     }
 
+    /// The chip of `id`, if this build knows it.
     pub const fn from_id(id: u16) -> Option<Chip> {
         match id {
             5 => Some(Chip::Esp32C3),
@@ -63,6 +69,8 @@ impl Chip {
         match self {
             Chip::Esp32C3 => "riscv32imc-unknown-none-elf",
             Chip::Esp32S3 => "xtensa-esp32s3-none-elf",
+            // Not known to this build.
+            Chip::Other(_) => "",
         }
     }
 }
@@ -72,6 +80,7 @@ impl fmt::Display for Chip {
         f.write_str(match self {
             Chip::Esp32C3 => "ESP32-C3",
             Chip::Esp32S3 => "ESP32-S3",
+            Chip::Other(id) => return write!(f, "chip {id}"),
         })
     }
 }
@@ -517,6 +526,9 @@ pub(crate) mod tests {
         assert_eq!(header.file_len(), file.len() as u64);
         assert_eq!(header.to_bytes()[..], file[..HEADER_LEN]);
         assert_eq!(Chip::from_id(Chip::Esp32S3.id()), Some(Chip::Esp32S3));
+        // A chip of a later build: told of by its id, a file for it refused.
+        assert_eq!((Chip::Other(13).id(), Chip::from_id(13)), (13, None));
+        assert_eq!(Chip::Other(13).target(), "");
         assert_eq!((header.needs_api, header.interface), (64, 5));
         // What the plugin needs comes back as written.
         let needing = Header {

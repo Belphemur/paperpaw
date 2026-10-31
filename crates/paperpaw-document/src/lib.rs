@@ -311,16 +311,25 @@ impl Run {
 }
 
 /// Horizontal alignment of a block's lines.
+///
+/// `Start` and `End` follow the paragraph's direction (`Start` is the
+/// right edge of a right-to-left paragraph); `Left` and `Right` are the
+/// page's edges whatever the direction, as CSS `text-align: left` and
+/// `right` are.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum Align {
-    /// As the reader prefers (justified or flush left).
+    /// As the reader prefers (justified or flush to the start).
     #[default]
     Auto,
     Start,
     Center,
     End,
     Justify,
+    /// Flush with the page's left edge, in either direction.
+    Left,
+    /// Flush with the page's right edge, in either direction.
+    Right,
 }
 
 impl Align {
@@ -332,6 +341,8 @@ impl Align {
             Align::Center => 2,
             Align::End => 3,
             Align::Justify => 4,
+            Align::Left => 5,
+            Align::Right => 6,
         }
     }
 
@@ -341,6 +352,8 @@ impl Align {
             2 => Align::Center,
             3 => Align::End,
             4 => Align::Justify,
+            5 => Align::Left,
+            6 => Align::Right,
             _ => Align::Auto,
         }
     }
@@ -476,6 +489,10 @@ pub enum AnnotationKind {
     Phonetic,
     /// What a word means (an interlinear gloss).
     Gloss,
+    /// A kind a later build adds (ruby under the text or between its
+    /// characters, bopomofo, warichu), by its number. A build that doesn't
+    /// know it shows it as a [`Gloss`](AnnotationKind::Gloss).
+    Other(u16),
 }
 
 /// The most room [`Block::leading_above`] adds above a line: four ems.
@@ -903,6 +920,10 @@ pub enum LinkKind {
     NoteRef,
     /// From a note back to its mark (`backlink`).
     Back,
+    /// A kind a later build adds (a glossary or bibliography reference,
+    /// a page break's mark), by its number. A build that doesn't know it
+    /// follows it as a [`Plain`](LinkKind::Plain) link.
+    Other(u16),
 }
 
 /// Whether `href` leads out of the document, e.g. to a web page: it has a

@@ -352,10 +352,12 @@ fn alignments_survive_their_bits() {
         Align::Center,
         Align::End,
         Align::Justify,
+        Align::Left,
+        Align::Right,
     ] {
         assert_eq!(Align::from_bits(align.bits()), align);
     }
-    for unknown in [5, 9, u8::MAX] {
+    for unknown in [7, 9, u8::MAX] {
         assert_eq!(Align::from_bits(unknown), Align::Auto);
     }
 }
