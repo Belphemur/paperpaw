@@ -16,6 +16,11 @@ use paperpaw_graphics::{Framebuffer, GraphicsError};
 use paperpaw_platform::{Color, FrameView, PixelFormat, Point, Rect};
 use proptest::prelude::*;
 
+#[test]
+fn a_cause_of_a_later_build_says_its_code() {
+    assert_eq!(GraphicsError::Other(7).to_string(), "graphics error 7");
+}
+
 const W: u16 = 53;
 const H: u16 = 29;
 

@@ -1,6 +1,19 @@
 use super::*;
 
 #[test]
+fn a_cause_of_a_later_build_says_its_code() {
+    assert_eq!(
+        alloc::format!("{}", SettingError::Other(7)),
+        "setting error 7"
+    );
+    // A data file's: refused as not as the format says.
+    assert_eq!(
+        crate::StorageError::from(crate::data::Error::Other(7)),
+        crate::StorageError::InvalidData
+    );
+}
+
+#[test]
 fn a_setting_follows_another_until_set_itself() {
     static FOLLOWS: SettingExtra = SettingExtra::new().follows(Id::new_static("a.sides"));
     let mut s = Settings::new();

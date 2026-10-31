@@ -55,6 +55,11 @@ const BOOK: &str = "# book ";
 pub enum Kind {
     Bookmark,
     Highlight,
+    /// A kind a later build adds (an underline, a pen note), by the letter
+    /// its lines start with (its code point). This build keeps it, lists
+    /// it as it can (the reader's list: as a highlight, not drawn) and
+    /// writes it back with its letter, so saving here loses none of them.
+    Other(u16),
 }
 
 /// Where an annotation is.
@@ -221,7 +226,13 @@ fn fields(line: &str, version: u32) -> Option<(Mark, Vec<&str>)> {
     let kind = match *fields.first()? {
         "b" => Kind::Bookmark,
         "h" => Kind::Highlight,
-        _ => return None,
+        // One letter: a kind of a later build, kept.
+        other => {
+            let mut letters = other.chars();
+            let letter = letters.next().filter(|c| c.is_alphabetic())?;
+            letters.next().is_none().then_some(())?;
+            Kind::Other(u16::try_from(u32::from(letter)).ok()?)
+        }
     };
     let number = |i: usize| fields.get(i)?.parse::<u32>().ok();
     let locator = |i: usize| Some(Locator::new(number(i)?, number(i + 1)?));
@@ -367,6 +378,11 @@ fn write(
         let kind = match a.mark.kind {
             Kind::Bookmark => 'b',
             Kind::Highlight => 'h',
+            // Its own letter (one this build would not make: left out).
+            Kind::Other(code) => match char::from_u32(u32::from(code)) {
+                Some(letter) if letter.is_alphabetic() => letter,
+                _ => continue,
+            },
         };
         out.push_str(&format!(
             "{kind}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t",
@@ -764,6 +780,32 @@ mod tests {
         let big = MemoryStorage::new().with(&file(book), alloc::vec![b'\n'; (1 << 20) + 1]);
         assert!(add(&big, book, highlight(1, 2, "x")).is_err());
         assert_eq!(big.size(&file(book)), Ok((1 << 20) + 1));
+    }
+
+    /// A line of a kind a later build adds, in a file of this version:
+    /// read with its letter and written back with it when a change here
+    /// saves the file.
+    #[test]
+    fn a_kind_of_a_later_build_survives_a_save() {
+        let book = "books/a.epub";
+        let storage =
+            MemoryStorage::new().with(&file(book), "# format 2\nu\t1\t2\t1\t3\t0\tunder\t\n");
+        let all = load(&storage, book);
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].mark.kind, Kind::Other(u16::from(b'u')));
+        add(&storage, book, highlight(10, 20, "new")).unwrap();
+        let all = load(&storage, book);
+        let kinds: Vec<Kind> = all.iter().map(|a| a.mark.kind).collect();
+        assert_eq!(kinds, [Kind::Other(u16::from(b'u')), Kind::Highlight]);
+        assert_eq!(all[0].text, "under");
+        let text = String::from_utf8(storage.get(&file(book)).unwrap()).unwrap();
+        assert!(
+            text.lines().any(|l| l.starts_with("u\t1\t2\t1\t3\t")),
+            "{text}"
+        );
+        // Not a letter: no kind, the line not read.
+        let odd = MemoryStorage::new().with(&file(book), "# format 2\n7\t1\t2\t1\t3\t0\tx\t\n");
+        assert!(load(&odd, book).is_empty());
     }
 
     /// Which book the annotations are of is said after the version, kept

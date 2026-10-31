@@ -489,6 +489,10 @@ pub enum AnnotationKind {
     Phonetic,
     /// What a word means (an interlinear gloss).
     Gloss,
+    /// A kind a later build adds (ruby under the text or between its
+    /// characters, bopomofo, warichu), by its number. A build that doesn't
+    /// know it shows it as a [`Gloss`](AnnotationKind::Gloss).
+    Other(u16),
 }
 
 /// The most room [`Block::leading_above`] adds above a line: four ems.
@@ -916,6 +920,10 @@ pub enum LinkKind {
     NoteRef,
     /// From a note back to its mark (`backlink`).
     Back,
+    /// A kind a later build adds (a glossary or bibliography reference,
+    /// a page break's mark), by its number. A build that doesn't know it
+    /// follows it as a [`Plain`](LinkKind::Plain) link.
+    Other(u16),
 }
 
 /// Whether `href` leads out of the document, e.g. to a web page: it has a

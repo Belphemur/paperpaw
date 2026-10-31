@@ -122,6 +122,16 @@ change the plugin SDK.
   book that holds only an English quote knows the line belongs to a
   right-to-left paragraph. The layout digest covers `WordBox`,
   `PageView`, `Page`, `PageLine`, `LineRun` and `LineBidi`.
+- Plugin interface 5, second sweep of open values (#33): `Other(u16)` in
+  `native::Chip` (a file for an unknown chip is still refused),
+  `image::Format` (decoded as unsupported), `document::LinkKind`
+  (followed as a plain link), `document::AnnotationKind` (shown as a
+  gloss), `annotations::Kind` (kept with its file letter and written back
+  on save, so annotations of a newer kind are not lost) and `PluginKind`;
+  and, as for the other errors, in `SettingError`, `data::Error`,
+  `GraphicsError`, `config::ErrorKind` and `MemoryError`.
+  `WritingMode` gains `SidewaysRl` and `SidewaysLr` (all of CSS Writing
+  Modes 4).
 - Plugin interface 5: `MenuNeed::Has(Capability)`: a menu entry can need
   any capability, also one a later build adds (not met where unknown).
   `SystemStatus` holds four named values (`value`, `with_value`:

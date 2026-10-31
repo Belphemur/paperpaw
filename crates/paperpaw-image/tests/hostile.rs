@@ -71,6 +71,19 @@ fn run(data: &[u8], fit: Fit, color: bool) -> (Result<(), ImageError>, Collect, 
     (result, out, took)
 }
 
+#[test]
+fn a_format_of_a_later_build_is_refused_without_a_size() {
+    let mut source: &[u8] = b"RIFF\0\0\0\0WEBPVP8 ";
+    let result = decode(
+        Format::Other(1),
+        &mut source,
+        Fit::side(8),
+        &mut Collect::default(),
+    );
+    assert_eq!(result, Err(ImageError::Unsupported("format")));
+    assert_eq!(Format::detect(b"RIFF\0\0\0\0WEBPVP8 "), None);
+}
+
 // GIF
 
 /// LZW codes of 3 bits (2-bit indices), least significant bit first, in
