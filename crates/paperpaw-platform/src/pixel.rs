@@ -4,7 +4,7 @@
 ///
 /// Packed grayscale formats store pixels most-significant-bit first, rows are
 /// padded to whole bytes. A value of `0` is black, the maximum value is white.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum PixelFormat {
     /// 1 bit per pixel, black and white.
@@ -31,6 +31,24 @@ pub enum PixelFormat {
         /// Bits per pixel.
         bits: u8,
     },
+}
+
+// By hand: a derived one would bring the formatter's struct printing into
+// every plugin that prints a format.
+impl core::fmt::Debug for PixelFormat {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(match *self {
+            PixelFormat::Mono1 => "Mono1",
+            PixelFormat::Gray2 => "Gray2",
+            PixelFormat::Gray4 => "Gray4",
+            PixelFormat::Gray8 => "Gray8",
+            PixelFormat::Rgb565 => "Rgb565",
+            PixelFormat::Rgb888 => "Rgb888",
+            PixelFormat::Other { code, bits } => {
+                return write!(f, "Other {{ code: {code}, bits: {bits} }}");
+            }
+        })
+    }
 }
 
 impl PixelFormat {

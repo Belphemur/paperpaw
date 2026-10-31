@@ -12,7 +12,7 @@
 use core::fmt;
 
 /// Why a storage operation failed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum StorageError {
     NotFound,
@@ -35,6 +35,23 @@ pub enum StorageError {
     /// that doesn't know one treats it as the most general failure of its
     /// kind.
     Other(u16),
+}
+
+// By hand: a derived one would bring the formatter's tuple printing into
+// every plugin that prints a storage error.
+impl fmt::Debug for StorageError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match *self {
+            StorageError::NotFound => "NotFound",
+            StorageError::InvalidPath => "InvalidPath",
+            StorageError::Unsupported => "Unsupported",
+            StorageError::Full => "Full",
+            StorageError::Io => "Io",
+            StorageError::TooLarge => "TooLarge",
+            StorageError::InvalidData => "InvalidData",
+            StorageError::Other(code) => return write!(f, "Other({code})"),
+        })
+    }
 }
 
 impl fmt::Display for StorageError {
@@ -416,6 +433,20 @@ mod tests {
         let mut text = Text([0; 32], 0);
         fmt::Write::write_fmt(&mut text, format_args!("{}", StorageError::Other(3))).unwrap();
         assert_eq!(&text.0[..text.1], b"storage error 3");
+        // `Debug` by hand, as a derived one writes it.
+        let debug = |value: &dyn fmt::Debug| {
+            let mut text = Text([0; 32], 0);
+            fmt::Write::write_fmt(&mut text, format_args!("{value:?}")).unwrap();
+            text
+        };
+        let other = debug(&StorageError::Other(3));
+        assert_eq!(&other.0[..other.1], b"Other(3)");
+        let full = debug(&StorageError::Full);
+        assert_eq!(&full.0[..full.1], b"Full");
+        let format = debug(&crate::pixel::PixelFormat::Other { code: 7, bits: 3 });
+        assert_eq!(&format.0[..format.1], b"Other { code: 7, bits: 3 }");
+        let gray = debug(&crate::pixel::PixelFormat::Gray4);
+        assert_eq!(&gray.0[..gray.1], b"Gray4");
     }
 
     /// A storage holding one file, `name`, of `size` bytes.
