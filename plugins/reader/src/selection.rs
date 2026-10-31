@@ -94,7 +94,11 @@ impl Selection {
             let Some((first, end)) = line_span(words, self.cursor) else {
                 return Some(self.cursor.min(last));
             };
-            let forward = (*a == actions::RIGHT) != line_rtl(words, self.cursor);
+            // The line goes the way its paragraph does (the layout says so,
+            // also for a line of a quote, a number or a Latin word that
+            // runs the other way: it goes on past them as the paragraph).
+            let rtl = words.get(self.cursor).is_some_and(|w| w.bidi.is_rtl());
+            let forward = (*a == actions::RIGHT) != rtl;
             return Some(if forward {
                 if end >= last { 0 } else { end + 1 }
             } else {
@@ -370,21 +374,6 @@ fn line_span(words: &[WordBox], index: usize) -> Option<(usize, usize)> {
     Some((first, line.next_back().map_or(first, |(i, _)| i)))
 }
 
-/// Whether the line of word `index` reads from right to left: its first
-/// word in reading order is drawn to the right of its last, whatever the
-/// word at the cursor runs (a number or a Latin word in an Arabic line
-/// stands at its edge, and the line goes on past it as the line does). A
-/// line of one word reads as the word does.
-fn line_rtl(words: &[WordBox], index: usize) -> bool {
-    let Some((first, end)) = line_span(words, index) else {
-        return false;
-    };
-    match (words.get(first), words.get(end)) {
-        (Some(f), Some(l)) if f.area.x != l.area.x => f.area.x > l.area.x,
-        _ => words.get(index).is_some_and(|w| w.rtl),
-    }
-}
-
 /// The word drawn next to word `index` on its line, on its right or its
 /// left: none at the line's edge.
 fn beside(words: &[WordBox], index: usize, right: bool) -> Option<usize> {
@@ -430,6 +419,7 @@ mod moving_tests;
 mod tests {
     use super::*;
     use paperpaw_sdk::document::Locator;
+    use paperpaw_sdk::reading::LineBidi;
 
     #[test]
     fn a_cursor_past_the_words_moves_without_panicking() {
@@ -457,6 +447,22 @@ mod tests {
     /// where `rtl`.
     fn at(x: u16, rtl: bool) -> WordBox {
         WordBox::new(Rect::new(x, 0, 10, 10), "w", Locator::START, Locator::START).rtl(rtl)
+    }
+
+    /// The bidi of a line of a paragraph running right to left where `rtl`.
+    fn para(rtl: bool) -> LineBidi {
+        LineBidi::new(u8::from(rtl), 0)
+    }
+
+    /// A word on the line below the first, in a paragraph of `rtl`'s way.
+    fn below(rtl: bool) -> WordBox {
+        WordBox::new(
+            Rect::new(60, 20, 10, 10),
+            "w",
+            Locator::START,
+            Locator::START,
+        )
+        .bidi(para(rtl))
     }
 
     #[test]
@@ -501,15 +507,10 @@ mod tests {
         // right) to the next word; left of a right-to-left line's last
         // word, the next too.
         let rtl_line = [
-            at(60, true),
-            at(40, true),
-            at(20, true),
-            WordBox::new(
-                Rect::new(60, 20, 10, 10),
-                "w",
-                Locator::START,
-                Locator::START,
-            ),
+            at(60, true).bidi(para(true)),
+            at(40, true).bidi(para(true)),
+            at(20, true).bidi(para(true)),
+            below(true),
         ];
         let on = |word: usize, action: Id| Selection::choosing(word).moved(&action, &rtl_line);
         assert_eq!(on(2, actions::LEFT), Some(3));
@@ -518,16 +519,15 @@ mod tests {
         assert_eq!(on(0, actions::RIGHT), Some(3));
     }
 
-    /// A line of words `(x, rtl)` in reading order, then one word on the
-    /// line below.
-    fn page_of(line: &[(u16, bool)]) -> Vec<WordBox> {
-        let mut words: Vec<WordBox> = line.iter().map(|&(x, rtl)| at(x, rtl)).collect();
-        words.push(WordBox::new(
-            Rect::new(60, 20, 10, 10),
-            "w",
-            Locator::START,
-            Locator::START,
-        ));
+    /// A line of words `(x, rtl)` in reading order, of a paragraph running
+    /// right to left where `paragraph_rtl`, then one word on the line
+    /// below.
+    fn page_of(paragraph_rtl: bool, line: &[(u16, bool)]) -> Vec<WordBox> {
+        let mut words: Vec<WordBox> = line
+            .iter()
+            .map(|&(x, rtl)| at(x, rtl).bidi(para(paragraph_rtl)))
+            .collect();
+        words.push(below(paragraph_rtl));
         words
     }
 
@@ -535,7 +535,7 @@ mod tests {
     fn at_the_edge_of_an_arabic_line_a_latin_word_or_number_goes_on_as_the_line_does() {
         // Reading order from the right: two Arabic words, then a number
         // at the left end (it runs left to right); then the next line.
-        let words = page_of(&[(60, true), (40, true), (20, false)]);
+        let words = page_of(true, &[(60, true), (40, true), (20, false)]);
         let on = |word: usize, action: Id| Selection::choosing(word).moved(&action, &words);
         // Left of the number: the line's end, on to the next line.
         assert_eq!(on(2, actions::LEFT), Some(3));
@@ -543,13 +543,16 @@ mod tests {
         assert_eq!(on(2, actions::RIGHT), Some(1));
         // A Latin word first, at the right end: right of it wraps back
         // (first word of the page: the last), left of it is the word beside.
-        let words = page_of(&[(60, false), (40, true), (20, true)]);
+        let words = page_of(true, &[(60, false), (40, true), (20, true)]);
         let on = |word: usize, action: Id| Selection::choosing(word).moved(&action, &words);
         assert_eq!(on(0, actions::RIGHT), Some(3));
         assert_eq!(on(0, actions::LEFT), Some(1));
         // The last word of the page, left of the line's end: wraps to the first.
         let line = [(60, true), (40, true), (20, true)];
-        let words: Vec<WordBox> = line.iter().map(|&(x, rtl)| at(x, rtl)).collect();
+        let words: Vec<WordBox> = line
+            .iter()
+            .map(|&(x, rtl)| at(x, rtl).bidi(para(true)))
+            .collect();
         assert_eq!(
             Selection::choosing(2).moved(&actions::LEFT, &words),
             Some(0)
@@ -557,9 +560,28 @@ mod tests {
     }
 
     #[test]
+    fn a_line_of_only_an_english_quote_in_an_arabic_book_goes_on_as_the_book_does() {
+        // Three Latin words drawn left to right (reading order from the
+        // left), in an Arabic paragraph, then the next line. Every word
+        // runs left to right, and no drawn position says which way the
+        // paragraph goes: the line's bidi does.
+        let words = page_of(true, &[(20, false), (40, false), (60, false)]);
+        let on = |word: usize, action: Id| Selection::choosing(word).moved(&action, &words);
+        // Left at the line's left edge: on in reading order, to the next line.
+        assert_eq!(on(0, actions::LEFT), Some(3));
+        // Right at its right edge: back, past the page's start round to the last.
+        assert_eq!(on(2, actions::RIGHT), Some(3));
+        // The same quote in a left-to-right book: left wraps, right goes on.
+        let words = page_of(false, &[(20, false), (40, false), (60, false)]);
+        let on = |word: usize, action: Id| Selection::choosing(word).moved(&action, &words);
+        assert_eq!(on(0, actions::LEFT), Some(3));
+        assert_eq!(on(2, actions::RIGHT), Some(3));
+    }
+
+    #[test]
     fn a_line_that_runs_left_to_right_keeps_its_way_with_a_hebrew_word_at_its_edge() {
         // `ab cd`, then Hebrew `x y` (drawn `y x`) last, at the right end.
-        let words = page_of(&[(0, false), (20, false), (60, true), (40, true)]);
+        let words = page_of(false, &[(0, false), (20, false), (60, true), (40, true)]);
         let on = |word: usize, action: Id| Selection::choosing(word).moved(&action, &words);
         // Right of the rightmost word of the line: on to the next line.
         assert_eq!(on(2, actions::RIGHT), Some(4));
