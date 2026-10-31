@@ -1000,6 +1000,7 @@ fn before_a_block_the_line_start_is_where_a_page_from_there_starts() {
             style: &STYLE,
             typesetter: &Units,
             hyphenate: None,
+            pieces: None,
         };
         let at = Locator::new(0, 0);
         let start = line_start(&cx, at).unwrap();
