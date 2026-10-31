@@ -81,7 +81,7 @@ change the plugin SDK.
   `_` arm). `screen::Handled` stays as it is.
 - `TextStyle` of `paperpaw-document` is 32 bits (bits 24 to 27 a
   block's inline language); cached books and page indexes are made anew
-  (EPUB cache version 29, a new `paperpaw_layout::VERSION`).
+  (EPUB cache version 30, a new `paperpaw_layout::VERSION`).
 - `paperpaw-i18n`: `Catalog::digits()` returns the ten digits (`[char; 10]`),
   not a name; `[meta] digits` takes a CLDR numbering system's name or the
   ten digits themselves (`digits = ០១២៣៤៥៦៧៨៩`), so any system is data.
@@ -346,9 +346,6 @@ change the plugin SDK.
   say) gives that block's start, where a page laid out from there starts, not
   the position itself. Comparing it with a page's start or looking it up in a
   `PageIndex` then needs no more care.
-
-### Fixed
-
 - Choosing text with the buttons: the page buttons (the X4's side buttons) now move by line, as Up and Down do,
   not word by word, and Left from the first word of the page reaches the last word (Right from the last
   reaches the first), instead of stopping there.
