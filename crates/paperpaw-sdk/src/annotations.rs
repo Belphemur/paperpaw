@@ -56,7 +56,8 @@ pub enum Kind {
     Bookmark,
     Highlight,
     /// A kind a later build adds (an underline, a pen note), by the ASCII
-    /// letter its lines start with (its code), as a later PaperPaw may hand
+    /// letter its lines start with (its code; `b` and `h` are the two
+    /// above, so never an `Other`'s), as a later PaperPaw may hand
     /// it to a plugin built now. Written with its letter; a line of a kind
     /// this build doesn't know is not read but kept as it is, whatever is
     /// changed (none is lost).
@@ -219,6 +220,20 @@ fn each<T>(
     }
 }
 
+/// The letter a line of `kind` starts with: `b`, `h`, or an [`Kind::Other`]'s
+/// own, which must be an ASCII letter and not one of those two (else
+/// `None`: it would read as a bookmark or highlight).
+fn letter(kind: Kind) -> Option<char> {
+    match kind {
+        Kind::Bookmark => Some('b'),
+        Kind::Highlight => Some('h'),
+        Kind::Other(code) => u8::try_from(code)
+            .ok()
+            .filter(|c| c.is_ascii_alphabetic() && !matches!(c, b'b' | b'h'))
+            .map(char::from),
+    }
+}
+
 /// The mark a line of a file of `version` describes, and the line's
 /// fields.
 fn fields(line: &str, version: u32) -> Option<(Mark, Vec<&str>)> {
@@ -371,14 +386,9 @@ fn write(
         out.push('\n');
     }
     for (a, anchor) in all {
-        let kind = match a.mark.kind {
-            Kind::Bookmark => 'b',
-            Kind::Highlight => 'h',
-            // Its own letter (one this build would not make: left out).
-            Kind::Other(code) => match char::from_u32(u32::from(code)) {
-                Some(letter) if letter.is_ascii_alphabetic() => letter,
-                _ => continue,
-            },
+        // A kind without a letter of its own is left out.
+        let Some(kind) = letter(a.mark.kind) else {
+            continue;
         };
         out.push_str(&format!(
             "{kind}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t",
@@ -801,12 +811,15 @@ mod tests {
             again.lines().any(|l| l.starts_with("u\t1\t1\t1\t2\t")),
             "{again}"
         );
-        // Not a letter: not written.
-        let odd = MemoryStorage::new();
-        let mut seven = highlight(1, 2, "x");
-        seven.mark.kind = Kind::Other(u16::from(b'7'));
-        add(&odd, book, seven).unwrap();
-        assert!(load(&odd, book).is_empty());
+        // Not a letter, or one of the known kinds' (which would read as a
+        // bookmark or a highlight): not written.
+        for code in [u16::from(b'7'), u16::from(b'b'), u16::from(b'h'), 0x0628] {
+            let odd = MemoryStorage::new();
+            let mut mark = highlight(1, 2, "x");
+            mark.mark.kind = Kind::Other(code);
+            add(&odd, book, mark).unwrap();
+            assert!(load(&odd, book).is_empty(), "{code}");
+        }
     }
 
     /// Which book the annotations are of is said after the version, kept
