@@ -85,7 +85,7 @@ impl Screen for Finishing {
         let middle = area.y + area.height / 2;
         let title = env.i18n().tr("core.finishing-update.title");
         Label::new(title)
-            .role(TextRole::Title)
+            .role(TextRole::TITLE)
             .align(Align::Center)
             .draw(
                 &mut ui,
@@ -102,8 +102,8 @@ impl Screen for Finishing {
         let text = env.i18n().tr("core.finishing-update.text");
         let below = Rect::new(area.x + margin, middle + gap * 2, inner, row * 2);
         Label::new(text)
-            .role(TextRole::Small)
-            .ink(Ink::Note)
+            .role(TextRole::SMALL)
+            .ink(Ink::NOTE)
             .align(Align::Center)
             .wrap()
             .draw(&mut ui, below);

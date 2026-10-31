@@ -23,8 +23,8 @@ use super::{Ink, TextRole, Ui, UiStyle, fit};
 /// use paperpaw_sdk::ui::{Ink, Label, TextRole};
 /// use paperpaw_sdk::widgets::Align;
 ///
-/// let title = Label::new("Settings").role(TextRole::Title).align(Align::Center);
-/// let note = Label::new("Changes are kept at once.").role(TextRole::Small).ink(Ink::Note).wrap();
+/// let title = Label::new("Settings").role(TextRole::TITLE).align(Align::Center);
+/// let note = Label::new("Changes are kept at once.").role(TextRole::SMALL).ink(Ink::NOTE).wrap();
 /// # let _ = (title, note);
 /// ```
 ///
@@ -63,9 +63,9 @@ impl<'t> Label<'t> {
         Self {
             text,
             font: None,
-            size: Size::Role(TextRole::Body),
+            size: Size::Role(TextRole::BODY),
             min: None,
-            ink: Paint::Ink(Ink::Text),
+            ink: Paint::Ink(Ink::TEXT),
             align: Align::Left,
             lines: 1,
         }
@@ -232,7 +232,49 @@ impl<'t> Label<'t> {
             Cow::Borrowed(self.text)
         };
         let x = from + self.free(room, width);
-        font.draw(canvas, size, x, baseline(font, size, area), &text, color) + x
+        self.put(
+            canvas,
+            font,
+            style,
+            size,
+            x,
+            baseline(font, size, area),
+            area,
+            &text,
+            color,
+        ) + x
+    }
+
+    /// One run of text at `x` on `baseline`: by the look's text painter,
+    /// if it has one and draws it, else as usual; its width.
+    #[allow(clippy::too_many_arguments, reason = "one run of text")]
+    fn put(
+        &self,
+        canvas: &mut Canvas<'_>,
+        font: &FontHandle<'_>,
+        style: &UiStyle,
+        size: f32,
+        x: f32,
+        baseline: i32,
+        area: Rect,
+        text: &str,
+        color: Color,
+    ) -> f32 {
+        let role = match self.size {
+            Size::Role(role) => role,
+            Size::Px(_) => TextRole::BODY,
+        };
+        super::text::put_run(
+            canvas,
+            font,
+            Some((style, role)),
+            size,
+            x,
+            baseline,
+            area,
+            text,
+            color,
+        )
     }
 
     /// Wrapped lines, the block in the middle of the area's height, the
@@ -275,14 +317,14 @@ impl<'t> Label<'t> {
                 let rest = self.text[range.start..].trim_end();
                 let last = fit(font, size, &format!("{rest} …"), room);
                 let x = self.x(area, font.measure(size, &last));
-                end = x + font.draw(canvas, size, x, at, &last, color);
+                end = x + self.put(canvas, font, style, size, x, at, area, &last, color);
                 let told = format!("{}{last}", &self.text[..range.start]);
                 canvas.describe(Role::Text, &told, shown);
                 return end;
             }
             let text = &self.text[range.clone()];
             let x = self.x(area, font.measure(size, text));
-            end = x + font.draw(canvas, size, x, at, text, color);
+            end = x + self.put(canvas, font, style, size, x, at, area, text, color);
         }
         canvas.describe(Role::Text, self.text, shown);
         end

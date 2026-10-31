@@ -116,6 +116,36 @@ change the plugin SDK.
 
 ### Added
 
+- More freedom over how things look (ticket #57, interface 5):
+  - **Text tone:** `ToneCurve::from_alphas`, `parse`, `parse_for` and `to_text` make a curve of your own from 16 values or text
+    (`smooth`, `contrast:1`, `sharp:128`, a list of numbers); the settings `core.text-curve` (book text, in place of *Text
+    contrast* when set) and `core.ui-text-curve` (the interface; themes set them) take a list of `[script=]curve` entries.
+    A `FontHandle` carries a `TextInk` (`inked`, `text_ink`) that `draw` and `draw_bolder` use.
+  - **Looks:** `Painters::text` paints the text of `Label`s and of the SDK's rows, headers, buttons, hints and captions (a shadow,
+    an outline), never changing its width; `ui::draw_label_in(canvas, font, style, role, ..)` does the same for text a plugin
+    draws itself (`draw_label` stays the stock look);
+    `Painters::extras` takes a static list of painters for parts of kinds that come later (`PartKind`), and `Painters::flags` is
+    reserved. `TextRole` is now an open `TextRole(u8)` with constants (`TextRole::BODY`, new `HINT`, `BUTTON`, `ICON`).
+    **Breaking for plugin authors:** `TextRole::Body` is now `TextRole::BODY` (and so on for every role); rename it, the compiler
+    finds each one.
+  - **Script:** `Lang::likely_script()` gives the script of a language (the tag's, else the one the language is usually
+    written in: `ar`, `fa`, `ur` and `ps` are `Arab`, `he` is `Hebr`), so `arab=contrast:1` in the curve settings reaches an
+    Arabic book and interface; `PageType.script` and `HookCx::script()` use it. Languages in Latin letters have none.
+  - **Rebuild all plugins:** `FontHandle` gained a field (its `TextInk`) that the firmware's `draw` reads, so every plugin has to
+    be built against interface 5 again; one built before would pass a shorter handle.
+  - **Colour roles:** `Ink` (the interface's colour roles) is now an open `Ink(u8)` with constants: `Ink::Text` is `Ink::TEXT`
+    and so on (rename it; plugins only change the spelling). New roles `ACCENT`, `ON_ACCENT`, `LINK`, `SELECTION` and
+    `WARNING` (numbers 14 to 18; 19 to 31 are free). `Palette` holds 32 colours (100 bytes, was 42) and knows which a theme set:
+    a role it leaves out reads its `Ink::fallback()` (`LINK` reads `TEXT`, `SELECTION` reads `CARD`), so themes made for 14
+    roles keep working and nothing looks different until a theme sets a new role. `core.ui-palette` also takes `#rrggbb`
+    (older readers skip such a pair; gray panels use its brightness). `Ink` has `value`, `from_value`, `fallback`. `TextInk` is
+    how text is inked (tone); an `Ink` is a colour role.
+  - **Render hooks:** a plugin can register a hook (`Registrar::add_render_hook`, `RenderHookSpec`, `HookStage`, `BandView`,
+    `HookCx`, `FramePass`, `Region`) that changes finished bands, with kernel-owned carry for dithering across bands. The
+    kernel accepts hooks and does not run them yet: `Capability::RENDER_HOOK`, `RENDER_REGIONS` and `LOOK_EXTRAS` are off.
+  - **Drawing:** `Canvas::pixel`, `gray_at` (read back what this band drew) and `fill_dithered`.
+  - The interface check now follows type aliases to the types they name (a type only a `fn` alias mentioned was not pinned).
+
 - `paperpaw-lang`: `Lang` (a language tag in 32 bits: language, script,
   region; canonical, so `per` and `fa` are one), `Direction` and
   `WritingMode` (#33). `paperpaw_sdk::lang`.

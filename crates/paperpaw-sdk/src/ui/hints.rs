@@ -170,6 +170,10 @@ fn free_span(
 /// sign that its press is being worked on.
 #[cfg(any(test, feature = "kernel"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+#[expect(
+    clippy::too_many_lines,
+    reason = "grew by the role each label now names; split it when it is next changed"
+)]
 pub fn draw_button_hints(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -201,7 +205,7 @@ pub fn draw_button_hints(
                 area.width.saturating_sub(2 * style.margin as u16),
                 line as u16,
             ),
-            style.ink(Ink::Rule),
+            style.ink(Ink::RULE),
         ),
         Separators::None => {}
     }
@@ -251,7 +255,17 @@ pub fn draw_button_hints(
                     canvas.fill_round(boxed, radius, Color::BLACK);
                 }
                 for p in placed {
-                    draw_label(canvas, &font, p.size, p.x, p.at, &p.text, ink);
+                    draw_label_in(
+                        canvas,
+                        &font,
+                        &style,
+                        TextRole::HINT,
+                        p.size,
+                        p.x,
+                        p.at,
+                        &p.text,
+                        ink,
+                    );
                 }
             }
             Hint::Icon(name) => {

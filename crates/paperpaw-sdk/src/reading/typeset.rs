@@ -182,6 +182,11 @@ pub struct PageType {
     /// The fewest letters before and after a hyphen the reader asks for
     /// (0: the language's own), see [`PageType::patterns`].
     pub hyphen_minimums: (u8, u8),
+    /// The script the book's language is written in
+    /// ([`Lang::likely_script`](crate::Lang::likely_script)), which the tone curves
+    /// per script (`core.text-curve`) look at; none for a language written
+    /// in Latin letters or one not known.
+    pub script: Option<&'static str>,
     /// What the plugins' text filters did when it was made
     /// ([`TextFilters::signature`](crate::filters::TextFilters)).
     pub filters: u64,
@@ -381,6 +386,7 @@ impl PageType {
             columns,
             hyphenation,
             hyphen_minimums,
+            script: paperpaw_lang::Lang::parse(language).likely_script(),
             filters: env.text_filters().signature(env),
             key,
         }
@@ -563,7 +569,7 @@ impl<'a> ReadingFaces<'a> {
         let bold = face(&fonts::READING_BOLD).unwrap_or(regular);
         let italic = face(&fonts::READING_ITALIC).unwrap_or(regular);
         let bold_italic = face(&fonts::READING_BOLD_ITALIC).unwrap_or(bold);
-        let (tone, sharp) = ink(env);
+        let (tone, sharp) = ink(env, page.script);
         Some(Self {
             fonts: [regular, bold, italic, bold_italic],
             weight: page.weight,
@@ -1050,12 +1056,13 @@ fn reordered_boxes(
         .collect()
 }
 
-/// The contrast curve of book text ([`settings::TEXT_CONTRAST`]), and
+/// The tone curve of book text ([`settings::TEXT_CURVE`] if it says one,
+/// else the contrast of [`settings::TEXT_CONTRAST`]), and
 /// whether it is drawn without grays ([`settings::SMOOTH_TEXT`] off).
 /// Not where the panel shows black and white alone: its frame draws the
 /// same letters already, and a page shown in grays there for its
 /// pictures keeps its letters smooth, as before.
-fn ink(env: &Env<'_>) -> (ToneCurve, bool) {
+fn ink(env: &Env<'_>, script: Option<&str>) -> (ToneCurve, bool) {
     let s = env.settings();
     let level = s.read(&settings::TEXT_CONTRAST);
     let step = settings::TEXT_CONTRAST_LEVELS
@@ -1064,7 +1071,11 @@ fn ink(env: &Env<'_>) -> (ToneCurve, bool) {
         .map_or(0, |at| at as i8 + ToneCurve::LIGHTEST);
     let mono = env.device().display.format.gray_levels() == Some(2);
     let sharp = !mono && !s.read(&settings::SMOOTH_TEXT);
-    (ToneCurve::contrast(step), sharp)
+    // A curve of one's own (a theme's, a language's) takes the place of
+    // the contrast; the entry for the book's script comes first.
+    let curve = ToneCurve::parse_for(s.text(settings::TEXT_CURVE.as_str()), script)
+        .unwrap_or_else(|| ToneCurve::contrast(step));
+    (curve, sharp)
 }
 
 /// Draws `lines` laid out with `faces` in `page_type`, their content box

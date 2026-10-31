@@ -285,108 +285,202 @@ fn px(value: u32) -> u16 {
     u16::try_from(value).unwrap_or(u16::MAX)
 }
 
-/// What a colour is for ([`UiStyle::ink`]): the grays of the interface,
-/// each set by the palette (setting `core.ui-palette`), so a theme
-/// changes them all at once and plugins draw in the same grays.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum Ink {
-    /// Text and what is drawn in its colour.
-    Text,
-    /// What the interface is drawn on.
-    Paper,
-    /// Notes below the titles of rows, what an empty screen explains.
-    Note,
-    /// What is told beside or below a row's title: details, the notes of
-    /// lists, hints on a page.
-    Detail,
-    /// Headings of sections, a widget's lesser text.
-    Muted,
-    /// The least of text, e.g. what an empty screen says.
-    Faint,
-    /// What cannot be used now, e.g. an arrow at the last page.
-    Disabled,
-    /// The line below a light header or above the row of button hints.
-    Rule,
-    /// The lines between rows.
-    Line,
-    /// The fainter lines between rows that start at the text.
-    LineFaint,
-    /// Gray text on a dark focus.
-    OnFocusMuted,
-    /// Lesser text on a dark card.
-    OnDarkMuted,
-    /// Cards, e.g. the frames of widgets (on panels of black and white
-    /// alone, a sparser pattern of it).
-    Card,
-    /// The cards a list's sections are on.
-    Section,
-}
+/// What a colour is for ([`UiStyle::ink`]): a colour role of the
+/// interface, each set by the palette (setting `core.ui-palette`), so a
+/// theme changes them all at once and plugins draw in the same colours.
+///
+/// An `Ink` is a colour role; how text is inked (its tone) is a
+/// [`TextInk`]. The roles are constants of one type, so more can come
+/// without a new plugin interface: a role this release does not know is
+/// drawn in the colour of its [`fallback`](Ink::fallback), the role a
+/// theme made for older releases already sets. Roles 0 to 13 have a
+/// default of their own, 14 to 18 are named, 19 to 31 are free (the
+/// palette has a slot for each), and what is past them still reads a
+/// fallback.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Ink(u8);
+
+/// What is known of each named [`Ink`], by its number: the name in the
+/// palette, the constant's name, and the role it reads where a theme
+/// sets none.
+const INKS: [(&str, &str, Ink); 19] = [
+    ("text", "TEXT", Ink::TEXT),
+    ("paper", "PAPER", Ink::PAPER),
+    ("note", "NOTE", Ink::NOTE),
+    ("detail", "DETAIL", Ink::DETAIL),
+    ("muted", "MUTED", Ink::MUTED),
+    ("faint", "FAINT", Ink::FAINT),
+    ("disabled", "DISABLED", Ink::DISABLED),
+    ("rule", "RULE", Ink::RULE),
+    ("line", "LINE", Ink::LINE),
+    ("line-faint", "LINE_FAINT", Ink::LINE_FAINT),
+    ("on-focus-muted", "ON_FOCUS_MUTED", Ink::ON_FOCUS_MUTED),
+    ("on-dark-muted", "ON_DARK_MUTED", Ink::ON_DARK_MUTED),
+    ("card", "CARD", Ink::CARD),
+    ("section", "SECTION", Ink::SECTION),
+    ("accent", "ACCENT", Ink::TEXT),
+    ("on-accent", "ON_ACCENT", Ink::PAPER),
+    ("link", "LINK", Ink::TEXT),
+    ("selection", "SELECTION", Ink::CARD),
+    ("warning", "WARNING", Ink::TEXT),
+];
 
 impl Ink {
-    /// Every role, in the order of [`Palette`]'s values.
+    /// Text and what is drawn in its colour.
+    pub const TEXT: Ink = Ink(0);
+    /// What the interface is drawn on.
+    pub const PAPER: Ink = Ink(1);
+    /// Notes below the titles of rows, what an empty screen explains.
+    pub const NOTE: Ink = Ink(2);
+    /// What is told beside or below a row's title: details, the notes of
+    /// lists, hints on a page.
+    pub const DETAIL: Ink = Ink(3);
+    /// Headings of sections, a widget's lesser text.
+    pub const MUTED: Ink = Ink(4);
+    /// The least of text, e.g. what an empty screen says.
+    pub const FAINT: Ink = Ink(5);
+    /// What cannot be used now, e.g. an arrow at the last page.
+    pub const DISABLED: Ink = Ink(6);
+    /// The line below a light header or above the row of button hints.
+    pub const RULE: Ink = Ink(7);
+    /// The lines between rows.
+    pub const LINE: Ink = Ink(8);
+    /// The fainter lines between rows that start at the text.
+    pub const LINE_FAINT: Ink = Ink(9);
+    /// Gray text on a dark focus.
+    pub const ON_FOCUS_MUTED: Ink = Ink(10);
+    /// Lesser text on a dark card.
+    pub const ON_DARK_MUTED: Ink = Ink(11);
+    /// Cards, e.g. the frames of widgets (on panels of black and white
+    /// alone, a sparser pattern of it).
+    pub const CARD: Ink = Ink(12);
+    /// The cards a list's sections are on.
+    pub const SECTION: Ink = Ink(13);
+    /// What stands out on a colour panel, e.g. a selected tab (text where
+    /// a theme sets none).
+    pub const ACCENT: Ink = Ink(14);
+    /// What is drawn on an [`ACCENT`](Ink::ACCENT) (paper where a theme
+    /// sets none).
+    pub const ON_ACCENT: Ink = Ink(15);
+    /// A link in a text (text where a theme sets none).
+    pub const LINK: Ink = Ink(16);
+    /// What a selection is marked with (a card's colour where a theme
+    /// sets none).
+    pub const SELECTION: Ink = Ink(17);
+    /// A warning or an error (text where a theme sets none).
+    pub const WARNING: Ink = Ink(18);
+
+    /// Every named role, in the order of their numbers.
     pub const ALL: &'static [Ink] = &[
-        Ink::Text,
-        Ink::Paper,
-        Ink::Note,
-        Ink::Detail,
-        Ink::Muted,
-        Ink::Faint,
-        Ink::Disabled,
-        Ink::Rule,
-        Ink::Line,
-        Ink::LineFaint,
-        Ink::OnFocusMuted,
-        Ink::OnDarkMuted,
-        Ink::Card,
-        Ink::Section,
+        Ink::TEXT,
+        Ink::PAPER,
+        Ink::NOTE,
+        Ink::DETAIL,
+        Ink::MUTED,
+        Ink::FAINT,
+        Ink::DISABLED,
+        Ink::RULE,
+        Ink::LINE,
+        Ink::LINE_FAINT,
+        Ink::ON_FOCUS_MUTED,
+        Ink::ON_DARK_MUTED,
+        Ink::CARD,
+        Ink::SECTION,
+        Ink::ACCENT,
+        Ink::ON_ACCENT,
+        Ink::LINK,
+        Ink::SELECTION,
+        Ink::WARNING,
     ];
 
-    /// Its name in the palette, e.g. `muted`.
+    /// The roles that have a default colour of their own; the ones after
+    /// them read their [`fallback`](Ink::fallback) until a theme sets them.
+    const OWN: u8 = 14;
+
+    /// The number the role goes by in data.
+    pub const fn value(self) -> u8 {
+        self.0
+    }
+
+    /// The role of `value`; one this release has no name for is kept, and
+    /// reads its [`fallback`](Ink::fallback).
+    pub const fn from_value(value: u8) -> Ink {
+        Ink(value)
+    }
+
+    /// Its name in the palette, e.g. `muted` (empty for a role without
+    /// one).
     pub const fn name(self) -> &'static str {
-        match self {
-            Ink::Text => "text",
-            Ink::Paper => "paper",
-            Ink::Note => "note",
-            Ink::Detail => "detail",
-            Ink::Muted => "muted",
-            Ink::Faint => "faint",
-            Ink::Disabled => "disabled",
-            Ink::Rule => "rule",
-            Ink::Line => "line",
-            Ink::LineFaint => "line-faint",
-            Ink::OnFocusMuted => "on-focus-muted",
-            Ink::OnDarkMuted => "on-dark-muted",
-            Ink::Card => "card",
-            Ink::Section => "section",
+        if (self.0 as usize) < INKS.len() {
+            INKS[self.0 as usize].0
+        } else {
+            ""
         }
     }
 
-    /// Text, which strong contrast draws black.
+    /// The role whose colour this one has where a theme does not set it:
+    /// one of the first 14 for every role, itself for those; text for a
+    /// role this release does not know.
+    pub const fn fallback(self) -> Ink {
+        if self.0 < Ink::OWN {
+            self
+        } else if (self.0 as usize) < INKS.len() {
+            INKS[self.0 as usize].2
+        } else {
+            Ink::TEXT
+        }
+    }
+
+    /// Text, which strong contrast draws black (a role this release does
+    /// not know is text where its fallback is).
     const fn is_text(self) -> bool {
-        matches!(self, Ink::Note | Ink::Detail | Ink::Muted | Ink::Faint)
+        matches!(
+            self.fallback(),
+            Ink::NOTE | Ink::DETAIL | Ink::MUTED | Ink::FAINT
+        )
+    }
+}
+
+impl core::fmt::Debug for Ink {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match INKS.get(usize::from(self.0)) {
+            Some((_, ident, _)) => write!(f, "Ink::{ident}"),
+            None => write!(f, "Ink({})", self.0),
+        }
     }
 }
 
 /// The colour of each [`Ink`], read from the setting `core.ui-palette`:
-/// names and grays (0 black, 255 white) separated by spaces, e.g.
-/// `muted=60 line=170`; what it leaves out has its default.
+/// names and colours separated by spaces, e.g. `muted=60 line=170
+/// link=#2a6f97`; a colour is a gray (0 black, 255 white) or `#rrggbb`
+/// (a gray panel uses its brightness). What it leaves out reads the
+/// default of the role, or the colour of its
+/// [`fallback`](Ink::fallback), which follows the theme; a name given
+/// twice takes the last; a name or a colour that is not understood
+/// (older releases do not read `#rrggbb`) is skipped.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Palette([Color; 14]);
+pub struct Palette {
+    colors: [Color; Palette::SLOTS],
+    /// Bit `n` is set where the theme set the role with number `n`.
+    set: u32,
+}
 
 impl Palette {
+    /// The number of roles the palette holds a colour for.
+    pub const SLOTS: usize = 32;
+
     /// The interface's own grays.
     pub const DEFAULT: Palette = {
-        const GRAYS: [u8; 14] = [
+        const GRAYS: [u8; Ink::OWN as usize] = [
             0, 255, 60, 80, 90, 120, 150, 150, 190, 210, 215, 200, 225, 238,
         ];
-        let mut colors = [Color::BLACK; 14];
+        let mut colors = [Color::BLACK; Palette::SLOTS];
         let mut at = 0;
         while at < GRAYS.len() {
             colors[at] = Color::gray(GRAYS[at]);
             at += 1;
         }
-        Palette(colors)
+        Palette { colors, set: 0 }
     };
 
     /// The default with what `text` sets; names it does not know and bad
@@ -397,22 +491,40 @@ impl Palette {
             let Some((name, value)) = pair.split_once('=') else {
                 continue;
             };
-            let (Some(at), Ok(value)) = (
-                Ink::ALL.iter().position(|ink| ink.name() == name),
-                value.parse::<u8>(),
+            let (Some(at), Some(color)) = (
+                INKS.iter().position(|(known, ..)| *known == name),
+                parse_color(value),
             ) else {
                 continue;
             };
-            palette.0[at] = Color::gray(value);
+            palette.colors[at] = color;
+            palette.set |= 1 << at;
         }
         palette
     }
 
-    /// The colour of `ink`.
+    /// The colour of `ink`: the theme's where it set it, else the default
+    /// of the first 14 roles, else the colour of its fallback.
     pub fn color(&self, ink: Ink) -> Color {
-        let at = Ink::ALL.iter().position(|i| *i == ink).unwrap_or(0);
-        self.0[at]
+        let at = usize::from(ink.value());
+        if at < Self::SLOTS && self.set & (1 << at) != 0 || ink.value() < Ink::OWN {
+            return self.colors[at];
+        }
+        // Every fallback is one of the first 14, which have their own.
+        self.colors[usize::from(ink.fallback().value())]
     }
+}
+
+/// A gray (`60`) or a colour (`#2a6f97`).
+fn parse_color(value: &str) -> Option<Color> {
+    let Some(hex) = value.strip_prefix('#') else {
+        return value.parse::<u8>().ok().map(Color::gray);
+    };
+    if hex.len() != 6 || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    let part = |at: usize| u8::from_str_radix(&hex[at..at + 2], 16).ok();
+    Some(Color::rgb(part(0)?, part(2)?, part(4)?))
 }
 
 impl Default for Palette {
@@ -421,27 +533,92 @@ impl Default for Palette {
     }
 }
 
+/// How the interface's text is inked: the tone curve of the setting
+/// `core.ui-text-curve` (see
+/// [`ToneCurve::parse_for`](paperpaw_text::ToneCurve::parse_for)), for the
+/// script of the interface's language; the stock ink where it is empty or
+/// says nothing usable.
+pub fn text_ink(env: &Env<'_>) -> TextInk {
+    let value = env.settings().text(settings::UI_TEXT_CURVE.as_str());
+    if value.is_empty() {
+        return TextInk::DEFAULT;
+    }
+    ToneCurve::parse_for(value, env.lang().likely_script()).map_or(TextInk::DEFAULT, TextInk::new)
+}
+
 /// What a text is (see [`UiStyle::size`]): its size follows from the
 /// style's, so text of one kind is as large on every screen.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum TextRole {
+///
+/// The roles are constants of one type, so more can come without a new
+/// plugin interface: a role this release does not know is sized as
+/// [`TextRole::BODY`], and a look's text painter
+/// ([`Painters::text`](crate::ui::look::Painters::text)) gets the role of
+/// every run it is asked about.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TextRole(u8);
+
+impl TextRole {
     /// Smaller than small, e.g. under an icon.
-    Caption,
+    pub const CAPTION: Self = Self(0);
     /// Hints, notes, status lines.
-    Small,
+    pub const SMALL: Self = Self(1);
     /// Most text.
-    Body,
+    pub const BODY: Self = Self(2);
     /// Titles of dialogs and widgets.
-    Title,
+    pub const TITLE: Self = Self(3);
     /// The titles of headers.
-    Head,
+    pub const HEAD: Self = Self(4);
     /// Large, e.g. a widget's main line.
-    Headline,
+    pub const HEADLINE: Self = Self(5);
     /// Larger, e.g. a clock.
-    Display,
+    pub const DISPLAY: Self = Self(6);
     /// Large numbers standing alone, e.g. a page count.
-    Numeral,
+    pub const NUMERAL: Self = Self(7);
+    /// A hint under a control (sized as [`TextRole::SMALL`]).
+    pub const HINT: Self = Self(8);
+    /// The label of a button or a list row (sized as [`TextRole::BODY`]).
+    pub const BUTTON: Self = Self(9);
+    /// A glyph of the icon font (sized as [`TextRole::BODY`]; the caller
+    /// sets an icon's own size).
+    pub const ICON: Self = Self(10);
+
+    /// The role's number, as the constants above have it: 0 to 10 are
+    /// named, the others are free.
+    pub const fn value(self) -> u8 {
+        self.0
+    }
+
+    /// The role of a number; one this release has no name for is a role
+    /// all the same.
+    pub const fn from_value(value: u8) -> Self {
+        Self(value)
+    }
+
+    const fn name(self) -> Option<&'static str> {
+        Some(match self.0 {
+            0 => "CAPTION",
+            1 => "SMALL",
+            2 => "BODY",
+            3 => "TITLE",
+            4 => "HEAD",
+            5 => "HEADLINE",
+            6 => "DISPLAY",
+            7 => "NUMERAL",
+            8 => "HINT",
+            9 => "BUTTON",
+            10 => "ICON",
+            _ => return None,
+        })
+    }
+}
+
+impl core::fmt::Debug for TextRole {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self.name() {
+            Some(name) => write!(f, "TextRole::{name}"),
+            None => write!(f, "TextRole({})", self.0),
+        }
+    }
 }
 
 /// How the focus of rows and items is drawn ([`Ui::focus`](super::Ui::focus)).
@@ -590,9 +767,9 @@ impl UiStyle {
     /// white on a dark focus, else black.
     pub fn focus_ink(&self, focused: bool) -> Color {
         if focused && self.dark_focus() {
-            self.ink(Ink::Paper)
+            self.ink(Ink::PAPER)
         } else {
-            self.ink(Ink::Text)
+            self.ink(Ink::TEXT)
         }
     }
 
@@ -600,9 +777,9 @@ impl UiStyle {
     /// be cleared to (black on a dark focus).
     pub fn focus_paper(&self, focused: bool) -> Color {
         if focused && self.dark_focus() {
-            self.ink(Ink::Text)
+            self.ink(Ink::TEXT)
         } else {
-            self.ink(Ink::Paper)
+            self.ink(Ink::PAPER)
         }
     }
 
@@ -610,7 +787,7 @@ impl UiStyle {
     /// (light on a dark focus).
     pub fn focus_faint(&self, focused: bool, ink: Ink) -> Color {
         if focused && self.dark_focus() {
-            self.ink(Ink::OnFocusMuted)
+            self.ink(Ink::ON_FOCUS_MUTED)
         } else {
             self.faint(ink)
         }
@@ -635,17 +812,21 @@ impl UiStyle {
         }
     }
 
-    /// The size of text of `role`.
+    /// The size of text of `role` (one this release does not know is
+    /// sized as [`TextRole::BODY`]).
     pub fn size(&self, role: TextRole) -> f32 {
         match role {
-            TextRole::Caption => self.small * 0.8,
-            TextRole::Small => self.small,
-            TextRole::Body => self.text,
-            TextRole::Title => self.title,
-            TextRole::Head => self.head,
-            TextRole::Headline => self.title * 1.6,
-            TextRole::Display => self.title * 2.0,
-            TextRole::Numeral => self.title * 3.0,
+            TextRole::CAPTION => self.small * 0.8,
+            TextRole::SMALL => self.small,
+            TextRole::BODY => self.text,
+            TextRole::TITLE => self.title,
+            TextRole::HEAD => self.head,
+            TextRole::HEADLINE => self.title * 1.6,
+            TextRole::DISPLAY => self.title * 2.0,
+            TextRole::NUMERAL => self.title * 3.0,
+            TextRole::HINT => self.small,
+            // BUTTON, ICON and the roles of later releases.
+            _ => self.text,
         }
     }
 
@@ -653,7 +834,7 @@ impl UiStyle {
     /// in the palette; black for strong contrast.
     pub fn faint(&self, ink: Ink) -> Color {
         if self.strong {
-            self.ink(Ink::Text)
+            self.ink(Ink::TEXT)
         } else {
             self.palette.color(ink)
         }
@@ -662,7 +843,7 @@ impl UiStyle {
     /// A header's background and text: the palette's text and paper, the
     /// other way round for light headers.
     pub fn header_colors(&self) -> (Color, Color) {
-        let (text, paper) = (self.ink(Ink::Text), self.ink(Ink::Paper));
+        let (text, paper) = (self.ink(Ink::TEXT), self.ink(Ink::PAPER));
         if self.dark_header {
             (text, paper)
         } else {
@@ -687,7 +868,7 @@ impl UiStyle {
                 let width = area.width.saturating_sub(2 * margin);
                 canvas.fill_tint(
                     Rect::new(area.x + margin, y, width, line),
-                    self.ink(Ink::Rule),
+                    self.ink(Ink::RULE),
                 );
             }
             Separators::None => {}
@@ -702,9 +883,12 @@ impl UiStyle {
         Rect::new(area.x, area.y, area.width, area.height.saturating_sub(line))
     }
 
-    /// The UI font.
+    /// The UI font, inked as the setting `core.ui-text-curve` says
+    /// ([`text_ink`]).
     pub fn font<'a>(&self, env: &Env<'a>) -> Option<FontHandle<'a>> {
-        env.fonts().role(fonts::UI.as_str())
+        env.fonts()
+            .role(fonts::UI.as_str())
+            .map(|font| font.inked(text_ink(env)))
     }
 
     /// Height of a row with a note: the title line, then up to
@@ -806,7 +990,7 @@ pub(crate) fn draw_separator(canvas: &mut Canvas<'_>, style: &UiStyle, rect: Rec
                 rect.width.saturating_sub(2 * margin),
                 line,
             ),
-            style.ink(Ink::Line),
+            style.ink(Ink::LINE),
         ),
         Separators::Inset => {
             let start = margin + indent;
@@ -818,7 +1002,7 @@ pub(crate) fn draw_separator(canvas: &mut Canvas<'_>, style: &UiStyle, rect: Rec
                     rect.width.saturating_sub(start + margin),
                     thin,
                 ),
-                style.ink(Ink::LineFaint),
+                style.ink(Ink::LINE_FAINT),
             );
         }
         Separators::None => {}
