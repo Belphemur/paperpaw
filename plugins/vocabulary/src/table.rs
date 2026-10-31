@@ -19,8 +19,10 @@
 //!   and reported. A quote that is opened and not closed within that is
 //!   reported with its line, and reading goes on at the next line.
 //! - The `id` column is the number the reader gave a card, so it counts
-//!   only in a file that says it is the reader's (a line `#paperpaw:`
-//!   before the header); in any other file it is an ordinary column.
+//!   only in a file that says it is the reader's own for the deck it is
+//!   merged into (a line `#paperpaw:deck 7` before the header, which
+//!   *Save to card* writes); in any other file, or one of another deck
+//!   (copied from another reader), it is an ordinary column.
 //! - A file that is not UTF-8 as a whole, with no NUL byte (a spreadsheet
 //!   "CSV" in Windows-1252), is read as Windows-1252. UTF-16 (a
 //!   spreadsheet's "Unicode text") is told, not read.
@@ -59,9 +61,9 @@ pub(crate) struct Layout {
     pub columns: Columns,
     /// The texts are HTML (`#html:true` of an Anki export).
     pub html: bool,
-    /// The file says it was made by the reader (`#paperpaw:`): its `id`
-    /// column is the cards' numbers.
-    pub paperpaw: bool,
+    /// The deck the file says it was saved from (`#paperpaw:deck 7`): only
+    /// for that deck is its `id` column the cards' numbers.
+    pub paperpaw: Option<u32>,
     /// The file is UTF-16 (a byte order mark says so): it is not read.
     pub utf16: bool,
     /// The file is Windows-1252, not UTF-8.
@@ -176,7 +178,7 @@ pub(crate) fn detect(storage: &dyn Storage, path: &str) -> Result<Layout, Storag
         0
     };
     let mut line = 1u32;
-    let (mut separator, mut html, mut paperpaw) = (None, false, false);
+    let (mut separator, mut html, mut paperpaw) = (None, false, None);
     // The lines of an Anki text export that start with `#`.
     while bytes.get(at) == Some(&b'#') {
         let end = bytes[at..]
@@ -195,8 +197,11 @@ pub(crate) fn detect(storage: &dyn Storage, path: &str) -> Result<Layout, Storag
             };
         } else if let Some(value) = text.strip_prefix("#html:") {
             html = value.trim() == "true";
-        } else if text.starts_with("#paperpaw:") {
-            paperpaw = true;
+        } else if let Some(rest) = text.strip_prefix("#paperpaw:") {
+            paperpaw = rest
+                .trim()
+                .strip_prefix("deck")
+                .and_then(|n| n.trim().parse().ok());
         }
         at = (end + 1).min(bytes.len());
         line += 1;
@@ -233,7 +238,7 @@ pub(crate) fn detect(storage: &dyn Storage, path: &str) -> Result<Layout, Storag
             back: find(Role::Back),
             example: find(Role::Example),
             // Only the reader's own files have the cards' numbers.
-            id: find(Role::Id).filter(|_| paperpaw),
+            id: find(Role::Id).filter(|_| paperpaw.is_some()),
         };
         layout.start = (at + first_end + 1).min(at + rest.len()) as u64;
         layout.line += 1;
@@ -325,6 +330,9 @@ struct Parser {
     quote_pending: bool,
     /// The field began with a quote.
     quoted_field: bool,
+    /// A quote that closed was followed by something other than a
+    /// separator or a line end: no quoted text, a stray quote.
+    stray: bool,
     size: usize,
     too_long: bool,
     /// A byte of this record was seen.
@@ -340,6 +348,7 @@ impl Parser {
             in_quotes: false,
             quote_pending: false,
             quoted_field: false,
+            stray: false,
             size: 0,
             too_long: false,
             started: false,
@@ -352,9 +361,16 @@ impl Parser {
     }
 
     /// Whether a quote was opened and the record is over its size without
-    /// it being closed: a lone quote, not a quoted text.
+    /// it being closed, or a closing quote was followed by more text: a
+    /// lone quote, not a quoted text.
     fn open_quote(&self) -> bool {
-        (self.in_quotes || self.quote_pending) && self.size > MAX_RECORD
+        self.stray || ((self.in_quotes || self.quote_pending) && self.size > MAX_RECORD)
+    }
+
+    /// Whether the record in hand is in quotes that are not closed (at the
+    /// file's end: a lone quote).
+    fn unclosed(&self) -> bool {
+        self.in_quotes && !self.quote_pending
     }
 
     fn push(&mut self, byte: u8) {
@@ -384,6 +400,9 @@ impl Parser {
                 return None;
             }
             self.in_quotes = false;
+            if byte != self.separator && byte != b'\n' && byte != b'\r' {
+                self.stray = true;
+            }
         }
         if self.in_quotes {
             if byte == b'"' {
@@ -515,7 +534,9 @@ pub(crate) fn scan(
     let mut chunk = [0u8; 512];
     'file: loop {
         let n = storage.read_at(path, at, &mut chunk)?;
-        if n == 0 {
+        // A quote still open at the file's end is a lone one too.
+        let mut lone = n == 0 && parser.unclosed();
+        if n == 0 && !lone {
             break;
         }
         for (i, &byte) in chunk[..n].iter().enumerate() {
@@ -538,21 +559,25 @@ pub(crate) fn scan(
                     return Ok(Some(Resume { at: next, line }));
                 }
             } else if parser.open_quote() {
-                // A lone quote: the record is told, and reading goes on at
-                // the line after the one the quote was on.
-                let item = Item::Skipped {
-                    line: start_line,
-                    fault: Fault::OpenQuote,
-                };
-                if visit(item).is_break() {
-                    return Ok(None);
-                }
-                at = line_after(storage, path, start)?;
-                line = start_line.saturating_add(1);
-                parser = Parser::new(layout.separator);
-                (start, start_line) = (at, line);
-                continue 'file;
+                lone = true;
+                break;
             }
+        }
+        if lone {
+            // A lone quote: the record is told, and reading goes on at
+            // the line after the one the quote was on.
+            let item = Item::Skipped {
+                line: start_line,
+                fault: Fault::OpenQuote,
+            };
+            if visit(item).is_break() {
+                return Ok(None);
+            }
+            at = line_after(storage, path, start)?;
+            line = start_line.saturating_add(1);
+            parser = Parser::new(layout.separator);
+            (start, start_line) = (at, line);
+            continue 'file;
         }
         at += n as u64;
     }
@@ -674,8 +699,10 @@ mod tests {
     #[test]
     fn a_file_with_a_header_names_its_columns() {
         // The reader's own file (it says so) has the cards' numbers.
-        let (layout, items) = read(b"#paperpaw:\nBeispiel;Back;Front;id\nDie Katze.;cat;Katze;7\n");
+        let (layout, items) =
+            read(b"#paperpaw:deck 3\nBeispiel;Back;Front;id\nDie Katze.;cat;Katze;7\n");
         assert_eq!(layout.line, 3);
+        assert_eq!(layout.paperpaw, Some(3));
         assert_eq!(cards(&items), [("Katze", "cat", "Die Katze.")]);
         let Item::Record(record) = &items[0] else {
             panic!()
@@ -797,6 +824,38 @@ mod tests {
         // A quoted text that does close, of any lines, is one record.
         let (_, items) = read(b"front\tback\n\"two\nlines\"\tz\n");
         assert_eq!(cards(&items), [("two\nlines", "z", "")]);
+    }
+
+    #[test]
+    fn a_stray_quote_costs_its_own_line_and_no_more() {
+        // Never closed before the file's end.
+        let (_, items) = read(b"gato\tcat\n\"perro\tdog\ncasa\thouse\n");
+        assert!(matches!(
+            items[1],
+            Item::Skipped {
+                line: 2,
+                fault: Fault::OpenQuote
+            }
+        ));
+        assert_eq!(cards(&items[..1]), [("gato", "cat", "")]);
+        assert_eq!(cards(&items[2..]), [("casa", "house", "")]);
+        assert_eq!(items.len(), 3);
+        // Closed by a later quote that goes on with text: no quoted field.
+        let (_, items) = read(b"gato\tcat\n\"perro\tdog\ncasa\t\"house\"\nmesa\ttable\n");
+        assert!(
+            matches!(items[1], Item::Skipped { line: 2, .. }),
+            "{items:?}"
+        );
+        assert_eq!(
+            cards(&items[2..]),
+            [("casa", "house", ""), ("mesa", "table", "")]
+        );
+        // Quotes that close at a separator or a line end are quoting.
+        let (_, items) = read(b"\"a\"\t\"b\"\n\"c\"\"\"\td\r\n\"e\"");
+        assert_eq!(
+            cards(&items),
+            [("a", "b", ""), ("c\"", "d", ""), ("e", "", "")]
+        );
     }
 
     #[test]

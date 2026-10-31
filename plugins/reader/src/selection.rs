@@ -74,7 +74,10 @@ impl Selection {
     }
 
     /// Moves the cursor for a navigation action; `None` if `action` is
-    /// another one.
+    /// another one. Left and right go a word, up and down a line (the
+    /// page buttons too, a device with two page buttons has no others).
+    /// Words wrap round the page: left from the first word reaches the
+    /// last, right from the last the first; lines stop at the ends.
     pub fn moved(&self, action: &Id, words: &[WordBox]) -> Option<usize> {
         let last = words.len().checked_sub(1)?;
         let a = action;
@@ -94,15 +97,17 @@ impl Selection {
             (_, s) => s,
         };
         Some(
-            if [actions::PREVIOUS, actions::PREV_PAGE].contains(a) || *a == visual(actions::LEFT) {
-                self.cursor.saturating_sub(1)
-            } else if [actions::NEXT, actions::NEXT_PAGE].contains(a)
-                || *a == visual(actions::RIGHT)
-            {
-                (self.cursor + 1).min(last)
-            } else if *a == actions::UP {
+            if [actions::PREVIOUS].contains(a) || *a == visual(actions::LEFT) {
+                self.cursor.checked_sub(1).unwrap_or(last)
+            } else if [actions::NEXT].contains(a) || *a == visual(actions::RIGHT) {
+                if self.cursor >= last {
+                    0
+                } else {
+                    self.cursor + 1
+                }
+            } else if [actions::UP, actions::PREV_PAGE].contains(a) {
                 nearest_on_line(words, self.cursor, false)
-            } else if *a == actions::DOWN {
+            } else if [actions::DOWN, actions::NEXT_PAGE].contains(a) {
                 nearest_on_line(words, self.cursor, true)
             } else {
                 return None;

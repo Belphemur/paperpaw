@@ -317,8 +317,14 @@ impl Book {
         events::Reading::new(
             self.path.clone(),
             self.title.clone(),
-            // One decimal, as written before.
-            (self.percent() * 10.0 + 0.5) as u32 as f32 / 10.0,
+            // One decimal, as written before; 100 once the last page was
+            // reached (the page's start is how far the book is read only
+            // until then).
+            if self.finished {
+                100.0
+            } else {
+                (self.percent() * 10.0 + 0.5) as u32 as f32 / 10.0
+            },
             self.page.start.section,
             self.page.start.offset,
             chapter.unwrap_or_default(),
@@ -370,7 +376,7 @@ impl Book {
         {
             return Some(first);
         }
-        let (first, _) = index.locate(env.storage(), *start)?;
+        let (first, _) = index.locate(env.storage(), self.line_start(env, *start))?;
         self.chapter_first.set(Some((*start, index.pages(), first)));
         Some(first)
     }
@@ -576,6 +582,11 @@ impl Book {
         let changed = moved || marks != self.marks;
         self.marks = marks;
         changed
+    }
+
+    /// Whether the page ends the book: it is read to the end.
+    pub(super) fn at_end(&self) -> bool {
+        self.document.progress(self.page.end) >= 0.999
     }
 
     pub(super) fn percent(&self) -> f32 {
@@ -787,7 +798,7 @@ impl Book {
         if !self.web() {
             cx.command(events::PAGE_TURNED.emit(self.reading(&env)));
             // The last page: the book is read to the end.
-            if !self.finished && self.document.progress(self.page.end) >= 0.999 {
+            if !self.finished && self.at_end() {
                 self.finished = true;
                 cx.command(events::BOOK_FINISHED.emit(self.reading(&env)));
             }
@@ -1057,7 +1068,16 @@ impl Book {
                 let (document, page) = (&*self.document, (self.page.start, self.page.end));
                 match (document.sections() > 1, value > 0) {
                     (true, true) => next_chapter(document, storage, entries, page.1),
-                    (true, false) => previous_chapter(document, storage, entries, page.0),
+                    (true, false) => {
+                        // On the page this chapter begins with, it is
+                        // behind us, though its entry's locator is before
+                        // the page's start.
+                        let here = match &self.chapter {
+                            Some((start, ..)) if self.line_start(env, *start) == page.0 => *start,
+                            _ => page.0,
+                        };
+                        previous_chapter(document, storage, entries, here)
+                    }
                     (false, on) => chapter_by_starts(document, storage, entries, page, on),
                 }
             }
@@ -1090,6 +1110,7 @@ impl Book {
         let Some(index) = &self.index else {
             return at;
         };
+        let at = self.line_start(env, at);
         match index.locate(env.storage(), at) {
             Some((page, _)) if index.is_complete() || page + 1 < index.pages() => {
                 index.entry(env.storage(), page).unwrap_or(at)

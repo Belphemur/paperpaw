@@ -115,5 +115,7 @@ fn a_highlight_keeps_its_text_when_the_books_styles_are_switched() {
     assert_eq!((all[0].mark.start, all[0].mark.end), (start, end));
 }
 
+#[path = "ended.rs"]
+mod ended;
 #[path = "index_reads.rs"]
 mod index_reads;
