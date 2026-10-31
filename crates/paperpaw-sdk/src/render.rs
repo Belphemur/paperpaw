@@ -135,6 +135,8 @@ impl fmt::Debug for HookCx<'_> {
 }
 
 /// A render hook and when and for what it runs (see the [module](self)).
+/// Built with [`RenderHookSpec::new`] and the `with_` methods.
+#[non_exhaustive]
 pub struct RenderHookSpec {
     /// Its id, in the plugin's namespace.
     pub id: Id,

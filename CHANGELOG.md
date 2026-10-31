@@ -201,7 +201,8 @@ change the plugin SDK.
     (older readers skip such a pair; gray panels use its brightness). `Ink` has `value`, `from_value`, `fallback`. `TextInk` is
     how text is inked (tone); an `Ink` is a colour role.
   - **Render hooks:** a plugin can register a hook (`Registrar::add_render_hook`, `RenderHookSpec`, `HookStage`, `BandView`,
-    `HookCx`, `FramePass`, `Region`) that changes finished bands, with kernel-owned carry for dithering across bands. The
+    `HookCx`, `FramePass`, `Region`) that changes finished bands, with kernel-owned carry for dithering across bands.
+    `RenderHookSpec` is `#[non_exhaustive]`: built with `new` and the `with_` methods. The
     kernel accepts hooks and does not run them yet: `Capability::RENDER_HOOK`, `RENDER_REGIONS` and `LOOK_EXTRAS` are off.
   - **Drawing:** `Canvas::pixel`, `gray_at` (read back what this band drew) and `fill_dithered`.
   - The interface check now follows type aliases to the types they name (a type only a `fn` alias mentioned was not pinned).
