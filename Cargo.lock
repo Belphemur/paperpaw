@@ -2443,6 +2443,7 @@ dependencies = [
  "paperpaw-digest",
  "paperpaw-native",
  "paperpaw-publish",
+ "paperpaw-table",
  "paperpaw-update",
  "paperpaw-x4",
 ]

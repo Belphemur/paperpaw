@@ -33,6 +33,28 @@ const SHARED_REVISIONS: paperpaw_table::Revisions = [0; paperpaw_table::FAMILIES
 #[cfg(feature = "esp32s3")]
 const SHARED_OLDEST: paperpaw_table::Revisions = [0; paperpaw_table::FAMILIES];
 
+/// What the release writes into its `-abi.txt` beside the fingerprint
+/// (`paperpaw-sign abi`), under a name of its own in the ELF file: the
+/// record's version (1), the plugin interface, the size of [`API`], then
+/// the revision of each family and the oldest it still runs (eight words
+/// each). The store and the web flasher read it to refuse a plugin that
+/// needs more of the table than the firmware has.
+#[used]
+#[unsafe(export_name = "PAPERPAW_NATIVE_ABI")]
+static EXPORTED_ABI: [u32; 3 + 2 * paperpaw_table::FAMILIES] = {
+    let mut words = [0; 3 + 2 * paperpaw_table::FAMILIES];
+    words[0] = 1;
+    words[1] = paperpaw_sdk::native::INTERFACE as u32;
+    words[2] = Api::SIZE;
+    let mut i = 0;
+    while i < paperpaw_table::FAMILIES {
+        words[3 + i] = SHARED_REVISIONS[i] as u32;
+        words[3 + paperpaw_table::FAMILIES + i] = SHARED_OLDEST[i] as u32;
+        i += 1;
+    }
+    words
+};
+
 /// The address of this firmware's table of each family, by family number,
 /// for the loader to write into a plugin's family words (0: none).
 #[cfg(feature = "esp32c3")]

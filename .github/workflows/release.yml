@@ -286,14 +286,25 @@ jobs:
       - name: Updates have somewhere to go
         run: cargo run -q --release -p paperpaw-sign -- check-image "dist/paperpaw-$DEVICE-$VERSION.bin"
       # Which code plugins run on it, for the plugin library and authors:
-      # the fingerprint alone, 16 hexadecimal digits.
+      # the fingerprint (16 hexadecimal digits, the first line, which
+      # store-plugin.yml reads), then its table for plugins (`interface:`,
+      # `api:`, `families:`, `min:`), as the firmware's ELF file says them,
+      # for the store and the web flasher.
       - name: The sample code plugin fits the firmware
         id: native
         uses: ./.github/actions/native-sample
-      - name: The fingerprint
+      - name: The fingerprint and the table
         env:
           FINGERPRINT: ${{ steps.native.outputs.fingerprint }}
-        run: echo "$FINGERPRINT" > "dist/paperpaw-$DEVICE-$VERSION-abi.txt"
+        run: |
+          abi="dist/paperpaw-$DEVICE-$VERSION-abi.txt"
+          cargo run -q --release -p paperpaw-sign -- abi \
+            "shells/xteink/target/$FIRMWARE_TARGET/release/paperpaw-xteink" > "$abi"
+          cat "$abi"
+          if [[ "$(head -n 1 "$abi")" != "$FINGERPRINT" ]]; then
+            echo "::error::$abi does not begin with the fingerprint $FINGERPRINT"
+            exit 1
+          fi
       # PaperPaw's own plugins that the store offers, built for this
       # firmware (ADR 0024) and signed with the first-party plugin key (its
       # public key is the catalogue's `author_key`; never the firmware's).

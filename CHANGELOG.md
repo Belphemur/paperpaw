@@ -12,6 +12,11 @@ change the plugin SDK.
   series (or the library), a rating of one to five (`4 / 5`, kept as a book field and shown as a badge on the
   book's row and on its information page) and whether the book counts as finished. Two settings in the reading
   group: *Show a screen at the end of a book* and *Mark the book as finished* (both on). It needs no SDK change.
+- A release's `paperpaw-<device>-<version>-abi.txt` says the firmware's table for plugins after its
+  fingerprint: `interface:`, `api:` (the table's size), `families:` and `min:` (each family's revision and the
+  oldest it runs), read from the firmware's ELF file (`PAPERPAW_NATIVE_ABI`, `paperpaw-sign abi`). The store
+  and the web flasher use them to refuse a plugin that needs more than a firmware has; the first line is the
+  fingerprint as before.
 
 ### Changed
 

@@ -61,6 +61,11 @@ USAGE:
     paperpaw-sign fingerprint <firmware.elf>
         Prints the fingerprint native plugins must have to run on a
         firmware (16 hexadecimal digits), as its ELF file names it.
+    paperpaw-sign abi <firmware.elf>
+        Prints a release's -abi.txt for a firmware: its fingerprint, then
+        `interface:`, `api:` (the size of its table for plugins),
+        `families:` and `min:` (each family's revision and the oldest it
+        runs, eight numbers), as its ELF file says them.
     paperpaw-sign pack <plugin.elf> <plugin.ppn> [--key <secret-key-file>]
         Makes a native plugin file from a plugin linked with
         paperpaw-plugin.x and --emit-relocs, or says what keeps it from
@@ -124,6 +129,7 @@ fn run(args: Vec<String>) -> Result<(), String> {
         ["check-image", flash] => image::check_file(flash),
         ["plugins", image] => firmware::plugins(image),
         ["fingerprint", elf] => firmware::fingerprint(elf),
+        ["abi", elf] => firmware::abi(elf),
         ["pack", elf, out] => plugin::pack(elf, out, None),
         ["pack", elf, out, "--key", key] => plugin::pack(elf, out, Some(key)),
         ["plugin", file] => plugin::show(file),
