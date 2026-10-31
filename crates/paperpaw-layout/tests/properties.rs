@@ -202,7 +202,7 @@ fn para() -> impl Strategy<Value = Para> {
     (
         proptest::collection::vec((word(), any::<bool>(), 0u8..8), 1..14),
         0u8..10,
-        0u8..5,
+        0u8..7,
         prop_oneof![4 => Just(None), 1 => (50u16..200).prop_map(Some)],
         // Now and then the book's margins at the sides, and a hanging
         // indent into them.

@@ -186,6 +186,13 @@ const CROSSING: &[(u64, u64)] = &layouts![
     // the plugin's), the device and status it is given, the storage's
     // replies.
     paperpaw_graphics::Framebuffer,
+    // What page layers and the reading code see of a page.
+    crate::layers::PageView<'static>,
+    crate::reading::WordBox,
+    paperpaw_layout::Page,
+    paperpaw_layout::PageLine,
+    paperpaw_layout::LineRun,
+    paperpaw_layout::LineBidi,
     crate::PixelFormat,
     crate::DisplayInfo,
     crate::InputCaps,

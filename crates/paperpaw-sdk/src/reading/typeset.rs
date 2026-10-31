@@ -985,12 +985,15 @@ pub fn word_boxes(faces: &ReadingFaces<'_>, page_type: &PageType, page: &Page) -
                     _ => {
                         let (start, end) = line.words.get(ordinal).copied().unwrap_or_default();
                         ordinal += 1;
-                        words.push(WordBox::new(
-                            Rect::new(x as u16, top as u16, width as u16, height as u16),
-                            part,
-                            Locator::new(line.section, start),
-                            Locator::new(line.section, end),
-                        ));
+                        words.push(
+                            WordBox::new(
+                                Rect::new(x as u16, top as u16, width as u16, height as u16),
+                                part,
+                                Locator::new(line.section, start),
+                                Locator::new(line.section, end),
+                            )
+                            .bidi(line.bidi),
+                        );
                     }
                 }
                 x += width;
@@ -1035,7 +1038,8 @@ fn reordered_boxes(
                     Locator::new(line.section, start),
                     Locator::new(line.section, end),
                 )
-                .rtl(run.is_rtl());
+                .rtl(run.is_rtl())
+                .bidi(line.bidi);
                 boxes.push((piece.ordinal, piece.range, word));
             }
         }
