@@ -33,7 +33,10 @@ LIST = CRATE / "shared.list"
 INDEX = CRATE / "src" / "index.rs"
 SIG = CRATE / "table.sig"
 ADDRESSES = REPO / "crates" / "paperpaw-sdk" / "src" / "shared_table.rs"
+# Families 0 to 6 by number; 7 is kept for the chain to 8 and up
+# (paperpaw_table::FAMILIES).
 FAMILIES = ["text", "fonts", "ui", "graphics", "contribution"]
+assert len(FAMILIES) <= 7, "family 7 is kept for the chain"
 COUNT = 8
 
 

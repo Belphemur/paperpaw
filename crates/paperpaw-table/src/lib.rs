@@ -59,6 +59,14 @@ impl Family {
 }
 
 /// How many families there can be: the words of `paperpaw-plugin.x`.
+///
+/// Families 0 to 6 are for functions; 7 is kept for the chain. When more
+/// than seven families are needed, table 7 holds the words of families 8
+/// to 15 (as a font pack's slot 7 chains to slots 8 to 15) and the
+/// plugin file lists their revisions where its header's reserved word
+/// says, which a firmware of today refuses as a newer format. So the
+/// header, the firmware's table and the store's check keep their format
+/// until then.
 pub const FAMILIES: usize = 8;
 
 /// A revision per family, by [`Family::number`]; 0: none (a firmware

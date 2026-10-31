@@ -104,6 +104,10 @@ change the plugin SDK.
   its content in the block's text, runs and annotations. A build that
   doesn't know it lays it out as a paragraph without a first-line indent
   (#33).
+- Shared functions: family 7 is kept for the chain to families 8 and up
+  (`paperpaw_table::FAMILIES`), so the plugin file's header, the
+  firmware's table and the store's check keep their format while seven
+  families suffice; `tools/shared-table.py` refuses an eighth.
 - Plugin interface 5: `MenuNeed::Has(Capability)`: a menu entry can need
   any capability, also one a later build adds (not met where unknown).
   `SystemStatus` holds four named values (`value`, `with_value`:
