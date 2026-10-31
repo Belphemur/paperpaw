@@ -17,7 +17,7 @@ pub struct SystemStatus {
 }
 
 /// How many named values a [`SystemStatus`] holds.
-const VALUES: usize = 4;
+const VALUES: usize = 8;
 
 impl SystemStatus {
     /// Made of all its fields; the `with_` methods change one.
@@ -157,7 +157,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn values_by_name_in_four_places() {
+    fn values_by_name_in_eight_places() {
         let status = SystemStatus::default()
             .with_value("temperature-c", 21)
             .with_value("frontlight-percent", 40)
@@ -165,10 +165,12 @@ mod tests {
         assert_eq!(status.value("temperature-c"), Some(22));
         assert_eq!(status.value("frontlight-percent"), Some(40));
         assert_eq!(status.value(""), None);
-        let full = status
-            .with_value("a", 1)
-            .with_value("b", 2)
-            .with_value("c", 3);
-        assert_eq!((full.value("b"), full.value("c")), (Some(2), None));
+        let full = ["a", "b", "c", "d", "e", "f", "g"]
+            .iter()
+            .zip(1..)
+            .fold(status, |status, (name, value)| {
+                status.with_value(name, value)
+            });
+        assert_eq!((full.value("f"), full.value("g")), (Some(6), None));
     }
 }

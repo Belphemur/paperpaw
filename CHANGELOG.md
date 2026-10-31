@@ -134,7 +134,7 @@ change the plugin SDK.
   Modes 4).
 - Plugin interface 5: `MenuNeed::Has(Capability)`: a menu entry can need
   any capability, also one a later build adds (not met where unknown).
-  `SystemStatus` holds four named values (`value`, `with_value`:
+  `SystemStatus` holds eight named values (`value`, `with_value`:
   `temperature-c`, `frontlight-percent`) a later shell can fill without a
   new interface.
 
