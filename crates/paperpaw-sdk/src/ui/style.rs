@@ -300,29 +300,27 @@ fn px(value: u32) -> u16 {
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Ink(u8);
 
-/// What is known of each named [`Ink`], by its number: the name in the
-/// palette, the constant's name, and the role it reads where a theme
-/// sets none.
-const INKS: [(&str, &str, Ink); 19] = [
-    ("text", "TEXT", Ink::TEXT),
-    ("paper", "PAPER", Ink::PAPER),
-    ("note", "NOTE", Ink::NOTE),
-    ("detail", "DETAIL", Ink::DETAIL),
-    ("muted", "MUTED", Ink::MUTED),
-    ("faint", "FAINT", Ink::FAINT),
-    ("disabled", "DISABLED", Ink::DISABLED),
-    ("rule", "RULE", Ink::RULE),
-    ("line", "LINE", Ink::LINE),
-    ("line-faint", "LINE_FAINT", Ink::LINE_FAINT),
-    ("on-focus-muted", "ON_FOCUS_MUTED", Ink::ON_FOCUS_MUTED),
-    ("on-dark-muted", "ON_DARK_MUTED", Ink::ON_DARK_MUTED),
-    ("card", "CARD", Ink::CARD),
-    ("section", "SECTION", Ink::SECTION),
-    ("accent", "ACCENT", Ink::TEXT),
-    ("on-accent", "ON_ACCENT", Ink::PAPER),
-    ("link", "LINK", Ink::TEXT),
-    ("selection", "SELECTION", Ink::CARD),
-    ("warning", "WARNING", Ink::TEXT),
+/// The names of the named [`Ink`]s in the palette, by their numbers.
+const INKS: [&str; 19] = [
+    "text",
+    "paper",
+    "note",
+    "detail",
+    "muted",
+    "faint",
+    "disabled",
+    "rule",
+    "line",
+    "line-faint",
+    "on-focus-muted",
+    "on-dark-muted",
+    "card",
+    "section",
+    "accent",
+    "on-accent",
+    "link",
+    "selection",
+    "warning",
 ];
 
 impl Ink {
@@ -412,7 +410,7 @@ impl Ink {
     /// one).
     pub const fn name(self) -> &'static str {
         if (self.0 as usize) < INKS.len() {
-            INKS[self.0 as usize].0
+            INKS[self.0 as usize]
         } else {
             ""
         }
@@ -422,29 +420,39 @@ impl Ink {
     /// one of the first 14 for every role, itself for those; text for a
     /// role this release does not know.
     pub const fn fallback(self) -> Ink {
-        if self.0 < Ink::OWN {
-            self
-        } else if (self.0 as usize) < INKS.len() {
-            INKS[self.0 as usize].2
-        } else {
-            Ink::TEXT
+        match self.0 {
+            // The roles with a default of their own.
+            0..=13 => self,
+            15 => Ink::PAPER,
+            17 => Ink::CARD,
+            // ACCENT, LINK, WARNING and the roles of later releases.
+            _ => Ink::TEXT,
         }
     }
 
     /// Text, which strong contrast draws black (a role this release does
     /// not know is text where its fallback is).
     const fn is_text(self) -> bool {
-        matches!(
-            self.fallback(),
-            Ink::NOTE | Ink::DETAIL | Ink::MUTED | Ink::FAINT
-        )
+        // (Every fallback past the first 14 is text, paper or a card.)
+        matches!(self.0, 2..=5)
     }
 }
 
 impl core::fmt::Debug for Ink {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        use core::fmt::Write as _;
         match INKS.get(usize::from(self.0)) {
-            Some((_, ident, _)) => write!(f, "Ink::{ident}"),
+            Some(name) => {
+                f.write_str("Ink::")?;
+                for c in name.chars() {
+                    f.write_char(if c == '-' {
+                        '_'
+                    } else {
+                        c.to_ascii_uppercase()
+                    })?;
+                }
+                Ok(())
+            }
             None => write!(f, "Ink({})", self.0),
         }
     }
@@ -487,12 +495,12 @@ impl Palette {
     /// values are left out.
     pub fn parse(text: &str) -> Palette {
         let mut palette = Palette::DEFAULT;
-        for pair in text.split_whitespace() {
+        for pair in text.split(|c: char| c.is_ascii_whitespace()) {
             let Some((name, value)) = pair.split_once('=') else {
                 continue;
             };
             let (Some(at), Some(color)) = (
-                INKS.iter().position(|(known, ..)| *known == name),
+                INKS.iter().position(|known| *known == name),
                 parse_color(value),
             ) else {
                 continue;
@@ -507,24 +515,45 @@ impl Palette {
     /// of the first 14 roles, else the colour of its fallback.
     pub fn color(&self, ink: Ink) -> Color {
         let at = usize::from(ink.value());
-        if at < Self::SLOTS && self.set & (1 << at) != 0 || ink.value() < Ink::OWN {
-            return self.colors[at];
-        }
+        let own = at < usize::from(Ink::OWN) || (at < Self::SLOTS && self.set >> at & 1 != 0);
         // Every fallback is one of the first 14, which have their own.
-        self.colors[usize::from(ink.fallback().value())]
+        let at = if own {
+            at
+        } else {
+            usize::from(ink.fallback().value())
+        };
+        self.colors.get(at).copied().unwrap_or(Color::BLACK)
     }
 }
 
 /// A gray (`60`) or a colour (`#2a6f97`).
 fn parse_color(value: &str) -> Option<Color> {
-    let Some(hex) = value.strip_prefix('#') else {
-        return value.parse::<u8>().ok().map(Color::gray);
+    let digit = |b: u8, base: u8| -> Option<u8> {
+        let d = match b {
+            b'0'..=b'9' => b - b'0',
+            b'a'..=b'f' => b - b'a' + 10,
+            b'A'..=b'F' => b - b'A' + 10,
+            _ => return None,
+        };
+        (d < base).then_some(d)
     };
-    if hex.len() != 6 || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+    let bytes = value.as_bytes();
+    if let [b'#', hex @ ..] = bytes {
+        let [r1, r2, g1, g2, b1, b2] = *hex else {
+            return None;
+        };
+        let pair = |hi: u8, lo: u8| Some(digit(hi, 16)? << 4 | digit(lo, 16)?);
+        return Some(Color::rgb(pair(r1, r2)?, pair(g1, g2)?, pair(b1, b2)?));
+    }
+    // 1 to 3 digits, 0 to 255.
+    if bytes.is_empty() || bytes.len() > 3 {
         return None;
     }
-    let part = |at: usize| u8::from_str_radix(&hex[at..at + 2], 16).ok();
-    Some(Color::rgb(part(0)?, part(2)?, part(4)?))
+    let mut gray = 0u16;
+    for b in bytes {
+        gray = gray * 10 + u16::from(digit(*b, 10)?);
+    }
+    u8::try_from(gray).ok().map(Color::gray)
 }
 
 impl Default for Palette {
