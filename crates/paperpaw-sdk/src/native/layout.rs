@@ -181,6 +181,19 @@ const CROSSING: &[(u64, u64)] = &layouts![
     crate::screen::CloseCause,
     paperpaw_platform::PointerEvent,
     paperpaw_document::Block,
+    // What `Env`, `Canvas` and `Storage` reach whose fields a plugin's own
+    // copy of the code reads: the frame it draws in (its drawing code is
+    // the plugin's), the device and status it is given, the storage's
+    // replies.
+    paperpaw_graphics::Framebuffer,
+    crate::PixelFormat,
+    crate::DisplayInfo,
+    crate::InputCaps,
+    crate::SystemStatus,
+    crate::Battery,
+    crate::WallClock,
+    crate::StorageError,
+    crate::DirEntry<'static>,
     // What the shared text functions take and give by value, between the
     // firmware's code and the plugin's (`paperpaw_table`): the plugin
     // lives on across firmware releases, so a moved field of one of these
