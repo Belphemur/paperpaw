@@ -116,6 +116,12 @@ change the plugin SDK.
   the page's edges whatever the paragraph's direction, as CSS
   `text-align: left`/`right`; `Start` and `End` stay the paragraph's.
   Layout resolves them by the paragraph's resolved direction (#33).
+- Plugin interface 5: `WordBox::bidi` (`LineBidi`, also as
+  `paperpaw_sdk::reading::LineBidi`): how the word's line goes, its
+  paragraph's direction included, so a selection on a line of an Arabic
+  book that holds only an English quote knows the line belongs to a
+  right-to-left paragraph. The layout digest covers `WordBox`,
+  `PageView`, `Page`, `PageLine`, `LineRun` and `LineBidi`.
 - Plugin interface 5: `MenuNeed::Has(Capability)`: a menu entry can need
   any capability, also one a later build adds (not met where unknown).
   `SystemStatus` holds four named values (`value`, `with_value`:

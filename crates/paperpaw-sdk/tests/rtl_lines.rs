@@ -314,3 +314,54 @@ fn latin_with_a_dir_span_is_drawn_as_before_ragged_and_justified() {
         assert_eq!(differ, 0, "{differ} pixels differ, justify {justify}");
     }
 }
+
+/// One paragraph of `text` going as `.1` says.
+struct Going(Metadata, Direction, &'static str);
+
+impl Document for Going {
+    fn metadata(&self) -> &Metadata {
+        &self.0
+    }
+
+    fn sections(&self) -> u32 {
+        1
+    }
+
+    fn section_len(&self, _: u32) -> u32 {
+        self.2.len() as u32
+    }
+
+    fn block_at(&self, _: &dyn Storage, at: Locator) -> Result<Option<Block>, DocumentError> {
+        let len = self.2.len() as u32;
+        Ok((at.offset < len)
+            .then(|| Block::new(BlockKind::Paragraph, 0, len, self.2.into()).dir(self.1)))
+    }
+}
+
+#[test]
+fn words_know_their_paragraphs_direction_on_a_line_of_an_english_quote() {
+    // An Arabic book's line that holds only an English quote: its words
+    // run left to right, its paragraph right to left.
+    let metrics = LineMetrics::new(16.0, 4.0, 24.0);
+    let mut builder = PackBuilder::new();
+    let glyphs = "abcd ".chars().map(|c| (c, Glyph::empty(5.0))).collect();
+    builder.add_strike(20.0, metrics, glyphs);
+    let h = harness_with(Font::from_data(builder.build(), &[]).unwrap());
+    let env = h.env();
+    let font = env.fonts().role(fonts::READING.as_str()).unwrap();
+    let t = PageType::new(&env, &font, "ar", false, StatusRoom::NONE);
+    let faces = ReadingFaces::new(&env, &t, None).unwrap();
+    for (dir, rtl) in [(Direction::Rtl, true), (Direction::Ltr, false)] {
+        let doc = Going(Metadata::default(), dir, "ab cd");
+        let cx = LayoutContext::new(&doc, &NoStorage, 400.0, &t.style, &faces);
+        let page = layout_page(&cx, Locator::START, 500.0).unwrap();
+        let words = word_boxes(&faces, &t, &page);
+        assert_eq!(words.len(), 2, "{dir:?}");
+        for word in &words {
+            assert!(!word.rtl, "{dir:?}");
+            assert_eq!(word.bidi, page.lines[0].bidi);
+            assert_eq!(word.bidi.is_rtl(), rtl, "{dir:?}");
+            assert!(word.bidi.has(LineBidi::PARAGRAPH_START), "{dir:?}");
+        }
+    }
+}

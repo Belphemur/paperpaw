@@ -35,6 +35,9 @@ use crate::builtin::events;
 use crate::document::Locator;
 use crate::event::{Event, EventData};
 use crate::{Command, Params, Rect};
+/// How a line goes ([`WordBox::bidi`]): also without the `unstable`
+/// layout, for page layers.
+pub use paperpaw_layout::LineBidi;
 
 /// A word on the page, with its box on the screen and its place in the
 /// book (`word_boxes`, page layers' [`PageView::words`](crate::layers::PageView::words)).
@@ -48,6 +51,12 @@ pub struct WordBox {
     /// The word runs right to left (Arabic, Hebrew): its start is at the
     /// right of its box, so a selection from it grows to the left.
     pub rtl: bool,
+    /// How its line goes, as the layout gave it (its `PageLine::bidi`): the
+    /// direction of its paragraph ([`LineBidi::is_rtl`]: a line of an
+    /// Arabic book that holds only an English quote is one of a
+    /// right-to-left paragraph), a vertical line, the paragraph's first
+    /// line.
+    pub bidi: LineBidi,
 }
 
 impl WordBox {
@@ -58,6 +67,7 @@ impl WordBox {
             start,
             end,
             rtl: false,
+            bidi: LineBidi::default(),
         }
     }
 
@@ -65,6 +75,13 @@ impl WordBox {
     #[must_use]
     pub fn rtl(mut self, rtl: bool) -> Self {
         self.rtl = rtl;
+        self
+    }
+
+    /// The same, on a line that goes as `bidi` says (see [`WordBox::bidi`]).
+    #[must_use]
+    pub fn bidi(mut self, bidi: LineBidi) -> Self {
+        self.bidi = bidi;
         self
     }
 
