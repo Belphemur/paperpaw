@@ -1302,7 +1302,7 @@ impl<'a> FontHandle<'a> {
         if let Some(larger) = self.larger_for(size) {
             return larger.measure_in(size, text, around);
         }
-        if plain_in(text, around) {
+        if split::plain_in(text, around) {
             return self.measure(size, text);
         }
         let size = self.size_for(size, text);
@@ -1355,7 +1355,7 @@ impl<'a> FontHandle<'a> {
                 around,
             );
         }
-        if plain_in(text, around) {
+        if split::plain_in(text, around) {
             return self.draw_toned(canvas, size, x, baseline, text, color, extra, tone);
         }
         if canvas.is_blind() || self.describing.get() {
@@ -1483,18 +1483,6 @@ impl<'a> FontHandle<'a> {
         }
         fits('\u{fb00}', two).then_some(('\u{fb00}', 2, two))
     }
-}
-
-/// Whether `text` is set as [`FontHandle::measure`] sets it, whatever is
-/// `around` it: left to right alone, no flags, no letter at its edges it
-/// could join.
-fn plain_in(text: &str, around: &paperpaw_text::Around) -> bool {
-    let joins = |c: Option<char>| c.is_some_and(|c| matches!(c, '\u{0600}'..='\u{08FF}'));
-    around.base != paperpaw_lang::Direction::Rtl
-        && around.flags == 0
-        && !joins(around.before)
-        && !joins(around.after)
-        && !paperpaw_text::bidi::needs_bidi(text)
 }
 
 mod split;

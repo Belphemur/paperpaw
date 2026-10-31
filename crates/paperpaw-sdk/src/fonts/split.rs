@@ -196,3 +196,15 @@ impl<'a> FontHandle<'a> {
         font.has_char(c) || (c.is_whitespace() && !self.has_char(c))
     }
 }
+
+/// Whether `text` is set as [`FontHandle::measure`] sets it, whatever is
+/// `around` it: left to right alone, no flags, no letter at its edges it
+/// could join.
+pub(super) fn plain_in(text: &str, around: &paperpaw_text::Around) -> bool {
+    let joins = |c: Option<char>| c.is_some_and(|c| matches!(c, '\u{0600}'..='\u{08FF}'));
+    around.base != paperpaw_lang::Direction::Rtl
+        && around.flags == 0
+        && !joins(around.before)
+        && !joins(around.after)
+        && !paperpaw_text::bidi::needs_bidi(text)
+}
