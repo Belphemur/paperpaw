@@ -17,6 +17,10 @@ change the plugin SDK.
   oldest it runs), read from the firmware's ELF file (`PAPERPAW_NATIVE_ABI`, `paperpaw-sign abi`). The store
   and the web flasher use them to refuse a plugin that needs more than a firmware has; the first line is the
   fingerprint as before.
+- A Greek letters pack, `script-greek` (#60): Literata's Greek, modern and with the older accents (Greek
+  Extended), for books whose Greek shows as `?` on a device whose fonts hold Latin only. It is a data plugin
+  that `tools/script-pack.py greek` builds, with no code and no interface change. Its entry in
+  `tools/plugin-files/data.toml` is commented out until the owner decides to offer it in the store.
 
 ### Changed
 
