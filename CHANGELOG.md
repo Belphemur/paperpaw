@@ -92,8 +92,10 @@ change the plugin SDK.
   name; a later build's values are constants of it) in `GestureKind`,
   `MenuPlace`, `library::catalog::Sort` and `Show`,
   `ActionHint`, `screen::Hint`, `canvas::Role`, `decorations::Tone` and
-  `LineKind`; `Extended` in `SettingKind` (key and static parameters) and
-  `StatusValue` (key and `Params`). A build that doesn't know a value
+  `LineKind`; `Extended` in `SettingKind` (a `&'static str` key and static
+  parameters: settings live in statics, and a key that needs no drop
+  keeps that code out of every plugin) and `StatusValue` (key and
+  `Params`). A build that doesn't know a value
   falls back: the default sort and filter, a gray tone, a solid line,
   a setting's value kept as text, a status value left out.
 - Plugin interface 5: `MenuNeed::Has(Capability)`: a menu entry can need

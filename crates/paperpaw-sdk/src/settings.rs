@@ -40,7 +40,7 @@ pub enum SettingKind {
     /// a `static` list of settings can hold. A build that doesn't know it
     /// shows the setting read-only, its value as text.
     Extended {
-        key: crate::Id,
+        key: &'static str,
         params: &'static [(&'static str, &'static str)],
     },
 }

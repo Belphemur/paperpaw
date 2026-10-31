@@ -387,7 +387,7 @@ fn groups_within_groups_know_their_parents() {
 #[test]
 fn a_setting_of_a_later_kind_keeps_its_value_as_text() {
     static SLIDER: SettingKind = SettingKind::Extended {
-        key: Id::new_static("core.slider"),
+        key: "core.slider",
         params: &[("step", "5")],
     };
     let value = SLIDER.parse("35").unwrap();
