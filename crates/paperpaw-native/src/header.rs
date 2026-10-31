@@ -165,6 +165,12 @@ pub struct Header {
     pub families: [u16; 8],
     /// The plugin interface it was built for
     /// ([`Entry::interface`](crate::Entry::interface)).
+    ///
+    /// The 16 bits after it (bytes 82 and 83) are reserved: 0. A firmware
+    /// refuses a file that sets them as one of a newer format: they are
+    /// for what a firmware that doesn't know them must not run, such as
+    /// where the file lists the revisions of chained families 8 and up
+    /// (see `paperpaw_table::FAMILIES`).
     pub interface: u16,
     /// SHA-256 of the header's first 84 bytes and of all after the header
     /// (see [`Header::digest`]).
@@ -230,8 +236,12 @@ impl Header {
             interface: le16(bytes, 80),
             sha256,
         };
-        // The word after `interface` is reserved: 0.
-        if header.compiler == 0 || le16(bytes, 82) != 0 || !header.holds_together() {
+        // The word after `interface` is reserved (see `interface`): a
+        // file that sets it is of a later format.
+        if le16(bytes, 82) != 0 {
+            return Err(Problem::NewerFormat);
+        }
+        if header.compiler == 0 || !header.holds_together() {
             return Err(Problem::Malformed);
         }
         Ok(header)
@@ -658,10 +668,13 @@ pub(crate) mod tests {
         };
         assert_eq!(Header::read(&hot.to_bytes()), Ok(hot));
         assert!(hot.in_hot(120) && hot.in_hot(127) && !hot.in_hot(128) && !hot.in_hot(119));
-        // The reserved word is 0.
+        // The reserved word is 0: a file that sets it is of a later format.
         let mut reserved = good.to_bytes();
         reserved[82] = 1;
-        assert_eq!(Header::read(&reserved), Err(Problem::Malformed));
+        assert_eq!(Header::read(&reserved), Err(Problem::NewerFormat));
+        reserved[82] = 0;
+        reserved[83] = 0x80;
+        assert_eq!(Header::read(&reserved), Err(Problem::NewerFormat));
     }
 
     #[test]

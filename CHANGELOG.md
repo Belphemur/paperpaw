@@ -108,6 +108,10 @@ change the plugin SDK.
   (`paperpaw_table::FAMILIES`), so the plugin file's header, the
   firmware's table and the store's check keep their format while seven
   families suffice; `tools/shared-table.py` refuses an eighth.
+- Plugin files: the header's reserved 16 bits (bytes 82 and 83) stay 0;
+  a file that sets them is refused as one of a newer format ("needs a
+  newer PaperPaw", in the store a plugin for another build) rather than
+  as malformed.
 - Plugin interface 5: `MenuNeed::Has(Capability)`: a menu entry can need
   any capability, also one a later build adds (not met where unknown).
   `SystemStatus` holds four named values (`value`, `with_value`:
