@@ -50,7 +50,8 @@ fn harness(language: &str) -> Harness {
     h.settings.define(COUNT).unwrap();
     let english = "[meta]\nlanguage = en\nname = English\nplural = one-other\n\n[messages]\n\
         core.clock.am = {time} AM\ncore.clock.pm = {time} PM\ncore.decimal = .\n\
-        core.duration.minutes = {m} min\ncore.duration.hours = {h} h {m} min\n";
+        core.duration.minutes = {m} min\ncore.duration.hours = {h} h {m} min\n\
+        core.page-of = {page} / {pages}\n";
     let persian = "[meta]\nlanguage = fa\nname = Farsi\nplural = one-other\ndigits = arabext\n\n\
         [messages]\ncore.clock.am = {time} ق.ظ\ncore.clock.pm = {time} ب.ظ\ncore.decimal = ٫\n\
         core.duration.minutes = {m} دقیقه\ncore.duration.hours = {h} ساعت {m} دقیقه\n";
@@ -97,4 +98,22 @@ fn persian_writes_its_own_digits() {
     }
     twelve_hours(&mut h);
     assert_eq!(time::clock_text(&h.env()).as_deref(), Some("۱:۰۵ ب.ظ"));
+}
+
+/// The pager's label (`ui::Header`, `core.page-of` as the kernel's
+/// en.ini has it): numbers given as numbers come in the language's digits,
+/// even where its catalog has no words of its own for the label.
+#[test]
+fn the_pagers_label_in_both_digits() {
+    let label = |h: &Harness| {
+        h.env().i18n().format(
+            "core.page-of",
+            &[
+                ("page", paperpaw_i18n::Arg::Int(3)),
+                ("pages", paperpaw_i18n::Arg::Int(12)),
+            ],
+        )
+    };
+    assert_eq!(label(&harness("en")), "3 / 12");
+    assert_eq!(label(&harness("fa")), "۳ / ۱۲");
 }
