@@ -754,6 +754,33 @@ const CASES: &[Case] = &[
         fixtures: false,
     },
     Case {
+        name: "x4-mobi-reading",
+        profile: "xteink-x4",
+        book: Some("books/lighthouse.mobi"),
+        sets: &[],
+        script: "wait:1500",
+        colour: 0,
+        fixtures: false,
+    },
+    Case {
+        name: "x4-mobi-picture",
+        profile: "xteink-x4",
+        book: Some("books/lighthouse.mobi"),
+        sets: &[],
+        script: "wait:1500,page-forward,wait:1500",
+        colour: 0,
+        fixtures: false,
+    },
+    Case {
+        name: "x4-mobi-locked",
+        profile: "xteink-x4",
+        book: Some("books/locked.azw"),
+        sets: &[],
+        script: "wait:1500",
+        colour: 0,
+        fixtures: false,
+    },
+    Case {
         name: "x4-endbook-next",
         profile: "xteink-x4",
         book: Some("books/moor-1.epub"),
@@ -856,6 +883,9 @@ fn library(case: &Case) -> PathBuf {
     let mut sources = vec![root().join("samples/library/books"), fixtures.clone()];
     if case.name.contains("endbook") {
         sources.push(fixtures.with_file_name("fixtures-endbook"));
+    }
+    if case.name.contains("mobi") {
+        sources.push(fixtures.with_file_name("fixtures-mobi"));
     }
     for dir in sources {
         for entry in fs::read_dir(dir).unwrap() {
