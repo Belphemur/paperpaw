@@ -25,6 +25,20 @@ pub(crate) struct Room {
     pub plugins: u32,
 }
 
+/// Below this much room for code on a device that limits the number of
+/// plugins is the X4's flash room as the stock layout (CrossPoint's)
+/// leaves it, about 0.6 MiB: a full flash with PaperPaw's own layout gives
+/// about 2.3 MB.
+const STOCK_ROOM: u64 = 1 << 20;
+
+/// Whether `room` is the X4's flash room in the stock layout, where the
+/// web flasher gives much more (the room has no field to say so: the X4
+/// Pro's and Classic's room is shared memory, and other devices' has no
+/// limit on the number of plugins).
+pub(crate) fn stock_flash(room: &CodeRoom) -> bool {
+    !room.shared && room.max_plugins.is_some() && room.total < STOCK_ROOM
+}
+
 impl Room {
     /// The room as it is now, `plugin`'s own code left out (an update
     /// takes the place of the version before).
@@ -113,6 +127,8 @@ impl Room {
             let left = size(env, left);
             let key = if self.fits(plugin, image_len) {
                 "store.needs.code"
+            } else if self.code.as_ref().is_some_and(stock_flash) {
+                "store.no-room.code-flash"
             } else {
                 "store.no-room.code"
             };
@@ -142,4 +158,32 @@ fn own_need(env: &Env<'_>, room: &CodeRoom, id: &str) -> Option<u64> {
 
 fn size(env: &Env<'_>, bytes: u64) -> String {
     files::size(bytes, env.i18n().tr("store.decimal"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const KIB: u64 = 1024;
+
+    #[test]
+    fn the_flasher_is_named_only_where_it_gives_more_room() {
+        // The X4 in the stock layout: flash, a limit on the plugins, 640 KiB.
+        let stock = CodeRoom::new(640 * KIB, 0, 4096).with_plugins(0, Some(16));
+        assert!(stock_flash(&stock));
+        // The same room with PaperPaw's own layout: 2.3 MB.
+        let own = CodeRoom::new(2300 * KIB, 0, 4096).with_plugins(0, Some(16));
+        assert!(!stock_flash(&own));
+        // Just under and at 1 MiB.
+        assert!(stock_flash(
+            &CodeRoom::new(1024 * KIB - 1, 0, 4096).with_plugins(0, Some(16))
+        ));
+        assert!(!stock_flash(
+            &CodeRoom::new(1024 * KIB, 0, 4096).with_plugins(0, Some(16))
+        ));
+        // Shared memory (the X4 Pro and Classic), however small.
+        assert!(!stock_flash(&stock.shared()));
+        // No limit on the plugins' number (other devices).
+        assert!(!stock_flash(&CodeRoom::new(640 * KIB, 0, 4096)));
+    }
 }

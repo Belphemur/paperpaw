@@ -243,7 +243,7 @@ fn finish(env: &Env<'_>, done: &Progress, out: &mut Commands) -> bool {
         }
         Verdict::Refused(refusal) => {
             INSTALLER.cancel(env.storage());
-            (refusal.key(), false)
+            (trust::refusal_key(env, refusal), false)
         }
     };
     out.push(Command::Notify(env.i18n().format(key, &name)));

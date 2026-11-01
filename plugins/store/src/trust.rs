@@ -61,6 +61,20 @@ impl Refusal {
     }
 }
 
+/// What the reader is told of `refusal`: for one for want of room, where
+/// the web flasher gives more, with that way too.
+pub(crate) fn refusal_key(env: &Env<'_>, refusal: Refusal) -> &'static str {
+    if refusal == Refusal::NoRoom
+        && crate::room::Room::of(env, None)
+            .code
+            .as_ref()
+            .is_some_and(crate::room::stock_flash)
+    {
+        return "store.refused.no-room-flash";
+    }
+    refusal.key()
+}
+
 /// What to do with a plugin all of whose files are here.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Verdict {
