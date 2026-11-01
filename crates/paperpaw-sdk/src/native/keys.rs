@@ -8,7 +8,7 @@
 //! even signed by the author's key, which may be the stolen one. The
 //! author keeps it offline. To move
 //! to a new key the author signs [`rotation_message`] with it; a store
-//! that gets the statement with an update hands it to `accept_rotation` (kernel),
+//! that gets the statement with an update hands it to [`accept_rotation`],
 //! which checks it against the pinned keys, so neither a moderator's
 //! mistake nor a taken-over server can forge one. The code installed
 //! before the rotation is not loaded from then on: it may be the stolen
@@ -17,7 +17,7 @@
 //! id).
 //!
 //! **Revoked keys** come from the store (its library lists them); it
-//! adds them with `keep_revoked` (kernel), and none is ever taken off. The kernel does not load the code of
+//! adds them with [`keep_revoked`], and none is ever taken off. The kernel does not load the code of
 //! a plugin whose known author's key is among them
 //! ([`PluginProblem::Revoked`](crate::PluginProblem::Revoked)).
 
@@ -68,7 +68,7 @@ pub fn rotation_message(plugin: &str, old: &[u8; 32], new: &[u8; 32]) -> String 
     paperpaw_native::signature::rotation_message(plugin, old, new)
 }
 
-/// Why a rotation was not taken (`accept_rotation` (kernel)).
+/// Why a rotation was not taken ([`accept_rotation`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum RotationError {
@@ -91,8 +91,6 @@ pub enum RotationError {
 /// longer named as installed ([`installed_code`](super::installed_code),
 /// [`fetched_code`](super::fetched_code)), so it is not loaded at the next
 /// start: it may be what a stolen key signed. The recovery key stays.
-#[cfg(any(test, feature = "kernel"))]
-#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub fn accept_rotation(
     storage: &dyn Storage,
     plugin: &str,
@@ -146,7 +144,7 @@ pub fn is_revoked(storage: &dyn Storage, key: &[u8; 32]) -> bool {
     revoked(storage).contains(key)
 }
 
-/// Why revoked keys were not all kept (`keep_revoked` (kernel)).
+/// Why revoked keys were not all kept ([`keep_revoked`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum RevokedError {
@@ -162,8 +160,6 @@ pub enum RevokedError {
 /// key once revoked stays so, whatever a later list says, as the list
 /// may come from a taken-over server. At most [`MAX_REVOKED`] in all;
 /// past that, [`RevokedError::Full`].
-#[cfg(any(test, feature = "kernel"))]
-#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub fn keep_revoked(storage: &dyn Storage, keys: &[[u8; 32]]) -> Result<(), RevokedError> {
     // A list there that cannot be read is not written over by a shorter
     // one; one with damaged lines is written anew from the others.
