@@ -412,10 +412,11 @@ pub(crate) fn draw_value_row(
         let top = rect.y + (rect.height - height) / 2;
         for (i, range) in lines.title.iter().cloned().enumerate() {
             let at = Rect::new(rect.x, top + i as u16 * line, lines.title_width, line);
-            draw_label_in(
+            draw_label_out(
                 canvas,
                 &font,
                 style,
+                rect,
                 TextRole::BODY,
                 size,
                 title_x,
@@ -431,10 +432,11 @@ pub(crate) fn draw_value_row(
             rect
         };
         let x = value_at(lines.value_width);
-        draw_label_in(
+        draw_label_out(
             canvas,
             &font,
             style,
+            rect,
             TextRole::BODY,
             size,
             x,
@@ -459,10 +461,11 @@ pub(crate) fn draw_value_row(
             font.measure(size, title) <= room + 1.0
         })
     {
-        draw_label_in(
+        draw_label_out(
             canvas,
             &font,
             style,
+            rect,
             TextRole::BODY,
             style.text,
             value_at(value_width),
@@ -470,10 +473,11 @@ pub(crate) fn draw_value_row(
             &shown,
             color,
         );
-        draw_label_in(
+        draw_label_out(
             canvas,
             &font,
             style,
+            rect,
             TextRole::BODY,
             size,
             title_x,
@@ -491,10 +495,11 @@ pub(crate) fn draw_value_row(
     let lines = font.wrap(style.small, title, room.max(1.0));
     let line = font.line_metrics(style.small).line_height as u16;
     if title_text != title && lines.len() == 2 && 2 * line <= rect.height {
-        draw_label_in(
+        draw_label_out(
             canvas,
             &font,
             style,
+            rect,
             TextRole::BODY,
             style.text,
             value_at(value_width),
@@ -506,10 +511,11 @@ pub(crate) fn draw_value_row(
         let title_width = up_to(rect, title_x + room);
         for (i, range) in lines.into_iter().enumerate() {
             let at = Rect::new(rect.x, top + i as u16 * line, title_width, line);
-            draw_label_in(
+            draw_label_out(
                 canvas,
                 &font,
                 style,
+                rect,
                 TextRole::SMALL,
                 style.small,
                 title_x,
@@ -531,10 +537,11 @@ pub(crate) fn draw_value_row(
         let lines = ValueLines::sized(&font, style, size, rect.width, title, value);
         return draw_lines(canvas, lines);
     }
-    draw_label_in(
+    draw_label_out(
         canvas,
         &font,
         style,
+        rect,
         TextRole::BODY,
         style.text,
         value_at(value_width),
@@ -542,10 +549,11 @@ pub(crate) fn draw_value_row(
         &shown,
         color,
     );
-    draw_label_in(
+    draw_label_out(
         canvas,
         &font,
         style,
+        rect,
         TextRole::BODY,
         style.text,
         title_x,
