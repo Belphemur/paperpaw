@@ -12,7 +12,7 @@ use crate::catalog::{Catalog, CatalogError, cmp_plain_key, fingerprint, plain_va
 
 /// In an entry of [`BuiltCatalogs::entries`]: its message is
 /// `decoded[entry & !DECODED]`, not a plain line of a source.
-pub const DECODED: u32 = 1 << 31;
+const DECODED: u32 = 1 << 31;
 /// Bits of an entry's offset in its source; the bits above, below
 /// [`DECODED`], are its source's slot.
 const OFFSET_BITS: u32 = 24;
@@ -28,7 +28,8 @@ pub struct BuiltCatalogs {
     /// source fills its slot rather than being kept as a catalog.
     pub prints: &'static [u64],
     /// The messages of all, sorted by key: a slot and the offset of the
-    /// key's line in that source, or [`DECODED`] and a place in `decoded`.
+    /// key's line in that source, or its top bit set and a place in
+    /// `decoded`.
     pub entries: &'static [u32],
     /// Keys and messages a source does not give plainly (quoted values,
     /// escape sequences), decoded.

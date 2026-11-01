@@ -53,7 +53,7 @@ fn started(card: &Rc<MemoryStorage>, language: &str) -> Kernel {
     let mut kernel = Kernel::builder(DEVICE)
         .plugin(harness.plugin())
         .storage(Shared(card.clone()))
-        .user_config(&format!("[core]\nlanguage = {language}\n"))
+        .user_config(format!("[core]\nlanguage = {language}\n"))
         .build()
         .unwrap();
     kernel.start(Instant(0));

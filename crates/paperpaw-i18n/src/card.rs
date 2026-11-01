@@ -53,7 +53,7 @@ const MAX_BLOCKS: u32 = 2048;
 /// A message's place before its key: hash, key length, message length.
 const ENTRY: usize = 7;
 /// What the messages read may take before no more are read until the
-/// kernel forgets them ([`Card::forget`]).
+/// kernel forgets them ([`Translator::forget_read`](crate::Translator::forget_read)).
 pub const MAX_READ: usize = 16 * 1024;
 
 /// The FNV-1a hash of `key`, by which messages are sorted.
