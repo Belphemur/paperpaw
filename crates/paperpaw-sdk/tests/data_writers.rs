@@ -15,7 +15,7 @@ use paperpaw_sdk::builtin::events::Reading;
 use paperpaw_sdk::secrets::{FILE, Secrets};
 use paperpaw_sdk::{MemoryStorage, annotations, library};
 
-const BOOK_RECORD: &str = ".paperpaw/library/books/0c6afbf2778c9bbf.ini";
+const BOOK_RECORD: &str = ".paperpaw/library/details/0c/0c6afbf2778c9bbf.ini";
 
 #[test]
 fn favourites_of_version_1_are_read() {

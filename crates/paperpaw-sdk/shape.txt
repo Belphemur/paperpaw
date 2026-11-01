@@ -961,6 +961,7 @@ struct paperpaw_sdk::library::service::BookField { id: paperpaw_sdk::id::Id, tit
 struct paperpaw_sdk::library::service::Deleted { commands: alloc::vec::Vec<paperpaw_sdk::command::Command>, failed: alloc::vec::Vec<(alloc::string::String, paperpaw_platform::storage::StorageError)>, refused: alloc::vec::Vec<alloc::string::String> }
 struct paperpaw_sdk::library::service::Kept
 struct paperpaw_sdk::library::service::LibraryService(0: alloc::boxed::Box<dyn paperpaw_sdk::library::service::Library>)
+struct paperpaw_sdk::library::split::Split { folder: usize, listed: alloc::vec::Vec<(alloc::string::String, bool)>, stuck: usize, moved: u32 }
 struct paperpaw_sdk::lookup::Asked { entries: alloc::vec::Vec<paperpaw_sdk::lookup::LookupEntry>, pending: alloc::vec::Vec<paperpaw_sdk::id::Id>, commands: alloc::vec::Vec<paperpaw_sdk::command::Command> }
 struct paperpaw_sdk::lookup::LookupEntry { source: alloc::string::String, text: alloc::string::String, more: core::option::Option<paperpaw_sdk::id::Id> }
 struct paperpaw_sdk::lookup::LookupProviderSpec { id: paperpaw_sdk::id::Id, title: alloc::borrow::Cow<'static, str>, languages: alloc::vec::Vec<alloc::borrow::Cow<'static, str>>, online: bool, lookup: paperpaw_sdk::lookup::LookupFn }

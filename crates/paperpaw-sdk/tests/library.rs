@@ -145,7 +145,7 @@ proptest! {
     fn any_record_is_read(bytes in proptest::collection::vec(any::<u8>(), 0..300)) {
         let storage = MemoryStorage::new()
             .with(PATH, b"12345".to_vec())
-            .with(".paperpaw/library/books/0c6afbf2778c9bbf.ini", bytes);
+            .with(".paperpaw/library/details/0c/0c6afbf2778c9bbf.ini", bytes);
         if let Some(book) = library::book(&storage, PATH) {
             prop_assert_eq!(book.size, 5);
             prop_assert!(book.progress.is_none_or(|p| p <= 100));
@@ -356,7 +356,7 @@ fn a_title_from_the_reader_is_kept_until_the_book_is_read() {
 #[test]
 fn records_written_by_an_older_details_version_are_read_again() {
     let storage = MemoryStorage::new().with(PATH, "12345").with(
-        ".paperpaw/library/books/0c6afbf2778c9bbf.ini",
+        ".paperpaw/library/details/0c/0c6afbf2778c9bbf.ini",
         "[book]\nsize = 5\nindexed = on\nversion = 4\ntitle = New\n",
     );
     assert!(library::book(&storage, PATH).unwrap().indexed);
@@ -364,7 +364,7 @@ fn records_written_by_an_older_details_version_are_read_again() {
         let text = format!("[book]\nsize = 5\nindexed = on\n{older}\ntitle = Old\n");
         let storage = MemoryStorage::new()
             .with(PATH, "12345")
-            .with(".paperpaw/library/books/0c6afbf2778c9bbf.ini", text);
+            .with(".paperpaw/library/details/0c/0c6afbf2778c9bbf.ini", text);
         let book = library::book(&storage, PATH).unwrap();
         assert!(!book.indexed, "{older:?}");
         assert_eq!(book.title.as_deref(), Some("Old"));
@@ -377,7 +377,7 @@ fn records_with_broken_lines_keep_what_they_can() {
                 title = \"unclosed\ntag.1 = One\n[field]\nx.y = 1\n";
     let storage = MemoryStorage::new()
         .with(PATH, "12345")
-        .with(".paperpaw/library/books/0c6afbf2778c9bbf.ini", text);
+        .with(".paperpaw/library/details/0c/0c6afbf2778c9bbf.ini", text);
     let book = library::book(&storage, PATH).unwrap();
     assert_eq!(book.progress, Some(100));
     // A cover without its height is none.
@@ -389,7 +389,7 @@ fn records_with_broken_lines_keep_what_they_can() {
 #[test]
 fn a_record_without_a_size_belongs_to_an_empty_file_only() {
     let storage = MemoryStorage::new().with(PATH, "").with(
-        ".paperpaw/library/books/0c6afbf2778c9bbf.ini",
+        ".paperpaw/library/details/0c/0c6afbf2778c9bbf.ini",
         "[book]\ntitle = T\n",
     );
     assert_eq!(

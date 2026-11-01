@@ -6,7 +6,11 @@
 //! - A book's details: title, author, series, tags and cover, read from
 //!   the book once ([`index`](fn@index)), its reading progress, and fields that
 //!   plugins add (e.g. a rating or where a book came from), in
-//!   `.paperpaw/library/books/<hash>.ini`.
+//!   `.paperpaw/library/details/<h>/<hash>.ini`, `<h>` the first two
+//!   digits of the hash; its cover made small beside, in
+//!   `.paperpaw/library/thumbs/<h>/<hash>.thumb`. (Earlier versions kept
+//!   them in `books/<hash>.ini` and `covers/<hash>.thumb`: read there
+//!   until the kernel moved them, [`split`](mod@split).)
 //! - The books opened last, most recent first (`opened.txt`), and the
 //!   favourites (`favourites.txt`).
 //! - The catalog of all books under the library folder ([`catalog`]),
@@ -27,6 +31,9 @@ mod fingerprint;
 pub mod index;
 pub mod listing;
 pub mod service;
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+pub mod split;
 
 pub use fingerprint::Fingerprint;
 pub use service::{Badge, BookBadge, BookField, Deleted, Library, is_book_path, service};
@@ -243,7 +250,10 @@ pub fn key(path: &str) -> String {
 /// A folder where a plugin keeps something for each book, named by the
 /// book's [`key`] after `prefix`, alone or followed by `.` and more (a
 /// file or a folder): `cache/0123456789abcdef`, `epub-0123…/`,
-/// `0123….ini`. Registered with
+/// `0123….ini`; in the folder itself, or in the part of the folder of
+/// the key's first two digits (`01/0123…`), where a folder would hold
+/// thousands (a memory card looks through a folder one entry after the
+/// other for a name). Registered with
 /// [`Registrar::add_book_data`](crate::Registrar::add_book_data) or
 /// [`Registrar::add_book_cache`](crate::Registrar::add_book_cache), the
 /// kernel moves it with its book ([`move_data`]), removes it with it
@@ -298,38 +308,94 @@ impl BookData {
         (hex && (tail.is_empty() || tail.starts_with('.'))).then_some((key, tail))
     }
 
-    /// The entries of the folder that are kept for books: name, whether a
-    /// folder.
-    fn entries(&self, storage: &dyn Storage) -> Vec<(String, bool)> {
-        let mut entries = Vec::new();
-        #[expect(
-            clippy::let_underscore_must_use,
-            reason = "a folder that cannot be listed keeps nothing for books"
-        )]
-        let _ = storage.list(&self.folder, &mut |entry| {
-            if self.key_of(entry.name).is_some() {
-                entries.push((String::from(entry.name), entry.is_dir));
+    /// Where what is kept for books is in the folder: in the folder
+    /// itself, as earlier plugins keep it, or split by the first two
+    /// digits of the key ([`split`]), each in the subfolder of its own:
+    /// `0123…`, `01/0123…`. With `only`, of that key alone (looked for
+    /// where it goes, not among all), else of every key. `found` is given
+    /// each one's path in the folder, its key and whether it is a folder,
+    /// once the folder holding it was read.
+    fn each(&self, storage: &dyn Storage, only: Option<&str>, found: &mut dyn FnMut(Kept<'_>)) {
+        let mut parts = alloc::vec![String::new()];
+        if let Some(key) = only {
+            parts.push(String::from(key.get(..2).unwrap_or("00")));
+        }
+        let mut at = 0;
+        while let Some(part) = parts.get(at).cloned() {
+            at += 1;
+            let folder = match part.is_empty() {
+                true => String::from(&*self.folder),
+                false => format!("{}/{part}", self.folder),
+            };
+            let mut entries: Vec<(String, bool)> = Vec::new();
+            #[expect(
+                clippy::let_underscore_must_use,
+                reason = "a folder that cannot be listed keeps nothing for books"
+            )]
+            let _ = storage.list(&folder, &mut |entry| {
+                let key = self.key_of(entry.name).map(|(key, _)| key);
+                if key.is_some_and(|key| only.is_none_or(|only| key == only)) {
+                    entries.push((String::from(entry.name), entry.is_dir));
+                } else if only.is_none() && part.is_empty() && entry.is_dir && is_split(entry.name)
+                {
+                    parts.push(String::from(entry.name));
+                }
+            });
+            for (name, is_dir) in &entries {
+                if let Some((key, tail)) = self.key_of(name) {
+                    let path = crate::files::join(&part, name);
+                    found(Kept {
+                        path: &path,
+                        key,
+                        tail,
+                        is_dir: *is_dir,
+                        split: !part.is_empty(),
+                    });
+                }
             }
-        });
-        entries
+        }
     }
 }
 
-/// Moves what is kept for the book `from` in folders `data` to `to`.
+/// Whether `name` is a part of a folder of [`BookData`] split by keys
+/// ([`split`]): two hexadecimal digits.
+fn is_split(name: &str) -> bool {
+    name.len() == 2 && name.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+}
+
+/// What is kept for a book in a folder of [`BookData`] ([`BookData::each`]).
+struct Kept<'a> {
+    /// In the folder.
+    path: &'a str,
+    key: &'a str,
+    /// What follows the key in its name.
+    tail: &'a str,
+    is_dir: bool,
+    /// In the part of the folder of its key, not in the folder itself.
+    split: bool,
+}
+
+/// Moves what is kept for the book `from` in folders `data` to `to`:
+/// where it was, in the folder itself or in the part of its key
+/// ([`split`]).
 pub fn move_data(storage: &dyn Storage, data: &[BookData], from: &str, to: &str) {
     let (old, new) = (key(from), key(to));
     for folder in data {
-        for (name, _) in folder.entries(storage) {
-            if let Some((found, tail)) = folder.key_of(&name)
-                && found == old
-            {
-                let to = format!("{}/{}{new}{tail}", folder.folder, folder.prefix);
-                #[expect(
-                    clippy::let_underscore_must_use,
-                    reason = "what cannot be moved stays under the old name; the book itself is moved already"
-                )]
-                let _ = storage.rename(&format!("{}/{name}", folder.folder), &to);
-            }
+        let mut moves = Vec::new();
+        folder.each(storage, Some(&old), &mut |kept| {
+            let named = format!("{}{new}{}", folder.prefix, kept.tail);
+            let to = match kept.split {
+                true => format!("{}/{named}", split(&folder.folder, &new)),
+                false => crate::files::join(&folder.folder, &named),
+            };
+            moves.push((crate::files::join(&folder.folder, kept.path), to));
+        });
+        for (from, to) in moves {
+            #[expect(
+                clippy::let_underscore_must_use,
+                reason = "what cannot be moved stays under the old name; the book itself is moved already"
+            )]
+            let _ = storage.rename(&from, &to);
         }
     }
 }
@@ -337,26 +403,31 @@ pub fn move_data(storage: &dyn Storage, data: &[BookData], from: &str, to: &str)
 /// Removes what is kept for the book at `path` in folders `data`.
 pub fn remove_data(storage: &dyn Storage, data: &[BookData], path: &str) {
     let gone = key(path);
-    clean(storage, data, &|key| key != gone);
+    clean(storage, data, Some(&gone), &|key| key != gone);
 }
 
 /// Removes what is kept in folders `data` for books whose key `keep` does
 /// not keep; how many entries went.
 pub fn clean_up(storage: &dyn Storage, data: &[BookData], keep: &dyn Fn(&str) -> bool) -> u32 {
-    clean(storage, data, keep)
+    clean(storage, data, None, keep)
 }
 
-fn clean(storage: &dyn Storage, data: &[BookData], keep: &dyn Fn(&str) -> bool) -> u32 {
+/// [`clean_up`], of key `only` alone where given.
+fn clean(
+    storage: &dyn Storage,
+    data: &[BookData],
+    only: Option<&str>,
+    keep: &dyn Fn(&str) -> bool,
+) -> u32 {
     let mut removed = 0;
     for folder in data {
-        for (name, is_dir) in folder.entries(storage) {
-            let Some((key, _)) = folder.key_of(&name) else {
-                continue;
-            };
-            if keep(key) {
-                continue;
+        let mut gone = Vec::new();
+        folder.each(storage, only, &mut |kept| {
+            if !keep(kept.key) {
+                gone.push((crate::files::join(&folder.folder, kept.path), kept.is_dir));
             }
-            let path = format!("{}/{name}", folder.folder);
+        });
+        for (path, is_dir) in gone {
             let done = if is_dir {
                 storage.remove_dir_all(&path)
             } else {
@@ -388,7 +459,7 @@ pub fn clean_up_unused(
     let keep =
         |key: &str| u64::from_str_radix(key, 16).is_ok_and(|k| keys.binary_search(&k).is_ok());
     let data: Vec<BookData> = data.iter().filter(|d| d.kind == kind).cloned().collect();
-    Ok(clean(storage, &data, &keep))
+    Ok(clean(storage, &data, None, &keep))
 }
 
 /// How many books [`clean_up_unused`] would remove data of `kind` for:
@@ -401,19 +472,22 @@ pub fn unused_books(
 ) -> Result<u32, StorageError> {
     let keys = file_keys(storage, library)?;
     let mut gone: Vec<u64> = Vec::new();
+    let mut full = false;
     for folder in data.iter().filter(|d| d.kind == kind) {
-        for (name, _) in folder.entries(storage) {
-            let Some(key) = folder
-                .key_of(&name)
-                .and_then(|(key, _)| u64::from_str_radix(key, 16).ok())
-            else {
-                continue;
+        folder.each(storage, None, &mut |kept| {
+            let Ok(key) = u64::from_str_radix(kept.key, 16) else {
+                return;
             };
             if keys.binary_search(&key).is_err() {
-                gone.try_reserve(1).map_err(|_| StorageError::TooLarge)?;
-                gone.push(key);
+                full |= gone.try_reserve(1).is_err();
+                if !full {
+                    gone.push(key);
+                }
             }
-        }
+        });
+    }
+    if full {
+        return Err(StorageError::TooLarge);
     }
     gone.sort_unstable();
     gone.dedup();
@@ -522,19 +596,81 @@ pub fn books_in(
     }
 }
 
+/// The folder of the books' details, in [`DIR`]: split by the first two
+/// digits of their keys ([`split`]).
+pub(crate) const DETAILS_DIR: &str = "details";
+
+/// The folder of the books' covers made small, in [`DIR`], split as
+/// [`DETAILS_DIR`].
+pub(crate) const THUMBS_DIR: &str = "thumbs";
+
+/// Where earlier versions kept the details and covers made small, in
+/// [`DIR`], each in one folder: read until moved ([`split::Split`]).
+pub(crate) const OLD_DETAILS_DIR: &str = "books";
+pub(crate) const OLD_THUMBS_DIR: &str = "covers";
+
+/// The part of folder `folder` that what is kept by `key` goes into:
+/// the subfolder of its first two digits (of 256), so that no folder holds
+/// thousands of entries, which a memory card looks through one after the
+/// other for a name.
+pub(crate) fn split(folder: &str, key: &str) -> String {
+    format!("{folder}/{}", key.get(..2).unwrap_or("00"))
+}
+
+/// Where a plugin keeps what it keeps for the book at `book` in folder
+/// `folder` of [`BookData`] (registered with
+/// [`Registrar::add_book_cache`](crate::Registrar::add_book_cache) or
+/// [`add_book_data`](crate::Registrar::add_book_data)), named `prefix` and
+/// the book's [`key`]: in the part of the folder of the key's first two
+/// digits, `<folder>/<2 digits>/<prefix><key>`, so that no folder holds
+/// thousands of entries (a memory card looks through a folder one entry
+/// after the other for a name). The kernel moves, removes and cleans up
+/// what is there, and what earlier plugins kept in the folder itself.
+#[must_use]
+pub fn kept_path(folder: &str, prefix: &str, book: &str) -> String {
+    let key = key(book);
+    format!(
+        "{}/{prefix}{key}",
+        split(folder.trim_end_matches('/'), &key)
+    )
+}
+
 fn book_file(path: &str) -> String {
-    format!("{DIR}/books/{}.ini", key(path))
+    let key = key(path);
+    format!("{}/{key}.ini", split(&format!("{DIR}/{DETAILS_DIR}"), &key))
+}
+
+/// Where earlier versions kept [`book_file`].
+fn old_book_file(path: &str) -> String {
+    format!("{DIR}/{OLD_DETAILS_DIR}/{}.ini", key(path))
 }
 
 fn cover_file(path: &str) -> String {
-    format!("{DIR}/covers/{}.thumb", key(path))
+    cover_variant_file(path, "")
 }
 
 fn cover_variant_file(path: &str, variant: &str) -> String {
-    if variant.is_empty() {
-        return cover_file(path);
+    let key = key(path);
+    let dot = if variant.is_empty() { "" } else { "." };
+    format!(
+        "{}/{key}{dot}{variant}.thumb",
+        split(&format!("{DIR}/{THUMBS_DIR}"), &key)
+    )
+}
+
+/// Where earlier versions kept [`cover_variant_file`].
+fn old_cover_variant_file(path: &str, variant: &str) -> String {
+    let dot = if variant.is_empty() { "" } else { "." };
+    format!("{DIR}/{OLD_THUMBS_DIR}/{}{dot}{variant}.thumb", key(path))
+}
+
+/// The details of the book at `path` as kept: where they are now, else
+/// where an earlier version kept them and they were not moved yet.
+fn load_details(storage: &dyn Storage, path: &str) -> Result<Option<String>, crate::data::Error> {
+    match crate::data::Format::FIRST.load(storage, &book_file(path), MAX_DETAILS)? {
+        Some(details) => Ok(Some(details)),
+        None => crate::data::Format::FIRST.load(storage, &old_book_file(path), MAX_DETAILS),
     }
-    format!("{DIR}/covers/{}.{variant}.thumb", key(path))
 }
 
 /// The cover of `book` (the one at `path`) made small to fit `width` ×
@@ -572,7 +708,10 @@ pub fn cover_variant(
         book.size, image.path, image.width, image.height
     ));
     let file = cover_variant_file(path, variant);
-    if let Some(thumb) = crate::ui::Thumbnail::kept(storage, &file, stamp, (w, h)) {
+    let old = || old_cover_variant_file(path, variant);
+    if let Some(thumb) = crate::ui::Thumbnail::kept(storage, &file, stamp, (w, h))
+        .or_else(|| crate::ui::Thumbnail::kept(storage, &old(), stamp, (w, h)))
+    {
         return Some(thumb);
     }
     let thumb = crate::ui::Thumbnail::new(storage, image, w, h, format)?;
@@ -638,9 +777,7 @@ pub fn book(storage: &dyn Storage, path: &str) -> Option<Book> {
 /// ([`listing::Entry::size`]): the file is not looked up again (on a card,
 /// a search through its folder).
 pub fn book_sized(storage: &dyn Storage, path: &str, size: u64) -> Option<Book> {
-    let source = crate::data::Format::FIRST
-        .load(storage, &book_file(path), MAX_DETAILS)
-        .ok()??;
+    let source = load_details(storage, path).ok()??;
     let book = parse_details(&source);
     (book.size == size).then_some(book)
 }
@@ -653,9 +790,7 @@ pub fn book_sized(storage: &dyn Storage, path: &str, size: u64) -> Option<Book> 
 /// written over.
 fn book_for_update(storage: &dyn Storage, path: &str) -> Result<Book, StorageError> {
     let size = storage.size(path)?;
-    let known = crate::data::Format::FIRST
-        .load(storage, &book_file(path), MAX_DETAILS)?
-        .map(|source| parse_details(&source));
+    let known = load_details(storage, path)?.map(|source| parse_details(&source));
     Ok(match known {
         Some(book) if book.size == size => book,
         Some(old) => Book {
@@ -761,7 +896,7 @@ fn write_book(storage: &dyn Storage, path: &str, book: &Book) -> bool {
 }
 
 fn write_details(storage: &dyn Storage, path: &str, book: &Book) -> Result<(), crate::data::Error> {
-    let before = crate::data::Format::FIRST.load(storage, &book_file(path), MAX_DETAILS)?;
+    let before = load_details(storage, path)?;
     let ini = details_text(book, before.as_deref().unwrap_or_default());
     if ini.len() > MAX_DETAILS {
         return Err(StorageError::TooLarge.into());
@@ -1021,8 +1156,7 @@ pub(crate) fn noted_status(storage: &dyn Storage, path: &str) {
 /// an error where one of them cannot be read, or the book is gone.
 fn status_of(storage: &dyn Storage, path: &str) -> Result<catalog::Status, StorageError> {
     let size = storage.size(path)?;
-    let progress = crate::data::Format::FIRST
-        .load(storage, &book_file(path), MAX_DETAILS)?
+    let progress = load_details(storage, path)?
         .map(|source| parse_details(&source))
         .filter(|book| book.size == size)
         .and_then(|book| book.progress);
@@ -1038,8 +1172,20 @@ fn status_of(storage: &dyn Storage, path: &str) -> Result<catalog::Status, Stora
     reason = "details and a cover not moved are made again from the book"
 )]
 pub fn moved(storage: &dyn Storage, from: &str, to: &str) {
-    let _ = storage.rename(&book_file(from), &book_file(to));
-    let _ = storage.rename(&cover_file(from), &cover_file(to));
+    // From where an earlier version kept them, where not moved yet; what
+    // is left there would be moved back to `from` later.
+    for (file, old) in [
+        (
+            book_file as fn(&str) -> String,
+            old_book_file as fn(&str) -> String,
+        ),
+        (cover_file, |path| old_cover_variant_file(path, "")),
+    ] {
+        if storage.rename(&file(from), &file(to)).is_err() {
+            let _ = storage.rename(&old(from), &file(to));
+        }
+        let _ = storage.remove(&old(from));
+    }
     // A cover kept by a format's data for the book moves with it too
     // ([`BookData`]): the details name it where it is now.
     if let Some(mut book) = book(storage, to)
@@ -1161,6 +1307,8 @@ fn follow_folders(env: &Env<'_>, from: &str, to: &str, out: &mut dyn FnMut(crate
 pub fn removed(storage: &dyn Storage, path: &str) {
     let _ = storage.remove(&book_file(path));
     let _ = storage.remove(&cover_file(path));
+    let _ = storage.remove(&old_book_file(path));
+    let _ = storage.remove(&old_cover_variant_file(path, ""));
     let without = |list: &mut Vec<String>| list.retain(|p| p != path);
     update_list(storage, &opened_file(), MAX_OPENED, without);
     update_list(storage, &favourites_file(), MAX_FAVOURITES, without);
@@ -1222,7 +1370,7 @@ pub fn take_over_old(storage: &dyn Storage) {
     for name in ["opened.txt", "favourites.txt"] {
         let _ = storage.rename(&format!("{old}/{name}"), &format!("{DIR}/{name}"));
     }
-    let _ = storage.rename(&format!("{old}/books"), &format!("{DIR}/books"));
+    let _ = storage.rename(&format!("{old}/books"), &format!("{DIR}/{OLD_DETAILS_DIR}"));
     // The catalog is made anew where it is now.
     let _ = storage.remove(&format!("{old}/catalog.txt"));
 }

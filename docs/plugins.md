@@ -706,7 +706,7 @@ as the run's artifact, also when a check failed.
 | Services | `provide` | Anything one plugin offers others, found with `env.services().get` |
 | Contributions | `contribute` | Additions to a point another plugin defined |
 | Translations | `add_translations` | Catalogs for any language |
-| Book data | `add_book_data`, `add_book_cache` | Where the plugin keeps something for each book (named by `library::key`): moved and removed with the book. What `add_book_cache` names (made again from the book when needed) is cleaned up by itself when the book is gone; what `add_book_data` names (the reader's own: notes, places) only when the reader agrees, in *Clean up storage* |
+| Book data | `add_book_data`, `add_book_cache` | Where the plugin keeps something for each book (named by `library::key`, in the folder itself or in its subfolder of the key's first two digits, `<folder>/<2 hex>/<prefix><key>…`, so that no folder holds thousands of entries): moved and removed with the book. What `add_book_cache` names (made again from the book when needed) is cleaned up by itself when the book is gone; what `add_book_data` names (the reader's own: notes, places) only when the reader agrees, in *Clean up storage* |
 | Book fields | `add_book_field` | A value kept with books (`library::set_field`), shown on their information page and, where `in_catalog`, kept in the catalog to filter by |
 | Book badges | `add_book_badge` | A few letters or an icon on books' rows in views of the library |
 | Actions of others | `override_action` | Runs in place of any action's own handler; of several, the highest priority wins |

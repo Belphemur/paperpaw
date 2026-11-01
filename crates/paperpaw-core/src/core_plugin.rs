@@ -2,6 +2,7 @@
 //! interface: standard actions, slots, settings, key bindings and the
 //! placeholder screen.
 
+mod catalog_job;
 mod clean_up;
 mod finishing;
 mod reading;
@@ -10,6 +11,7 @@ use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
+use catalog_job::CatalogJob;
 use clean_up::{ask_clean_up, register_clean_up};
 
 use paperpaw_sdk::builtin::{
@@ -353,35 +355,6 @@ fn register_device_actions(r: &mut Registrar) -> Result<(), RegisterError> {
 /// ([`library::catalog`]).
 const CATALOG_WORK: Id = Id::new_static("core.catalog");
 
-/// What the kernel does to the catalog: walk the library, or catch up.
-enum CatalogJob {
-    Walk(library::catalog::Walk),
-    Rewrite(library::catalog::Rewrite),
-}
-
-impl CatalogJob {
-    fn step(&mut self, env: &Env<'_>) -> Result<bool, paperpaw_sdk::StorageError> {
-        match self {
-            CatalogJob::Walk(walk) => walk.step(env),
-            CatalogJob::Rewrite(rewrite) => rewrite.step(env),
-        }
-    }
-
-    fn abort(self, storage: &dyn paperpaw_sdk::Storage) {
-        match self {
-            CatalogJob::Walk(walk) => walk.abort(storage),
-            CatalogJob::Rewrite(rewrite) => rewrite.abort(storage),
-        }
-    }
-
-    fn pause(&mut self) {
-        match self {
-            CatalogJob::Walk(walk) => walk.pause(),
-            CatalogJob::Rewrite(rewrite) => rewrite.pause(),
-        }
-    }
-}
-
 /// The making of the catalog, shared by the kernel's handlers and its
 /// job: the only writer of the catalog, one change at a time.
 #[derive(Default)]
@@ -399,6 +372,9 @@ struct Catalog {
     urgent: core::cell::Cell<bool>,
     /// The library was walked since PaperPaw started.
     walked: core::cell::Cell<bool>,
+    /// What earlier versions kept for books is to be moved
+    /// ([`library::split`]): first, before a walk or catching up.
+    split: core::cell::Cell<bool>,
 }
 
 /// Whether the catalog's job waits (paused, it goes on where it was):
@@ -485,6 +461,30 @@ impl Catalog {
         self.walk.set(self.walk.get() || walk);
     }
 
+    /// A step of moving what earlier versions kept for books: then on to
+    /// a walk or catching up, if wanted. Failed, it is tried again later;
+    /// views are not told, the books are read where they were.
+    fn split_step(&self, env: &Env<'_>, job: &mut Option<CatalogJob>) -> paperpaw_sdk::work::Step {
+        use paperpaw_sdk::work::Step;
+        match job.as_mut().map_or(Ok(true), |job| job.step(env)) {
+            Ok(false) => Step::Continue,
+            Ok(true) => {
+                *job = None;
+                if self.walk.get() || !self.fresh.borrow().is_empty() {
+                    Step::Continue
+                } else {
+                    self.urgent.set(false);
+                    Step::Done
+                }
+            }
+            Err(error) => {
+                *job = None;
+                self.split.set(true);
+                Step::Failed(alloc::format!("library folders: {error:?}"))
+            }
+        }
+    }
+
     /// One step of the job.
     fn step(&self, env: &Env<'_>, out: &mut Commands) -> paperpaw_sdk::work::Step {
         use paperpaw_sdk::work::Step;
@@ -492,7 +492,8 @@ impl Catalog {
         let mut job = self.job.borrow_mut();
         let walk_next = match &*job {
             Some(running) => matches!(running, CatalogJob::Walk(_)),
-            None => self.walk.get(),
+            // Moving what earlier versions kept takes little memory.
+            None => self.walk.get() && !self.split.get(),
         };
         if waits(env, walk_next) {
             // Goes on where it was once another screen shows.
@@ -505,8 +506,16 @@ impl Catalog {
             && let Some(stopped) = job.take()
         {
             let walk = matches!(stopped, CatalogJob::Walk(_));
+            self.split
+                .set(self.split.get() || matches!(stopped, CatalogJob::Split(_)));
             stopped.abort(storage);
             self.give_back(walk);
+        }
+        if job.is_none() && self.split.replace(false) {
+            *job = Some(CatalogJob::Split(library::split::Split::new()));
+        }
+        if matches!(*job, Some(CatalogJob::Split(_))) {
+            return self.split_step(env, &mut job);
         }
         if job.is_none() {
             let fresh = core::mem::take(&mut *self.fresh.borrow_mut());
@@ -586,6 +595,17 @@ fn register_library(r: &mut Registrar) -> Result<(), RegisterError> {
     // CATALOG_CHANGED.
     r.on(events::STARTED, |env, _, _| make_library_folder(env))?;
     let catalog = Rc::new(Catalog::default());
+    // What earlier versions kept for books in one folder each: moved at a
+    // calm moment after the start, a few at a time.
+    {
+        let catalog = Rc::clone(&catalog);
+        r.on(events::STARTED, move |env, _, out| {
+            if library::split::wanted(env.storage()) {
+                catalog.split.set(true);
+                catalog.declare(false, out);
+            }
+        })?;
+    }
     let recorded = Recorded::default();
     {
         let catalog = Rc::clone(&catalog);

@@ -2783,6 +2783,7 @@ pub fn paperpaw_sdk::library::indexed(&paperpaw_sdk::Env<'_>, &str) -> paperpaw_
 pub fn paperpaw_sdk::library::is_book_path(&paperpaw_sdk::Env<'_>, &str) -> bool
 pub fn paperpaw_sdk::library::is_new(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::library::Book, bool) -> bool
 pub fn paperpaw_sdk::library::is_new_on(&paperpaw_sdk::library::Book, bool, core::option::Option<u32>) -> bool
+pub fn paperpaw_sdk::library::kept_path(&str, &str, &str) -> alloc::string::String
 pub fn paperpaw_sdk::library::key(&str) -> alloc::string::String
 pub fn paperpaw_sdk::library::move_data(&dyn paperpaw_platform::storage::Storage, &[paperpaw_sdk::library::BookData], &str, &str)
 pub fn paperpaw_sdk::library::moved(&dyn paperpaw_platform::storage::Storage, &str, &str)

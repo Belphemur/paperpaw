@@ -24,7 +24,7 @@ fn library_records_and_lists() {
         .with("books/a.epub", b"12345".to_vec())
         .with(
             // The record's name is the FNV-1a of the book's path.
-            ".paperpaw/library/books/0c6afbf2778c9bbf.ini",
+            ".paperpaw/library/details/0c/0c6afbf2778c9bbf.ini",
             include_str!("../testdata/library-book.ini.v1"),
         )
         .with(

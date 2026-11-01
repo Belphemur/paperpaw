@@ -2,7 +2,7 @@
 # before it was set, each with the most lines it may have: none may grow,
 # and one split below the limit leaves this list.
 3307 crates/paperpaw-core/src/tests.rs
-1948 crates/paperpaw-core/src/core_plugin.rs
+1930 crates/paperpaw-core/src/core_plugin.rs
 1891 plugins/format-epub/src/convert.rs
 1925 crates/paperpaw-sdk/src/widgets/grid/view.rs
 1643 crates/paperpaw-sdk/src/library/catalog.rs
