@@ -14,7 +14,7 @@
 use alloc::string::String;
 
 use paperpaw_sdk::{Storage, StorageError};
-use paperpaw_sqlite::{Database, Error as SqlError, Value};
+use paperpaw_sqlite::{Database, Error as SqlError, Row, Value};
 use paperpaw_zip::{ZipArchive, ZipError};
 
 use crate::{cards, table};
@@ -33,6 +33,9 @@ const MAX_NOTES: usize = cards::MAX_CARDS;
 /// out, unread: its pictures are in it as text. A card holds 500 letters
 /// on each side, so nothing a card can hold is lost.
 const MAX_NOTE: usize = table::MAX_RECORD;
+/// A note's row (all its columns, as stored) larger than this is not read:
+/// a row read takes about twice its size while it is decoded.
+const MAX_PAYLOAD: usize = 16 * 1024;
 /// How far back from the end of a ZIP its end record is looked for: a
 /// comment is at most 64 KiB.
 const COMMENT: u64 = 0xffff;
@@ -238,7 +241,13 @@ fn write_notes(storage: &dyn Storage, db: &str) -> Result<Notes, Fault> {
         }
     };
     let mut too_many = false;
-    database.scan(root, &mut |_, values: &[Value]| {
+    database.scan_bounded(root, MAX_PAYLOAD, &mut |_, row| {
+        // Too large to hold (pictures in it as text, say): passed over by
+        // the reader, nothing of it allocated.
+        let Row::Values(values) = row else {
+            skipped += 1;
+            return true;
+        };
         let Some(Value::Text(text)) = values.get(flds) else {
             return true;
         };
