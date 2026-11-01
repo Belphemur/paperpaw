@@ -43,6 +43,7 @@ pub mod ds3231;
 pub mod generation;
 pub mod gt911;
 pub mod install_note;
+pub mod light_timer;
 pub mod mdns;
 pub mod nvs;
 pub mod ota;

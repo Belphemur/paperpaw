@@ -84,8 +84,12 @@ impl Light {
         self.cool.set_duty_hw(total - warm);
     }
 
-    /// Off, e.g. asleep; [`Light::show`] brings it back.
+    /// Off, e.g. asleep or for want of input (`light_timer`);
+    /// [`Light::show`] brings it back.
     pub fn off(&mut self) {
+        if self.shown.is_none() {
+            return;
+        }
         self.shown = None;
         self.cool.set_duty_hw(0);
         self.warm.set_duty_hw(0);
