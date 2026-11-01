@@ -61,7 +61,10 @@ pub(crate) fn duration(env: &Env<'_>, seconds: u64) -> String {
         "stats.hours",
         &[
             ("h", Arg::Int((minutes / 60) as i64)),
-            ("m", Arg::Str(&format!("{:02}", minutes % 60))),
+            (
+                "m",
+                Arg::Str(&env.i18n().localize_digits(&format!("{:02}", minutes % 60))),
+            ),
         ],
     )
 }

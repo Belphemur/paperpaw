@@ -1002,7 +1002,7 @@ pub(crate) fn draw_ring_percent(
     let Some(font) = style.font(env) else {
         return;
     };
-    let number = percent.to_string();
+    let number = env.i18n().number(i64::from(percent));
     let room = inner as f32 * 1.5;
     let least = style.small() * 0.6;
     let sign = |size: f32| (size * 0.45).max(least * 0.8);

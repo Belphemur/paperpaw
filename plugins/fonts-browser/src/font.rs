@@ -229,7 +229,6 @@ impl FontScreen {
     /// A row's name and what it says at its end.
     fn row_text(env: &Env<'_>, job: Option<&Progress>, font: &Font, row: Row) -> (String, String) {
         let name = Arg::Str(&font.name);
-        let decimal = env.i18n().tr("fonts-browser.decimal");
         let chosen = |setting: &str| {
             if font.chosen_for(env, setting) {
                 String::from("•")
@@ -240,13 +239,15 @@ impl FontScreen {
         match row {
             Row::Download => (
                 env.i18n().tr("fonts-browser.download").to_string(),
-                files::size(font.size(), decimal),
+                files::shown_size(env, font.size()),
             ),
             Row::Stop => {
                 let job = job.cloned().unwrap_or_default();
                 (
                     env.i18n().tr("fonts-browser.stop").to_string(),
-                    format!("{} / {}", job.done, job.total),
+                    env.i18n()
+                        .localize_digits(&format!("{} / {}", job.done, job.total))
+                        .into_owned(),
                 )
             }
             Row::Read => (

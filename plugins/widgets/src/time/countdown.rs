@@ -206,13 +206,13 @@ pub(super) fn shown(i18n: &paperpaw_sdk::Translator, days: i64, title: &str) -> 
             short: String::new(),
         },
         2.. => Shown {
-            big: format!("{days}"),
+            big: i18n.number(days),
             note: i18n.plural("widgets.countdown.until", days, &args),
             sentence: i18n.plural("widgets.countdown.days-until", days, &args),
             short: i18n.plural("widgets.countdown.unit", days, &[]),
         },
         _ => Shown {
-            big: format!("{}", -days),
+            big: i18n.number(-days),
             note: i18n.plural("widgets.countdown.since", -days, &args),
             sentence: i18n.plural("widgets.countdown.days-ago", -days, &args),
             short: i18n.plural("widgets.countdown.ago", -days, &[]),

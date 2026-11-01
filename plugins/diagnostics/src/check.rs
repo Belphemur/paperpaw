@@ -561,9 +561,10 @@ impl Screen for Check {
         if self.step != Some(Step::Touch) {
             // Which step, as a note: the header's page arrows would turn
             // nothing here.
-            let step = self
-                .step
-                .map(|s| format!("{} / {}", s.index() + 1, Step::ALL.len()));
+            let step = self.step.map(|s| {
+                let text = format!("{} / {}", s.index() + 1, Step::ALL.len());
+                env.i18n().localize_digits(&text).into_owned()
+            });
             let title = env.i18n().tr("diagnostics.check.title");
             self.header.draw(&mut ui, title, step.as_deref(), None);
         }
@@ -914,9 +915,12 @@ impl Check {
                 if let Some((brightness, warmth)) = level {
                     lines.push((
                         tr("diagnostics.check.brightness"),
-                        format!("{brightness} %"),
+                        env.i18n().number(*brightness) + " %",
                     ));
-                    lines.push((tr("diagnostics.check.warmth"), format!("{warmth} %")));
+                    lines.push((
+                        tr("diagnostics.check.warmth"),
+                        env.i18n().number(*warmth) + " %",
+                    ));
                 }
             }
             Some(Step::Battery) => battery_lines(env, &mut lines),
@@ -949,7 +953,10 @@ impl Check {
         let speed = |us: Option<u64>| {
             us.map_or_else(
                 || tr("diagnostics.check.unknown"),
-                |us| format!("{} KiB/s", steps::speed(test.bytes, us)),
+                |us| {
+                    let text = format!("{} KiB/s", steps::speed(test.bytes, us));
+                    env.i18n().localize_digits(&text).into_owned()
+                },
             )
         };
         lines.push((tr("diagnostics.check.write"), speed(test.write_us)));
@@ -959,7 +966,7 @@ impl Check {
     fn wifi_lines(&self, env: &Env<'_>, lines: &mut Vec<(String, String)>) {
         let tr = |key: &str| env.i18n().tr(key).to_string();
         let found = match self.networks {
-            Some(n) => n.to_string(),
+            Some(n) => env.i18n().number(n as i64),
             None => tr("diagnostics.check.looking"),
         };
         lines.push((tr("diagnostics.check.networks"), found));

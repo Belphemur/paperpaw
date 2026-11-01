@@ -547,7 +547,7 @@ impl UpdatePage {
                 stopping,
                 anyway,
             } => {
-                let size = files::size(offer.size, env.i18n().tr("update.decimal"));
+                let size = files::shown_size(env, offer.size);
                 let help = with(
                     if offer.size > 0 {
                         "update.offer.help"

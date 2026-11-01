@@ -446,13 +446,15 @@ impl PageScreen {
                 };
                 (tr(name), tr("store.preparing"))
             }
-            Row::Install => (
-                tr("store.install"),
-                files::size(plugin.size, env.i18n().tr("store.decimal")),
-            ),
+            Row::Install => (tr("store.install"), files::shown_size(env, plugin.size)),
             Row::Stop => {
                 let job = self.job.clone().unwrap_or_default();
-                (tr("store.stop"), format!("{} / {}", job.done, job.total))
+                (
+                    tr("store.stop"),
+                    env.i18n()
+                        .localize_digits(&format!("{} / {}", job.done, job.total))
+                        .into_owned(),
+                )
             }
             Row::Update => (tr("store.update"), plugin.version.clone()),
             Row::UseStore => (tr("store.use-store"), plugin.version.clone()),
@@ -461,10 +463,7 @@ impl PageScreen {
             Row::Restart => (tr("store.restart"), String::new()),
             Row::Understood => (tr("store.code.understood"), String::new()),
             Row::Cancel => (tr("store.not-now"), String::new()),
-            Row::NoRoom => (
-                tr("store.no-room"),
-                files::size(plugin.size, env.i18n().tr("store.decimal")),
-            ),
+            Row::NoRoom => (tr("store.no-room"), files::shown_size(env, plugin.size)),
             Row::Shots => {
                 let count = match &self.details {
                     Details::Here(details) => details.more.shots.len(),
@@ -504,7 +503,7 @@ fn version_line(env: &Env<'_>, plugin: &Entry) -> String {
             &[("version", Arg::Str(&plugin.version))],
         );
     }
-    let size = files::size(plugin.size, i18n.tr("store.decimal"));
+    let size = files::shown_size(env, plugin.size);
     i18n.format(
         "store.version",
         &[
@@ -597,7 +596,7 @@ fn facts(
         facts.push(("stack-2", needs));
     }
     if let Some(heap) = more.and_then(|m| m.heap) {
-        let size = files::size(heap, i18n.tr("store.decimal"));
+        let size = files::shown_size(env, heap);
         let small = env.device().memory == MemoryClass::Small;
         let key = if small && heap > TIGHT_HEAP {
             "store.heap.tight"

@@ -227,7 +227,7 @@ pub(super) fn offset_text(env: &Env<'_>, minutes: i64) -> String {
     };
     env.i18n().format(
         "widgets.world-clock.offset",
-        &[("offset", Arg::Str(&number))],
+        &[("offset", Arg::Str(&env.i18n().localize_digits(&number)))],
     )
 }
 

@@ -454,7 +454,7 @@ fn caption_text(env: &Env<'_>, open: usize) -> String {
     if open == 0 {
         String::from(title)
     } else {
-        format!("{title} · {open}")
+        format!("{title} · {}", env.i18n().number(open as i64))
     }
 }
 

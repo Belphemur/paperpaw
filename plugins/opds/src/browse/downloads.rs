@@ -116,7 +116,7 @@ impl BrowseScreen {
                 ],
             ),
             None => {
-                let size = files::size(download.received, env.i18n().tr("opds.decimal"));
+                let size = files::shown_size(&env, download.received);
                 env.i18n().format(
                     "opds.downloading-size",
                     &[("title", title), ("size", Arg::Str(&size))],

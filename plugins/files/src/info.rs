@@ -213,7 +213,7 @@ fn details(env: &Env<'_>, path: &str) -> (Details, String) {
         }
     }
     let size = storage.size(path).unwrap_or_default();
-    let file = file_row(name, size, env.i18n().tr("files.decimal"));
+    let file = file_row(name, &files::shown_size(env, size));
     rows.push((Cow::Borrowed("files.info.file"), file));
     rows.push((
         Cow::Borrowed("files.info.folder"),
@@ -223,11 +223,11 @@ fn details(env: &Env<'_>, path: &str) -> (Details, String) {
     (details, description)
 }
 
-/// The file's row: its format and size, `EPUB · 2,4 MB` (with the
-/// language's decimal mark).
-fn file_row(name: &str, size: u64, decimal: &str) -> String {
+/// The file's row: its format and its size as the language writes it,
+/// `EPUB · 2,4 MB`.
+fn file_row(name: &str, size: &str) -> String {
     let (_, format) = crate::stem_and_format(name);
-    format!("{format} · {}", files::size(size, decimal))
+    format!("{format} · {size}")
 }
 
 impl Screen for InfoScreen {
@@ -355,9 +355,8 @@ mod tests {
     use super::file_row;
 
     #[test]
-    fn sizes_read_easily_in_each_language() {
-        assert_eq!(file_row("a.epub", 340 * 1024, "."), "EPUB · 340 KB");
-        assert_eq!(file_row("a.epub", 2_516_582, ","), "EPUB · 2,4 MB");
-        assert_eq!(file_row("a.fb2.zip", 2_516_582, "."), "FB2 · 2.4 MB");
+    fn the_row_names_the_format_and_the_size_shown() {
+        assert_eq!(file_row("a.epub", "2,4 MB"), "EPUB · 2,4 MB");
+        assert_eq!(file_row("a.fb2.zip", "۲٫۴ MB"), "FB2 · ۲٫۴ MB");
     }
 }

@@ -2,8 +2,6 @@
 //! ticks or numerals as the reader likes, a ring or two round it, and
 //! the date below it or on the face.
 
-use alloc::format;
-
 use paperpaw_sdk::round::point_at;
 use paperpaw_sdk::time::{self, LocalTime};
 use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, Padding};
@@ -201,7 +199,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
                         continue;
                     }
                     let p = point_at(center, at, degrees);
-                    let text = format!("{hour}");
+                    let text = env.i18n().number(i64::from(hour));
                     let (x, y) = (p.x as f32, p.y as f32);
                     super::draw_centred(canvas, font, size, x, y, &text, ink);
                 }
@@ -213,7 +211,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     // The day on the face, in a window towards three as on a watch
     // (towards six where numerals are).
     if let (Some(font), "inside", Some(now)) = (&font, date, &now) {
-        let text = format!("{}", now.day);
+        let text = env.i18n().number(i64::from(now.day));
         let numerals = matches!(face, "quarters" | "numerals");
         let size = (r as f32 * if numerals { 0.14 } else { 0.17 }).max(6.0);
         let (x, y) = if numerals {

@@ -150,7 +150,7 @@ fn own_need(env: &Env<'_>, room: &CodeRoom, id: &str) -> Option<u64> {
 }
 
 fn size(env: &Env<'_>, bytes: u64) -> String {
-    files::size(bytes, env.i18n().tr("store.decimal"))
+    files::shown_size(env, bytes)
 }
 
 #[cfg(test)]

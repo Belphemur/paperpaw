@@ -285,7 +285,11 @@ fn draw_month(
     today: Option<u8>,
     weeks_shown: u8,
 ) {
-    let label = format!("{} {}", super::month_name(env, month.month), month.year);
+    let label = format!(
+        "{} {}",
+        super::month_name(env, month.month),
+        env.i18n().number(i64::from(month.year))
+    );
     canvas.describe(paperpaw_sdk::semantics::Role::Text, &label, area);
     let whole = grid(env, font, area, weeks_shown, true);
     let (grid, rows) = match (whole, today) {
@@ -323,7 +327,7 @@ fn draw_month(
     if heading {
         let name = super::month_name(env, month.month);
         let text = if widgets::shows(env, id, "year") {
-            format!("{name} {}", month.year)
+            format!("{name} {}", env.i18n().number(i64::from(month.year)))
         } else {
             String::from(name)
         };
@@ -358,7 +362,7 @@ fn draw_month(
     for (row, week) in rows.enumerate() {
         let y = top + cell_h * (row as f32 + 0.5);
         if weeks {
-            let number = format!("{}", month.week_number(week));
+            let number = env.i18n().number(i64::from(month.week_number(week)));
             let x = f32::from(area.x) + cell_w / 2.0;
             super::draw_centred(canvas, font, small, x, y, &number, look.faint);
         }
@@ -370,7 +374,7 @@ fn draw_month(
                 continue;
             }
             let date = super::dates::civil_from_days(first + i64::from(day));
-            let text = format!("{}", date.2);
+            let text = env.i18n().number(i64::from(date.2));
             let mut color = if inside { look.ink } else { look.faint };
             if weekends && matches!(month.weekday_of(column), 0 | 6) {
                 color = look.faint;
@@ -410,7 +414,7 @@ fn draw_today(
         .into_iter()
         .find(|name| font.measure(style.small(), name) <= width);
     let name_h = super::line(font, style.small());
-    let number = format!("{day}");
+    let number = env.i18n().number(i64::from(day));
     let room = |name: bool| f32::from(area.height) - if name { name_h } else { 0.0 };
     let fits = |size: f32, name: bool| {
         font.measure(size, &number) <= width && super::line(font, size) <= room(name)

@@ -188,7 +188,10 @@ impl ListScreen {
     /// What the row of `font` says at its end.
     fn state(env: &Env<'_>, job: Option<&Progress>, font: &Font) -> String {
         if let Some(job) = job.filter(|j| j.plugin == font.plugin()) {
-            return format!("{} / {}", job.done, job.total);
+            return env
+                .i18n()
+                .localize_digits(&format!("{} / {}", job.done, job.total))
+                .into_owned();
         }
         let key = if font.chosen_for(env, settings::READING_FONT.as_str()) {
             "fonts-browser.state.reading"
@@ -197,7 +200,7 @@ impl ListScreen {
         } else if font.installed(env).is_some() {
             "fonts-browser.state.installed"
         } else {
-            return files::size(font.size(), env.i18n().tr("fonts-browser.decimal"));
+            return files::shown_size(env, font.size());
         };
         env.i18n().tr(key).to_string()
     }

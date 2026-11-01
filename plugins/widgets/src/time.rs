@@ -256,12 +256,21 @@ fn date_text(
         ("weekday", Arg::Str(weekday)),
     ];
     match chosen_name(env, widget, "date-format") {
-        "iso" => format!("{year:04}-{month:02}-{day:02}"),
+        "iso" => env
+            .i18n()
+            .localize_digits(&format!("{year:04}-{month:02}-{day:02}"))
+            .into_owned(),
         "numeric" => env.i18n().format(
             "widgets.date.numeric",
             &[
-                ("day", Arg::Str(&format!("{day:02}"))),
-                ("month", Arg::Str(&format!("{month:02}"))),
+                (
+                    "day",
+                    Arg::Str(&env.i18n().localize_digits(&format!("{day:02}"))),
+                ),
+                (
+                    "month",
+                    Arg::Str(&env.i18n().localize_digits(&format!("{month:02}"))),
+                ),
                 ("year", Arg::Int(i64::from(year))),
             ],
         ),
@@ -607,5 +616,7 @@ fn ui<'a>(env: &Env<'a>) -> (UiStyle, Option<FontHandle<'a>>) {
     (style, font)
 }
 
+#[cfg(test)]
+mod digits_tests;
 #[cfg(test)]
 mod logic_tests;

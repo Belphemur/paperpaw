@@ -166,7 +166,6 @@ fn requested(env: &Env<'_>, request: &PluginsRequested, out: &mut Commands) {
             return answer(out, by, (&[], &ids), true, String::new());
         }
     }
-    let decimal = i18n.tr("store.decimal");
     let lines: Vec<String> = list
         .iter()
         .map(|(id, entry)| match entry {
@@ -174,7 +173,7 @@ fn requested(env: &Env<'_>, request: &PluginsRequested, out: &mut Commands) {
                 "store.request.item",
                 &[
                     ("name", Arg::Str(&entry.name)),
-                    ("size", Arg::Str(&files::size(entry.size, decimal))),
+                    ("size", Arg::Str(&files::shown_size(env, entry.size))),
                 ],
             ),
             None => id.clone(),
