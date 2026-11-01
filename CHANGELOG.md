@@ -275,6 +275,10 @@ before it are thrown away.
 
 ### Changed
 
+- *Right to left: the overview of every tool and the keyboard's header* (#33): where the interface runs right to
+  left the overview's grid starts at the right (the first tool at the top right, the left button on to the next
+  tool), and the keyboard's title is at the right, the hint of how typing ends and the field's *Phone* and
+  *Paste* buttons at the left, typed text from the right.
 - *Keyboard: wider keys* (#91): the keys' side margin is a quarter of the margin other screens keep (at least
   4 pixels), so on small screens the keys get nearly the whole width. Every layout, tapped or chosen with buttons;
   the text field keeps its margin, the key order and the focus are as before. Round keys are as high as wide, so

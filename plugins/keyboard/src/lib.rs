@@ -530,9 +530,11 @@ impl KeyboardScreen {
         let b = self.text_box();
         let height = ui::button_height(&self.style, b);
         let pad = (b.height - height) / 2;
-        // From the right: each as wide as its label (rounded up) and the
-        // button's padding.
-        let mut right = b.x + b.width - pad;
+        // From the right (the left where the interface runs right to
+        // left): each as wide as its label (rounded up) and the button's
+        // padding.
+        let rtl = self.style.is_rtl();
+        let mut edge = if rtl { b.x + pad } else { b.x + b.width - pad };
         let mut buttons: Vec<(FieldButton, Rect)> = kinds
             .into_iter()
             .rev()
@@ -540,8 +542,15 @@ impl KeyboardScreen {
                 let label = env.i18n().tr(kind.label());
                 let label_width = (font.measure(self.style.small(), label) + 1.0) as u16;
                 let width = label_width + self.style.gap() * 3;
-                let area = Rect::new(right - width, b.y + pad, width, height);
-                right -= width + pad;
+                let area = if rtl {
+                    let area = Rect::new(edge, b.y + pad, width, height);
+                    edge += width + pad;
+                    area
+                } else {
+                    let area = Rect::new(edge - width, b.y + pad, width, height);
+                    edge -= width + pad;
+                    area
+                };
                 (kind, area)
             })
             .collect();
