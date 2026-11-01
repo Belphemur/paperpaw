@@ -80,8 +80,9 @@ survive minor releases.
   serves PSRAM to the instruction bus): no flash written, as many
   plugins as PSRAM holds.
 - The **X4** writes it once into flash, into the free end of the app
-  partition it runs from (behind the firmware's image, about 1.7 MB
-  today), and maps it through free MMU entries, so its code runs from
+  partition it runs from (behind the firmware's image: 2,273,280 bytes
+  with PaperPaw's layout, a full flash by USB or the web flasher, about
+  640 KB after an install by CrossPoint's SD installer), and maps it through free MMU entries, so its code runs from
   flash and only its data takes RAM. Updates are written into the other
   app partition, so plugins in use are never erased, and going back to
   the old firmware finds the old plugins behind it.
@@ -232,8 +233,9 @@ and the plugin manager says why.
 
 - Community code plugins reach the X4, the X4 Pro and Android from the
   store and the web flasher without a firmware build; the X4 Pro and
-  Android have room for very many, the plain X4 for a few (about 1.7 MB
-  in all, its hardware limit; the sample plugin alone is 70 KB today,
+  Android have room for very many, the plain X4 for a few (2,273,280 bytes
+  in all with PaperPaw's layout, about 640 KB after a CrossPoint install,
+  as measured on a device; the sample plugin alone is 70 KB today,
   less once the SDK's functions stay in the firmware).
 - Plugins run at full speed and can do anything the firmware can,
   past the SDK too: their own drivers, the radio, the flash.

@@ -103,7 +103,7 @@ Data formats are written down in [data-files.md](data-files.md#a-data-plugins-fi
 | `plugin.ini` | top | the manifest; its `id` is the folder's name |
 | `code.ppn`, `code.so`, `code-host.*` | top | a code plugin's code; a folder with one is a code plugin's, whether PaperPaw loads it or not |
 | `i18n/` | top | translation catalogs, read by the loader for every folder |
-| `how/` | top | texts for people; the kernel does not read them |
+| `how/` | top | texts for people; the kernel does not read them; `how/<lang>.txt`, or `how/<plugin-id>/<lang>.txt` in a crate with several plugins |
 | `fonts/` | top | fonts and font packs, one folder below it allowed |
 | `points/` | top | lines for a point (formats 3) |
 | `store/` | top | the plugin library's entry; taken out of what readers install |
@@ -183,7 +183,10 @@ small).
 - *How it works* is `how/<lang>.txt` (plain text, paragraphs apart by an
   empty line, at least 120 characters, `paperpaw-dev` warns about a short
   one), registered with `Manifest::how` through `include_str!`. A data
-  plugin gives it as `<id>.plugin.how` in its catalogs instead.
+  plugin gives it as `<id>.plugin.how` in its catalogs instead. A crate
+  that ships several plugins (`format-epub` ships the formats EPUB,
+  HTML, FB2, Markdown and CBZ) has one folder for each:
+  `how/<plugin-id>/<lang>.txt`.
 - Put the same `how/` files into what you upload: the store shows them.
 - Keep a plugin's catalogs small: they are embedded and loaded when the
   plugin shows text; a catalog over 64 KiB is left out by the loader (a
@@ -211,14 +214,22 @@ small).
   it differs; a cache is never the only copy of anything.
 - Add every file to [data-files.md](data-files.md) in the commit that
   introduces it.
+- How to write a file so that a power cut leaves the old one or the new
+  one, not half of either: TODO, a convention follows from the kernel.
 
 ## Memory, flash and the store
+
+The 10 KB rule is PaperPaw's own, for what is added to the firmware; the
+4 KB for embedded assets above is for every code plugin, which pays
+for them in its own file.
 
 | Budget | Rule |
 |---|---|
 | Heap (X4: 256 KiB for everything) | keep lists in files; `static` specs; read files a piece at a time; `try_reserve` large buffers and cope; see [Memory](plugins.md#memory) |
 | Code plugin file | `opt-level = "s"`, `lto = "fat"`, `codegen-units = 1`, `panic = "abort"`; no float parsing (`str::parse::<f32>`), no `{:?}` of strings; the store takes a build of at most 4 MiB |
 | Embedded assets | below about 4 KB each; the rest on the card |
+| Room for code plugins on the X4 | 2,273,280 bytes with PaperPaw's layout (a full flash by USB or the web flasher), about 640 KB after an install by CrossPoint's SD installer (measured on a device); the X4 Pro has PSRAM |
+| First-party rule | an addition built into the X4 firmware that grows it by more than 10 KB becomes a store plugin instead |
 | Data plugin | data files 64 KiB each, 96 KiB in all (24 KiB for formats 3) |
 | Package | at most 64 files (63 with code), 20 MB zipped, 40 MB unpacked, paths of 100 bytes |
 | Store entry | id 40, name 60, summary 160, description 2000 characters; up to 5 tags and 4 screenshots (500 KB each) |
