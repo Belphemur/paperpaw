@@ -150,6 +150,26 @@ pub enum RotationError {
     NotKept,
 }
 
+/// Whether [`accept_rotation`] takes this rotation, without writing
+/// anything: for the store's verdict before it fetches the update.
+pub fn check_rotation(
+    storage: &dyn Storage,
+    plugin: &str,
+    new: &[u8; 32],
+    signature: &[u8; 64],
+) -> Result<(), RotationError> {
+    let old = super::known_author(storage, plugin).ok_or(RotationError::NoAuthor)?;
+    let recovery = known_recovery(storage, plugin).ok_or(RotationError::NoRecoveryKey)?;
+    if *new == old || is_revoked(storage, new) {
+        return Err(RotationError::Refused);
+    }
+    let message = rotation_message(plugin, &old, new);
+    match paperpaw_native::signature::verify_message(&recovery, message.as_bytes(), signature) {
+        true => Ok(()),
+        false => Err(RotationError::BadSignature),
+    }
+}
+
 /// Takes the author of `plugin` to `new`, where `signature` is the pinned
 /// recovery key's over [`rotation_message`] from the known key: from then
 /// on the plugin's code is `new`'s (updates signed by it are taken, and
@@ -163,15 +183,7 @@ pub fn accept_rotation(
     new: &[u8; 32],
     signature: &[u8; 64],
 ) -> Result<(), RotationError> {
-    let old = super::known_author(storage, plugin).ok_or(RotationError::NoAuthor)?;
-    let recovery = known_recovery(storage, plugin).ok_or(RotationError::NoRecoveryKey)?;
-    if *new == old || is_revoked(storage, new) {
-        return Err(RotationError::Refused);
-    }
-    let message = rotation_message(plugin, &old, new);
-    if !paperpaw_native::signature::verify_message(&recovery, message.as_bytes(), signature) {
-        return Err(RotationError::BadSignature);
-    }
+    check_rotation(storage, plugin, new, signature)?;
     // The old key's code first: cut short after it, nothing is loaded,
     // and the rotation can be taken again.
     let forgotten = super::write_entry(storage, super::INSTALLED, plugin, None)
@@ -288,6 +300,7 @@ pub fn keep_revoked(storage: &dyn Storage, revocations: &[Revocation]) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{DirEntry, StorageError};
     use paperpaw_native::signature::{public_key, sign_message};
 
     const AUTHOR: [u8; 32] = [1; 32];
@@ -412,6 +425,99 @@ mod tests {
             super::super::installed_code(&storage, "clock"),
             Some([6; 32])
         );
+    }
+
+    /// check_rotation says what accept_rotation would, and writes
+    /// nothing (#20, review of the store side).
+    #[test]
+    fn a_rotation_is_checked_without_writing() {
+        let storage = installed();
+        let message = rotation_message("clock", &AUTHOR, &NEW);
+        let signature = sign_message(message.as_bytes(), &RECOVERY_SEED);
+        let forged = sign_message(message.as_bytes(), &[8; 32]);
+        assert_eq!(check_rotation(&storage, "clock", &NEW, &signature), Ok(()));
+        assert_eq!(
+            check_rotation(&storage, "clock", &NEW, &forged),
+            Err(RotationError::BadSignature)
+        );
+        assert_eq!(
+            check_rotation(&storage, "clock", &AUTHOR, &signature),
+            Err(RotationError::Refused)
+        );
+        assert_eq!(
+            check_rotation(&storage, "gone", &NEW, &signature),
+            Err(RotationError::NoAuthor)
+        );
+        assert_eq!(super::super::known_author(&storage, "clock"), Some(AUTHOR));
+        assert_eq!(
+            super::super::installed_code(&storage, "clock"),
+            Some([6; 32])
+        );
+        assert_eq!(super::super::fetched_code(&storage, "clock"), Some([5; 32]));
+    }
+
+    /// A storage that takes `left` more writes, then fails every one: the
+    /// power cut between them.
+    struct CutAfter {
+        storage: crate::MemoryStorage,
+        left: core::cell::Cell<usize>,
+    }
+
+    impl Storage for CutAfter {
+        fn read_at(&self, path: &str, at: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
+            self.storage.read_at(path, at, buf)
+        }
+
+        fn size(&self, path: &str) -> Result<u64, StorageError> {
+            self.storage.size(path)
+        }
+
+        fn write(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+            let left = self.left.get().checked_sub(1).ok_or(StorageError::Io)?;
+            self.left.set(left);
+            self.storage.write(path, data)
+        }
+
+        fn append(&self, _: &str, _: &[u8]) -> Result<(), StorageError> {
+            Err(StorageError::Io)
+        }
+
+        fn list(&self, dir: &str, visit: &mut dyn FnMut(DirEntry<'_>)) -> Result<(), StorageError> {
+            self.storage.list(dir, visit)
+        }
+
+        fn remove(&self, _: &str) -> Result<(), StorageError> {
+            Err(StorageError::Io)
+        }
+    }
+
+    /// Cut short after any of its writes, a rotation leaves the old
+    /// author with no code to load (or all as it was), never the new
+    /// author with the old key's code; and it can be taken again (#20,
+    /// review of the store side).
+    #[test]
+    fn a_rotation_cut_short_can_be_taken_again() {
+        let message = rotation_message("clock", &AUTHOR, &NEW);
+        let signature = sign_message(message.as_bytes(), &RECOVERY_SEED);
+        for writes in 0..3 {
+            let cut = CutAfter {
+                storage: installed(),
+                left: core::cell::Cell::new(writes),
+            };
+            assert_eq!(
+                accept_rotation(&cut, "clock", &NEW, &signature),
+                Err(RotationError::NotKept),
+                "{writes}"
+            );
+            assert_eq!(super::super::known_author(&cut, "clock"), Some(AUTHOR));
+            let code = super::super::installed_code(&cut, "clock");
+            assert_eq!(code, (writes == 0).then_some([6; 32]), "{writes}");
+            cut.left.set(usize::MAX);
+            assert_eq!(accept_rotation(&cut, "clock", &NEW, &signature), Ok(()));
+            assert_eq!(super::super::known_author(&cut, "clock"), Some(NEW));
+            assert_eq!(super::super::installed_code(&cut, "clock"), None);
+            assert_eq!(super::super::fetched_code(&cut, "clock"), None);
+        }
     }
 
     /// A revocation of `key` for `plugin`, signed with `seed`.
