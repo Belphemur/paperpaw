@@ -8,6 +8,9 @@ change the plugin SDK.
 
 ### Added
 
+- SDK: `Slider::mirrored` for a right-to-left interface: the lowest value at the right, the track filled from
+  there, `−` at the right and `+` at the left (`Slider::parts`), the left button moving it up
+  (`Slider::key_step`); `SliderPart::mirrored` tells a theme's painter.
 - A language can come compiled from the card and be read as it is needed (ADR 0033): a data plugin's
   `i18n/<lang>.ppcat` (made with `paperpaw-sign catalog <lang>.ini <lang>.ppcat`, data formats 4) keeps its
   messages on the card, about a kilobyte of memory for 3,400 messages, and the messages of the screen shown;
