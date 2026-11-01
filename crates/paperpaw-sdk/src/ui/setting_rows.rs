@@ -392,6 +392,9 @@ pub(crate) fn draw_value_row(
     let Some(font) = style.font(env) else {
         return;
     };
+    // The chevron of a row that opens a screen points the other way.
+    let turned = turn_chevron(style, value);
+    let value = turned.as_ref();
     let color = style.focus_ink(focused);
     let margin = style.margin as f32;
     let width = f32::from(rect.width) - 2.0 * margin;
@@ -653,6 +656,17 @@ fn first_line(style: &UiStyle, spec: &SettingSpec, rect: Rect, noted: bool) -> R
 /// Whether setting `spec` shows a switch (else a value or a number).
 fn is_switch(spec: &SettingSpec) -> bool {
     matches!(spec.kind, SettingKind::Bool) && spec.extra().editor.is_none()
+}
+
+/// `value` as a row shows it where the UI runs right to left: the "›" that
+/// ends a value (it opens a screen) is a "‹" in front of it, at the end the
+/// value stands at. Left to right, `value` as it is.
+fn turn_chevron<'a>(style: &UiStyle, value: &'a str) -> alloc::borrow::Cow<'a, str> {
+    match value.strip_suffix('›').filter(|_| style.is_rtl()) {
+        Some(rest) if rest.trim_end().is_empty() => alloc::borrow::Cow::Borrowed("‹"),
+        Some(rest) => alloc::borrow::Cow::Owned(alloc::format!("‹ {}", rest.trim_end())),
+        None => alloc::borrow::Cow::Borrowed(value),
+    }
 }
 
 /// The widest a setting's value at the right of its row is drawn, of

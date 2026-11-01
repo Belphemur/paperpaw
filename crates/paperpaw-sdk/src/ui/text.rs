@@ -298,14 +298,17 @@ pub(crate) fn draw_row_icon(
         let text = ch.encode_utf8(&mut text);
         // Centred by its ink in a column as wide as the icons are high:
         // icons drawn with more room on one side line up with the others.
-        let column = f32::from(rect.x) + style.margin as f32;
+        // At the start of the row: its right end where the UI runs right
+        // to left.
+        let column = style.flip_x(rect, f32::from(rect.x) + style.margin as f32, size);
         let x = font.ink_across(size, text).map_or(column, |(left, right)| {
             column + (size - (right - left) as f32) / 2.0 - left as f32
         });
         draw_text(canvas, &font, None, size, x, rect, text, ink);
     }
+    let start = if style.is_rtl() { 0 } else { room };
     Rect::new(
-        rect.x + room,
+        rect.x + start,
         rect.y,
         rect.width.saturating_sub(room),
         rect.height,

@@ -2522,7 +2522,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-menu"
-version = "1.0.3"
+version = "1.0.4"
 dependencies = [
  "paperpaw-sdk",
 ]
