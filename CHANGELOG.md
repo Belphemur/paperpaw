@@ -265,6 +265,11 @@ refused too. Store, test-card and Workshop builds from commits before `e5f4a41a`
 
 ### Changed
 
+- *Store: a plugin rebuilt for a newer PaperPaw* is not offered to a device whose firmware lacks what the build
+  needs (a newer table or revision of a family of shared functions, as the library lists it in `interface`,
+  `needs_api` and `families` of the build). The page says *Needs a newer PaperPaw* in place of *Install* or *Update*,
+  and what is installed stays as it is; before, such a build was offered and the firmware refused it at the next
+  start. A library that lists none of it is read as before.
 - *Literata's bold and italic* are no longer in the firmware of the X4, X3, X4 Pro and X4 Classic (531 KB less, more
   room for updates and plugins) but a small font pack on the card, the plugin *Literata bold and italic*
   (`literata-styles`, 0.5 MB, 0 flash). The web flasher puts it on the card with the firmware; after an update

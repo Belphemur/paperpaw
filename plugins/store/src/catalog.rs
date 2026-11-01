@@ -55,6 +55,7 @@ use paperpaw_sdk::web::{encode, join_url};
 use paperpaw_sdk::{Env, PluginKind, Plugins, Storage, Version};
 
 use crate::PLUGIN;
+use crate::needs::{Fit, Needs, Provides};
 use crate::revoked::Revocations;
 use crate::trust::{Named, Rotation};
 
@@ -132,6 +133,9 @@ pub(crate) struct Device<'a> {
     pub sdk: Version,
     /// The list is PaperPaw's own library ([`OFFICIAL_LIST`]).
     pub official: bool,
+    /// What its firmware provides code plugins (`None` where it does not
+    /// say: every build for it fits, as before).
+    pub provides: Option<Provides>,
 }
 
 impl<'a> Device<'a> {
@@ -147,6 +151,7 @@ impl<'a> Device<'a> {
                 .kernel()
                 .map_or(paperpaw_sdk::SDK_VERSION, |kernel| kernel.manifest.version),
             official: env.settings().read(&crate::CATALOG).trim() == OFFICIAL_LIST,
+            provides: env.native().map(Provides::of),
         })
     }
 }
@@ -195,6 +200,10 @@ pub(crate) struct Entry {
     pub official: bool,
     /// A community plugin, which nobody reviewed: the library says so.
     pub unreviewed: bool,
+    /// Its newest build is made for a newer PaperPaw than this device
+    /// runs (it has a table or a family of shared functions the firmware
+    /// lacks): not offered, and what is installed is kept as it is.
+    pub needs_newer: bool,
     /// Bytes to download, its code with them.
     pub size: u64,
     /// When it was first published and when its newest version, as
@@ -225,7 +234,10 @@ impl Entry {
             "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
             self.group,
             self.size,
-            u8::from(self.code) | (u8::from(self.official) << 1) | (u8::from(self.unreviewed) << 2),
+            u8::from(self.code)
+                | (u8::from(self.official) << 1)
+                | (u8::from(self.unreviewed) << 2)
+                | (u8::from(self.needs_newer) << 3),
             self.added,
             self.updated,
             clean(&self.id),
@@ -249,6 +261,7 @@ impl Entry {
             code: flags & 1 != 0,
             official: flags & 2 != 0,
             unreviewed: flags & 4 != 0,
+            needs_newer: flags & 8 != 0,
             added: f.next()?.parse().ok()?,
             updated: f.next()?.parse().ok()?,
             id: f.next()?.to_string(),
@@ -273,6 +286,10 @@ struct Build {
     /// The bytes its image takes where the device places it (its
     /// header's), where the library says.
     image_len: Option<u64>,
+    /// What it needs of the firmware, where the library says.
+    needs: Needs,
+    /// The `families` read so far, whole only with eight.
+    families: Vec<u16>,
 }
 
 /// What is known of the plugin being read.
@@ -304,6 +321,8 @@ struct Item {
     /// The build being read, and the one for this device and PaperPaw.
     build: Build,
     code: Option<PackageFile>,
+    /// A build for this device is there, but needs a newer PaperPaw.
+    needs_newer: bool,
     /// What only a plugin's page says.
     more: More,
     shot: Shot,
@@ -371,6 +390,12 @@ impl Item {
         }
     }
 
+    /// Whether no build for this device runs here but one needs a newer
+    /// PaperPaw: listed, with that said, nothing to install.
+    fn waits_for_newer(&self) -> bool {
+        self.needs_newer && self.code.is_none()
+    }
+
     /// Whether this device can install it: a data plugin, or one with code
     /// built for it, that takes the place of none of its own.
     fn fits(&self, device: &Device<'_>) -> bool {
@@ -382,10 +407,10 @@ impl Item {
             .is_some_and(|plugins| switched_off(plugins, &entry.id));
         let kind = match self.kind.as_str() {
             "data" => true,
-            "code" => self.code.is_some() || off,
+            "code" => self.code.is_some() || self.waits_for_newer() || off,
             _ => false,
         };
-        let code = self.code.is_some();
+        let code = self.code.is_some() || self.waits_for_newer();
         kind && !self.built_in
             && (off
                 || device
@@ -480,18 +505,37 @@ impl Item {
                     }
                 }
             }
-            [latest, builds, at, key] if latest == "latest" && builds == "builds" && at == "[]" => {
-                let build = &mut self.build;
-                match key.as_str() {
-                    "device" => build.device = cut(value, MAX_NAME),
-                    "abi" => build.abi = cut(value, MAX_NAME),
-                    "url" => build.url = value.to_string(),
-                    "size" => build.size = value.parse().unwrap_or(0),
-                    "sha256" => build.sha256 = value.to_ascii_lowercase(),
-                    "image_len" => build.image_len = value.parse().ok(),
-                    "rebuilt" if value == "differs" => self.more.verified = "failed".into(),
-                    _ => {}
-                }
+            [latest, builds, at, rest @ ..]
+                if latest == "latest" && builds == "builds" && at == "[]" =>
+            {
+                self.read_build(rest, value);
+            }
+            _ => {}
+        }
+    }
+
+    /// Takes what `key` (the path below a build) says.
+    fn read_build(&mut self, key: &[String], value: &str) {
+        let build = &mut self.build;
+        match key {
+            [key] => match key.as_str() {
+                "device" => build.device = cut(value, MAX_NAME),
+                "abi" => build.abi = cut(value, MAX_NAME),
+                "url" => build.url = value.to_string(),
+                "size" => build.size = value.parse().unwrap_or(0),
+                "sha256" => build.sha256 = value.to_ascii_lowercase(),
+                "image_len" => build.image_len = value.parse().ok(),
+                "needs_api" => build.needs.api = value.parse().ok(),
+                "rebuilt" if value == "differs" => self.more.verified = "failed".into(),
+                _ => {}
+            },
+            // More than eight is odd: one more is kept, so that it shows.
+            [key, item]
+                if key == "families"
+                    && item == "[]"
+                    && build.families.len() <= crate::needs::FAMILIES =>
+            {
+                build.families.push(value.parse().unwrap_or(u16::MAX));
             }
             _ => {}
         }
@@ -507,22 +551,37 @@ impl Item {
     }
 
     /// A build of `latest.builds` was read whole: kept as the plugin's
-    /// code if it is for this device and PaperPaw.
+    /// code if it is for this device and PaperPaw; one that needs a newer
+    /// PaperPaw is noted (see [`Entry::needs_newer`]).
     fn build_done(&mut self, device: &Device<'_>) {
-        let build = core::mem::take(&mut self.build);
-        let fits = build.device == device.name
+        let mut build = core::mem::take(&mut self.build);
+        let right = build.device == device.name
             && !device.code_file.is_empty()
             && device
                 .fingerprint
                 .is_some_and(|f| Fingerprint::parse(&build.abi) == Some(f));
-        if fits && self.code.is_none() {
-            self.more.image_len = build.image_len;
-            self.code = Some(PackageFile::new(
-                device.code_file.to_string(),
-                build.url,
-                build.size,
-                Digest::Sha256(build.sha256),
-            ));
+        if !right || self.code.is_some() {
+            return;
+        }
+        // The interface is the fingerprint's own (the library's `interface`
+        // field says the same, and is not taken twice).
+        build.needs.interface = Fingerprint::parse(&build.abi).map(Fingerprint::interface);
+        // Eight revisions, each a number: else the list is not read.
+        build.needs.families = <[u16; crate::needs::FAMILIES]>::try_from(build.families.as_slice())
+            .ok()
+            .filter(|f| !f.contains(&u16::MAX));
+        match device.provides.map_or(Fit::Yes, |p| p.fit(&build.needs)) {
+            Fit::Yes => {
+                self.more.image_len = build.image_len;
+                self.code = Some(PackageFile::new(
+                    device.code_file.to_string(),
+                    build.url,
+                    build.size,
+                    Digest::Sha256(build.sha256),
+                ));
+            }
+            Fit::Newer => self.needs_newer = true,
+            Fit::Older => {}
         }
     }
 
@@ -564,6 +623,9 @@ impl Item {
         if let Some(code) = &self.code {
             self.entry.code = true;
             self.entry.size = self.entry.size.saturating_add(code.size);
+        } else if self.needs_newer {
+            self.entry.code = true;
+            self.entry.needs_newer = true;
         }
         // PaperPaw's, where its own library says so (code signed with its
         // key, as the library names it, which the install checks).
