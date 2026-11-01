@@ -95,7 +95,14 @@ are reported as [SECURITY.md](../SECURITY.md) says.
   that key at the first install. An update signed by another key is
   refused, in the store, in a firmware update (which does not fetch it
   at all) and from the web flasher, with no way for the reader to accept
-  the new key; the version installed stays. From the web flasher and from a
+  the new key; the version installed stays. The one way to another key
+  is the author's **recovery key**, chosen in advance and pinned with the
+  author's key at the first install (`.paperpaw/plugin-recovery.txt`): a
+  statement it signs (`paperpaw-sign rotation`) moves the plugin to a new
+  key, and the device checks it itself (`native::keys::accept_rotation`),
+  so neither a moderator nor a taken-over server can forge one. Keys the
+  store says were **revoked** (stolen; `.paperpaw/revoked-keys.txt`) stop
+  their authors' code: the kernel does not load it (`Revoked`). From the web flasher and from a
   computer the firmware also takes a file not signed (one's own build):
   from the flasher only for a plugin that has no author's key remembered
   yet, from a computer only once the reader said yes to its code on the

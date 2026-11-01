@@ -49,6 +49,10 @@ change the plugin SDK.
 - In *Offline* a plugin can offer *Go online* outside its network screens too (a widget's *Update now*): SDK
   `Command::GoOnlineFor` (the network for a while, at most `power::MAX_ONLINE_FOR`, ten minutes; held work runs
   as in Saving), taken only from the reader's input.
+- Author keys: a recovery key chosen in advance moves a plugin to a new key by a statement the device checks
+  itself (`paperpaw-sign rotation`; SDK `native::keys`: `remember_recovery`, `rotation_message`,
+  `accept_rotation`), and the code of an author whose key the store revoked does not run
+  (`PluginProblem::Revoked`, `keys::keep_revoked`). The store does not offer either yet.
 - *All notes*, a new plugin (Tools): the books that have bookmarks or highlights with how many, a book's notes
   (a note opens the book there), and *Export as My Clippings.txt*, all notes in one file in Kindle's form
   (UTF-8 with a byte order mark, `Exports/My Clippings.txt` beside the library) that notes apps read. A book's

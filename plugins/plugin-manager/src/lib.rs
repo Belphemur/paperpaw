@@ -464,6 +464,7 @@ fn problem_key(env: &Env<'_>, problem: PluginProblem) -> &'static str {
         PluginProblem::Changed => "plugin-manager.code.changed",
         PluginProblem::OlderInterface { .. } => "plugin-manager.code.older",
         PluginProblem::NeedsNewerPaperPaw => "plugin-manager.code.needs-newer",
+        PluginProblem::Revoked => "plugin-manager.code.revoked",
         _ => "plugin-manager.failed",
     }
 }
