@@ -188,7 +188,7 @@ fn the_profile_records_live_allocations_by_site_until_freed() {
     let _alone = alone();
     PROFILE.store(true, Ordering::Relaxed);
     let buffer = track(|| Vec::<u8>::with_capacity(4321));
-    let recorded = |sites: &Mutex<Option<HashMap<usize, (usize, Backtrace)>>>| {
+    let recorded = |sites: &Mutex<Option<HashMap<usize, Site>>>| {
         sites
             .lock()
             .unwrap()
@@ -208,6 +208,30 @@ fn the_profile_records_live_allocations_by_site_until_freed() {
     // The report takes what is recorded.
     report(2);
     assert!(SITES.lock().unwrap().is_none());
+}
+
+#[test]
+fn the_profile_keeps_what_was_live_at_the_peak_after_it_is_freed() {
+    let _alone = alone();
+    reset_peak();
+    PROFILE.store(true, Ordering::Relaxed);
+    let peak = track(|| Vec::<u8>::with_capacity(PEAK_STEP * 3));
+    drop(peak);
+    let later = track(|| Vec::<u8>::with_capacity(100));
+    PROFILE.store(false, Ordering::Relaxed);
+    let sizes: Vec<usize> = AT_PEAK
+        .lock()
+        .unwrap()
+        .as_ref()
+        .map(|(_, sites)| sites.iter().map(|(size, _)| *size).collect())
+        .unwrap_or_default();
+    assert!(sizes.contains(&(PEAK_STEP * 3)), "{sizes:?}");
+    assert!(!sizes.contains(&100), "{sizes:?}");
+    // A new peak starts it anew; the report takes it.
+    drop(later);
+    reset_peak();
+    assert!(AT_PEAK.lock().unwrap().is_none());
+    report(2);
 }
 
 #[test]

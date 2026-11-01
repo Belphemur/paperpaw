@@ -558,15 +558,35 @@ fn the_heap_report_lists_the_live_heap_by_call_site() {
         (total - live).abs() < 0.2,
         "report {total} KiB, live {live} KiB"
     );
-    // The sites: largest first, in PaperPaw's code.
-    let sizes: Vec<f64> = stdout
-        .lines()
-        .skip_while(|l| !l.starts_with("live heap by call site"))
-        .skip(1)
-        .filter(|l| l.contains(" KiB "))
-        .map(|l| l.split_whitespace().next().unwrap().parse().unwrap())
-        .collect();
-    assert!(sizes.len() > 3, "{stdout}");
-    assert!(sizes.windows(2).all(|w| w[0] >= w[1]), "{sizes:?}");
+    // The sites of each part: largest first, in PaperPaw's code.
+    let sizes = |heading: &str| -> Vec<f64> {
+        stdout
+            .lines()
+            .skip_while(|l| !l.starts_with(heading))
+            .skip(1)
+            .take_while(|l| l.starts_with(' '))
+            .filter(|l| l.contains(" KiB "))
+            .map(|l| l.split_whitespace().next().unwrap().parse().unwrap())
+            .collect()
+    };
+    for heading in ["live heap by call site", "heap at the peak by call site"] {
+        let sizes = sizes(heading);
+        assert!(sizes.len() > 3, "{heading}: {stdout}");
+        assert!(
+            sizes.windows(2).all(|w| w[0] >= w[1]),
+            "{heading}: {sizes:?}"
+        );
+    }
     assert!(stdout.contains("paperpaw_"), "{stdout}");
+    // What was live at the peak: no less than what is live at the end.
+    let at_peak: f64 = stdout
+        .lines()
+        .find_map(|l| l.strip_prefix("heap at the peak by call site ("))
+        .and_then(|s| s.split_whitespace().next())
+        .and_then(|s| s.parse().ok())
+        .expect("the peak's heading");
+    assert!(
+        at_peak >= live - 0.2,
+        "at the peak {at_peak} KiB, live {live} KiB"
+    );
 }
