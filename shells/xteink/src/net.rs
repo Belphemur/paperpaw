@@ -123,6 +123,12 @@ struct Names {
     socket: SocketHandle,
     responder: paperpaw_x4::mdns::Responder,
     in_group: bool,
+    /// The claim to the plain name, while something serves (probed for
+    /// when it starts, dropped when it ends, the name changes or the
+    /// network is joined anew).
+    claim: Option<paperpaw_x4::mdns::Claim>,
+    /// How the claim stood when last looked at, for the log and the alias.
+    standing: Option<paperpaw_x4::mdns::Standing>,
 }
 
 pub struct Net {
@@ -367,6 +373,9 @@ impl Net {
         let name = core::str::from_utf8(&name).unwrap_or("?");
         if let Some(names) = &mut self.names {
             names.responder = responder;
+            // The plain name is claimed anew, with the new name or address.
+            names.claim = None;
+            names.standing = None;
             log::info!("net: answering for {name}");
             return;
         }
@@ -390,6 +399,8 @@ impl Net {
             socket: raw,
             responder,
             in_group: false,
+            claim: None,
+            standing: None,
         });
     }
 
@@ -435,29 +446,76 @@ impl Net {
         }
         let own = self.address;
         let at = u64::try_from(now().total_millis()).unwrap_or(0);
+        // The plain name: claimed when something serves (the group is
+        // joined), let go when it stops.
+        if !serving {
+            names.claim = None;
+        } else if names.claim.is_none()
+            && names.in_group
+            && let (Some(base), Some(own)) = (self.label, own)
+        {
+            let HardwareAddress::Ethernet(mac) = self.stack.hardware_addr();
+            names.claim = paperpaw_x4::mdns::Claim::new(
+                base,
+                own.address().octets(),
+                at,
+                u64::from(mac.0[5]) % 250,
+            );
+        }
         let socket = self.sockets.get_mut::<udp::Socket<'_>>(names.socket);
         let mut answers = Vec::new();
         while let Ok((query, meta)) = socket.recv() {
             let from = meta.endpoint;
-            let near = match (own, from.addr) {
-                (Some(own), IpAddress::Ipv4(source)) => paperpaw_x4::mdns::on_link(
-                    source.octets(),
-                    own.address().octets(),
-                    own.prefix_len(),
+            let (near, itself) = match (own, from.addr) {
+                (Some(own), IpAddress::Ipv4(source)) => (
+                    paperpaw_x4::mdns::on_link(
+                        source.octets(),
+                        own.address().octets(),
+                        own.prefix_len(),
+                    ),
+                    source.octets() == own.address().octets(),
                 ),
-                _ => false,
+                _ => (false, false),
             };
-            if serving
-                && near
-                && let Some(reply) = names.responder.answer(query, from.port, at)
-            {
+            if !serving || !near {
+                continue;
+            }
+            if !itself && let Some(claim) = &mut names.claim {
+                claim.heard(query, at);
+            }
+            if let Some(reply) = names.responder.answer(query, from.port, at) {
                 answers.push((reply, from));
             }
         }
-        let group = smoltcp::wire::IpEndpoint::new(
-            IpAddress::Ipv4(Self::group()),
-            paperpaw_x4::mdns::PORT,
-        );
+        let group =
+            smoltcp::wire::IpEndpoint::new(IpAddress::Ipv4(Self::group()), paperpaw_x4::mdns::PORT);
+        if let Some(claim) = &mut names.claim {
+            if let Some(probe) = claim.poll(at)
+                && let Err(e) = socket.send_slice(&probe, group)
+            {
+                log::info!("net: the probe was not sent: {e:?}");
+            }
+            let standing = claim.standing();
+            if names.standing != Some(standing) {
+                let plain = core::str::from_utf8(claim.label()).unwrap_or("?");
+                match standing {
+                    paperpaw_x4::mdns::Standing::Owned => {
+                        names.responder.set_alias(Some(claim.label()));
+                        log::info!("net: also answering for {plain}.local");
+                    }
+                    paperpaw_x4::mdns::Standing::Conflict => {
+                        names.responder.set_alias(None);
+                        log::info!("net: {plain}.local belongs to another host");
+                    }
+                    paperpaw_x4::mdns::Standing::Probing => {
+                        names.responder.set_alias(None);
+                    }
+                }
+                names.standing = Some(standing);
+            }
+        } else if names.standing.take().is_some() {
+            names.responder.set_alias(None);
+        }
         for (reply, from) in answers {
             let (bytes, to) = match reply {
                 paperpaw_x4::mdns::Reply::Group(bytes) => (bytes, group),
