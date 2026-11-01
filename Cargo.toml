@@ -170,7 +170,7 @@ paperpaw-plugin-format-docx = { path = "plugins/format-docx", version = "1.0.0" 
 paperpaw-plugin-format-images = { path = "plugins/format-images", version = "1.0.0" }
 paperpaw-plugin-wifi = { path = "plugins/wifi", version = "1.0.1" }
 paperpaw-plugin-bluetooth = { path = "plugins/bluetooth", version = "1.0.1" }
-paperpaw-plugin-power = { path = "plugins/power", version = "1.0.1" }
+paperpaw-plugin-power = { path = "plugins/power", version = "1.1.0" }
 paperpaw-plugin-file-manager = { path = "plugins/file-manager", version = "1.0.2" }
 paperpaw-plugin-transfer = { path = "plugins/transfer", version = "1.0.2" }
 paperpaw-plugin-browser = { path = "plugins/browser", version = "1.0.3" }
@@ -178,7 +178,7 @@ paperpaw-plugin-opds = { path = "plugins/opds", version = "1.0.2" }
 paperpaw-plugin-fonts-browser = { path = "plugins/fonts-browser", version = "1.0.2" }
 paperpaw-plugin-store = { path = "plugins/store", version = "1.0.2" }
 paperpaw-plugin-rules = { path = "plugins/rules", version = "1.0.3" }
-paperpaw-plugin-lock = { path = "plugins/lock", version = "1.0.2" }
+paperpaw-plugin-lock = { path = "plugins/lock", version = "1.0.3" }
 paperpaw-plugin-profiles = { path = "plugins/profiles", version = "1.0.4" }
 paperpaw-plugin-keys = { path = "plugins/keys", version = "1.0.3" }
 paperpaw-plugin-wikipedia = { path = "plugins/wikipedia", version = "1.0.1" }

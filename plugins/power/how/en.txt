@@ -3,3 +3,5 @@ Power chooses how PaperPaw spends the battery: Normal, Saving or Offline. Saving
 Change the mode in the quick panel, where Power shows the modes side by side, or in Settings under Power. There you also set the levels where Auto switches to Saving and to Offline, and whether it stays Normal while charging.
 
 In the status lines, Power mode shows a leaf while saving and a crossed-out Wi-Fi while offline, and nothing in Normal.
+
+Hold the power button to open a small menu: Sleep, Switch off (where PaperPaw can), Restart, and on touch devices Lock touch or Unlock touch. A short press still puts the device to sleep. Back leaves the menu.
