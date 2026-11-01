@@ -367,6 +367,11 @@ pub struct WidgetSpec {
     /// The cells it takes in a grid ([`WidgetSpec::cells`]); without it,
     /// the grid's width and the rows it needs.
     pub cells: Option<CellSpan>,
+    /// Reserved: zero now. A later release gives its bits a meaning, each
+    /// with a setter and a getter of its own (never by reading a set bit
+    /// another way), so specs can grow without a new plugin interface.
+    #[allow(dead_code, reason = "reserved for later releases")]
+    spare: u32,
 }
 
 impl WidgetSpec {
@@ -383,6 +388,7 @@ impl WidgetSpec {
             category: Cow::Borrowed(categories::OTHER),
             previews: None,
             cells: None,
+            spare: 0,
         }
     }
 
@@ -456,6 +462,9 @@ pub struct FixedWidget {
     category: &'static str,
     previews: Option<Id>,
     cells: Option<CellSpan>,
+    /// Reserved, as [`WidgetSpec`]'s: zero now.
+    #[allow(dead_code, reason = "reserved for later releases")]
+    spare: u32,
 }
 
 /// How a [`FixedWidget`] is made.
@@ -479,6 +488,7 @@ impl FixedWidget {
             category: categories::OTHER,
             previews: None,
             cells: None,
+            spare: 0,
         }
     }
 
@@ -491,6 +501,7 @@ impl FixedWidget {
             category: categories::OTHER,
             previews: None,
             cells: None,
+            spare: 0,
         }
     }
 

@@ -81,6 +81,11 @@ pub struct ScreenSpec {
     /// How many of it may be open at once: one for each set of params
     /// unless it says otherwise ([`Instances`]).
     pub instances: Instances,
+    /// Reserved: zero now. A later release gives its bits a meaning, each
+    /// with a setter and a getter of its own (never by reading a set bit
+    /// another way), so specs can grow without a new plugin interface.
+    #[allow(dead_code, reason = "reserved for later releases")]
+    spare: u32,
 }
 
 impl ScreenSpec {
@@ -92,6 +97,7 @@ impl ScreenSpec {
             factory,
             refresh_on_open: None,
             instances: Instances::PER_PARAMS,
+            spare: 0,
         }
     }
 
@@ -125,6 +131,9 @@ pub struct FixedScreen {
     factory: FixedFactory,
     refresh_on_open: Option<RefreshMode>,
     instances: Instances,
+    /// Reserved, as [`ScreenSpec`]'s: zero now.
+    #[allow(dead_code, reason = "reserved for later releases")]
+    spare: u32,
 }
 
 impl FixedScreen {
@@ -136,6 +145,7 @@ impl FixedScreen {
             factory,
             refresh_on_open: None,
             instances: Instances::PER_PARAMS,
+            spare: 0,
         }
     }
 

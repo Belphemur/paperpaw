@@ -329,3 +329,42 @@ fn plugins_hear_how_long_the_device_slept() {
     let slept = kernel.shared.env(Instant(0)).slept_for();
     assert_eq!(slept, Some(core::time::Duration::from_secs(3_600)));
 }
+
+/// Hears whether its sound played.
+struct Listener(Log);
+
+const PLAYED: paperpaw_sdk::event::Event<paperpaw_sdk::replies::Played> =
+    paperpaw_sdk::event::Event::new("ear.played");
+
+impl Plugin for Listener {
+    fn manifest(&self) -> Manifest {
+        Manifest::new(Id::new_static("ear"), "Ear", Version::new(1, 0, 0))
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        let log = self.0.clone();
+        r.on(PLAYED, move |_, played, _| {
+            let word = played.context.get("word").unwrap_or_default();
+            log.borrow_mut()
+                .push(alloc::format!("{word} played {}", played.played));
+        })
+    }
+}
+
+/// No shell plays sound yet (reserved): a sound asked for is answered at
+/// once, not played, with its parameters; stopping one does nothing.
+#[test]
+fn sounds_are_answered_not_played() {
+    let log = log();
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(Listener(log.clone()))
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    let sound = paperpaw_sdk::sound::Sound::new("plugins/ear/haus.ogg", &PLAYED)
+        .with(paperpaw_sdk::Params::new().with("word", "Haus"));
+    kernel.apply(Command::play_sound(sound));
+    kernel.apply(Command::StopSound);
+    kernel.run_commands();
+    assert_eq!(*log.borrow(), ["Haus played false"]);
+}

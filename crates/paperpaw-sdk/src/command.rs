@@ -928,6 +928,16 @@ pub enum Command {
     Speak(alloc::boxed::Box<Speech>),
     /// Stops speaking; no reply comes for the texts cut off.
     StopSpeaking,
+    /// Plays a sound file (reserved: no shell plays sound yet, see
+    /// [`sound`](crate::sound)). Its reply, a
+    /// [`Played`](crate::replies::Played), comes once it has played, and
+    /// at once, not played, where the device has no sound
+    /// ([`Capability::AUDIO`](crate::Capability::AUDIO)). A sound in its
+    /// place stops. Made with [`Command::play_sound`].
+    PlaySound(alloc::boxed::Box<crate::sound::Sound>),
+    /// Stops the sound playing (reserved, see [`Command::PlaySound`]); no
+    /// reply comes for it.
+    StopSound,
     /// Switches the device off once the frame is shown, where PaperPaw
     /// does so ([`Capabilities::power_off`](crate::Capabilities)): plugins
     /// hear [`events::SUSPEND`](crate::builtin::events::SUSPEND) first, and
@@ -1014,6 +1024,11 @@ impl Command {
     /// [`Command::Speak`]: speaks `speech`.
     pub fn speak(speech: Speech) -> Self {
         Command::Speak(alloc::boxed::Box::new(speech))
+    }
+
+    /// [`Command::PlaySound`]: plays `sound` (reserved).
+    pub fn play_sound(sound: crate::sound::Sound) -> Self {
+        Command::PlaySound(alloc::boxed::Box::new(sound))
     }
 
     /// [`Command::Work`]: declares `work`.

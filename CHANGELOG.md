@@ -35,6 +35,12 @@ change the plugin SDK.
 - SDK: `Slider::mirrored` for a right-to-left interface: the lowest value at the right, the track filled from
   there, `−` at the right and `+` at the left (`Slider::parts`), the left button moving it up
   (`Slider::key_step`); `SliderPart::mirrored` tells a theme's painter.
+- SDK, reserved for features known to come, so they need no new plugin interface (no effect yet):
+  `Command::PlaySound` (`sound::Sound`, reply `replies::Played`, answered at once, not played) and
+  `Command::StopSound`; `Capability::CHORDS` (key maps may bind `chord.<button>_<button>`, read and kept),
+  `Capability::PAGE_TURNER`, `Capability::HOTSPOT`; `paperpaw_table::Family::CORE` for the firmware's own
+  `core`; a spare word (zero) in `Manifest`, `ScreenSpec`, `FixedScreen`, `WidgetSpec`, `FixedWidget` and
+  `StatusItemSpec` for flags later releases give a meaning with setters of their own.
 - SDK: room for later questions without a new plugin interface: `KeyBindings::extended`,
   `ScreenMaker::extended` and `Typesetter::extended` (with `paperpaw_layout::TypesetKey`) answer `None`
   by default; none is asked yet (`docs/sdk-design.md`, rule 17).

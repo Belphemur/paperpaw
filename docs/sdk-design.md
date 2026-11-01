@@ -147,7 +147,11 @@ must leave its list.
     `Library::extended`, `Document::extended`, `KeyBindings::extended`,
     `ScreenMaker::extended`, `Typesetter::extended`. A new question is a
     new key, not a new item. Commands have `Command::Extended`, what a
-    device can do `Capability`, events their ids.
+    device can do `Capability`, events their ids. Features known to come
+    are reserved in their own typed form where they cross, answered
+    "unsupported" until a release does them: `Command::PlaySound`, chords
+    in key maps (`Capability::CHORDS`), `Family::CORE`, the spare word of
+    the specs plugins register (rule 16).
 
 18. **A new API is proposed before it is built.** Send a short sketch:
     the types and one call site. Write it out across the plugins only

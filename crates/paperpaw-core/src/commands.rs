@@ -874,6 +874,9 @@ impl Kernel {
                 self.stop_speaking();
                 self.io.focus_spoken = false;
             }
+            // No shell plays sound yet (reserved): not played, at once.
+            Command::PlaySound(sound) => self.output.commands.push(sound.answer(false)),
+            Command::StopSound => {}
             Command::Serve {
                 server,
                 port,
@@ -1002,6 +1005,7 @@ fn typed_for(command: &Command) -> Option<Option<&Params>> {
         }
         Command::Http(request) if typed(request.reply()) => Some(Some(request.params())),
         Command::Speak(speech) if typed(speech.reply()) => Some(Some(speech.params())),
+        Command::PlaySound(sound) if typed(sound.reply()) => Some(Some(sound.params())),
         Command::Serve { events, .. } | Command::Connect { events, .. } if typed(events) => {
             Some(None)
         }

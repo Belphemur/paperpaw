@@ -42,6 +42,11 @@ impl Family {
     /// Reading data: translations (`paperpaw_i18n`), settings, JSON, INI
     /// (`paperpaw_config`) and XML.
     pub const DATA: Family = Family(5);
+    /// Reserved for the firmware's own `core` and `alloc` code, which
+    /// plugins would then call rather than carry a copy of (#259: about
+    /// 8 KiB a plugin). No firmware fills it yet, and no function is in
+    /// it: a plugin file names it only once one is.
+    pub const CORE: Family = Family(6);
 
     /// The family of number `n` (below [`FAMILIES`]).
     #[must_use]

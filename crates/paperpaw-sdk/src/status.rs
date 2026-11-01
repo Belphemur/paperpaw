@@ -262,6 +262,11 @@ pub struct StatusItemSpec {
     /// line does not move when its text gets shorter (a clock's `9:59`
     /// after `10:00`); 0 for its own width.
     pub min_width: f32,
+    /// Reserved: zero now. A later release gives its bits a meaning, each
+    /// with a setter and a getter of its own (never by reading a set bit
+    /// another way), so specs can grow without a new plugin interface.
+    #[allow(dead_code, reason = "reserved for later releases")]
+    spare: u32,
 }
 
 impl StatusItemSpec {
@@ -274,6 +279,7 @@ impl StatusItemSpec {
             tap: None,
             priority: PRIORITY,
             min_width: 0.0,
+            spare: 0,
         }
     }
 

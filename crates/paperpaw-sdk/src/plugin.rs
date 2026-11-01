@@ -25,6 +25,11 @@ pub struct Manifest {
     /// How it works, at length, by language: `(language, text)`, the text
     /// plain, paragraphs apart by an empty line ([`Manifest::how`]).
     pub how: &'static [(&'static str, &'static str)],
+    /// Reserved: zero now. A later release gives its bits a meaning, each
+    /// with a setter and a getter of its own (never by reading a set bit
+    /// another way), so specs can grow without a new plugin interface.
+    #[allow(dead_code, reason = "reserved for later releases")]
+    spare: u32,
 }
 
 impl Manifest {
@@ -37,6 +42,7 @@ impl Manifest {
             description: crate::Str::new_static(""),
             uses: Uses::default(),
             how: &[],
+            spare: 0,
         }
     }
 

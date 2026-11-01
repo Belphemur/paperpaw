@@ -351,14 +351,9 @@ mod tests {
 
     fn info(id: &'static str, state: PluginState, enabled: bool) -> PluginInfo {
         PluginInfo {
-            manifest: Manifest {
-                id: Id::new_static(id),
-                name: crate::Str::new_static("Name"),
-                description: crate::Str::new_static("Does things."),
-                version: Version::new(1, 0, 0),
-                uses: crate::Uses::NOTHING,
-                how: &[],
-            },
+            manifest: Manifest::new(Id::new_static(id), "Name", Version::new(1, 0, 0))
+                .description("Does things.")
+                .uses(crate::Uses::NOTHING),
             state,
             enabled,
             required_for: RequiredFor::default(),

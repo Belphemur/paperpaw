@@ -123,6 +123,7 @@ pub mod setup;
 #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub mod shared;
 mod shared_str;
+pub mod sound;
 pub mod status;
 pub mod time;
 pub mod ui;
