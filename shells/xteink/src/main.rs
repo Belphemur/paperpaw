@@ -454,13 +454,14 @@ fn prepare() -> Ready {
     // firmware reads it.
     #[cfg(feature = "x4-classic")]
     let board = Board::take(p, probe::factory_controller(&flash));
-    #[cfg(feature = "x3")]
-    let ota = x3_panel_or_back(ota, &board.display);
-
     let (storage, card_trouble) = match card::mount(board.card) {
         Ok(storage) => (storage, None),
         Err(trouble) => (Box::new(NoStorage) as Box<dyn Storage>, Some(trouble)),
     };
+    // After the card, which the note below goes to; before anything else
+    // is written to it.
+    #[cfg(feature = "x3")]
+    let ota = x3_panel_or_back(ota, &board.display, storage.as_ref());
     // What the card keeps under PaperPaw's old name, moved before anything
     // is written to its folder (the kernel does it again, finding nothing).
     paperpaw_sdk::data::take_over_old_name(storage.as_ref());
@@ -566,15 +567,26 @@ fn prepare() -> Ready {
 
 /// An X3 with the newer UC8279d, which this build does not drive (its
 /// waveforms are not taken over): its screen would stay as it was. Said
-/// in the log, and an update on trial that brought it goes back at once
-/// to the firmware before it.
+/// in the log and in a note on the card (the firmware before it, which it
+/// goes back to, says nothing of it), and an update on trial that brought
+/// it goes back at once to that firmware.
 #[cfg(feature = "x3")]
 fn x3_panel_or_back(
     mut ota: Option<ota::Ota>,
     probe: &paperpaw_x4::probe::Probe,
+    storage: &dyn Storage,
 ) -> Option<ota::Ota> {
     if probe.x3_uc8279d() {
         log::error!("display: a UC8279d ({probe}), which this build does not drive: nothing shows");
+        let note = alloc::format!(
+            "{}",
+            paperpaw_x4::probe::X3Note {
+                probe,
+                version: env!("PAPERPAW_VERSION")
+            }
+        );
+        // Best effort: no card, no note.
+        let _ = storage.write(paperpaw_x4::probe::X3_NOTE_FILE, note.as_bytes());
         if let Some(ota) = ota.as_mut() {
             ota.give_up("this X3's display is not driven");
         }
