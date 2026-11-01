@@ -122,6 +122,8 @@ pub mod setup;
 ))]
 #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub mod shared;
+mod shared_str;
+pub mod sound;
 pub mod status;
 pub mod time;
 pub mod ui;
@@ -160,7 +162,7 @@ pub use contribution::item::Contribution;
 #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub use env::EnvParts;
 pub use env::{Capabilities, Capability, Env, Metrics};
-pub use event::{Event, EventData, EventHandler};
+pub use event::{Event, EventData, EventHandler, FixedSubscription};
 pub use fonts::{FontFace, FontHandle, FontSet, FontSpec, Fonts};
 pub use formats::{
     COVER_FIT, FormatOpener, FormatPrepared, FormatSpec, Formats, IMAGE_FIT, OpenOptions, cover_fit,
@@ -174,7 +176,10 @@ pub use menus::{
 };
 pub use params::Params;
 pub use plugin::{Manifest, Plugin, Priority, RegisterError, SlotSpec, Uses};
-pub use plugins::{PluginInfo, PluginKind, PluginProblem, PluginState, Plugins, RequiredFor};
+pub use plugins::requires;
+pub use plugins::{
+    MAX_REQUESTED_PLUGINS, PluginInfo, PluginKind, PluginProblem, PluginState, Plugins, RequiredFor,
+};
 pub use replies::{
     FolderChosen, HttpError, HttpProgress, HttpReply, ServerNotice, SocketNotice, Typed,
 };
@@ -187,6 +192,7 @@ pub use settings::{
     Choices, Editor, Level, SettingCheck, SettingError, SettingExtra, SettingGroup,
     SettingGroupSpec, SettingKind, SettingSpec, SettingValue, Settings,
 };
+pub use shared_str::Str;
 pub use version::{DATA_FORMATS, SDK_VERSION, Version};
 
 /// Round shapes' geometry: angles as on a clock face, points around a
@@ -223,9 +229,10 @@ pub mod qr {
 /// The format-independent document model (see `paperpaw-document`).
 pub mod document {
     pub use paperpaw_document::{
-        Align, Block, BlockKind, Document, DocumentError, EmbeddedFont, ImageRef, Link, LinkKind,
-        Locator, MAX_FAMILIES, MAX_INLINE_LANGS, Metadata, OffsetMap, PageProgression, Run,
-        TextStyle, TocEntry, is_external,
+        Align, Block, BlockKind, Document, DocumentError, EmbeddedFont, ImageRef,
+        LETTER_SPACING_STEPS, LineStyle, Link, LinkKind, Locator, MAX_COLUMNS, MAX_FAMILIES,
+        MAX_INLINE_LANGS, MAX_LETTER_SPACING, MIN_LETTER_SPACING, Metadata, OffsetMap,
+        PageProgression, Run, TableCell, TableRow, TextStyle, TocEntry, VerticalAlign, is_external,
     };
 }
 
@@ -236,8 +243,8 @@ pub mod document {
 pub mod layout {
     pub use paperpaw_layout::{
         BookStyles, Face, Hyphenate, LayoutContext, LayoutOptions, LineBidi, LineRun, Page,
-        PageImage, PageLine, PageNote, PieceStarts, ScriptOptions, Style, Typesetter, VERSION,
-        layout_page, line_start,
+        PageImage, PageLine, PageNote, PageRule, PieceStarts, ScriptOptions, Style, Typesetter,
+        VERSION, layout_page, line_start,
     };
     /// Lines broken as the layout breaks them (see `paperpaw-text`): for
     /// laying out text of one's own the way pages are, e.g. a note.

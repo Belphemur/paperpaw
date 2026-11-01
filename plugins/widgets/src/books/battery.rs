@@ -10,7 +10,7 @@ use alloc::string::{String, ToString};
 use paperpaw_sdk::builtin::settings::BATTERY_LOW;
 use paperpaw_sdk::ui::UiStyle;
 use paperpaw_sdk::widgets::{
-    self, Align, Frame, Padding, TextSize, Widget, WidgetLook, WidgetSpec,
+    self, Align, FixedWidget, Frame, Padding, TextSize, Widget, WidgetLook,
 };
 use paperpaw_sdk::{Canvas, Color, Env, FontHandle, Id, Point, Rect, RegisterError, Registrar};
 
@@ -71,14 +71,14 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         },
         &SETTINGS,
     )?;
-    r.add_widget(
-        WidgetSpec::new(
+    static WIDGET: [FixedWidget; 1] =
+        [FixedWidget::new(
             ID,
             "widgets.battery",
             |_| Box::new(BatteryWidget::default()),
         )
-        .category(widgets::categories::DEVICE),
-    )
+        .category(widgets::categories::DEVICE)];
+    r.add_widgets(&WIDGET)
 }
 
 /// The charge in percent and whether it charges, as last read.

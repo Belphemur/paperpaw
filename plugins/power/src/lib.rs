@@ -124,6 +124,12 @@ fn automatic(env: &Env<'_>) -> PowerLevel {
     if battery.charging && env.settings().read(&NORMAL_WHILE_CHARGING) {
         return PowerLevel::Normal;
     }
+    // The system's own saver (Android's) on: Saving at least.
+    let least = if battery.saver {
+        PowerLevel::Saving
+    } else {
+        PowerLevel::Normal
+    };
     let percent = i64::from(battery.percent);
     // Wearing one already: kept until the charge is clearly above it.
     let now = env.power().level;
@@ -136,7 +142,7 @@ fn automatic(env: &Env<'_>) -> PowerLevel {
     } else if below(&SAVING_BELOW, PowerLevel::Saving) {
         PowerLevel::Saving
     } else {
-        PowerLevel::Normal
+        least
     }
 }
 

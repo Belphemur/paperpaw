@@ -240,7 +240,7 @@ impl BatteryView {
                         "battery.shown-refreshes",
                         refreshes,
                         &[
-                            ("time", Arg::Str(&duration(env, p.shown_ms))),
+                            ("time", Arg::Str(&duration(env, u64::from(p.shown_ms)))),
                             ("count", Arg::Int(refreshes)),
                         ],
                     ),

@@ -199,7 +199,7 @@ impl Screen for ItemsScreen {
             let on = chosen.iter().position(|c| *c == id.as_str());
             let rect = if on.is_some() {
                 Reorder::draw_grip(ui.canvas(), env, &style, rect, focused);
-                Reorder::content(rect)
+                Reorder::content(rect, &style)
             } else {
                 rect
             };

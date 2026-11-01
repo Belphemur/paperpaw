@@ -87,6 +87,8 @@ const CROSSING: &[(u64, u64)] = &layouts![
     crate::SettingValue,
     crate::SettingKind,
     crate::Translator,
+    // What a `Translator` holds: a plugin's own `tr` walks its catalogs.
+    paperpaw_i18n::Catalog,
     crate::Fonts,
     crate::FontHandle<'static>,
     crate::Params,

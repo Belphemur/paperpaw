@@ -16,6 +16,8 @@ paperpaw-native = { workspace = true }
 # The number of families in a firmware's table (`abi`).
 paperpaw-table = { workspace = true }
 paperpaw-digest = { workspace = true }
+# Translation catalogs compiled for the card (`catalog`).
+paperpaw-i18n = { workspace = true }
 # A plugin's repository and release checked by the store's rules.
 paperpaw-publish = { workspace = true }
 # The firmware's reading of the partition table (check-image).

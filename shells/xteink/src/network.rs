@@ -427,7 +427,7 @@ impl Network {
                 self.asked.scan = false;
                 remote::networks(networks);
             }
-            WifiEvent::State(WifiState::Online { ssid, address }) => {
+            WifiEvent::State(WifiState::Online { ssid, address, .. }) => {
                 if let Some((asked, password)) = self.asked.connect.take() {
                     if asked == *ssid {
                         kernel.set_secret(paperpaw_sdk::wifi::keep(&asked, &password));

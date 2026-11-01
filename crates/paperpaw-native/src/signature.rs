@@ -173,6 +173,33 @@ pub fn sign(file: &[u8], seed: &[u8; 32]) -> Signature {
     }
 }
 
+/// The statement an author's recovery key signs to move `plugin` from the
+/// author's key `old` to `new` (`paperpaw_sdk::native::keys`): these
+/// bytes, exactly.
+pub fn rotation_message(plugin: &str, old: &[u8; 32], new: &[u8; 32]) -> alloc::string::String {
+    alloc::format!(
+        "paperpaw key rotation 1\n{plugin}\n{}\n{}\n",
+        paperpaw_digest::hex::encode(old),
+        paperpaw_digest::hex::encode(new)
+    )
+}
+
+/// Signs `message` (a short statement, e.g. a key rotation) with the
+/// Ed25519 key made from `seed`.
+pub fn sign_message(message: &[u8], seed: &[u8; 32]) -> [u8; 64] {
+    let pair = ed25519_compact::KeyPair::from_seed(ed25519_compact::Seed::new(*seed));
+    *pair.sk.sign(message, None)
+}
+
+/// Whether `signature` is `key`'s over `message` ([`sign_message`]).
+pub fn verify_message(key: &[u8; 32], message: &[u8], signature: &[u8; 64]) -> bool {
+    let Ok(key) = PublicKey::from_slice(key) else {
+        return false;
+    };
+    key.verify(message, &ed25519_compact::Signature::new(*signature))
+        .is_ok()
+}
+
 /// The public key of the Ed25519 key made from `seed`.
 pub fn public_key(seed: &[u8; 32]) -> [u8; 32] {
     *ed25519_compact::KeyPair::from_seed(ed25519_compact::Seed::new(*seed)).pk

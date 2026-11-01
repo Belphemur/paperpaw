@@ -119,6 +119,11 @@ pub enum WifiState {
         ssid: String,
         /// The device's address, e.g. `192.168.1.20`.
         address: String,
+        /// The name the device answers to in this network (mDNS), e.g.
+        /// `paperpaw.local`, where the shell gives one: a page can say it
+        /// beside the address, as it is easier to type. It answers to it
+        /// while a plugin serves.
+        name: Option<String>,
     },
     /// The device's own network is open ([`WifiCommand::Host`]): plugins'
     /// servers serve on it (requests to elsewhere wait, there is no way
@@ -152,6 +157,19 @@ impl WifiState {
     pub fn ssid(&self) -> Option<&str> {
         match self {
             WifiState::Joining { ssid } | WifiState::Online { ssid, .. } => Some(ssid),
+            _ => None,
+        }
+    }
+
+    /// Where a browser on another device reaches this one: its name in
+    /// the network where the shell gives one (`paperpaw.local`), else its
+    /// address; `None` without either (off, joining).
+    pub fn reach(&self) -> Option<&str> {
+        match self {
+            WifiState::Online {
+                name: Some(name), ..
+            } if !name.is_empty() => Some(name),
+            WifiState::Online { address, .. } | WifiState::Hosting { address, .. } => Some(address),
             _ => None,
         }
     }
@@ -339,9 +357,24 @@ mod tests {
         let online = WifiState::Online {
             ssid: String::from("n"),
             address: String::from("10.0.0.2"),
+            name: None,
         };
         assert!(online.is_on() && online.is_online());
         assert_eq!(online.ssid(), Some("n"));
+        assert_eq!(online.reach(), Some("10.0.0.2"));
+        let named = WifiState::Online {
+            ssid: String::from("n"),
+            address: String::from("10.0.0.2"),
+            name: Some(String::from("paperpaw.local")),
+        };
+        assert_eq!(named.reach(), Some("paperpaw.local"));
+        let unnamed = WifiState::Online {
+            ssid: String::from("n"),
+            address: String::from("10.0.0.2"),
+            name: Some(String::new()),
+        };
+        assert_eq!(unnamed.reach(), Some("10.0.0.2"));
+        assert_eq!(WifiState::Off.reach(), None);
         assert!(!WifiState::Off.is_on());
         for failure in [
             JoinFailure::NotFound,

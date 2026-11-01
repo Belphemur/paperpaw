@@ -64,12 +64,20 @@ fn the_capital_spans_its_lines_which_are_set_in_beside_it() {
     assert_eq!(cap.words, [(0, 1)]);
     assert_eq!(page.lines[1].words[0], (1, 5));
     assert!(page.lines[1].bidi.has(LineBidi::PARAGRAPH_START));
+    // Marked as the capital; the lines beside it not.
+    assert!(cap.bidi.has(LineBidi::DROP_CAP));
+    assert!(
+        page.lines[1..]
+            .iter()
+            .all(|l| !l.bidi.has(LineBidi::DROP_CAP))
+    );
     // Without one asked for, the lines as they always were.
     let plain = page_plain();
     assert_eq!(
         placed(&plain),
         [("Lorem ipsum dolor", 0.0), ("sit amet consectetur", 0.0)]
     );
+    assert!(plain.lines.iter().all(|l| !l.bidi.has(LineBidi::DROP_CAP)));
 }
 
 fn page_plain() -> Page {

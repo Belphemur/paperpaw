@@ -233,7 +233,7 @@ impl Frame {
             let (label, value) = row(index);
             let rect = if index < movable {
                 Reorder::draw_grip(ui.canvas(), env, &style, rect, focused);
-                Reorder::content(rect)
+                Reorder::content(rect, &style)
             } else {
                 rect
             };

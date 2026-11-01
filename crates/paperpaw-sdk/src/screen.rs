@@ -57,6 +57,14 @@ pub trait ScreenMaker {
         let _ = screen;
         None
     }
+
+    /// A question asked after this release, by its key and parameters:
+    /// what plugins ask of the screens later reaches a kernel built now,
+    /// which answers `None` to keys it does not know. None is asked yet.
+    fn extended(&self, key: &Id, params: &Params) -> Option<Params> {
+        let _ = (key, params);
+        None
+    }
 }
 
 /// A screen contribution.
@@ -73,6 +81,11 @@ pub struct ScreenSpec {
     /// How many of it may be open at once: one for each set of params
     /// unless it says otherwise ([`Instances`]).
     pub instances: Instances,
+    /// Reserved: zero now. A later release gives its bits a meaning, each
+    /// with a setter and a getter of its own (never by reading a set bit
+    /// another way), so specs can grow without a new plugin interface.
+    #[allow(dead_code, reason = "reserved for later releases")]
+    spare: u32,
 }
 
 impl ScreenSpec {
@@ -84,6 +97,7 @@ impl ScreenSpec {
             factory,
             refresh_on_open: None,
             instances: Instances::PER_PARAMS,
+            spare: 0,
         }
     }
 
@@ -117,6 +131,9 @@ pub struct FixedScreen {
     factory: FixedFactory,
     refresh_on_open: Option<RefreshMode>,
     instances: Instances,
+    /// Reserved, as [`ScreenSpec`]'s: zero now.
+    #[allow(dead_code, reason = "reserved for later releases")]
+    spare: u32,
 }
 
 impl FixedScreen {
@@ -128,6 +145,7 @@ impl FixedScreen {
             factory,
             refresh_on_open: None,
             instances: Instances::PER_PARAMS,
+            spare: 0,
         }
     }
 
@@ -527,14 +545,19 @@ pub trait Screen {
         false
     }
 
-    /// Whether its taps and swipes go the other way: what the key map
+    /// Which way its taps and swipes go. Right to left, what the key map
     /// binds to the left side and to a swipe to the left happens on the
-    /// right and for a swipe to the right, and the other way round, e.g.
-    /// a book whose pages go right to left
-    /// ([`PageProgression`](crate::document::PageProgression)). Buttons
-    /// stay as they are.
-    fn mirrored(&self) -> bool {
-        false
+    /// right and for a swipe to the right, and the other way round;
+    /// buttons stay as they are. By default ([`Direction::Auto`]) as the
+    /// interface goes ([`Env::direction`]): right to left in Arabic. A
+    /// screen with a direction of its own says so, e.g. a book whose
+    /// pages go right to left
+    /// ([`PageProgression`](crate::document::PageProgression)), or left
+    /// to right in an Arabic interface.
+    ///
+    /// [`Direction::Auto`]: paperpaw_lang::Direction::Auto
+    fn direction(&self) -> paperpaw_lang::Direction {
+        paperpaw_lang::Direction::Auto
     }
 
     /// When it shows the row of hints, where it knows better than the

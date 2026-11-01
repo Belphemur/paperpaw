@@ -13,10 +13,10 @@ pub struct Manifest {
     pub id: Id,
     /// Human-readable name in English. Plugins translate it with the key
     /// `<id>.plugin.name`.
-    pub name: Cow<'static, str>,
+    pub name: crate::Str,
     /// What the plugin does, one English sentence for plugin managers.
     /// Plugins translate it with the key `<id>.plugin.description`.
-    pub description: Cow<'static, str>,
+    pub description: crate::Str,
     pub version: Version,
     /// What it uses beyond its own files, e.g. the network: shown before
     /// it is installed, and the kernel refuses what is not declared
@@ -25,6 +25,11 @@ pub struct Manifest {
     /// How it works, at length, by language: `(language, text)`, the text
     /// plain, paragraphs apart by an empty line ([`Manifest::how`]).
     pub how: &'static [(&'static str, &'static str)],
+    /// Reserved: zero now. A later release gives its bits a meaning, each
+    /// with a setter and a getter of its own (never by reading a set bit
+    /// another way), so specs can grow without a new plugin interface.
+    #[allow(dead_code, reason = "reserved for later releases")]
+    spare: u32,
 }
 
 impl Manifest {
@@ -32,16 +37,17 @@ impl Manifest {
     pub fn new(id: Id, name: impl Into<Cow<'static, str>>, version: Version) -> Self {
         Self {
             id,
-            name: name.into(),
+            name: crate::Str::new(name),
             version,
-            description: Cow::Borrowed(""),
+            description: crate::Str::new_static(""),
             uses: Uses::default(),
             how: &[],
+            spare: 0,
         }
     }
 
     pub fn description(mut self, description: impl Into<Cow<'static, str>>) -> Self {
-        self.description = description.into();
+        self.description = crate::Str::new(description);
         self
     }
 

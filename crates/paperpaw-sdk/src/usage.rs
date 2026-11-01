@@ -76,15 +76,17 @@ pub struct PluginUsage {
     pub busy_us: u64,
     /// Times its code was called.
     pub calls: u32,
-    /// Time one of its screens was on top, in milliseconds.
-    pub shown_ms: u64,
+    /// Time one of its screens was on top, in milliseconds (counts stop
+    /// at their largest value; a row is kept for every plugin, so they
+    /// are as narrow as they can be).
+    pub shown_ms: u32,
     /// Refreshes while one of its screens was on top.
     pub refreshes: Refreshes,
     /// Pixels refreshed then.
     pub pixels: u64,
     /// Bytes of storage its code read and wrote.
-    pub read: u64,
-    pub written: u64,
+    pub read: u32,
+    pub written: u32,
     /// Its requests, servers and connections that went out to the network,
     /// and those refused (Offline, its network off, not declared; see
     /// [`work`](crate::work)).
@@ -93,7 +95,7 @@ pub struct PluginUsage {
     /// Time its holds kept the device from going to sleep by itself
     /// ([`WakeHold`](crate::power::WakeHold)), in milliseconds, and the
     /// reason of its last hold.
-    pub awake_ms: u64,
+    pub awake_ms: u32,
     pub awake_reason: alloc::borrow::Cow<'static, str>,
 }
 

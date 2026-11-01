@@ -148,6 +148,9 @@ pub struct SliderPart {
     /// Where the knob's middle is.
     pub knob_x: i32,
     pub ink: Color,
+    /// The track is filled from its right end up to the knob (a slider
+    /// in a right-to-left interface, [`Slider::mirrored`](super::slider::Slider::mirrored)).
+    pub mirrored: bool,
 }
 
 /// A sheet that comes up from an edge of the screen over what is below

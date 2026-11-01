@@ -51,6 +51,7 @@ struct BuilderParts {
     /// Network settings kept in the program, by plugin.
     network_settings: &'static [crate::NetworkSettings],
     catalog_indexes: paperpaw_i18n::FixedIndexes,
+    built_catalogs: &'static paperpaw_i18n::BuiltCatalogs,
     /// The most Bluetooth links the shell keeps; none without a radio.
     bluetooth_links: u8,
 }
@@ -100,6 +101,14 @@ impl KernelBuilder {
     /// [`FixedIndexes`](paperpaw_i18n::FixedIndexes)).
     pub fn catalog_indexes(mut self, indexes: paperpaw_i18n::FixedIndexes) -> Self {
         self.0.catalog_indexes = indexes;
+        self
+    }
+
+    /// The English catalogs built in, indexed together when the program
+    /// was built: the translator keeps one catalog for all of them (see
+    /// [`BuiltCatalogs`](paperpaw_i18n::BuiltCatalogs)).
+    pub fn built_catalogs(mut self, table: &'static paperpaw_i18n::BuiltCatalogs) -> Self {
+        self.0.built_catalogs = table;
         self
     }
 
@@ -158,9 +167,12 @@ impl KernelBuilder {
         self
     }
 
-    /// A folder on the storage with font files (OpenType/TrueType) to
-    /// read with; they appear as one plugin, "font folder". Only for
-    /// devices that render scalable fonts.
+    /// A folder on the storage with font files to read with, also in
+    /// folders of its own (one level); they appear as one plugin, "font
+    /// folder". Font packs (`.ppfp`) on every device, each a face of the
+    /// family its file name gives (`Literata-BoldItalic.ppfp`), without a
+    /// `plugin.ini`; OpenType/TrueType files where scalable fonts are
+    /// drawn (the `outline` feature).
     pub fn font_dir(mut self, dir: impl Into<String>) -> Self {
         self.0.font_dirs.push(dir.into());
         self
@@ -355,6 +367,23 @@ impl KernelBuilder {
         self
     }
 
+    /// The device can do `capability` too
+    /// ([`Capabilities::has`](paperpaw_sdk::Capabilities::has)), e.g.
+    /// [`Capability::USB_DRIVE`](paperpaw_sdk::Capability::USB_DRIVE).
+    pub fn capability(mut self, capability: paperpaw_sdk::Capability) -> Self {
+        self.0.caps = self.0.caps.with(capability);
+        self
+    }
+
+    /// What the shell changes by the power level
+    /// ([`Capabilities::power`](paperpaw_sdk::Capabilities::power)), read
+    /// from [`Kernel::power`]; without, nothing beyond what every device
+    /// does.
+    pub fn power(mut self, controls: paperpaw_sdk::power::PowerControls) -> Self {
+        self.0.caps.power = controls;
+        self
+    }
+
     /// The shell turns the screen as the setting
     /// [`settings::ROTATION`](paperpaw_sdk::builtin::settings::ROTATION)
     /// says (see [`Kernel::rotation`]); without, it is not offered.
@@ -531,6 +560,7 @@ impl BuilderParts {
         let links = self.bluetooth_links;
         let mut translator = Translator::new();
         translator.fixed_indexes(self.catalog_indexes);
+        translator.built_catalogs(self.built_catalogs);
         Kernel {
             shared: Shared {
                 registry: Registry::default(),
@@ -668,6 +698,7 @@ impl BuilderParts {
             restart: false,
             sleep: false,
             power_off: false,
+            usb_drive: false,
             suspended_at: None,
             hint: hints::HintRow::new(self.button_row),
             busy_mark: self.busy_mark,
@@ -688,6 +719,7 @@ impl BuilderParts {
             holds: crate::awake::Holds::default(),
             preview_owner: None,
             next_serial: 0,
+            read_top: None,
             task: None,
             tasks: Vec::new(),
             config_unreadable: false,
@@ -777,6 +809,12 @@ impl Kernel {
         // The device's name the default of its setting.
         let name = paperpaw_sdk::device_name::default_name(&self.shared.device);
         let core: Box<dyn Plugin> = Box::new(CorePlugin(name));
+        // Their lists asked for once, at their size: the start's peak is
+        // not the lists doubled (each plugin is listed, and brings about
+        // one catalog in each language chosen).
+        let count = plugins.len() + 1;
+        self.shared.plugins.reserve(count);
+        self.shared.translator.reserve(count);
         for plugin in core::iter::once(core).chain(plugins) {
             self.add_plugin(plugin.as_ref(), &disabled);
         }
@@ -1021,7 +1059,7 @@ impl Kernel {
             )
             .description("core.setting.reading-app.format.help")
             .with_extra(&READING_APPS);
-            spec.title = title;
+            spec.title = paperpaw_sdk::Str::new(title);
             let _ = self.shared.settings.define(spec);
         }
     }
@@ -1061,10 +1099,10 @@ impl Kernel {
                 );
                 continue;
             }
-            if let Err(error) = self
-                .shared
-                .settings
-                .set_default_from_text(id.as_str(), &value)
+            if let Err(error) =
+                self.shared
+                    .settings
+                    .set_default_by(id.as_str(), &value, plugin.clone())
             {
                 self.warn(
                     WarningSource::Plugin(plugin),
@@ -1141,6 +1179,7 @@ impl Kernel {
             ),
             network_settings: &[],
             catalog_indexes: &[],
+            built_catalogs: &paperpaw_i18n::BuiltCatalogs::NONE,
             bluetooth_links: 0,
         }))
     }

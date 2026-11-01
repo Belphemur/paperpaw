@@ -110,6 +110,10 @@ pub(crate) enum InputKey {
     DoubleTap(Zone),
     /// `tap2`: two fingers tapped together.
     Tap2,
+    /// `chord.<button>_<button>`: two buttons pressed together, their
+    /// names in order (`chord.back_power` for `chord.power_back`).
+    /// Reserved (`Capability::CHORDS`): read and kept, raised by none yet.
+    Chord(String),
     /// `tap.<name>`, `long-tap.<name>` of a layer's own zone
     /// (`[zones.<layer>]`): whether it is long, its name.
     ZoneTap(bool, String),
@@ -176,6 +180,7 @@ impl InputKey {
             InputKey::Edge(side) => format!("edge.{}", side_id(*side)),
             InputKey::Pinch(out) => String::from(if *out { "pinch.out" } else { "pinch.in" }),
             InputKey::Tap2 => String::from("tap2"),
+            InputKey::Chord(buttons) => format!("chord.{buttons}"),
             InputKey::ZoneTap(false, name) => format!("tap.{name}"),
             InputKey::ZoneTap(true, name) => format!("long-tap.{name}"),
             InputKey::Named(id) => format!("input.{id}"),
@@ -233,6 +238,12 @@ impl InputKey {
             "gestures" if name == "policy" => Some(InputKey::Policy),
             "pinch" if name == "out" => Some(InputKey::Pinch(true)),
             "pinch" if name == "in" => Some(InputKey::Pinch(false)),
+            "chord" => {
+                let (a, b) = name.split_once('_')?;
+                let (a, b) = (button(a)?, button(b)?);
+                let (a, b) = if b < a { (b, a) } else { (a, b) };
+                (a != b).then(|| InputKey::Chord(format!("{a}_{b}")))
+            }
             _ => None,
         }
     }
@@ -621,8 +632,44 @@ mod tests {
             "input.my.chord",
             "gesture.my.flick",
             "gestures.policy",
+            "chord.back_power",
+            "chord.hid.left_hid.right",
         ] {
             assert_eq!(InputKey::parse(name).unwrap().name(), name);
         }
+    }
+
+    /// Chords name their buttons in order, two different ones (reserved:
+    /// read and kept, raised by none yet).
+    #[test]
+    fn chords_are_read_in_order() {
+        let chord = InputKey::parse("chord.power_back").unwrap();
+        assert_eq!(chord.name(), "chord.back_power");
+        for bad in [
+            "chord.power",
+            "chord.power_power",
+            "chord._back",
+            "chord.a_b_c",
+            "chord.A_b",
+        ] {
+            assert_eq!(InputKey::parse(bad), None, "{bad}");
+        }
+        let mut keymap = Keymap::default();
+        let problems = keymap.load(
+            "[keymap.global]\nchord.power_back = core.home\n",
+            Origin::Plugin,
+            true,
+        );
+        assert!(problems.is_empty(), "{problems:?}");
+    }
+
+    /// No later question about the bindings is known yet: each answers
+    /// `None`.
+    #[test]
+    fn later_questions_get_no_answer() {
+        use paperpaw_sdk::keys::KeyBindings;
+        let keymap = Keymap::default();
+        let key = paperpaw_sdk::Id::new_static("core.chords");
+        assert_eq!(keymap.extended(&key, &paperpaw_sdk::Params::new()), None);
     }
 }

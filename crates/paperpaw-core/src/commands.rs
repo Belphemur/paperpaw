@@ -90,6 +90,7 @@ impl Kernel {
             restart: mem::take(&mut self.restart),
             sleep: mem::take(&mut self.sleep),
             power_off: mem::take(&mut self.power_off),
+            usb_drive: mem::take(&mut self.usb_drive),
             pace: mode.frame_interval(),
             ..Effects::default()
         };
@@ -232,6 +233,7 @@ impl Kernel {
             self.sleep_due(),
             shot,
             self.network_deadline(),
+            self.online_ends(),
             self.bluetooth_deadline(),
             self.escape_due(),
         ]
@@ -257,7 +259,20 @@ impl Kernel {
         self.keep_notes();
         // The next call is the reader's only if it says so.
         self.shared.reader = false;
+        self.forget_read_messages();
         effects
+    }
+
+    /// Forgets the messages read from catalogs on the card (ADR 0033),
+    /// none lent out now: when the screen on top changed, and once they
+    /// near the most that is read.
+    fn forget_read_messages(&mut self) {
+        let top = self.stack.last().map(|s| s.serial);
+        let full = self.shared.translator.read_bytes() > paperpaw_i18n::MAX_READ / 4 * 3;
+        if top != self.read_top || full {
+            self.shared.translator.forget_read();
+            self.read_top = top;
+        }
     }
 
     pub(crate) fn run_commands(&mut self) {
@@ -380,13 +395,18 @@ impl Kernel {
             | Command::CancelWork(..)
             | Command::CancelHttp(_)
             | Command::Wear(_)
-            | Command::GoOnline) => self.apply_work(command),
+            | Command::GoOnline
+            | Command::GoOnlineFor(_)) => self.apply_work(command),
             Command::Restart => self.restart = true,
             Command::LoadPlugin(folder) => self.load_plugin(&folder),
             Command::RemovePlugin(id) => self.remove_plugin(&id),
             Command::InstallPlugin(id, folder) => self.install_plugin(&id, &folder),
+            Command::RequestPlugins { by, plugins } => self.request_plugins(by, plugins),
             Command::Sleep => self.sleep = self.shared.caps.sleep,
             Command::PowerOff => self.power_off = self.shared.caps.power_off,
+            Command::UsbDrive => {
+                self.usb_drive = self.shared.caps.has(paperpaw_sdk::Capability::USB_DRIVE);
+            }
             Command::KeepAwake(hold) => self.keep_awake(hold),
             Command::LetSleep(id) => self.let_sleep(&id),
             // Keys of later releases: none known yet, left as they are.
@@ -539,7 +559,9 @@ impl Kernel {
         {
             let _running = self.shared.meter.enter(plugin.as_str());
             let from = self.output.commands.len();
-            handing(&mut self.output.commands, |out| handler(&env, params, out));
+            handing(&mut self.output.commands, |out| {
+                handler.call(&env, params, out)
+            });
             let reserved = Reserved::of(&self.shared.settings, &self.shared.registry);
             let out = &mut self.output.commands;
             refused_secret |= vet_reserved(out, from, plugin.as_str(), &reserved);
@@ -618,7 +640,9 @@ impl Kernel {
         {
             let _running = self.shared.meter.enter(plugin.as_str());
             let from = self.output.commands.len();
-            handing(&mut self.output.commands, |out| handler(&env, params, out));
+            handing(&mut self.output.commands, |out| {
+                handler.call(&env, params, out)
+            });
             let reserved = Reserved::of(&self.shared.settings, &self.shared.registry);
             vet_reserved(&mut self.output.commands, from, plugin.as_str(), &reserved);
         }
@@ -850,6 +874,9 @@ impl Kernel {
                 self.stop_speaking();
                 self.io.focus_spoken = false;
             }
+            // No shell plays sound yet (reserved): not played, at once.
+            Command::PlaySound(sound) => self.output.commands.push(sound.answer(false)),
+            Command::StopSound => {}
             Command::Serve {
                 server,
                 port,
@@ -978,6 +1005,7 @@ fn typed_for(command: &Command) -> Option<Option<&Params>> {
         }
         Command::Http(request) if typed(request.reply()) => Some(Some(request.params())),
         Command::Speak(speech) if typed(speech.reply()) => Some(Some(speech.params())),
+        Command::PlaySound(sound) if typed(sound.reply()) => Some(Some(sound.params())),
         Command::Serve { events, .. } | Command::Connect { events, .. } if typed(events) => {
             Some(None)
         }

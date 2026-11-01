@@ -152,7 +152,8 @@ differently; a plugin must keep that mapping.
 A plugin without code is a folder, `plugins/<id>/`, with a `plugin.ini`
 and the files below. The kernel reads them at the start
 (`crates/paperpaw-core/src/data_plugin.rs`). Together they may take at
-most 96 KiB, and the translations another 512 KiB. Each file may take
+most 96 KiB, and the translations another 512 KiB (compiled ones,
+`i18n/*.ppcat`, are not counted: they stay on the card). Each file may take
 at most 64 KiB, and `plugin.ini` at most 4 KiB. The files of formats 3
 may take at most 24 KiB of the 96 KiB, and `points/` holds at most 16
 files. `paperpaw-dev check` says where a folder holds a file PaperPaw
@@ -195,8 +196,9 @@ so a plugin without code cannot set it.
 
 | Path | Format | Read by, for | Since formats |
 |------|--------|--------------|---------------|
-| `plugin.ini` | ini: `[plugin]` with `id`, `name`, `description`, `version`, `formats`; `[extends]`, `[family]` and `[fonts]` (formats 3) where it brings fonts | the kernel: the plugin, its fonts, the fonts bound to roles | 1 |
+| `plugin.ini` | ini: `[plugin]` with `id`, `name`, `description`, `version`, `formats`; `[extends]`, `[family]` and `[fonts]` (formats 3) where it brings fonts; `requires` (formats 4): the plugins it needs, ids apart by commas, each with the version it needs at least after a space (`requires = stats, vocabulary 1.2.0`, at most 16) | the kernel: the plugin, its fonts, the fonts bound to roles; `requires` the store, which fetches what is missing with the plugin, and the plugin manager (`paperpaw_sdk::requires`); the kernel starts a plugin whatever it requires | 1 |
 | `i18n/<lang>.ini` | a translation catalog: `[meta]` (`language`, `name`, `plural`; optional `direction`, `script`, `digits`, `calendar`) and `[messages]` | the kernel: texts of any plugin, also a whole new language | 1 |
+| `i18n/<lang>.ppcat` | the same catalog compiled (`paperpaw-sign catalog <lang>.ini <lang>.ppcat`): its messages stay on the card and are read as they are needed, so a language of any size takes about a kilobyte (ADR 0033); an `.ini` of the same language beside it is left to older versions | the kernel, as `i18n/<lang>.ini` | 4 |
 | `settings.ini` | ini: a section per plugin, a key per setting, as `paperpaw.ini` writes them | the kernel: new defaults for any plugin's settings (a theme, a home screen, a logo) | 1 |
 | `keymap.ini` | ini: `[keymap.<layer>]` sections, `button.<name> = <action>` | the kernel: what buttons, taps and swipes do | 1 |
 | `styles.css` | CSS | the reader: a stylesheet for books, after a book's own | 1 |

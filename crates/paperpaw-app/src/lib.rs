@@ -180,6 +180,12 @@ pub static NETWORK_SETTINGS: &[paperpaw_core::NetworkSettings] = paperpaw_core::
 pub static CATALOG_INDEXES: &[(u64, &[u16])] =
     include!(concat!(env!("OUT_DIR"), "/catalog_indexes.rs"));
 
+/// The first-party plugins' English catalogs indexed together when the
+/// program was built (see `build.rs`): the translator keeps one catalog
+/// for all of them.
+pub static BUILT_CATALOGS: paperpaw_i18n::BuiltCatalogs =
+    include!(concat!(env!("OUT_DIR"), "/built_catalogs.rs"));
+
 /// Adds the first-party plugins to `builder`, those the store offers as
 /// files too as `store` says.
 pub fn install_with(
@@ -189,7 +195,8 @@ pub fn install_with(
 ) -> KernelBuilder {
     let builder = builder
         .network_settings(NETWORK_SETTINGS)
-        .catalog_indexes(CATALOG_INDEXES);
+        .catalog_indexes(CATALOG_INDEXES)
+        .built_catalogs(&BUILT_CATALOGS);
     let builder = match fonts {
         #[cfg(feature = "outline")]
         Fonts::Outline => builder.plugin(paperpaw_plugin_fonts_default::DefaultFonts),

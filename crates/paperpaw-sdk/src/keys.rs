@@ -262,6 +262,15 @@ pub trait KeyBindings {
         let _ = layer;
         Vec::new()
     }
+
+    /// A question asked after this release, by its key and parameters
+    /// (e.g. about chords of buttons): what plugins ask of the bindings
+    /// later reaches a kernel built now, which answers `None` to keys it
+    /// does not know. None is asked yet.
+    fn extended(&self, key: &Id, params: &crate::Params) -> Option<crate::Params> {
+        let _ = (key, params);
+        None
+    }
 }
 
 /// Where a binding comes from ([`KeyBindings::bindings`]); later ones

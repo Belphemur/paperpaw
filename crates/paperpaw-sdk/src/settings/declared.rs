@@ -2,10 +2,10 @@
 //! defaults, bounds and help.
 
 #[cfg(any(test, feature = "kernel"))]
-use alloc::borrow::Cow;
-
 #[cfg(any(test, feature = "kernel"))]
 use super::{SettingError, SettingKind, Settings};
+#[cfg(any(test, feature = "kernel"))]
+use crate::Id;
 
 #[cfg(any(test, feature = "kernel"))]
 impl Settings {
@@ -15,6 +15,21 @@ impl Settings {
     pub fn set_default_from_text(&mut self, id: &str, text: &str) -> Result<(), SettingError> {
         let spec = self.specs.get_mut(id)?;
         spec.default = spec.parse(text).ok_or(SettingError::InvalidValue)?;
+        Ok(())
+    }
+
+    /// Changes a setting's default as plugin `by` gives it (its
+    /// `settings.ini` or [`Registrar::set_setting_default`](crate::Registrar::set_setting_default)),
+    /// which [`Settings::default_from`] names from then on (where the
+    /// setting is another plugin's).
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+    pub fn set_default_by(&mut self, id: &str, text: &str, by: Id) -> Result<(), SettingError> {
+        self.set_default_from_text(id, text)?;
+        let setting = self.specs.get_mut(id)?.id.clone();
+        // A plugin's own settings: their own default, nothing to tell.
+        if setting.namespace() != by.as_str() {
+            self.defaults_by.insert(setting, by);
+        }
         Ok(())
     }
 
@@ -41,7 +56,7 @@ impl Settings {
     pub fn set_description(&mut self, id: &str, key: &'static str) -> bool {
         match self.specs.get_mut(id) {
             Ok(spec) => {
-                spec.description = Some(Cow::Borrowed(key));
+                spec.description = Some(crate::Str::new_static(key));
                 true
             }
             Err(_) => false,

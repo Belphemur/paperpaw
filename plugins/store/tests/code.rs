@@ -317,14 +317,44 @@ fn with_room(total: u64) -> Shared {
 
 /// As [`with_room`], for `most` code plugins at most.
 fn with_room_for(total: u64, most: u32) -> Shared {
+    with_room_line(&format!("{total} 4096 4096 {most} 1 0\n"))
+}
+
+/// A storage whose shell kept the room as `room` says, another code
+/// plugin taking one page.
+fn with_room_line(room: &str) -> Shared {
     let storage = Shared::default();
-    let room = format!("{total} 4096 4096 {most} 1 0\n");
     storage
         .write(".paperpaw/code-room.txt", room.as_bytes())
         .unwrap();
     let other = ppn(BUILD, Some(&OTHER));
     storage.write("plugins/other/code.ppn", &other).unwrap();
     storage
+}
+
+/// Where the shell says a full flash gives more room (a smaller layout
+/// than PaperPaw's own), the web flasher is named; elsewhere it is not.
+#[test]
+fn the_web_flasher_is_named_only_where_the_shell_says_it_gives_more() {
+    for (room, named) in [
+        ("8192 4096 4096 83 1 0 2400000\n", true),
+        ("8192 4096 4096 83 1 0 0\n", false),
+        ("8192 4096 4096 83 1 0\n", false),
+    ] {
+        let storage = with_room_line(room);
+        let mut shopping = Shopping::with(Some("x4"), Some(native()), &list("1.0.0"), storage);
+        shopping.choose("Reading");
+        shopping.choose("Clock");
+        let code = ppn(BUILD, Some(&AUTHOR));
+        let body = page("1.0.0", &code).replace(
+            r#""device": "x4", "abi""#,
+            r#""device": "x4", "image_len": 8192, "abi""#,
+        );
+        shopping.serve(PAGE, body.as_bytes());
+        let shown = shopping.shown();
+        assert!(shown.contains("Not enough room"), "{shown}");
+        assert_eq!(shown.contains("web flasher"), named, "{room}: {shown}");
+    }
 }
 
 #[test]

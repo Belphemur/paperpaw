@@ -14,6 +14,12 @@ use crate::builtin::{fonts, slots};
 use crate::id::Id;
 use crate::plugin::Manifest;
 
+pub mod requires;
+
+/// The most plugins one [`Command::RequestPlugins`](crate::Command::RequestPlugins)
+/// asks for; those past it are left out.
+pub const MAX_REQUESTED_PLUGINS: usize = 32;
+
 /// What [`RequiredFor`] can name: the standard slots and the UI font.
 static ESSENTIALS: [Id; 6] = [
     slots::HOME,
@@ -124,6 +130,9 @@ pub enum PluginProblem {
     },
     /// Its code needs a newer PaperPaw: an update of PaperPaw runs it.
     NeedsNewerPaperPaw,
+    /// The key its author signed it with was revoked (stolen): it does not
+    /// run ([`native::keys`](crate::native::keys)).
+    Revoked,
     /// A cause this build has no variant for, by its code (0: not said).
     /// Codes are listed here as they are given and never reused; a build
     /// that doesn't know one treats it as the most general failure of its
@@ -313,6 +322,15 @@ impl Plugins {
         self.list.iter_mut().find(|p| p.manifest.id.as_str() == id)
     }
 
+    /// Room for `additional` more plugins, asked for once before they
+    /// register: the list then never grows by doubling at the start (the
+    /// start's peak on small devices).
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+    pub fn reserve(&mut self, additional: usize) {
+        self.list.reserve_exact(additional);
+    }
+
     #[cfg(any(test, feature = "kernel"))]
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn shrink_to_fit(&mut self) {
@@ -333,14 +351,9 @@ mod tests {
 
     fn info(id: &'static str, state: PluginState, enabled: bool) -> PluginInfo {
         PluginInfo {
-            manifest: Manifest {
-                id: Id::new_static(id),
-                name: Cow::Borrowed("Name"),
-                description: Cow::Borrowed("Does things."),
-                version: Version::new(1, 0, 0),
-                uses: crate::Uses::NOTHING,
-                how: &[],
-            },
+            manifest: Manifest::new(Id::new_static(id), "Name", Version::new(1, 0, 0))
+                .description("Does things.")
+                .uses(crate::Uses::NOTHING),
             state,
             enabled,
             required_for: RequiredFor::default(),

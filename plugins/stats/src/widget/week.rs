@@ -7,7 +7,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::widgets::{
-    self, Align, Frame, Padding, Widget, WidgetLook, WidgetSpec, WidgetTarget,
+    self, Align, FixedWidget, Frame, Padding, Widget, WidgetLook, WidgetTarget,
 };
 use paperpaw_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec};
 
@@ -72,10 +72,12 @@ pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         &SPEC
     })?;
     r.add_settings(&SETTINGS)?;
-    r.add_widget(
-        WidgetSpec::new(WEEK, "stats.widget.week", |_| Box::new(Week::default()))
-            .category(widgets::categories::READING),
-    )
+    static WIDGET: [FixedWidget; 1] =
+        [
+            FixedWidget::new(WEEK, "stats.widget.week", |_| Box::new(Week::default()))
+                .category(widgets::categories::READING),
+        ];
+    r.add_widgets(&WIDGET)
 }
 
 /// A day shown: its weekday, seconds read, and whether it is still to

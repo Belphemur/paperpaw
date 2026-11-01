@@ -207,6 +207,7 @@ fn optional_network_work_waits_until_the_radio_is_on() {
         WifiEvent::State(WifiState::Online {
             ssid: "Home".into(),
             address: "10.0.0.2".into(),
+            name: None,
         }),
     );
     assert_eq!(*log.borrow(), ["wk.weather online"]);
@@ -701,6 +702,59 @@ fn offline_lets_out_only_what_the_reader_went_online_for() {
     kernel.apply(request());
     kernel.finish();
     assert!(kernel.io.http.busy(), "{:?}", log.borrow());
+}
+
+/// Gone online for a while outside a screen of the network (a widget's
+/// *Update now*): background work goes out too until the while ends; a
+/// plugin cannot send it for itself, and it lasts ten minutes at most.
+#[test]
+fn offline_lets_out_everything_for_the_while_the_reader_went_online_for() {
+    let log = log();
+    let mut kernel = kernel(&log, true);
+    kernel.shared.power = paperpaw_sdk::power::Power::new(
+        paperpaw_sdk::power::PowerLevel::Offline,
+        paperpaw_sdk::power::OFFLINE,
+        false,
+        4,
+    );
+    let request = || {
+        Command::http(paperpaw_sdk::HttpRequest::get(
+            "https://example.org/",
+            Id::new_static("wk.answered"),
+        ))
+    };
+    // Sent by background work: not taken.
+    kernel.shared.reader = false;
+    kernel.apply(Command::GoOnlineFor(Duration::from_secs(60)));
+    kernel.apply(request());
+    kernel.finish();
+    assert_eq!(*log.borrow(), ["answered offline"]);
+    // The reader's: background work goes out within it.
+    kernel.shared.reader = true;
+    kernel.apply(Command::GoOnlineFor(Duration::from_secs(3600)));
+    kernel.shared.reader = false;
+    assert_eq!(
+        kernel.works.online_until,
+        Some(kernel.now.add_millis(10 * 60 * 1000))
+    );
+    let effects = kernel.finish();
+    assert!(
+        effects
+            .wake_at()
+            .is_some_and(|at| at <= kernel.now.add_millis(600_000))
+    );
+    kernel.apply(request());
+    kernel.finish();
+    assert!(kernel.io.http.busy(), "{:?}", log.borrow());
+    // After it: refused again.
+    let _ = kernel.io.http.take();
+    kernel.now = kernel.now.add_millis(600_001);
+    kernel.apply(request());
+    kernel.finish();
+    assert_eq!(
+        log.borrow().last().map(String::as_str),
+        Some("answered offline")
+    );
 }
 
 #[test]

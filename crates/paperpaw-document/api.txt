@@ -27,6 +27,7 @@ pub paperpaw_document::BlockKind::Heading(u8)
 pub paperpaw_document::BlockKind::Image
 pub paperpaw_document::BlockKind::Paragraph
 pub paperpaw_document::BlockKind::Preformatted
+pub paperpaw_document::BlockKind::TableRow
 #[non_exhaustive] pub enum paperpaw_document::DocumentError
 pub paperpaw_document::DocumentError::Malformed(alloc::borrow::Cow<'static, str>)
 pub paperpaw_document::DocumentError::NotReady
@@ -39,6 +40,11 @@ pub fn paperpaw_document::DocumentError::from(paperpaw_platform::storage::Storag
 impl core::error::Error for paperpaw_document::DocumentError
 impl core::fmt::Display for paperpaw_document::DocumentError
 pub fn paperpaw_document::DocumentError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum paperpaw_document::LineStyle
+pub paperpaw_document::LineStyle::Dotted
+pub paperpaw_document::LineStyle::Double
+pub paperpaw_document::LineStyle::Solid
+pub paperpaw_document::LineStyle::Wavy
 #[non_exhaustive] pub enum paperpaw_document::LinkKind
 pub paperpaw_document::LinkKind::Back
 pub paperpaw_document::LinkKind::NoteRef
@@ -47,6 +53,10 @@ pub paperpaw_document::LinkKind::Plain
 #[non_exhaustive] pub enum paperpaw_document::PageProgression
 pub paperpaw_document::PageProgression::LeftToRight
 pub paperpaw_document::PageProgression::RightToLeft
+pub enum paperpaw_document::VerticalAlign
+pub paperpaw_document::VerticalAlign::Bottom
+pub paperpaw_document::VerticalAlign::Middle
+pub paperpaw_document::VerticalAlign::Top
 #[non_exhaustive] pub struct paperpaw_document::Annotation
 pub paperpaw_document::Annotation::end: u32
 pub paperpaw_document::Annotation::kind: paperpaw_document::AnnotationKind
@@ -77,6 +87,7 @@ pub paperpaw_document::Block::runs: alloc::vec::Vec<paperpaw_document::Run>
 pub paperpaw_document::Block::size: core::option::Option<u16>
 pub paperpaw_document::Block::space: core::option::Option<u16>
 pub paperpaw_document::Block::start: u32
+pub paperpaw_document::Block::table: core::option::Option<alloc::boxed::Box<paperpaw_document::TableRow>>
 pub paperpaw_document::Block::text: alloc::string::String
 pub paperpaw_document::Block::writing_mode: paperpaw_lang::WritingMode
 impl paperpaw_document::Block
@@ -159,11 +170,34 @@ pub paperpaw_document::Run::start: u32
 pub paperpaw_document::Run::style: paperpaw_document::TextStyle
 impl paperpaw_document::Run
 pub const fn paperpaw_document::Run::new(u32, u32, paperpaw_document::TextStyle) -> paperpaw_document::Run
+#[non_exhaustive] pub struct paperpaw_document::TableCell
+pub paperpaw_document::TableCell::align: paperpaw_document::Align
+pub paperpaw_document::TableCell::end: u32
+pub paperpaw_document::TableCell::rows: u8
+pub paperpaw_document::TableCell::span: u8
+pub paperpaw_document::TableCell::vertical: paperpaw_document::VerticalAlign
+impl paperpaw_document::TableCell
+pub const fn paperpaw_document::TableCell::align(self, paperpaw_document::Align) -> Self
+pub const fn paperpaw_document::TableCell::new(u32) -> Self
+pub const fn paperpaw_document::TableCell::rows(self, u8) -> Self
+pub const fn paperpaw_document::TableCell::span(self, u8) -> Self
+pub const fn paperpaw_document::TableCell::vertical(self, paperpaw_document::VerticalAlign) -> Self
+#[non_exhaustive] pub struct paperpaw_document::TableRow
+pub paperpaw_document::TableRow::cells: alloc::boxed::Box<[paperpaw_document::TableCell]>
+pub paperpaw_document::TableRow::columns: alloc::boxed::Box<[u16]>
+pub paperpaw_document::TableRow::first: bool
+pub paperpaw_document::TableRow::header: bool
+pub paperpaw_document::TableRow::last: bool
+impl paperpaw_document::TableRow
+pub fn paperpaw_document::TableRow::new(alloc::boxed::Box<[paperpaw_document::TableCell]>) -> Self
+pub fn paperpaw_document::TableRow::ranges(&self, usize) -> impl core::iter::traits::iterator::Iterator<Item = core::ops::range::Range<usize>> + '_
+pub fn paperpaw_document::TableRow::weights(&self) -> impl core::iter::traits::iterator::Iterator<Item = u32> + '_
 pub struct paperpaw_document::TextStyle(_)
 impl paperpaw_document::TextStyle
 pub const paperpaw_document::TextStyle::BOLD: paperpaw_document::TextStyle
 pub const paperpaw_document::TextStyle::BOLD_ITALIC: paperpaw_document::TextStyle
 pub const paperpaw_document::TextStyle::ITALIC: paperpaw_document::TextStyle
+pub const paperpaw_document::TextStyle::OVERLINE: paperpaw_document::TextStyle
 pub const paperpaw_document::TextStyle::REGULAR: paperpaw_document::TextStyle
 pub const paperpaw_document::TextStyle::SMALL_CAPS: paperpaw_document::TextStyle
 pub const paperpaw_document::TextStyle::STRIKE: paperpaw_document::TextStyle
@@ -176,6 +210,9 @@ pub const fn paperpaw_document::TextStyle::family(self) -> u8
 pub const fn paperpaw_document::TextStyle::from_bits(u32) -> paperpaw_document::TextStyle
 pub const fn paperpaw_document::TextStyle::italic(self) -> bool
 pub const fn paperpaw_document::TextStyle::lang_index(self) -> u8
+pub const fn paperpaw_document::TextStyle::letter_spacing(self) -> i8
+pub const fn paperpaw_document::TextStyle::line_style(self) -> paperpaw_document::LineStyle
+pub const fn paperpaw_document::TextStyle::overline(self) -> bool
 pub const fn paperpaw_document::TextStyle::small_caps(self) -> bool
 pub const fn paperpaw_document::TextStyle::strike(self) -> bool
 pub const fn paperpaw_document::TextStyle::subscript(self) -> bool
@@ -184,16 +221,22 @@ pub const fn paperpaw_document::TextStyle::underline(self) -> bool
 pub const fn paperpaw_document::TextStyle::union(self, paperpaw_document::TextStyle) -> paperpaw_document::TextStyle
 pub const fn paperpaw_document::TextStyle::with_family(self, u8) -> paperpaw_document::TextStyle
 pub const fn paperpaw_document::TextStyle::with_lang_index(self, u8) -> paperpaw_document::TextStyle
+pub const fn paperpaw_document::TextStyle::with_letter_spacing(self, i8) -> paperpaw_document::TextStyle
+pub const fn paperpaw_document::TextStyle::with_line_style(self, paperpaw_document::LineStyle) -> paperpaw_document::TextStyle
 pub const fn paperpaw_document::TextStyle::without(self, paperpaw_document::TextStyle) -> paperpaw_document::TextStyle
 pub struct paperpaw_document::TocEntry
 pub paperpaw_document::TocEntry::at: paperpaw_document::Locator
 pub paperpaw_document::TocEntry::level: u8
 pub paperpaw_document::TocEntry::title: alloc::string::String
+pub const paperpaw_document::LETTER_SPACING_STEPS: u8
+pub const paperpaw_document::MAX_COLUMNS: usize
 pub const paperpaw_document::MAX_FAMILIES: u8
 pub const paperpaw_document::MAX_INLINE_LANGS: u8
 pub const paperpaw_document::MAX_INSERTED: usize
 pub const paperpaw_document::MAX_INSERTED_TEXT: usize
 pub const paperpaw_document::MAX_LEADING_ABOVE: u16
+pub const paperpaw_document::MAX_LETTER_SPACING: i8
+pub const paperpaw_document::MIN_LETTER_SPACING: i8
 pub trait paperpaw_document::Document
 pub fn paperpaw_document::Document::block_at(&self, &dyn paperpaw_platform::storage::Storage, paperpaw_document::Locator) -> core::result::Result<core::option::Option<paperpaw_document::Block>, paperpaw_document::DocumentError>
 pub fn paperpaw_document::Document::cover(&self, &dyn paperpaw_platform::storage::Storage) -> core::result::Result<core::option::Option<paperpaw_document::ImageRef>, paperpaw_document::DocumentError>
@@ -206,6 +249,7 @@ pub fn paperpaw_document::Document::locate_xpointer(&self, &dyn paperpaw_platfor
 pub fn paperpaw_document::Document::metadata(&self) -> &paperpaw_document::Metadata
 pub fn paperpaw_document::Document::page_label(&self, &dyn paperpaw_platform::storage::Storage, paperpaw_document::Locator) -> core::option::Option<alloc::string::String>
 pub fn paperpaw_document::Document::prepare_image(&self, &dyn paperpaw_platform::storage::Storage, &paperpaw_document::ImageRef) -> core::option::Option<paperpaw_document::ImageRef>
+pub fn paperpaw_document::Document::prepare_image_larger(&self, &dyn paperpaw_platform::storage::Storage, &paperpaw_document::ImageRef, u32) -> core::option::Option<paperpaw_document::ImageRef>
 pub fn paperpaw_document::Document::progress(&self, paperpaw_document::Locator) -> f32
 pub fn paperpaw_document::Document::section_len(&self, u32) -> u32
 pub fn paperpaw_document::Document::sections(&self) -> u32

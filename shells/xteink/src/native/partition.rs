@@ -65,7 +65,7 @@ pub fn other_app(flash: &mut FlashStorage<'static>) -> Result<(u32, u32), &'stat
 /// The app partition this code runs from (its offset and size): the one
 /// holding the flash page the MMU maps this function's address to (the
 /// bootloader's choice; the OTA data may say another after an update).
-fn running_partition(flash: &mut FlashStorage<'static>) -> Result<(u32, u32), &'static str> {
+pub fn running_partition(flash: &mut FlashStorage<'static>) -> Result<(u32, u32), &'static str> {
     let here = running_partition as *const () as u32;
     let entry = here
         .checked_sub(LINK_BASE + CODE_OFFSET)

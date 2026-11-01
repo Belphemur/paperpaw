@@ -182,6 +182,7 @@ fn centred(cache: &mut GlyphCache, style: &TextStyle<'_>, letter: char, mark: ch
 /// left to right, nothing to join, shape or mirror, kerned.
 fn plain(text: &str, around: &Around) -> bool {
     !around.has(Around::NO_KERN)
+        && !crate::has_jamo(text)
         && around.base != Direction::Rtl
         && !bidi::needs_bidi(text)
         && !joins(around.before)
@@ -296,6 +297,11 @@ impl Set<'_> {
                 *k = key;
                 *m = crate::is_mark(ch) || arabic::is_mark(ch);
             }
+        }
+        // Hangul in jamo: as its syllables, where the font has them.
+        if crate::has_jamo(text) {
+            let keys = keys.get_mut(..n).unwrap_or_default();
+            crate::hangul::compose(keys, NO_GLYPH, |s| font.has_char(s));
         }
         let shown = bidi::visual_order(levels, order);
         let kern = !around.has(Around::NO_KERN);
@@ -424,6 +430,22 @@ mod tests {
 
     fn all() -> Font {
         font(&alloc::format!("{LATIN}{HEBREW}{ARABIC}"), false)
+    }
+
+    /// Hangul in jamo is set as its syllables where the font holds them
+    /// (as wide as the text written so), else as the jamo.
+    #[test]
+    fn hangul_in_jamo_is_set_as_syllables() {
+        let nfd = "\u{1112}\u{1161}\u{11AB}\u{1100}\u{116E}\u{11A8}";
+        let syllables = font("가한국", false);
+        assert!(syllables.has_char('\u{1112}') && syllables.has_char('\u{11AB}'));
+        assert_eq!(shown(&syllables, nfd, &Around::NONE), "한국");
+        let whole = measure_in(&syllables, 10.0, "한국", &Around::NONE);
+        assert_eq!(measure_in(&syllables, 10.0, nfd, &Around::NONE), whole);
+        // No syllables: the jamo are drawn (or not) as they are.
+        let latin = font("abc", false);
+        assert!(!latin.has_char('\u{1112}'));
+        assert_eq!(shown(&latin, nfd, &Around::NONE), nfd);
     }
 
     #[test]

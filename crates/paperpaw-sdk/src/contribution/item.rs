@@ -140,6 +140,8 @@ pub enum Contribution {
         event: Id,
         handler: EventHandler,
     },
+    /// Subscriptions kept in the program.
+    FixedSubscriptions(&'static [crate::event::FixedSubscription]),
     StatusItem(Box<StatusItemSpec>),
     StatusLine(Box<StatusLineSpec>),
     /// Boxed: four ids, larger than the other contributions.
@@ -174,6 +176,8 @@ pub enum Contribution {
     /// A job: work done in steps (see [`work`](crate::work)).
     Work(Box<crate::work::WorkSpec>),
     Widget(Box<WidgetSpec>),
+    /// Widgets kept in the program.
+    FixedWidgets(&'static [crate::widgets::FixedWidget]),
     SetupStep(Box<SetupStepSpec>),
     /// A preset made at start (see [`presets`](crate::presets)).
     Preset(Box<Preset>),
@@ -198,6 +202,9 @@ pub enum Contribution {
     },
     /// A translation catalog (see `paperpaw-i18n`).
     Translations(Cow<'static, str>),
+    /// A compiled translation catalog on the storage, read as needed
+    /// (see [`Registrar::add_translation_file`](crate::Registrar::add_translation_file)).
+    TranslationFile(String),
     /// A look for the parts of screens (see [`Registrar::set_ui_look`](crate::Registrar::set_ui_look)).
     #[non_exhaustive]
     UiLook {
@@ -250,7 +257,9 @@ impl Contribution {
             Contribution::ItemState { .. } => "item-state",
             Contribution::ItemDescription { .. } => "item-description",
             Contribution::ScreenHints { .. } => "screen-hints",
-            Contribution::Subscription { .. } => "subscription",
+            Contribution::Subscription { .. } | Contribution::FixedSubscriptions(_) => {
+                "subscription"
+            }
             Contribution::StatusItem(_) => "status-item",
             Contribution::StatusLine(_) => "status-line",
             Contribution::StatusPlace(_) => "status-place",
@@ -273,14 +282,14 @@ impl Contribution {
             Contribution::EventObserver(_) => "event-observer",
             Contribution::Gesture(_) => "gesture",
             Contribution::Work(_) => "work",
-            Contribution::Widget(_) => "widget",
+            Contribution::Widget(_) | Contribution::FixedWidgets(_) => "widget",
             Contribution::SetupStep(_) => "setup-step",
             Contribution::Preset(_) | Contribution::FixedPresets(_) => "preset",
             Contribution::Published { .. } => "service",
             Contribution::ToPoint { .. } => "to-point",
             Contribution::Point(_) => "point",
             Contribution::EventDeclared(_) => "event",
-            Contribution::Translations(_) => "translations",
+            Contribution::Translations(_) | Contribution::TranslationFile(_) => "translations",
             Contribution::UiLook { .. } => "ui-look",
             Contribution::Extended { .. } => "extended",
             Contribution::RenderHook(_) => "render-hook",

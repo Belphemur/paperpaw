@@ -150,6 +150,9 @@ struct Awaiting {
     reply: Id,
     context: Params,
     save_to: Option<String>,
+    /// The largest file it may save ([`HttpOptions::max_file`]): checked
+    /// again here, as a shell may not cut.
+    max_file: usize,
     /// Made while the kernel handled the reader's input.
     reader: bool,
     /// The event its progress comes as, and how far it was when last.
@@ -262,6 +265,7 @@ impl Http {
             timeout,
             want_headers,
             max_body,
+            max_file,
             ..
         } = request.options;
         let body = match request.body_from {
@@ -271,7 +275,9 @@ impl Http {
         self.next = self.next.wrapping_add(1);
         let id = self.next;
         let max_response = if request.save_to.is_some() {
-            MAX_FILE
+            max_file.map_or(MAX_FILE, |cap| {
+                usize::try_from(cap).unwrap_or(usize::MAX).min(MAX_FILE)
+            })
         } else {
             max_body.unwrap_or(self.max_response).min(MAX_RESPONSE)
         };
@@ -301,6 +307,7 @@ impl Http {
             reply: request.reply,
             context: request.params,
             save_to: request.save_to,
+            max_file: max_response,
             reader,
             progress: progress.map(|event| Progress { event, shown: None }),
         });
@@ -363,7 +370,21 @@ impl Http {
         let body = match awaiting.save_to {
             // Answers that are files: written where asked.
             Some(path) if (200..300).contains(&status) => {
-                if response.saved {
+                let saved_size = response
+                    .saved
+                    .then(|| storage.size(&path).ok())
+                    .flatten()
+                    .map_or(0, |size| usize::try_from(size).unwrap_or(usize::MAX));
+                if response.body.len().max(saved_size) > awaiting.max_file {
+                    // Larger than the plugin allowed: not kept (a shell
+                    // that wrote it itself had it replace the old file).
+                    if response.saved {
+                        let _ = storage.remove(&path);
+                    }
+                    status = 0;
+                    error = Some(HttpError::Refused);
+                    format!("larger than {} bytes", awaiting.max_file).into_bytes()
+                } else if response.saved {
                     Vec::new()
                 } else if let Err(e) = storage.write(&path, &response.body) {
                     status = 0;
@@ -529,6 +550,52 @@ mod tests {
         };
         http.answer(response, &storage, &mut out);
         assert_eq!(reply_of(&out).header("Last-Modified"), Some("Tue"));
+    }
+
+    /// A download's own cap reaches the shell (never above `MAX_FILE`),
+    /// and an answer past it is refused by the kernel too: nothing written
+    /// where the kernel writes, and a file the shell wrote itself removed.
+    #[test]
+    fn a_download_is_capped_where_the_plugin_says() {
+        let storage = MemoryStorage::new().with("old.epub", "old");
+        let mut out = Vec::new();
+        let mut http = Http::default();
+        let capped = get("https://h.org/a", Some("a.epub")).max_file(4);
+        let huge = get("https://h.org/b", Some("b.epub")).max_file(u64::MAX);
+        http.request(capped, true, false, &storage, &mut out);
+        http.request(huge, true, false, &storage, &mut out);
+        let calls = http.take();
+        assert_eq!(calls[0].max_response, 4);
+        assert_eq!(calls[1].max_response, MAX_FILE);
+        // Written by the kernel: too long, refused, nothing saved.
+        let mut response = answer(200, b"0123456789");
+        response.id = calls[0].id;
+        http.answer(response, &storage, &mut out);
+        let reply = reply_of(&out);
+        assert_eq!(reply.error, Some(HttpError::Refused));
+        assert!(storage.size("a.epub").is_err());
+        // Exactly the cap is fine.
+        let again = get("https://h.org/a", Some("a.epub")).max_file(4);
+        http.request(again, true, false, &storage, &mut out);
+        let id = http.take()[0].id;
+        let mut response = answer(200, b"0123");
+        response.id = id;
+        http.answer(response, &storage, &mut out);
+        assert_eq!(reply_of(&out).error, None);
+        assert_eq!(read_file(&storage, "a.epub", 64).unwrap(), b"0123");
+        // Written by a shell that did not cut: removed, refused.
+        let shell = get("https://h.org/c", Some("old.epub")).max_file(2);
+        http.request(shell, true, false, &storage, &mut out);
+        let id = http.take()[0].id;
+        let response = HttpResponse {
+            id,
+            status: 200,
+            saved: true,
+            ..HttpResponse::default()
+        };
+        http.answer(response, &storage, &mut out);
+        assert_eq!(reply_of(&out).error, Some(HttpError::Refused));
+        assert!(storage.size("old.epub").is_err());
     }
 
     const PROGRESS: paperpaw_sdk::event::Event<HttpProgress> =

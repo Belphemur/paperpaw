@@ -29,7 +29,10 @@ use paperpaw_sdk::PluginProblem;
 use paperpaw_sdk::native::CodeRoom;
 
 use super::api::API;
-use super::partition::{Behind, PAGE, behind_image};
+use super::partition::{Behind, PAGE, behind_image, running_partition};
+
+/// An app slot of PaperPaw's own layout (`partitions.csv`).
+const OWN_SLOT: u32 = 0x7F_0000;
 
 /// The MMU's entries (data and instruction bus share them).
 const ENTRIES: u32 = 128;
@@ -209,7 +212,13 @@ impl Flash {
                 (behind.start, end, behind.start)
             }
         };
-        Some(CodeRoom::in_flash(start, end, images_end, self.placed))
+        let room = CodeRoom::in_flash(start, end, images_end, self.placed);
+        // A slot smaller than PaperPaw's own (a CrossPoint SD install):
+        // the store says a full flash gives more.
+        Some(match running_partition(&mut self.flash.borrow_mut()) {
+            Ok((_, slot)) => room.in_slot(slot, OWN_SLOT),
+            Err(_) => room,
+        })
     }
 
     /// Writes the index, if what lies in the region changed, and gives

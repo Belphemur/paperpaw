@@ -249,6 +249,7 @@ fn a_network_chosen_on_the_phone_is_joined_and_kept() {
     t.wifi(WifiEvent::State(WifiState::Online {
         ssid: String::from("Home"),
         address: String::from("10.0.0.5"),
+        name: None,
     }));
     let secrets =
         Secrets::decode(&String::from_utf8(t.kernel.storage().read_to_vec(FILE)).unwrap());

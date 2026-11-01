@@ -186,11 +186,13 @@ pub mod paperpaw_platform::status
 pub paperpaw_platform::status::Battery::charging: bool
 pub paperpaw_platform::status::Battery::millivolts: core::option::Option<u16>
 pub paperpaw_platform::status::Battery::percent: u8
+pub paperpaw_platform::status::Battery::saver: bool
 impl paperpaw_platform::status::Battery
 pub const fn paperpaw_platform::status::Battery::new(u8, bool, core::option::Option<u16>) -> Self
 pub const fn paperpaw_platform::status::Battery::with_charging(self, bool) -> Self
 pub const fn paperpaw_platform::status::Battery::with_millivolts(self, core::option::Option<u16>) -> Self
 pub const fn paperpaw_platform::status::Battery::with_percent(self, u8) -> Self
+pub const fn paperpaw_platform::status::Battery::with_saver(self, bool) -> Self
 #[non_exhaustive] pub struct paperpaw_platform::status::SystemStatus
 pub paperpaw_platform::status::SystemStatus::battery: core::option::Option<paperpaw_platform::status::Battery>
 pub paperpaw_platform::status::SystemStatus::clock: core::option::Option<paperpaw_platform::status::WallClock>
@@ -406,11 +408,13 @@ pub fn paperpaw_platform::storage::StorageError::fmt(&self, &mut core::fmt::Form
 pub paperpaw_platform::Battery::charging: bool
 pub paperpaw_platform::Battery::millivolts: core::option::Option<u16>
 pub paperpaw_platform::Battery::percent: u8
+pub paperpaw_platform::Battery::saver: bool
 impl paperpaw_platform::status::Battery
 pub const fn paperpaw_platform::status::Battery::new(u8, bool, core::option::Option<u16>) -> Self
 pub const fn paperpaw_platform::status::Battery::with_charging(self, bool) -> Self
 pub const fn paperpaw_platform::status::Battery::with_millivolts(self, core::option::Option<u16>) -> Self
 pub const fn paperpaw_platform::status::Battery::with_percent(self, u8) -> Self
+pub const fn paperpaw_platform::status::Battery::with_saver(self, bool) -> Self
 pub struct paperpaw_platform::Color
 pub paperpaw_platform::Color::b: u8
 pub paperpaw_platform::Color::g: u8

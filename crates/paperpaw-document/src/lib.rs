@@ -29,6 +29,9 @@ pub use paperpaw_lang::{Direction, Lang, WritingMode};
 
 pub use paperpaw_platform::{DirEntry, NoStorage, Storage};
 
+mod table;
+pub use table::{MAX_COLUMNS, TableCell, TableRow, VerticalAlign};
+
 /// A reading position.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct Locator {
@@ -142,10 +145,13 @@ pub enum BlockKind {
     Preformatted,
     /// An image ([`Block::image`]); `text` is its alternative text.
     Image,
+    /// A row of a table ([`Block::table`]): its cells side by side in the
+    /// table's columns, its text their texts one after the other.
+    TableRow,
     /// A kind a later build adds, by its number, whose content is in the
     /// block's text, runs and annotations as a paragraph's is. Numbers are
     /// given here when first used and never reused; these are reserved:
-    /// 0 unspecified, 1 a table's row, 2 a list
+    /// 0 unspecified, 1 a table's row (now [`BlockKind::TableRow`]), 2 a list
     /// item, 3 a rule (a line across), 4 a figure's caption, 5 an aside
     /// (a sidebar, a note shown in place), 6 a verse line, 7 maths.
     ///
@@ -164,12 +170,12 @@ pub struct ImageRef {
 }
 
 /// The character style of a run of text: bold, italic, small capitals,
-/// superscript or subscript, underlined or struck through, the font
-/// family embedded in the document, if any (see [`Document::fonts`]), and
-/// the language of the run if it is not the block's (see
-/// [`Block::inline_langs`]).
+/// superscript or subscript, underlined, overlined or struck through (in
+/// a [`LineStyle`]), the book's letter spacing, the font family embedded
+/// in the document, if any (see [`Document::fonts`]), and the language of
+/// the run if it is not the block's (see [`Block::inline_langs`]).
 ///
-/// Bits 12 to 23 and 28 to 31 are reserved: zero now. A meaning is given
+/// Bits 20 to 23 and 28 to 31 are reserved: zero now. A meaning is given
 /// to one of them only with a new `paperpaw_layout::VERSION`, never by
 /// reading a bit already set differently.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -182,9 +188,56 @@ pub const MAX_FAMILIES: u8 = 31;
 /// ([`Block::inline_langs`]).
 pub const MAX_INLINE_LANGS: u8 = 15;
 
-/// The bits of everything but the family (bits 2 to 6) and the inline
+/// The bits of everything but the family (bits 2 to 6), the line style
+/// (bits 13 and 14), the letter spacing (bits 15 to 19) and the inline
 /// language (bits 24 to 27).
-const FLAGS: u32 = 0b1111_1000_0011;
+const FLAGS: u32 = 0b1_1111_1000_0011;
+
+/// Where the line style starts.
+const LINE_SHIFT: u32 = 13;
+
+/// Where the letter spacing starts: five bits, a signed number of
+/// [`LETTER_SPACING_STEPS`]ths of an em.
+const SPACING_SHIFT: u32 = 15;
+
+/// The steps of a run's letter spacing in an em
+/// ([`TextStyle::letter_spacing`]): a fortieth of the text's size each.
+pub const LETTER_SPACING_STEPS: u8 = 40;
+
+/// The widest letter spacing of a run, in steps
+/// ([`LETTER_SPACING_STEPS`]): 0.375 em.
+pub const MAX_LETTER_SPACING: i8 = 15;
+
+/// The tightest letter spacing of a run, in steps
+/// ([`LETTER_SPACING_STEPS`]): −0.4 em.
+pub const MIN_LETTER_SPACING: i8 = -16;
+
+/// How the lines under, over or through text are drawn
+/// ([`TextStyle::line_style`]), as CSS's `text-decoration-style`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub enum LineStyle {
+    /// One line.
+    #[default]
+    Solid,
+    /// Two lines.
+    Double,
+    /// A dotted line (also for CSS `dashed`).
+    Dotted,
+    /// A wavy line.
+    Wavy,
+}
+
+impl LineStyle {
+    /// From its number in a style (0 to 3).
+    const fn from_bits(bits: u32) -> LineStyle {
+        match bits & 3 {
+            1 => LineStyle::Double,
+            2 => LineStyle::Dotted,
+            3 => LineStyle::Wavy,
+            _ => LineStyle::Solid,
+        }
+    }
+}
 
 /// Where the inline language's index starts.
 const LANG_SHIFT: u32 = 24;
@@ -204,6 +257,8 @@ impl TextStyle {
     pub const UNDERLINE: TextStyle = TextStyle(1 << 10);
     /// A line through the text.
     pub const STRIKE: TextStyle = TextStyle(1 << 11);
+    /// A line over the text.
+    pub const OVERLINE: TextStyle = TextStyle(1 << 12);
 
     pub const fn bold(self) -> bool {
         self.0 & 1 != 0
@@ -233,8 +288,48 @@ impl TextStyle {
         self.0 & Self::STRIKE.0 != 0
     }
 
-    /// This style without what `other` sets (its family aside), e.g.
-    /// without the lines a reader chose not to see.
+    pub const fn overline(self) -> bool {
+        self.0 & Self::OVERLINE.0 != 0
+    }
+
+    /// How its lines under, over and through it are drawn.
+    pub const fn line_style(self) -> LineStyle {
+        LineStyle::from_bits(self.0 >> LINE_SHIFT)
+    }
+
+    /// This style with its lines drawn as `line`.
+    pub const fn with_line_style(self, line: LineStyle) -> TextStyle {
+        let mask = 3 << LINE_SHIFT;
+        TextStyle((self.0 & !mask) | ((line as u32) << LINE_SHIFT))
+    }
+
+    /// The book's letter spacing of the run (CSS `letter-spacing`), in
+    /// [`LETTER_SPACING_STEPS`]ths of its size (an em), from
+    /// [`MIN_LETTER_SPACING`] to [`MAX_LETTER_SPACING`]; 0 for none.
+    /// Added to the reader's own after each letter.
+    pub const fn letter_spacing(self) -> i8 {
+        let bits = ((self.0 >> SPACING_SHIFT) & 0b1_1111) as i8;
+        // Five bits, signed.
+        (bits << 3) >> 3
+    }
+
+    /// This style with a letter spacing of `steps`
+    /// ([`TextStyle::letter_spacing`]), kept within its range.
+    pub const fn with_letter_spacing(self, steps: i8) -> TextStyle {
+        let steps = if steps > MAX_LETTER_SPACING {
+            MAX_LETTER_SPACING
+        } else if steps < MIN_LETTER_SPACING {
+            MIN_LETTER_SPACING
+        } else {
+            steps
+        };
+        let mask = 0b1_1111 << SPACING_SHIFT;
+        TextStyle((self.0 & !mask) | (((steps as u8 as u32) & 0b1_1111) << SPACING_SHIFT))
+    }
+
+    /// This style without what `other` sets (its family, line style and
+    /// letter spacing aside), e.g. without the lines a reader chose not
+    /// to see.
     pub const fn without(self, other: TextStyle) -> TextStyle {
         TextStyle(self.0 & !(other.0 & FLAGS))
     }
@@ -268,7 +363,8 @@ impl TextStyle {
     }
 
     /// Both styles combined, e.g. bold text in an italic paragraph; the
-    /// family and the language are `other`'s if it has them.
+    /// family, the language, the line style and the letter spacing are
+    /// `other`'s if it has them.
     pub const fn union(self, other: TextStyle) -> TextStyle {
         let family = if other.family() != 0 {
             other.family()
@@ -280,9 +376,19 @@ impl TextStyle {
         } else {
             self.lang_index()
         };
+        let line = match other.line_style() {
+            LineStyle::Solid => self.line_style(),
+            line => line,
+        };
+        let spacing = match other.letter_spacing() {
+            0 => self.letter_spacing(),
+            spacing => spacing,
+        };
         TextStyle((self.0 | other.0) & FLAGS)
             .with_family(family)
             .with_lang_index(lang)
+            .with_line_style(line)
+            .with_letter_spacing(spacing)
     }
 
     /// For storing styles compactly.
@@ -448,6 +554,9 @@ pub struct Block {
     /// an opening quote or two), its first lines set in beside it; a
     /// paragraph of fewer lines has a smaller one, of one line none.
     pub drop_cap: u8,
+    /// The row's cells, columns and place in its table, for a block of
+    /// [`BlockKind::TableRow`]; `None` in every other block.
+    pub table: Option<alloc::boxed::Box<TableRow>>,
 }
 
 /// The most blocks a text filter inserts after one ([`Block::inserted`]).
@@ -528,6 +637,7 @@ impl Block {
             lang: Lang::NONE,
             inline_langs: None,
             drop_cap: 0,
+            table: None,
         }
     }
 
@@ -1006,6 +1116,23 @@ pub trait Document {
         None
     }
 
+    /// Decodes `image` (of one of its blocks) anew, larger than for its
+    /// page: its longer side at most `long` pixels, never larger than the
+    /// picture is (nor than 1600 pixels), into a file of its own beside
+    /// the one for the page, for a picture zoomed or shown on the whole
+    /// screen. `None` where the format cannot (a reader then enlarges the
+    /// one for the page) or the picture cannot be decoded. Asked when the
+    /// reader opens a picture, never while pages are laid out.
+    fn prepare_image_larger(
+        &self,
+        storage: &dyn Storage,
+        image: &ImageRef,
+        long: u32,
+    ) -> Option<ImageRef> {
+        let _ = (storage, image, long);
+        None
+    }
+
     /// The cover as a small gray image in storage, decoded on first use;
     /// `None` if the book has none (or the format no covers).
     fn cover(&self, storage: &dyn Storage) -> Result<Option<ImageRef>, DocumentError> {
@@ -1088,6 +1215,63 @@ pub trait Document {
 mod tests {
 
     #[test]
+    fn line_styles_overlines_and_letter_spacing_keep_to_their_bits() {
+        let style = TextStyle::BOLD
+            .union(TextStyle::OVERLINE)
+            .with_family(3)
+            .with_lang_index(2)
+            .with_line_style(LineStyle::Wavy)
+            .with_letter_spacing(-7);
+        assert!(style.bold() && style.overline() && !style.underline());
+        assert_eq!(style.line_style(), LineStyle::Wavy);
+        assert_eq!(style.letter_spacing(), -7);
+        assert_eq!((style.family(), style.lang_index()), (3, 2));
+        // Each keeps to its own bits; bits 20 to 23 and 28 to 31 stay 0.
+        for line in [
+            LineStyle::Solid,
+            LineStyle::Double,
+            LineStyle::Dotted,
+            LineStyle::Wavy,
+        ] {
+            for steps in MIN_LETTER_SPACING..=MAX_LETTER_SPACING {
+                let s = style.with_line_style(line).with_letter_spacing(steps);
+                assert_eq!((s.line_style(), s.letter_spacing()), (line, steps));
+                assert_eq!((s.family(), s.lang_index(), s.bold()), (3, 2, true));
+                assert_eq!(s.bits() & 0xF0F0_0000, 0, "{line:?} {steps}");
+            }
+        }
+        // Past the range: its ends.
+        assert_eq!(
+            TextStyle::REGULAR.with_letter_spacing(90).letter_spacing(),
+            15
+        );
+        assert_eq!(
+            TextStyle::REGULAR.with_letter_spacing(-90).letter_spacing(),
+            -16
+        );
+        // A run's own spacing and line style win over its paragraph's.
+        let heading = TextStyle::REGULAR.with_letter_spacing(4);
+        let spaced = TextStyle::UNDERLINE
+            .with_letter_spacing(-2)
+            .with_line_style(LineStyle::Double);
+        assert_eq!(heading.union(spaced).letter_spacing(), -2);
+        assert_eq!(heading.union(spaced).line_style(), LineStyle::Double);
+        assert_eq!(heading.union(TextStyle::ITALIC).letter_spacing(), 4);
+        assert_eq!(
+            spaced.union(TextStyle::ITALIC).line_style(),
+            LineStyle::Double
+        );
+        // Without the lines a reader chose not to see: the overline goes,
+        // the spacing stays.
+        let plain = style.without(TextStyle::OVERLINE.union(TextStyle::UNDERLINE));
+        assert!(!plain.overline() && plain.bold());
+        assert_eq!(plain.letter_spacing(), -7);
+        // Styles of before (bits 12 to 19 zero) read as before.
+        assert_eq!(TextStyle::from_bits(0b1111).line_style(), LineStyle::Solid);
+        assert_eq!(TextStyle::from_bits(0b1111).letter_spacing(), 0);
+    }
+
+    #[test]
     fn replacing_keeps_styles_and_positions() {
         let mut block = Block {
             kind: BlockKind::Paragraph,
@@ -1113,6 +1297,7 @@ mod tests {
             lang: Lang::NONE,
             inline_langs: None,
             drop_cap: 0,
+            table: None,
         };
         block.replace(0..3, "Mister");
         assert_eq!(block.text, "Mister Smith is here.");
@@ -1166,6 +1351,7 @@ mod tests {
             lang: Lang::NONE,
             inline_langs: None,
             drop_cap: 0,
+            table: None,
         }
     }
 

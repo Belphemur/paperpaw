@@ -882,7 +882,7 @@ that their choices go along; a shell opens a book with
 | Where a book was left | `positions::{load, save}`, `Reading::xpointer` with `BOOK_CLOSED` | readers keep it; syncs and lists read it without opening the book |
 | The contents, search, the marks, a footnote, skimming | `slots::TOC`, `SEARCH`, `ANNOTATIONS`, `FOOTNOTE`, `SKIM`, `events::FOLLOW_LINK`, `SKIM`, `SKIMMED` | bind a screen of one's own; readers open the slots, follow the links and go where skimming asks |
 | A book opened as the reader opens it | `reading::open_options`, `reading::conversion` | its places fit the reader's (a search, contents, an XPointer) |
-| Pages that go right to left | `Metadata::direction` (`PageProgression`), `Screen::mirrored` | readers mirror taps and swipes (an EPUB's `page-progression-direction`) |
+| Pages that go right to left | `Metadata::direction` (`PageProgression`), `Screen::direction` | readers mirror taps and swipes (an EPUB's `page-progression-direction`); other screens follow the interface (`Direction::Auto`) |
 | Status lines' settings | `groups::STATUS_LINES` | the group readers put them in |
 | Reading aloud's settings | `group_sections::ALOUD` | the section readers and shells put them in |
 | Key bindings while reading | the layer `[keymap.core.reader]` | the slot's layer, whichever screen fills it |
@@ -2016,6 +2016,7 @@ A data plugin is a folder:
 plugins/large-print/
   plugin.ini     [plugin] id, name, description, version, formats
   i18n/*.ini     translation catalogs (also whole new languages)
+  i18n/*.ppcat   the same compiled (paperpaw-sign catalog), read as needed
   keymap.ini     key bindings
   settings.ini   new defaults for any plugin's settings ([core] font-size = 14)
   fonts/*.ttf    fonts to read with (also .otf, .ttc), by family

@@ -83,7 +83,7 @@ impl Face {
 
 /// Changes whenever the same input is laid out differently, so readers
 /// rebuild page indexes they cached.
-pub const VERSION: u32 = 10;
+pub const VERSION: u32 = 11;
 
 /// Measures text for the layout engine; readers implement it with their
 /// fonts.
@@ -120,6 +120,27 @@ pub trait Typesetter {
             before = Some(c);
         }
         width
+    }
+
+    /// A measure later layouts ask of `c` in `face`, by `key` (e.g. its
+    /// advance down a line of vertical text): `None` where the typesetter
+    /// does not know it, and the layout does without. None is asked yet;
+    /// the keys come as constants of [`TypesetKey`].
+    fn extended(&self, face: Face, key: TypesetKey, c: char) -> Option<f32> {
+        let _ = (face, key, c);
+        None
+    }
+}
+
+/// What [`Typesetter::extended`] is asked: constants, so more can come
+/// without a new plugin interface. None is named yet.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TypesetKey(u32);
+
+impl TypesetKey {
+    /// Its number, e.g. for a typesetter that passes questions on.
+    pub const fn get(self) -> u32 {
+        self.0
     }
 }
 
@@ -505,7 +526,8 @@ pub struct LineBidi {
     /// The direction of its paragraph: 0 left to right, 1 right to left.
     pub paragraph: u8,
     /// [`LineBidi::REORDER`], [`LineBidi::VERTICAL`],
-    /// [`LineBidi::PARAGRAPH_START`]; the other bits are zero.
+    /// [`LineBidi::PARAGRAPH_START`], [`LineBidi::DROP_CAP`]; the other
+    /// bits are zero.
     pub flags: u8,
 }
 
@@ -517,6 +539,11 @@ impl LineBidi {
     pub const VERTICAL: u8 = 2;
     /// The line starts its paragraph.
     pub const PARAGRAPH_START: u8 = 4;
+    /// The line is a drop capital ([`Block::drop_cap`]): its letters set
+    /// as high as the lines beside it, its baseline that of the last of
+    /// them. Readers and page layers tell it from the paragraph's lines
+    /// by this, not by its size.
+    pub const DROP_CAP: u8 = 8;
 
     /// A line of a paragraph of `paragraph`'s direction (0 or 1) with
     /// `flags`.
@@ -588,6 +615,31 @@ pub struct LineAnnotation {
     pub size: f32,
 }
 
+/// A thin line on the page, as the reader draws it in the text's colour:
+/// a table's borders between and around its cells (see
+/// [`paperpaw_document::TableRow`]).
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
+pub struct PageRule {
+    /// Left and top edges relative to the content box, and its size: one
+    /// side is the line's thickness.
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+}
+
+impl PageRule {
+    pub const fn new(x: f32, y: f32, width: f32, height: f32) -> PageRule {
+        PageRule {
+            x,
+            y,
+            width,
+            height,
+        }
+    }
+}
+
 /// An image at its position and size on the page.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -654,6 +706,8 @@ pub struct Page {
     pub images: Vec<PageImage>,
     /// Its notes. Reserved: empty until the layout sets them.
     pub notes: Vec<PageNote>,
+    /// Thin lines the reader draws (a table's borders).
+    pub rules: Vec<PageRule>,
 }
 
 impl Page {
@@ -665,6 +719,7 @@ impl Page {
             lines,
             images,
             notes: Vec::new(),
+            rules: Vec::new(),
         }
     }
 
@@ -979,6 +1034,7 @@ pub fn layout_page(
         lines: Vec::new(),
         images: Vec::new(),
         notes: Vec::new(),
+        rules: Vec::new(),
     };
     let mut at = start;
     let mut y = 0.0f32;

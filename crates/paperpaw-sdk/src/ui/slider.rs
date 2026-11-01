@@ -27,6 +27,11 @@
 //! with buttons alone a number is changed a step at a time all the same,
 //! and a compact row with `−` and `+` serves it better ([`shows`]).
 //!
+//! In a right-to-left interface a slider is mirrored
+//! ([`Slider::mirrored`] with [`UiStyle::is_rtl`]): its lowest value at
+//! the right, the track filled from there, `−` at the right and `+` at
+//! the left, and the left button moving it up ([`Slider::key_step`]).
+//!
 //! A screen keeps a [`Slider`] for each (from a setting with
 //! [`Slider::of`]), draws rows of [`row_height`] with
 //! [`Slider::draw_row`] (what it shows in a [`SliderView`]), or only the
@@ -55,6 +60,8 @@ pub struct Slider {
     max: i64,
     /// At least 1.
     step: i64,
+    /// Its lowest value at the right ([`Slider::mirrored`]).
+    mirrored: bool,
 }
 
 /// How a slider shows the focus (see [`Slider::draw_row`]).
@@ -141,7 +148,22 @@ impl Slider {
             min,
             max: if max < min { min } else { max },
             step: 1,
+            mirrored: false,
         }
+    }
+
+    /// Mirrored where `mirrored` is true, as a right-to-left interface
+    /// wants it ([`UiStyle::is_rtl`]): the lowest value at the right end
+    /// of the track, which is filled from there, `−` at the right and
+    /// `+` at the left ([`Slider::parts`]), and the left button moving
+    /// it up ([`Slider::key_step`]).
+    pub const fn mirrored(self, mirrored: bool) -> Self {
+        Self { mirrored, ..self }
+    }
+
+    /// Whether it is mirrored ([`Slider::mirrored`]).
+    pub fn is_mirrored(&self) -> bool {
+        self.mirrored
     }
 
     /// In steps of `step` (at least 1) from `min`.
@@ -220,6 +242,7 @@ impl Slider {
         let left = i32::from(track.x) + knob / 2;
         let width = (i32::from(track.width) - knob).max(1);
         let share = ((x - left) as f32 / width as f32).clamp(0.0, 1.0);
+        let share = if self.mirrored { 1.0 - share } else { share };
         if share >= 1.0 {
             return self.clamp(self.max);
         }
@@ -235,7 +258,11 @@ impl Slider {
     pub fn knob_x(&self, track: Rect, value: i64) -> i32 {
         let knob = knob_size(track);
         let width = track.width.saturating_sub(knob);
-        let filled = ((f32::from(width) * self.share(value)) + 0.5) as u16;
+        let share = match self.mirrored {
+            true => 1.0 - self.share(value),
+            false => self.share(value),
+        };
+        let filled = ((f32::from(width) * share) + 0.5) as u16;
         i32::from(track.x + knob / 2 + filled)
     }
 
@@ -255,6 +282,7 @@ impl Slider {
             track,
             knob_x: self.knob_x(track, value),
             ink,
+            mirrored: self.mirrored,
         };
         if style.look.slider(canvas, style, part) {
             return;
@@ -266,26 +294,27 @@ impl Slider {
         let mid = track.y + track.height / 2;
         let left = track.x + knob / 2;
         let width = track.width.saturating_sub(knob);
-        let filled = (self.knob_x(track, value) - i32::from(left)) as u16;
-        // After the value a thin line: in ink, not gray, so that it stays
-        // in the quick refreshes that show a knob moving, which leave out
-        // grays.
+        // Where the knob is, from the track's left end.
+        let at = (self.knob_x(track, value) - i32::from(left)).clamp(0, i32::from(width)) as u16;
+        // Up to the value a thick line, from the lowest value's end (the
+        // right where mirrored); after it a thin one: in ink, not gray, so
+        // that it stays in the quick refreshes that show a knob moving,
+        // which leave out grays.
         let thin = line.div_ceil(2);
+        let (thick, rest) = match self.mirrored {
+            false => ((left, at), (left + at, width - at)),
+            true => ((left + at, width - at), (left, at)),
+        };
         canvas.fill(
-            Rect::new(
-                left + filled,
-                mid.saturating_sub(thin / 2),
-                width - filled,
-                thin,
-            ),
+            Rect::new(rest.0, mid.saturating_sub(thin / 2), rest.1, thin),
             ink,
         );
         canvas.fill(
-            Rect::new(left, mid.saturating_sub(line), filled, line * 2),
+            Rect::new(thick.0, mid.saturating_sub(line), thick.1, line * 2),
             ink,
         );
         let (x, y) = (
-            i32::from(left + filled) - i32::from(knob / 2),
+            i32::from(left + at) - i32::from(knob / 2),
             i32::from(mid) - i32::from(knob / 2),
         );
         let size = u32::from(knob);
@@ -308,7 +337,7 @@ impl Slider {
     ) {
         let band = view.area;
         let focus = view.focus;
-        let SliderParts { minus, track, plus } = parts(style, band);
+        let SliderParts { minus, track, plus } = self.parts(style, band);
         let ink = match focus {
             SliderFocus::None => {
                 draw_button(canvas, env, style, minus, "−", false, false);
@@ -327,6 +356,30 @@ impl Slider {
             .describe(Role::Slider, view.shown, track)
             .focused(focus != SliderFocus::None);
         self.draw_track(canvas, style, track, view.value, ink);
+    }
+
+    /// Where `−`, the track and `+` are in `band`, as [`parts`] says;
+    /// `−` at the right and `+` at the left where it is mirrored
+    /// ([`Slider::mirrored`]).
+    pub fn parts(&self, style: &UiStyle, band: Rect) -> SliderParts {
+        let parts = parts(style, band);
+        match self.mirrored {
+            false => parts,
+            true => SliderParts {
+                minus: parts.plus,
+                plus: parts.minus,
+                ..parts
+            },
+        }
+    }
+
+    /// How many steps a button moves it while it is changed with the
+    /// buttons, as [`key_step`] says; left and right the other way where
+    /// it is mirrored ([`Slider::mirrored`]): left moves it up, towards
+    /// its highest value at the left.
+    pub fn key_step(&self, action: &Id) -> Option<i64> {
+        let mirrored = self.mirrored && (*action == actions::LEFT || *action == actions::RIGHT);
+        key_step(action).map(|steps| if mirrored { -steps } else { steps })
     }
 
     /// Draws a row of [`row_height`] with a slider, `view.area`: the
@@ -542,8 +595,8 @@ impl SliderDrag {
     /// down anywhere in `band` is taken. Moved sideways, the knob moves
     /// as far from `value` as the finger from where it came down, in the
     /// slider's steps and within its range; a tap chooses the value on
-    /// the track where it lands, or a step down left of the track and up
-    /// right of it. `None` for samples it does not take: the screen then
+    /// the track where it lands, or a step towards `−` or `+` beside the
+    /// track on their side (mirrored: [`Slider::mirrored`]). `None` for samples it does not take: the screen then
     /// handles them as it would.
     pub fn on_pointer(
         &mut self,
@@ -607,9 +660,9 @@ impl SliderDrag {
                 } else if !band.contains(event.point) {
                     drag.from
                 } else if x < i32::from(track.x) {
-                    slider.stepped(drag.from, -1)
+                    slider.stepped(drag.from, if slider.mirrored { 1 } else { -1 })
                 } else if x >= track.right() as i32 {
-                    slider.stepped(drag.from, 1)
+                    slider.stepped(drag.from, if slider.mirrored { -1 } else { 1 })
                 } else {
                     slider.value_at(track, x)
                 };
@@ -697,6 +750,7 @@ mod tests {
             min: 10,
             max: 0,
             step: 0,
+            mirrored: false,
         };
         assert_eq!(wrong.clamp(-3), 10);
         assert_eq!(wrong.stepped(4, 3), 10);
@@ -772,6 +826,76 @@ mod tests {
     /// 400 (the knob's middle from 102 to 377), + from 408 to 468.
     fn across() -> (Slider, Rect) {
         (Slider::new(0, 100).step(5), Rect::new(0, 100, 480, 87))
+    }
+
+    #[test]
+    fn a_mirrored_slider_runs_from_the_right() {
+        let (slider, band) = across();
+        let mirrored = slider.mirrored(true);
+        assert!(mirrored.is_mirrored() && !slider.is_mirrored());
+        let track = parts(&TOUCH, band).track;
+        // The ends change places: the lowest value at the right.
+        assert_eq!(mirrored.knob_x(track, 0), slider.knob_x(track, 100));
+        assert_eq!(mirrored.knob_x(track, 100), slider.knob_x(track, 0));
+        assert_eq!(mirrored.knob_x(track, 50), slider.knob_x(track, 50));
+        // Every value where its knob is, mirrored or not.
+        for value in (0..=100).step_by(5) {
+            let x = mirrored.knob_x(track, value);
+            assert_eq!(mirrored.value_at(track, x), value, "at {x}");
+        }
+        // Past the ends: the ends of the range, the other way round.
+        assert_eq!(mirrored.value_at(track, -100), 100);
+        assert_eq!(mirrored.value_at(track, 2000), 0);
+        // − at the right, + at the left.
+        let (ltr, rtl) = (slider.parts(&TOUCH, band), mirrored.parts(&TOUCH, band));
+        assert_eq!(ltr, parts(&TOUCH, band));
+        assert_eq!(
+            (rtl.minus, rtl.track, rtl.plus),
+            (ltr.plus, ltr.track, ltr.minus)
+        );
+        // Left moves it up, right down; the other buttons as before.
+        assert_eq!(mirrored.key_step(&actions::LEFT), Some(1));
+        assert_eq!(mirrored.key_step(&actions::RIGHT), Some(-1));
+        assert_eq!(mirrored.key_step(&actions::UP), Some(1));
+        assert_eq!(mirrored.key_step(&actions::PREV_PAGE), Some(-1));
+        assert_eq!(slider.key_step(&actions::LEFT), Some(-1));
+        assert_eq!(mirrored.key_step(&actions::CONFIRM), None);
+    }
+
+    #[test]
+    fn a_mirrored_slider_is_tapped_and_dragged_the_other_way() {
+        use PointerPhase::{Down, Move, Up};
+        use SliderStep::{Chosen, Moved};
+        let (slider, band) = across();
+        let slider = slider.mirrored(true);
+        let mut drag = SliderDrag::default();
+        let mut at = |phase, x| drag.on_pointer(&pointer(phase, x, 140), &TOUCH, &slider, band, 50);
+        // A finger moving left moves it up.
+        at(Down, 300);
+        assert_eq!(at(Move, 272), Some(Moved(60)));
+        assert_eq!(at(Up, 272), Some(Chosen(60)));
+        // A tap left of the track (on +) a step up, right of it a step down.
+        at(Down, 40);
+        assert_eq!(at(Up, 40), Some(Chosen(55)));
+        at(Down, 440);
+        assert_eq!(at(Up, 440), Some(Chosen(45)));
+    }
+
+    #[test]
+    fn a_mirrored_track_is_filled_from_the_right() {
+        let slider = Slider::new(0, 100).mirrored(true);
+        let track = Rect::new(10, 0, 220, 40);
+        let mut frame = Framebuffer::new(240, 40, PixelFormat::Gray8).unwrap();
+        let mut canvas = frame.canvas();
+        canvas.clear(Color::WHITE);
+        slider.draw_track(&mut canvas, &STYLE, track, 25, Color::BLACK);
+        // Knob 20 wide: the track runs from 220 (0) to 20 (100), the knob
+        // at 25 has its middle at 170.
+        let view = frame.view();
+        assert_eq!(view.pixel(170, 11), Color::BLACK, "the knob");
+        assert_eq!(view.pixel(200, 18), Color::BLACK, "thick before it");
+        assert_eq!(view.pixel(60, 20), Color::BLACK, "thin after it");
+        assert_eq!(view.pixel(60, 18), Color::WHITE, "thin after it");
     }
 
     fn sample(drag: &mut SliderDrag, phase: PointerPhase, x: i32, y: i32) -> Option<SliderStep> {

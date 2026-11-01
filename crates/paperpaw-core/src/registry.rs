@@ -7,9 +7,8 @@ use alloc::vec::Vec;
 use paperpaw_i18n::Catalog;
 use paperpaw_sdk::collections::VecMap;
 use paperpaw_sdk::{
-    ActionSpec, Actions, Contribution, EventHandler, FontSpec, FormatSpec, HyphenationSpec, Id,
-    MenuEntry, Priority, RegisterError, ScreenSpec, SettingSpec, SlotSpec, StatusItemSpec,
-    StatusLineSpec,
+    ActionSpec, Actions, Contribution, FontSpec, FormatSpec, HyphenationSpec, Id, MenuEntry,
+    Priority, RegisterError, ScreenSpec, SettingSpec, SlotSpec, StatusItemSpec, StatusLineSpec,
 };
 
 /// A candidate screen for a slot, proposed by a plugin.
@@ -170,32 +169,66 @@ impl Screens {
     }
 }
 
+/// Widgets a plugin added, in order: one made at the start, or a list
+/// kept in the program.
+pub(crate) enum StagedWidgets {
+    One(alloc::boxed::Box<paperpaw_sdk::widgets::WidgetSpec>),
+    List(&'static [paperpaw_sdk::widgets::FixedWidget]),
+}
+
 /// The events plugins subscribed to, plugin by plugin in the order they
-/// registered: each plugin's id once, with how many of the handlers after
+/// registered: each plugin's id once, with how many of the entries after
 /// those of the plugin before are its (a plugin subscribes to a few
-/// events; there are some hundred and fifty subscriptions).
+/// events; there are some hundred and fifty subscriptions). An entry is
+/// one handler made at the start, or a list kept in the program.
 #[derive(Default)]
 pub(crate) struct Subscriptions {
     plugins: Vec<(Id, u16)>,
-    handlers: Vec<(Id, paperpaw_sdk::EventHandler)>,
+    entries: Vec<Subscribed>,
+}
+
+/// A plugin's subscriptions as they came: one made at the start (its
+/// event and handler), or a list kept in the program.
+pub(crate) enum Subscribed {
+    One(Id, paperpaw_sdk::EventHandler),
+    List(&'static [paperpaw_sdk::FixedSubscription]),
+}
+
+/// A subscription's handler, to call.
+#[derive(Clone, Copy)]
+pub(crate) enum Handler<'a> {
+    Made(&'a paperpaw_sdk::EventHandler),
+    Fixed(&'a paperpaw_sdk::FixedSubscription),
+}
+
+impl Handler<'_> {
+    pub(crate) fn call(
+        self,
+        env: &paperpaw_sdk::Env<'_>,
+        params: &paperpaw_sdk::Params,
+        out: &mut paperpaw_sdk::Commands,
+    ) {
+        match self {
+            Handler::Made(handler) => handler(env, params, out),
+            Handler::Fixed(fixed) => fixed.call(env, params, out),
+        }
+    }
 }
 
 impl Subscriptions {
-    /// Adds `subscriptions` (event, plugin, handler), emptying it.
-    pub(crate) fn append(&mut self, subscriptions: &mut Vec<(Id, Id, paperpaw_sdk::EventHandler)>) {
-        for (event, plugin, handler) in subscriptions.drain(..) {
+    /// Adds `subscriptions` (plugin, entry), emptying it.
+    pub(crate) fn append(&mut self, subscriptions: &mut Vec<(Id, Subscribed)>) {
+        for (plugin, entry) in subscriptions.drain(..) {
             match self.plugins.last_mut() {
                 Some((last, count)) if *last == plugin && *count < u16::MAX => *count += 1,
                 _ => self.plugins.push((plugin, 1)),
             }
-            self.handlers.push((event, handler));
+            self.entries.push(entry);
         }
     }
 
     /// Every subscription: the event, the plugin, its handler.
-    pub(crate) fn iter(
-        &self,
-    ) -> impl Iterator<Item = (&Id, &Id, &paperpaw_sdk::EventHandler)> + '_ {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = (&Id, &Id, Handler<'_>)> + '_ {
         self.plugins
             .iter()
             .scan(0, |at, (plugin, count)| {
@@ -203,16 +236,24 @@ impl Subscriptions {
                 *at += usize::from(*count);
                 Some((plugin, from..*at))
             })
-            .flat_map(move |(plugin, handlers)| {
-                self.handlers[handlers]
-                    .iter()
-                    .map(move |(event, handler)| (event, plugin, handler))
+            .flat_map(move |(plugin, entries)| {
+                self.entries[entries].iter().flat_map(move |entry| {
+                    let (one, list) = match entry {
+                        Subscribed::One(event, handler) => {
+                            (Some((event, Handler::Made(handler))), &[][..])
+                        }
+                        Subscribed::List(list) => (None, *list),
+                    };
+                    one.into_iter()
+                        .chain(list.iter().map(|s| (s.event(), Handler::Fixed(s))))
+                        .map(move |(event, handler)| (event, plugin, handler))
+                })
             })
     }
 
     pub(crate) fn shrink_to_fit(&mut self) {
         self.plugins.shrink_to_fit();
-        self.handlers.shrink_to_fit();
+        self.entries.shrink_to_fit();
     }
 }
 
@@ -378,6 +419,8 @@ pub(crate) struct Staging {
     /// Key maps that apply while a switch (the id) is on.
     pub(crate) keymaps_when: Vec<(Id, Cow<'static, str>)>,
     pub(crate) catalogs: Vec<Catalog>,
+    /// Compiled catalogs on the storage, opened as they are applied.
+    pub(crate) catalog_files: Vec<alloc::string::String>,
     pub(crate) fonts: Vec<FontSpec>,
     pub(crate) font_files: Vec<(Id, alloc::string::String)>,
     pub(crate) font_extensions: Vec<(Id, alloc::string::String, Id)>,
@@ -388,7 +431,7 @@ pub(crate) struct Staging {
     pub(crate) hyphenation: Vec<HyphenationSpec>,
     pub(crate) setting_groups: Vec<paperpaw_sdk::SettingGroup>,
     /// Events, the plugins that hear them, and their handlers.
-    pub(crate) subscriptions: Vec<(Id, Id, EventHandler)>,
+    pub(crate) subscriptions: Vec<(Id, Subscribed)>,
     pub(crate) overrides: Vec<(Id, Priority, paperpaw_sdk::ActionHandler)>,
     pub(crate) action_observers: Vec<paperpaw_sdk::ObserverSpec>,
     pub(crate) event_observers: Vec<paperpaw_sdk::ObserverSpec>,
@@ -415,7 +458,7 @@ pub(crate) struct Staging {
     pub(crate) status_places: Vec<paperpaw_sdk::status::Place>,
     pub(crate) widget_places: Vec<paperpaw_sdk::widgets::WidgetPlace>,
     pub(crate) widget_categories: Vec<paperpaw_sdk::widgets::WidgetCategory>,
-    pub(crate) widgets: Vec<paperpaw_sdk::widgets::WidgetSpec>,
+    pub(crate) widgets: Vec<StagedWidgets>,
     pub(crate) setup_steps: Vec<paperpaw_sdk::setup::SetupStepSpec>,
     pub(crate) presets: Vec<paperpaw_sdk::presets::Preset>,
     pub(crate) fixed_presets: Vec<&'static [paperpaw_sdk::presets::Preset]>,
@@ -599,7 +642,14 @@ pub(crate) fn stage(
                 staging.screen_hints.push((screen, hints));
             }
             Contribution::Subscription { event, handler, .. } => {
-                staging.subscriptions.push((event, plugin.clone(), handler));
+                staging
+                    .subscriptions
+                    .push((plugin.clone(), Subscribed::One(event, handler)));
+            }
+            Contribution::FixedSubscriptions(list) => {
+                staging
+                    .subscriptions
+                    .push((plugin.clone(), Subscribed::List(list)));
             }
             Contribution::StatusItem(item) => staging.status_items.push(*item),
             Contribution::StatusLine(line) => staging.status_lines.push(*line),
@@ -628,7 +678,8 @@ pub(crate) fn stage(
             Contribution::EventObserver(observer) => staging.event_observers.push(*observer),
             Contribution::Gesture(gesture) => staging.gestures.push(*gesture),
             Contribution::Work(spec) => staging.works.push(*spec),
-            Contribution::Widget(widget) => staging.widgets.push(*widget),
+            Contribution::Widget(widget) => staging.widgets.push(StagedWidgets::One(widget)),
+            Contribution::FixedWidgets(list) => staging.widgets.push(StagedWidgets::List(list)),
             Contribution::SetupStep(step) => staging.setup_steps.push(*step),
             Contribution::Preset(preset) => staging.presets.push(*preset),
             Contribution::FixedPresets(list) => staging.fixed_presets.push(list),
@@ -637,6 +688,7 @@ pub(crate) fn stage(
             Contribution::Point(point) => staging.points.push(*point),
             Contribution::EventDeclared(event) => staging.events.push(*event),
             Contribution::Translations(source) => staging.catalogs.push(catalog(source)?),
+            Contribution::TranslationFile(path) => staging.catalog_files.push(path),
             Contribution::UiLook {
                 painters, priority, ..
             } => staging.ui_looks.push((painters, priority)),
@@ -692,33 +744,52 @@ mod tests {
     use alloc::string::String;
 
     /// Subscriptions come back as they were added: in order, each with its
-    /// event and plugin, a plugin's id kept once for its run of them.
+    /// event and plugin, a plugin's id kept once for its run of them, the
+    /// lists kept in the program among those made.
     #[test]
     fn subscriptions_come_back_in_order_with_their_plugins() {
-        let handler = || -> paperpaw_sdk::EventHandler { Box::new(|_, _, _| {}) };
+        static FIXED: [paperpaw_sdk::FixedSubscription; 2] = [
+            paperpaw_sdk::FixedSubscription::new(Id::new_static("e.four"), |_, _, _| {}),
+            paperpaw_sdk::FixedSubscription::new(Id::new_static("e.five"), |_, _, _| {}),
+        ];
+        let made = |event: &str| {
+            let handler: paperpaw_sdk::EventHandler = Box::new(|_, _, _| {});
+            Subscribed::One(Id::parse(event).unwrap(), handler)
+        };
         let id = |text: &str| Id::parse(text).unwrap();
         let mut subscriptions = Subscriptions::default();
         let mut first = alloc::vec![
-            (id("e.one"), id("a"), handler()),
-            (id("e.two"), id("a"), handler()),
-            (id("e.one"), id("b"), handler()),
+            (id("a"), made("e.one")),
+            (id("a"), made("e.two")),
+            (id("b"), made("e.one")),
         ];
         subscriptions.append(&mut first);
         assert!(first.is_empty());
-        subscriptions.append(&mut alloc::vec![(id("e.three"), id("b"), handler())]);
-        subscriptions.append(&mut alloc::vec![(id("e.one"), id("a"), handler())]);
-        let seen: Vec<(String, String)> = subscriptions
+        subscriptions.append(&mut alloc::vec![
+            (id("b"), made("e.three")),
+            (id("b"), Subscribed::List(&FIXED)),
+        ]);
+        subscriptions.append(&mut alloc::vec![(id("a"), made("e.one"))]);
+        let seen: Vec<(String, String, bool)> = subscriptions
             .iter()
-            .map(|(event, plugin, _)| (event.as_str().into(), plugin.as_str().into()))
+            .map(|(event, plugin, handler)| {
+                let fixed = matches!(handler, Handler::Fixed(_));
+                (event.as_str().into(), plugin.as_str().into(), fixed)
+            })
             .collect();
-        let pairs = [
-            ("e.one", "a"),
-            ("e.two", "a"),
-            ("e.one", "b"),
-            ("e.three", "b"),
-            ("e.one", "a"),
+        let expected = [
+            ("e.one", "a", false),
+            ("e.two", "a", false),
+            ("e.one", "b", false),
+            ("e.three", "b", false),
+            ("e.four", "b", true),
+            ("e.five", "b", true),
+            ("e.one", "a", false),
         ];
-        assert_eq!(seen, pairs.map(|(e, p)| (String::from(e), String::from(p))));
+        assert_eq!(
+            seen,
+            expected.map(|(e, p, f)| (String::from(e), String::from(p), f))
+        );
         assert_eq!(subscriptions.plugins.len(), 3);
     }
 }

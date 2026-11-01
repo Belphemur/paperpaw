@@ -595,6 +595,32 @@ impl Document for EpubDocument {
         crate::pictures::open(storage, base, self.color)
     }
 
+    fn prepare_image_larger(
+        &self,
+        storage: &dyn Storage,
+        image: &ImageRef,
+        long: u32,
+    ) -> Option<ImageRef> {
+        let base = image.path.rsplit_once('.')?.0;
+        let (dir, _) = base.rsplit_once('/')?;
+        let (_, source) = crate::pictures::noted(storage, base)?;
+        // Named by its size, beside the one for the page; no larger than
+        // pictures are decoded at most.
+        let fit = Fit::side(long).min(convert::IMAGE_FIT);
+        let larger = alloc::format!("{base}-{}", fit.long);
+        if crate::pictures::failed(storage, &larger) {
+            return None;
+        }
+        if let Some(decoded) = crate::pictures::open(storage, &larger, self.color) {
+            return Some(decoded);
+        }
+        let file = crate::pictures::file(&larger, self.color);
+        convert::decode_image(storage, &self.archive, &source, &file, dir, fit, self.color)
+            .inspect_err(|e| crate::pictures::note_failure(storage, &larger, e))
+            .ok()?;
+        crate::pictures::open(storage, &larger, self.color)
+    }
+
     fn cover(&self, storage: &dyn Storage) -> Result<Option<ImageRef>, DocumentError> {
         let Some(source) = &self.cover else {
             return Ok(None);
