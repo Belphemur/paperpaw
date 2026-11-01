@@ -250,9 +250,10 @@ fn flow_stays_within_budget(
 /// at those three states; the German start did not grow.
 const GERMAN_START_EXTRA_KIB: f64 = 13.0;
 /// And at most this, whatever English does: the 136.0 KiB German starts
-/// with, and a little room. Keep it below 140 KiB, where
+/// with, 137.7 KiB with format-images (it alone added 1.0 KiB to the
+/// German start, 3.8 KiB to the English one), and a little room. Keep it below 140 KiB, where
 /// the store's install peaks sit with German on top (#219).
-const GERMAN_START_CEILING_KIB: f64 = 137.0;
+const GERMAN_START_CEILING_KIB: f64 = 139.0;
 
 /// The language catalogs are read in once the registries have given back
 /// what they reserved, not before: German (longer texts than English)
