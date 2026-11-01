@@ -42,7 +42,7 @@ fn card(catalog: Vec<u8>) -> Rc<MemoryStorage> {
         MemoryStorage::new()
             .with(
                 "plugins/arabic/plugin.ini",
-                b"[plugin]\nname = Arabic\n".to_vec(),
+                b"[plugin]\nname = Arabic\nformats = 4\n".to_vec(),
             )
             .with(PATH, catalog),
     )
@@ -139,6 +139,39 @@ fn a_damaged_catalog_is_reported_and_the_language_falls_back() {
         kernel.translator().tr("core.action.home"),
         english.translator().tr("core.action.home")
     );
+}
+
+#[test]
+fn compiled_catalogs_need_formats_4_and_win_over_their_text() {
+    // Made for formats 3: left out, and said so.
+    let old = Rc::new(
+        MemoryStorage::new()
+            .with(
+                "plugins/arabic/plugin.ini",
+                b"[plugin]\nname = Arabic\nformats = 3\n".to_vec(),
+            )
+            .with(PATH, arabic(10)),
+    );
+    let mut kernel = started(&old, "ar");
+    let warnings: Vec<String> = kernel
+        .take_warnings()
+        .iter()
+        .map(ToString::to_string)
+        .collect();
+    assert!(
+        warnings.iter().any(|w| w.contains("formats = 4")),
+        "{warnings:?}"
+    );
+    assert_ne!(kernel.translator().tr("core.action.home"), "الرئيسية");
+    // The text of the same language beside it is for older versions.
+    let both = card(arabic(10));
+    both.write(
+        "plugins/arabic/i18n/AR.INI",
+        "[meta]\nlanguage = ar\n[messages]\ncore.action.home = نص\n".as_bytes(),
+    )
+    .unwrap();
+    let kernel = started(&both, "ar");
+    assert_eq!(kernel.translator().tr("core.action.home"), "الرئيسية");
 }
 
 /// The card, shared with the test so that it can pull files.

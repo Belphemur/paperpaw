@@ -6,6 +6,7 @@
 //! plugins/large-print/
 //!   plugin.ini     [plugin] id, name, description, version, formats
 //!   i18n/*.ini     translation catalogs (also whole new languages)
+//!   i18n/*.ppcat   the same compiled, read as needed (formats 4, ADR 0033)
 //!   keymap.ini     key bindings
 //!   settings.ini   new defaults for any plugin's settings ([core] font-size = 14)
 //!   fonts/*.ttf    fonts to read with (also .otf, .ttc), by family
@@ -81,6 +82,8 @@ const MAX_TRANSLATIONS: usize = 512 * 1024;
 const MAX_FORMAT3_DATA: usize = 24 * 1024;
 /// The version of the formats that brought those files.
 const FORMATS_3: u32 = 3;
+/// The version that brought compiled catalogs (`i18n/*.ppcat`).
+const FORMATS_4: u32 = 4;
 /// The files read as the plugin registers, and whether each is of
 /// formats 3.
 const LATER: [(&str, bool); 7] = [
@@ -650,6 +653,26 @@ fn load(shared: &Rc<dyn Storage>, path: &str, folder: &str) -> Result<DataPlugin
     });
     files.sort_unstable();
     compiled.sort_unstable();
+    if budget.formats < FORMATS_4 {
+        if !compiled.is_empty() {
+            budget.problems.push(format!(
+                "{catalogs}: compiled catalogs left out, plugin.ini does not say formats = {FORMATS_4}"
+            ));
+        }
+        compiled.clear();
+    }
+    // A language compiled is read from it: its text beside it is for an
+    // older PaperPaw.
+    let stem = |name: &str| {
+        name.rsplit_once('.')
+            .map_or(name, |(stem, _)| stem)
+            .to_ascii_lowercase()
+    };
+    files.retain(|file| {
+        !compiled
+            .iter()
+            .any(|path| stem(path.rsplit('/').next().unwrap_or(path)) == stem(file))
+    });
     let mut translations_left = MAX_TRANSLATIONS;
     for file in files {
         let path = format!("{catalogs}/{file}");
