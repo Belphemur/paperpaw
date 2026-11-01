@@ -122,6 +122,12 @@ Workshop builds from those commits are thrown away.
   does not offer either yet; it calls `keys::keep_revoked` with its library's revocations and `keys::accept_rotation`
   with a statement that came with an update (both plugin-facing; the recovery key arrives with the install marks;
   `keys::check_rotation` says beforehand, without writing, whether a rotation would be taken).
+- Reserved for devices and plugins to come, so they need no new interface: a pen above the screen
+  (`PointerPhase::Hover`, which the kernel passes to no screen yet) and how it leans (`PointerEvent::tilt_x`,
+  `tilt_y`, `with_tilt`; `Capability::PEN_HOVER`, `PEN_TILT`); TLS sockets (`SocketNotice::Secured`, `Untrusted`
+  with the certificate's SHA-256; `socket_params::SECURED`, `UNTRUSTED`, `CERTIFICATE`), whose commands will come
+  as `Command::Extended` (#81). The layout digest now also holds where `PointerEvent`'s fields lie (its size hid
+  the new ones), so the plugin fingerprint changed: build plugins from the baseline below or later.
 - Layout `VERSION` 11: books cached before are laid out anew once, so drop capitals and the new list markers show
   in them too. SDK, for real tables: `BlockKind::TableRow`, `Block::table` (`TableRow`, `TableCell`, `MAX_COLUMNS`:
   a row's cells, the table's column weights, header, first and last row) and `Page::rules` (`PageRule`: thin lines

@@ -249,6 +249,21 @@ const TABLE: [u64; 12] = [
     offset_of!(Api, build_len) as u64,
 ];
 
+/// Where a pointer event's fields lie: its size hides fields added in its
+/// padding (the pen's tilt), and a plugin's own code reads them.
+const POINTER: [u64; 7] = {
+    use paperpaw_platform::PointerEvent;
+    [
+        offset_of!(PointerEvent, id) as u64,
+        offset_of!(PointerEvent, phase) as u64,
+        offset_of!(PointerEvent, point) as u64,
+        offset_of!(PointerEvent, tool) as u64,
+        offset_of!(PointerEvent, pressure) as u64,
+        offset_of!(PointerEvent, tilt_x) as u64,
+        offset_of!(PointerEvent, tilt_y) as u64,
+    ]
+};
+
 pub(super) const DIGEST: u64 = {
     let mut hash = Fnv::new();
     let mut i = 0;
@@ -269,6 +284,11 @@ pub(super) const DIGEST: u64 = {
     let mut i = 0;
     while i < TABLE.len() {
         hash = hash.number(TABLE[i]);
+        i += 1;
+    }
+    let mut i = 0;
+    while i < POINTER.len() {
+        hash = hash.number(POINTER[i]);
         i += 1;
     }
     hash.0

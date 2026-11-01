@@ -470,6 +470,15 @@ impl Kernel {
     /// Handles an input event.
     pub fn handle(&mut self, now: Instant, event: InputEvent) -> Effects {
         let _running = self.shared.meter.enter(meter::CORE);
+        // A pen above the screen (reserved): no screen hears it yet, and it
+        // is not the reader's doing.
+        if let InputEvent::Pointer(PointerEvent {
+            phase: PointerPhase::Hover,
+            ..
+        }) = event
+        {
+            return self.finish();
+        }
         self.shared.reader = true;
         if self.stale(now, &event) {
             return self.finish();

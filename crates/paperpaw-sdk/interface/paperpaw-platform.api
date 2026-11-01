@@ -116,6 +116,7 @@ pub paperpaw_platform::input::InputEvent::Pointer(paperpaw_platform::input::Poin
 #[non_exhaustive] pub enum paperpaw_platform::input::PointerPhase
 pub paperpaw_platform::input::PointerPhase::Cancel
 pub paperpaw_platform::input::PointerPhase::Down
+pub paperpaw_platform::input::PointerPhase::Hover
 pub paperpaw_platform::input::PointerPhase::Move
 pub paperpaw_platform::input::PointerPhase::Up
 #[non_exhaustive] pub enum paperpaw_platform::input::PointerTool
@@ -144,6 +145,8 @@ pub paperpaw_platform::input::PointerEvent::id: u8
 pub paperpaw_platform::input::PointerEvent::phase: paperpaw_platform::input::PointerPhase
 pub paperpaw_platform::input::PointerEvent::point: paperpaw_platform::geometry::Point
 pub paperpaw_platform::input::PointerEvent::pressure: u16
+pub paperpaw_platform::input::PointerEvent::tilt_x: i8
+pub paperpaw_platform::input::PointerEvent::tilt_y: i8
 pub paperpaw_platform::input::PointerEvent::tool: paperpaw_platform::input::PointerTool
 impl paperpaw_platform::input::PointerEvent
 pub const fn paperpaw_platform::input::PointerEvent::new(u8, paperpaw_platform::input::PointerPhase, paperpaw_platform::geometry::Point, paperpaw_platform::input::PointerTool, u16) -> Self
@@ -151,6 +154,7 @@ pub const fn paperpaw_platform::input::PointerEvent::with_id(self, u8) -> Self
 pub const fn paperpaw_platform::input::PointerEvent::with_phase(self, paperpaw_platform::input::PointerPhase) -> Self
 pub const fn paperpaw_platform::input::PointerEvent::with_point(self, paperpaw_platform::geometry::Point) -> Self
 pub const fn paperpaw_platform::input::PointerEvent::with_pressure(self, u16) -> Self
+pub const fn paperpaw_platform::input::PointerEvent::with_tilt(self, i8, i8) -> Self
 pub const fn paperpaw_platform::input::PointerEvent::with_tool(self, paperpaw_platform::input::PointerTool) -> Self
 pub mod paperpaw_platform::pixel
 #[non_exhaustive] pub enum paperpaw_platform::pixel::PixelFormat
@@ -368,6 +372,7 @@ pub fn paperpaw_platform::pixel::PixelFormat::fmt(&self, &mut core::fmt::Formatt
 #[non_exhaustive] pub enum paperpaw_platform::PointerPhase
 pub paperpaw_platform::PointerPhase::Cancel
 pub paperpaw_platform::PointerPhase::Down
+pub paperpaw_platform::PointerPhase::Hover
 pub paperpaw_platform::PointerPhase::Move
 pub paperpaw_platform::PointerPhase::Up
 #[non_exhaustive] pub enum paperpaw_platform::PointerTool
@@ -554,6 +559,8 @@ pub paperpaw_platform::PointerEvent::id: u8
 pub paperpaw_platform::PointerEvent::phase: paperpaw_platform::input::PointerPhase
 pub paperpaw_platform::PointerEvent::point: paperpaw_platform::geometry::Point
 pub paperpaw_platform::PointerEvent::pressure: u16
+pub paperpaw_platform::PointerEvent::tilt_x: i8
+pub paperpaw_platform::PointerEvent::tilt_y: i8
 pub paperpaw_platform::PointerEvent::tool: paperpaw_platform::input::PointerTool
 impl paperpaw_platform::input::PointerEvent
 pub const fn paperpaw_platform::input::PointerEvent::new(u8, paperpaw_platform::input::PointerPhase, paperpaw_platform::geometry::Point, paperpaw_platform::input::PointerTool, u16) -> Self
@@ -561,6 +568,7 @@ pub const fn paperpaw_platform::input::PointerEvent::with_id(self, u8) -> Self
 pub const fn paperpaw_platform::input::PointerEvent::with_phase(self, paperpaw_platform::input::PointerPhase) -> Self
 pub const fn paperpaw_platform::input::PointerEvent::with_point(self, paperpaw_platform::geometry::Point) -> Self
 pub const fn paperpaw_platform::input::PointerEvent::with_pressure(self, u16) -> Self
+pub const fn paperpaw_platform::input::PointerEvent::with_tilt(self, i8, i8) -> Self
 pub const fn paperpaw_platform::input::PointerEvent::with_tool(self, paperpaw_platform::input::PointerTool) -> Self
 pub struct paperpaw_platform::Rect
 pub paperpaw_platform::Rect::height: u16

@@ -42,6 +42,10 @@ pub enum PointerPhase {
     Up,
     /// The interaction was aborted (e.g. palm rejection).
     Cancel,
+    /// A pen held above the screen, not touching it, at the event's
+    /// point. Reserved: no shell reports it yet, and the kernel passes it
+    /// to no screen.
+    Hover,
 }
 
 /// What touches the screen.
@@ -65,10 +69,19 @@ pub struct PointerEvent {
     pub tool: PointerTool,
     /// Pressure from 0 to 1000; 1000 for devices without pressure sensing.
     pub pressure: u16,
+    /// How far a pen leans to the right (positive) or left, in degrees
+    /// from -90 to 90; 0 upright and where the device does not tell.
+    /// Reserved: no shell reports it yet.
+    pub tilt_x: i8,
+    /// How far a pen leans towards the reader (positive) or away, in
+    /// degrees from -90 to 90; 0 upright and where the device does not
+    /// tell. Reserved: no shell reports it yet.
+    pub tilt_y: i8,
 }
 
 impl PointerEvent {
-    /// Made of all its fields; the `with_` methods change one.
+    /// Made of its fields, upright (no tilt); the `with_` methods change
+    /// one.
     pub const fn new(
         id: u8,
         phase: PointerPhase,
@@ -82,7 +95,27 @@ impl PointerEvent {
             point,
             tool,
             pressure,
+            tilt_x: 0,
+            tilt_y: 0,
         }
+    }
+
+    /// Leaning `x` and `y` degrees (see [`tilt_x`](Self::tilt_x)), each
+    /// held to -90 to 90.
+    #[must_use]
+    pub const fn with_tilt(mut self, x: i8, y: i8) -> Self {
+        const fn held(degrees: i8) -> i8 {
+            if degrees < -90 {
+                -90
+            } else if degrees > 90 {
+                90
+            } else {
+                degrees
+            }
+        }
+        self.tilt_x = held(x);
+        self.tilt_y = held(y);
+        self
     }
 
     #[must_use]
