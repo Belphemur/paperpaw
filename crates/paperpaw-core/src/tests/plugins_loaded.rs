@@ -357,9 +357,9 @@ fn data_plugins_bring_actions_menus_icons_points_and_steps() {
 
 /// What the store hears of plugins asked for by id (where it `installs`
 /// plugins), and the answers anyone hears.
-struct Store {
-    log: Log,
-    installs: bool,
+pub(super) struct Store {
+    pub(super) log: Log,
+    pub(super) installs: bool,
 }
 
 impl Plugin for Store {

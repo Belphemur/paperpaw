@@ -927,6 +927,8 @@ fn changes_setup(command: &Command) -> bool {
             | Command::BindSlot(..)
             | Command::LoadPlugin(_)
             | Command::InstallPlugin(..)
+            // Leads to an install (the store asks, then installs).
+            | Command::RequestPlugins { .. }
     )
 }
 
@@ -941,6 +943,7 @@ fn command_name(command: &Command) -> &'static str {
         | Command::RemovePlugin(_)
         | Command::LoadPlugin(_)
         | Command::InstallPlugin(..) => "plugins changed",
+        Command::RequestPlugins { .. } => "plugins asked for",
         Command::SetSecret(_) => "secrets changed",
         Command::SetMenu(..) => "menus changed",
         Command::Bind { .. } => "keys bound",
