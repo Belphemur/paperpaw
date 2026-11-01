@@ -139,10 +139,12 @@ fn said(env: &Env<'_>, out: &mut Commands) {
     let styles = name_of(env, crate::styles::PACK);
     if let Some(rest) = crate::styles::without(&not, &styles) {
         not = rest;
-        out.push(Command::Notify(
-            env.i18n()
-                .format("store.styles.later", &[("name", Arg::Str(&styles))]),
-        ));
+        if crate::styles::hint_due(env) {
+            out.push(Command::Notify(
+                env.i18n()
+                    .format("store.styles.later", &[("name", Arg::Str(&styles))]),
+            ));
+        }
     }
     if !done.is_empty() {
         out.push(Command::Notify(
@@ -243,6 +245,7 @@ pub(crate) fn fetched(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
     let Some(id) = reply.context.get(params::ID).map(ToString::to_string) else {
         return;
     };
+    crate::styles::answered(env, &id, reply.status);
     let fetched = catalog::plugin_part(&id);
     let plugin = Device::of(env)
         .filter(|_| (200..300).contains(&reply.status))

@@ -1167,6 +1167,20 @@ impl ReaderScreen {
         let Ok(book) = &mut self.book else {
             return;
         };
+        // A plugin came or went while the book is open (Literata's bold
+        // and italic from the store): laid out again with the faces there
+        // are now, else a word in a new face stands in room measured for
+        // the old one.
+        if *event == events::PLUGINS_CHANGED {
+            let env = *cx.env();
+            if book.type_changed(&env) {
+                self.selection = None;
+                book.relayout(&env);
+                cx.request_redraw();
+                cx.wake_at(env.now());
+            }
+            return;
+        }
         // The book's fonts are loaded with it.
         let reopen = id == crate::settings::PUBLISHER_STYLES.as_str()
             || id == paperpaw_sdk::builtin::settings::READING_FONT.as_str();

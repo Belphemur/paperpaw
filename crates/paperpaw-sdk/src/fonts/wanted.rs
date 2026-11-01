@@ -15,7 +15,10 @@ impl Fonts {
         let mut wanted: Vec<usize> = self.user.values().filter_map(position).collect();
         let mut seen: Vec<&Id> = Vec::new();
         for (role, _, _) in &self.candidates {
-            if seen.contains(&role) || self.family_face(role.as_str()).is_some() {
+            if seen.contains(&role)
+                || self.user.contains_key(role.as_str())
+                || self.family_face(role.as_str()).is_some()
+            {
                 continue;
             }
             seen.push(role);
@@ -23,8 +26,9 @@ impl Fonts {
                 .candidates
                 .iter()
                 .filter(|(r, _, _)| r == role)
-                .max_by_key(|(_, _, priority)| *priority);
-            wanted.extend(best.and_then(|(_, font, _)| position(font)));
+                .filter_map(|(_, font, priority)| Some((position(font)?, *priority)))
+                .max_by_key(|(_, priority)| *priority);
+            wanted.extend(best.map(|(entry, _)| entry));
         }
         wanted
     }

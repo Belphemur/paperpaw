@@ -13,7 +13,7 @@
 mod common;
 
 use common::{DEVICE, Shared};
-use paperpaw_core::{Io, Kernel};
+use paperpaw_core::{HttpCall, HttpResponse, Io, Kernel};
 use paperpaw_sdk::builtin::fonts;
 use paperpaw_sdk::{
     Font, FontSpec, Id, Instant, Manifest, Plugin, Priority, RegisterError, Registrar, Storage,
@@ -50,7 +50,7 @@ const PAGE: &str = "https://paperpaw.org/api/v1/plugins/literata-styles.json?dev
 
 /// A kernel started on `storage`, with the fonts of the firmware `lean`
 /// or not, and what it asks the network for.
-fn started(storage: Shared, lean: bool) -> Vec<String> {
+fn begun(storage: Shared, lean: bool) -> (Kernel, Vec<HttpCall>) {
     let mut builder = Kernel::builder(DEVICE)
         .storage(storage)
         .network(true)
@@ -64,14 +64,36 @@ fn started(storage: Shared, lean: bool) -> Vec<String> {
     };
     let mut kernel = builder.build().unwrap();
     kernel.start(Instant(0));
-    kernel
+    let calls = kernel
         .take_io()
         .into_iter()
         .filter_map(|io| match io {
-            Io::Http(call) => Some(call.url),
+            Io::Http(call) => Some(call),
             _ => None,
         })
-        .collect()
+        .collect();
+    (kernel, calls)
+}
+
+/// What a start asks the network for.
+fn started(storage: Shared, lean: bool) -> Vec<String> {
+    begun(storage, lean).1.into_iter().map(|c| c.url).collect()
+}
+
+/// A start whose first request is answered with `status` (0: no
+/// connection at all).
+fn started_and_answered(storage: Shared, status: u16) -> Vec<String> {
+    let (mut kernel, calls) = begun(storage, true);
+    let urls = calls.iter().map(|c| c.url.clone()).collect();
+    if let Some(call) = calls.first() {
+        let response = HttpResponse {
+            id: call.id,
+            status,
+            ..HttpResponse::default()
+        };
+        kernel.http_response(Instant(100), response);
+    }
+    urls
 }
 
 fn after_setup() -> Shared {
@@ -113,17 +135,43 @@ fn a_card_with_the_plugin_asks_for_nothing() {
     assert!(started(storage, true).is_empty());
 }
 
-/// Not asked again and again: three starts at most, then it is the
-/// reader's to find.
+const TRIES: &str = ".paperpaw/plugins/store/styles-tries.txt";
+const HINTED: &str = ".paperpaw/plugins/store/styles-hinted.txt";
+
+/// Not asked again and again: three answers of the store at most (the
+/// page came wrong), then it is the reader's to find.
 #[test]
 fn it_is_tried_three_times_at_most() {
     let storage = after_setup();
     for round in 1..=3 {
-        assert_eq!(started(storage.clone(), true), [PAGE], "start {round}");
-        // The page did not come: the queue gave up on it.
-        storage.remove(".paperpaw/plugins/store/queue.txt").unwrap();
+        assert_eq!(
+            started_and_answered(storage.clone(), 500),
+            [PAGE],
+            "start {round}"
+        );
     }
-    assert!(started(storage, true).is_empty());
+    assert!(started(storage.clone(), true).is_empty());
+    assert_eq!(
+        String::from_utf8(paperpaw_sdk::read_file(&storage, TRIES, 16).unwrap()).unwrap(),
+        "3"
+    );
+}
+
+/// Starts without a network are no tries: a reader who is rarely
+/// online gets it at the first start with a network, however many starts
+/// there were before, and is told once to connect.
+#[test]
+fn starts_without_a_network_cost_no_try_and_say_it_once() {
+    let storage = after_setup();
+    for round in 1..=5 {
+        assert_eq!(
+            started_and_answered(storage.clone(), 0),
+            [PAGE],
+            "start {round}"
+        );
+        assert!(!storage.exists(TRIES), "start {round} counted");
+        assert!(storage.exists(HINTED), "start {round} did not say it");
+    }
 }
 
 /// A start while it still waits (no network yet) does not put it in

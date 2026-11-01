@@ -216,4 +216,28 @@ fn a_face_the_reader_binds_is_loaded() {
     );
     let bold = kernel.fonts().bound(fonts::READING_BOLD.as_str()).unwrap();
     assert_eq!(bold.id().as_str(), "literata-styles.italic");
+    // The proposal it replaces is not opened for nothing.
+    assert!(kernel.fonts().get("literata-styles.bold").is_none());
+}
+
+/// A proposal naming a font nobody added does not hide the next one.
+#[test]
+fn a_proposal_without_a_font_gives_way_to_the_next() {
+    let card = card(true, false).with(
+        "plugins/zzz-ghost/plugin.ini",
+        plugin_ini(
+            "zzz-ghost",
+            "Ghost",
+            "[fonts]\ncore.font-reading-bold = zzz-ghost.bold\n",
+        ),
+    );
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(Lean)
+        .storage(card)
+        .user_config("")
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    let bold = kernel.fonts().bound(fonts::READING_BOLD.as_str()).unwrap();
+    assert_eq!(bold.id().as_str(), "literata-styles.bold");
 }

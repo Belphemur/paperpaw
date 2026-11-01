@@ -8,9 +8,11 @@
 //! first-run setup is over: it is fetched by itself, unasked, as soon as
 //! the network allows (also after later restarts, as the setup's offer
 //! is), and said once at its end. The only download the store makes
-//! unasked, 0.5 MB, so it is not made in Offline mode and is tried at
-//! most [`TRIES`] times: a library without it, or no network at all,
-//! leave it to the reader, who finds it under More plugins.
+//! unasked, 0.5 MB, so it is not made in Offline mode. It is tried at most
+//! [`TRIES`] times, counted where a page of the store answered (see
+//! [`answered`]), not at the starts: a start without a network costs no
+//! try, and says once, in a hint, to connect once. A library without it
+//! after that is left to the reader, who finds it under More plugins.
 //!
 //! A web flasher's bundle brings it with the firmware, and there is
 //! nothing to fetch.
@@ -32,10 +34,11 @@ const BUILT_IN: &str = "fonts-default.literata-bold";
 const FROM_PACK: &str = "literata-styles.bold";
 /// The firmware's regular face: where it is, Literata is the default.
 const REGULAR: &str = "fonts-default.literata";
-/// How often it is put in the queue at most, over all starts.
+/// How often the store may answer for it at most (it came, or it did not
+/// install), over all starts.
 const TRIES: u32 = 3;
 
-/// How often it was put in the queue.
+/// How often the store answered for it.
 fn tries_path() -> String {
     format!("{}/styles-tries.txt", Env::plugin_dir(PLUGIN.as_str()))
 }
@@ -70,15 +73,38 @@ pub(crate) fn offer(env: &Env<'_>, out: &mut Commands) {
     {
         return;
     }
-    let tried = tries(env);
-    if tried >= TRIES {
+    if tries(env) >= TRIES {
+        return;
+    }
+    queue::add_quietly(env, &[PACK.to_string()], out);
+}
+
+/// Keeps that the store answered for plugin `id` (with `status`, 0 where
+/// there was no connection at all): only an answer is a try.
+pub(crate) fn answered(env: &Env<'_>, id: &str, status: u16) {
+    if id != PACK || status == 0 {
         return;
     }
     let _ = env.storage().create_dir(&Env::plugin_dir(PLUGIN.as_str()));
     let _ = env
         .storage()
-        .write(&tries_path(), (tried + 1).to_string().as_bytes());
-    queue::add_quietly(env, &[PACK.to_string()], out);
+        .write(&tries_path(), (tries(env) + 1).to_string().as_bytes());
+}
+
+/// Where the hint was said is kept: it is said once.
+fn hinted_path() -> String {
+    format!("{}/styles-hinted.txt", Env::plugin_dir(PLUGIN.as_str()))
+}
+
+/// Whether the hint to connect once is to be said now: the first time
+/// only, as it is kept.
+pub(crate) fn hint_due(env: &Env<'_>) -> bool {
+    if env.storage().exists(&hinted_path()) {
+        return false;
+    }
+    let _ = env.storage().create_dir(&Env::plugin_dir(PLUGIN.as_str()));
+    let _ = env.storage().write(&hinted_path(), b"1");
+    true
 }
 
 /// The names of `list` (joined with `, `) without `name`, if it is one.
