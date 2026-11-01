@@ -66,8 +66,19 @@ fn the_table_answers_as_the_catalogs_would() {
         built.format("notes.hello", &[("name", Arg::Str("Ada"))]),
         "Hello, Ada!"
     );
-    // One catalog in place of two.
+    // One catalog in place of two, with the keys of both (for tools,
+    // such as the pseudo-language's).
     assert_eq!(built.catalogs().len(), 1);
+    let keys: Vec<String> = built.catalogs()[0].keys().map(String::from).collect();
+    let mut both: Vec<String> = [CLOCK, NOTES]
+        .iter()
+        .flat_map(|s| {
+            let catalog = Catalog::parse(*s).unwrap();
+            catalog.keys().map(String::from).collect::<Vec<_>>()
+        })
+        .collect();
+    both.sort();
+    assert_eq!(keys, both);
     assert_eq!(built.languages(), [("en", "English")]);
 }
 

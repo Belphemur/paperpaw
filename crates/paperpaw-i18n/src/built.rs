@@ -8,7 +8,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::cmp::Ordering;
 
-use crate::catalog::{Catalog, CatalogError, cmp_plain_key, fingerprint, plain_value};
+use crate::catalog::{Catalog, CatalogError, cmp_plain_key, fingerprint, plain_key, plain_value};
 
 /// In an entry of [`BuiltCatalogs::entries`]: its message is
 /// `decoded[entry & !DECODED]`, not a plain line of a source.
@@ -159,6 +159,20 @@ impl Built {
 
     pub(crate) fn len(&self) -> usize {
         self.table.entries.len()
+    }
+
+    /// The keys it answers ([`Built::get`]), sorted.
+    pub(crate) fn keys(&self) -> impl Iterator<Item = &str> {
+        self.table.entries.iter().filter_map(|&entry| {
+            if entry & DECODED != 0 {
+                return Some(self.table.decoded[(entry & !DECODED) as usize].0);
+            }
+            let source = self
+                .sources
+                .get((entry >> OFFSET_BITS) as usize)
+                .copied()??;
+            Some(plain_key(source, entry & ((1 << OFFSET_BITS) - 1)))
+        })
     }
 
     pub(crate) fn index_on_heap(&self) -> usize {
