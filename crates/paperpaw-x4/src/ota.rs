@@ -41,6 +41,12 @@ const ENTRIES: [u32; 2] = [0, SECTOR];
 const ENTRY_LEN: usize = 32;
 /// What unwritten flash holds, as a word.
 const UNWRITTEN: u32 = u32::MAX;
+/// In an entry's label (its second word): this firmware itself put the
+/// image on trial, `PendingVerify` with this word. A bootloader with app
+/// rollback turns `New` into `PendingVerify` at the first start of an
+/// image, leaving the label as it was: without this word, the state is its
+/// doing, and not a trial that ended other than cleanly.
+const ARMED: u32 = 0x5050_4131;
 
 /// The state of an image, as ESP-IDF keeps it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -113,6 +119,10 @@ pub enum Start {
     /// An update's start, or a start of one on trial whose last run ended
     /// cleanly: now on trial, after `ran` milliseconds run before.
     Trial { ran: u32 },
+    /// An update's first start that a bootloader with app rollback had
+    /// marked `PendingVerify` itself: not a failed trial. Now on trial as
+    /// [`Start::Trial`], after `ran` milliseconds run before.
+    Marked { ran: u32 },
     /// An update on trial whose last run ended other than cleanly: marked
     /// bad, the device starts again into the firmware before it. `ran` is
     /// the milliseconds its earlier runs noted (0: none; a start that did
@@ -153,6 +163,12 @@ impl Entry {
         State::from_code(self.word(24))
     }
 
+    /// Whether the firmware itself marked the image as on trial (see
+    /// [`ARMED`]).
+    fn armed(&self) -> bool {
+        self.word(8) == ARMED
+    }
+
     /// How long its image ran on trial, in the label's first word.
     fn trial_ms(&self) -> u32 {
         match self.word(4) {
@@ -165,6 +181,13 @@ impl Entry {
         self.0[24..28].copy_from_slice(&state.code().to_le_bytes());
         let ms = if trial_ms == 0 { UNWRITTEN } else { trial_ms };
         self.0[4..8].copy_from_slice(&ms.to_le_bytes());
+        // Only the firmware's own mark of a trial carries the word.
+        let armed = if state == State::PendingVerify {
+            ARMED
+        } else {
+            UNWRITTEN
+        };
+        self.0[8..12].copy_from_slice(&armed.to_le_bytes());
     }
 }
 
@@ -212,6 +235,13 @@ impl OtaData {
     pub fn state_of(&self, slot: u32) -> Option<(State, u32)> {
         self.newest_of(slot)
             .map(|i| (self.entries[i].state(), self.entries[i].trial_ms()))
+    }
+
+    /// Whether `slot`'s image was put on trial by this firmware (`false`
+    /// for a `PendingVerify` that a bootloader made, or without an entry).
+    pub fn armed(&self, slot: u32) -> bool {
+        self.newest_of(slot)
+            .is_some_and(|i| self.entries[i].armed())
     }
 
     /// Chooses `slot` to start, its image in `state` after `trial_ms` on
@@ -281,6 +311,13 @@ impl OtaData {
                 self.set_state(flash, running, State::PendingVerify, ran)
                     .ok()?;
                 Some(Start::Trial { ran })
+            }
+            // Marked by a bootloader with app rollback, not by this
+            // firmware: the update's start, not a run that failed.
+            (Some(_), Some((State::PendingVerify, ran))) if !self.armed(running) => {
+                self.set_state(flash, running, State::PendingVerify, ran)
+                    .ok()?;
+                Some(Start::Marked { ran })
             }
             (Some(_), Some((State::PendingVerify, ran))) => {
                 self.set_state(flash, running, State::Invalid, 0).ok()?;
@@ -599,6 +636,209 @@ mod tests {
         );
         // Marked bad: the bootloader passes over it at the next start.
         assert_eq!(data.booted(), 0);
+    }
+
+    /// What a bootloader does before the firmware: with app rollback, the
+    /// image it starts is `PendingVerify` (a `New` one made so, its label
+    /// kept; one found `PendingVerify` already is given up: `Aborted`, and
+    /// the one before starts). The slot it starts.
+    fn boot(flash: &mut Nor, rollback: bool) -> u32 {
+        let mut data = OtaData::read(flash).unwrap();
+        if rollback && let Some(slot) = data.chosen() {
+            let at = data.newest_of(slot).unwrap();
+            let mut entry = data.entries[at];
+            match entry.state() {
+                State::New => {
+                    // Only the state word, as the bootloader's write leaves
+                    // the rest of the entry.
+                    entry.0[24..28].copy_from_slice(&State::PendingVerify.code().to_le_bytes());
+                    let _ = data.write(flash, at, entry);
+                }
+                State::PendingVerify => {
+                    entry.0[24..28].copy_from_slice(&State::Aborted.code().to_le_bytes());
+                    let _ = data.write(flash, at, entry);
+                }
+                _ => {}
+            }
+        }
+        OtaData::read(flash).unwrap().booted()
+    }
+
+    /// One event of a case.
+    #[derive(Debug, Clone, Copy)]
+    enum Event {
+        /// The bootloader starts a slot, the firmware in it looks at the
+        /// OTA data: what it found.
+        Boot(Option<Start>, u32),
+        /// The firmware ends cleanly after this many ms on trial (sleep,
+        /// restart): the image is new again.
+        Pause(u32),
+        /// It ran long enough: it works.
+        Works,
+        /// It ends other than cleanly (a panic, the watchdog, power).
+        Crash,
+    }
+
+    /// A table of runs of an image put on trial in slot 1 by another
+    /// firmware's installer (`New`, the label unwritten), with a
+    /// bootloader that leaves the states (`false`) and one with app
+    /// rollback (`true`): what each start finds, and the slot it runs.
+    #[test]
+    fn the_starts_of_an_update_on_trial_by_bootloader() {
+        use Event::*;
+        let trial = |ran| Some(Start::Trial { ran });
+        let marked = |ran| Some(Start::Marked { ran });
+        let failed = |ran| Some(Start::Failed { ran });
+        let cases: &[(&str, bool, &[Event])] = &[
+            (
+                "no rollback: works at once",
+                false,
+                &[Boot(trial(0), 1), Works, Boot(Some(Start::Kept), 1)],
+            ),
+            (
+                "no rollback: a crash is a failed trial, the slot before starts",
+                false,
+                &[
+                    Boot(trial(0), 1),
+                    Crash,
+                    Boot(failed(0), 1),
+                    Boot(Some(Start::Undone), 0),
+                    Boot(Some(Start::Kept), 0),
+                ],
+            ),
+            (
+                "no rollback: a clean pause goes on with the trial, then a crash fails it",
+                false,
+                &[
+                    Boot(trial(0), 1),
+                    Pause(5_000),
+                    Boot(trial(5_000), 1),
+                    Crash,
+                    Boot(failed(5_000), 1),
+                ],
+            ),
+            (
+                "rollback: the bootloader's mark is not a failed trial",
+                true,
+                &[Boot(marked(0), 1), Works, Boot(Some(Start::Kept), 1)],
+            ),
+            (
+                "rollback: a pause and the bootloader's mark again keep the time",
+                true,
+                &[
+                    Boot(marked(0), 1),
+                    Pause(12_000),
+                    Boot(marked(12_000), 1),
+                    Pause(20_000),
+                    Boot(marked(20_000), 1),
+                    Works,
+                ],
+            ),
+            (
+                "rollback: a crash is given up by the bootloader, the slot before starts",
+                true,
+                &[
+                    Boot(marked(0), 1),
+                    Crash,
+                    Boot(Some(Start::Undone), 0),
+                    Boot(Some(Start::Kept), 0),
+                ],
+            ),
+        ];
+        for (name, rollback, events) in cases {
+            let mut flash = ota_data();
+            let mut data = OtaData::read(&mut flash).unwrap();
+            // The way before, CrossPoint in slot 0 (running), then the
+            // installer's choice of slot 1, new, the label unwritten.
+            data.choose(&mut flash, 0, State::Valid, 0).unwrap();
+            data.choose(&mut flash, 1, State::New, 0).unwrap();
+            for event in *events {
+                match *event {
+                    Boot(found, expected_slot) => {
+                        let slot = boot(&mut flash, *rollback);
+                        assert_eq!(slot, expected_slot, "{name}: slot at {event:?}");
+                        let mut data = OtaData::read(&mut flash).unwrap();
+                        assert_eq!(data.start(&mut flash, slot), found, "{name}: {event:?}");
+                    }
+                    Pause(ms) => {
+                        let mut data = OtaData::read(&mut flash).unwrap();
+                        data.set_state(&mut flash, 1, State::New, ms).unwrap();
+                    }
+                    Works => {
+                        let mut data = OtaData::read(&mut flash).unwrap();
+                        data.set_state(&mut flash, 1, State::Valid, 0).unwrap();
+                    }
+                    Crash => {}
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_pending_state_without_the_firmwares_mark_is_a_start_and_with_it_a_failure() {
+        // A PendingVerify of an earlier firmware (its label has the time
+        // only) or a bootloader's: a start, marked now.
+        let mut flash = ota_data();
+        let mut data = OtaData::read(&mut flash).unwrap();
+        data.choose(&mut flash, 0, State::Valid, 0).unwrap();
+        data.choose(&mut flash, 1, State::New, 7_000).unwrap();
+        let mut entry = data.entries[data.newest_of(1).unwrap()];
+        entry.0[24..28].copy_from_slice(&State::PendingVerify.code().to_le_bytes());
+        data.write(&mut flash, data.newest_of(1).unwrap(), entry)
+            .unwrap();
+        let mut data = OtaData::read(&mut flash).unwrap();
+        assert!(!data.armed(1));
+        assert_eq!(
+            data.start(&mut flash, 1),
+            Some(Start::Marked { ran: 7_000 })
+        );
+        // Now the firmware's own mark is on it.
+        let mut data = OtaData::read(&mut flash).unwrap();
+        assert!(data.armed(1));
+        assert_eq!(
+            data.start(&mut flash, 1),
+            Some(Start::Failed { ran: 7_000 })
+        );
+        // Marked bad, nothing armed on it.
+        assert!(!OtaData::read(&mut flash).unwrap().armed(1));
+    }
+
+    #[test]
+    fn a_power_cut_at_every_step_of_the_first_starts_never_loses_the_way_back() {
+        // The firmware before (slot 0) stays startable whatever step of
+        // the update's starts the power goes at, and an update never
+        // starts twice as failed or good by the cut.
+        for rollback in [false, true] {
+            for left in 0..12 {
+                let mut flash = ota_data();
+                let mut data = OtaData::read(&mut flash).unwrap();
+                data.choose(&mut flash, 0, State::Valid, 0).unwrap();
+                data.choose(&mut flash, 1, State::New, 0).unwrap();
+                flash.left = left;
+                // Starts of the update, the first marking the trial, the
+                // second a clean pause, until the flash fails.
+                let slot = boot(&mut flash, rollback);
+                let mut data = OtaData::read(&mut flash).unwrap();
+                let _ = data.start(&mut flash, slot);
+                let _ = data.set_state(&mut flash, 1, State::New, 3_000);
+                flash.left = usize::MAX;
+                // After the cut, the update crashing at each of its starts:
+                // within a few starts the slot before runs and stays.
+                let mut settled = false;
+                for _ in 0..6 {
+                    let slot = boot(&mut flash, rollback);
+                    assert!(slot < SLOTS, "rollback {rollback}, cut after {left}");
+                    let mut data = OtaData::read(&mut flash).unwrap();
+                    let start = data.start(&mut flash, slot);
+                    assert!(start.is_some(), "rollback {rollback}, cut after {left}");
+                    if start == Some(Start::Kept) && slot == 0 {
+                        settled = true;
+                        break;
+                    }
+                }
+                assert!(settled, "rollback {rollback}, cut after {left}");
+            }
+        }
     }
 
     #[test]
