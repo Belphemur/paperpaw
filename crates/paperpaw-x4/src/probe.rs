@@ -149,6 +149,72 @@ pub fn factory_controller(screen_type: i64) -> Option<Controller> {
     }
 }
 
+/// Where an X3 whose display is not driven leaves its note (see
+/// [`X3Note`]): on the card's top level, where a person who comes back to
+/// the firmware before it finds it.
+pub const X3_NOTE_FILE: &str = "paperpaw-x3-display.txt";
+
+/// The note an X3 with the newer UC8279d leaves on its card before the
+/// update on trial goes back (`Probe::x3_uc8279d`). The screen shows
+/// nothing then, and the firmware before it (CrossPoint) says nothing of
+/// why PaperPaw is gone: this does, in English and German, with what the
+/// controller answered, which is what a driver for it needs.
+#[derive(Debug)]
+pub struct X3Note<'a> {
+    pub probe: &'a Probe,
+    pub version: &'a str,
+    /// Whether the update on trial goes back to the firmware before it
+    /// (`Ota::on_trial`): then the note says so; else the screen stays
+    /// blank (a cable or web-flasher install, or an update already kept)
+    /// and the note says how to get out.
+    pub went_back: bool,
+}
+
+impl fmt::Display for X3Note<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.went_back {
+            writeln!(
+                f,
+                "PaperPaw {} did not stay on this Xteink X3: its display has the newer controller (UC8279d),",
+                self.version
+            )?;
+            writeln!(
+                f,
+                "which PaperPaw cannot drive yet (the screen would stay blank). The reader went back to the firmware it had before (CrossPoint)."
+            )?;
+            writeln!(
+                f,
+                "Dieses Xteink X3 hat den neueren Anzeige-Chip (UC8279d), den PaperPaw noch nicht ansteuern kann (der Bildschirm bliebe leer)."
+            )?;
+            writeln!(
+                f,
+                "Das Gerät ist zur vorherigen Firmware (CrossPoint) zurückgekehrt."
+            )?;
+        } else {
+            writeln!(
+                f,
+                "PaperPaw {} runs on this Xteink X3, but its display has the newer controller (UC8279d),",
+                self.version
+            )?;
+            writeln!(
+                f,
+                "which PaperPaw cannot drive yet: the screen stays blank. Flash the old firmware back (CrossPoint, with its web installer)."
+            )?;
+            writeln!(
+                f,
+                "PaperPaw {} läuft auf diesem Xteink X3, aber das Gerät hat den neueren Anzeige-Chip (UC8279d), den PaperPaw noch nicht ansteuern kann:",
+                self.version
+            )?;
+            writeln!(
+                f,
+                "Der Bildschirm bleibt leer. Spiele die alte Firmware wieder auf (CrossPoint, mit dem Web-Installer)."
+            )?;
+        }
+        writeln!(f)?;
+        writeln!(f, "Display answer / Antwort des Displays: {}", self.probe)
+    }
+}
+
 impl fmt::Display for Probe {
     /// For the log, all a bug report needs: e.g. `UC8179 (FLG 13, REV 00
     /// 00 01 FF FF, BUSY high at rest)`.
@@ -601,5 +667,76 @@ mod tests {
         let (_, panel) = run(uc81([0x00, 0x00, 0x01, 0xFF, 0xFF]));
         let p = panel.borrow();
         assert!(p.select && !p.listening && !p.clock);
+    }
+
+    #[test]
+    fn an_x3_with_the_newer_controller_is_told_by_the_third_revision_byte() {
+        let newer = Probe {
+            busy_high: true,
+            flg: 0x13,
+            rev: [0x00, 0x00, 0x66, 0xFF, 0xFF],
+        };
+        let older = Probe {
+            rev: [0x00, 0x00, 0x01, 0xFF, 0xFF],
+            ..newer
+        };
+        let silent = Probe {
+            busy_high: false,
+            flg: 0xFF,
+            rev: [0xFF; 5],
+        };
+        assert!(newer.x3_uc8279d());
+        assert!(!older.x3_uc8279d());
+        assert!(!silent.x3_uc8279d());
+    }
+
+    #[test]
+    fn the_x3_note_of_an_update_on_trial_says_it_went_back() {
+        let probe = Probe {
+            busy_high: true,
+            flg: 0x13,
+            rev: [0x00, 0x00, 0x66, 0xFF, 0xFF],
+        };
+        let note = X3Note {
+            probe: &probe,
+            version: "0.5.0-beta.12",
+            went_back: true,
+        }
+        .to_string();
+        assert!(note.contains("PaperPaw 0.5.0-beta.12 did not stay on this Xteink X3"));
+        assert!(note.contains("UC8279d"));
+        assert!(note.contains("went back to the firmware it had before (CrossPoint)"));
+        assert!(note.contains("zur\u{fc}ckgekehrt"));
+        assert!(!note.contains("Flash the old firmware back"));
+        // The line a driver for it needs, as the log has it.
+        assert!(
+            note.contains("(FLG 13, REV 00 00 66 FF FF, BUSY high at rest)"),
+            "{note}"
+        );
+        assert!(note.ends_with('\n'));
+    }
+
+    #[test]
+    fn the_x3_note_of_a_kept_install_does_not_say_it_went_back() {
+        let probe = Probe {
+            busy_high: true,
+            flg: 0x13,
+            rev: [0x00, 0x00, 0x66, 0xFF, 0xFF],
+        };
+        let note = X3Note {
+            probe: &probe,
+            version: "0.5.0-beta.12",
+            went_back: false,
+        }
+        .to_string();
+        assert!(note.contains("the screen stays blank. Flash the old firmware back"));
+        assert!(note.contains("Der Bildschirm bleibt leer"));
+        assert!(!note.contains("went back"));
+        assert!(!note.contains("did not stay"));
+        assert!(!note.contains("zur\u{fc}ckgekehrt"));
+        assert!(
+            note.contains("(FLG 13, REV 00 00 66 FF FF, BUSY high at rest)"),
+            "{note}"
+        );
     }
 }
