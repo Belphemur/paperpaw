@@ -61,6 +61,7 @@ pub paperpaw_layout::LineAnnotation::x: f32
 pub paperpaw_layout::LineBidi::flags: u8
 pub paperpaw_layout::LineBidi::paragraph: u8
 impl paperpaw_layout::LineBidi
+pub const paperpaw_layout::LineBidi::DROP_CAP: u8
 pub const paperpaw_layout::LineBidi::PARAGRAPH_START: u8
 pub const paperpaw_layout::LineBidi::REORDER: u8
 pub const paperpaw_layout::LineBidi::VERTICAL: u8
@@ -83,6 +84,7 @@ pub paperpaw_layout::Page::end: paperpaw_document::Locator
 pub paperpaw_layout::Page::images: alloc::vec::Vec<paperpaw_layout::PageImage>
 pub paperpaw_layout::Page::lines: alloc::vec::Vec<paperpaw_layout::PageLine>
 pub paperpaw_layout::Page::notes: alloc::vec::Vec<paperpaw_layout::PageNote>
+pub paperpaw_layout::Page::rules: alloc::vec::Vec<paperpaw_layout::PageRule>
 pub paperpaw_layout::Page::start: paperpaw_document::Locator
 impl paperpaw_layout::Page
 pub fn paperpaw_layout::Page::is_past_end(&self) -> bool
@@ -119,6 +121,13 @@ pub const paperpaw_layout::PageNote::ENDNOTE: u8
 pub const paperpaw_layout::PageNote::FOOTNOTE: u8
 pub const paperpaw_layout::PageNote::SIDENOTE: u8
 pub const fn paperpaw_layout::PageNote::new(paperpaw_platform::geometry::Rect, paperpaw_document::Locator, paperpaw_document::Locator, u8) -> paperpaw_layout::PageNote
+#[non_exhaustive] pub struct paperpaw_layout::PageRule
+pub paperpaw_layout::PageRule::height: f32
+pub paperpaw_layout::PageRule::width: f32
+pub paperpaw_layout::PageRule::x: f32
+pub paperpaw_layout::PageRule::y: f32
+impl paperpaw_layout::PageRule
+pub const fn paperpaw_layout::PageRule::new(f32, f32, f32, f32) -> paperpaw_layout::PageRule
 pub struct paperpaw_layout::PieceStarts
 impl paperpaw_layout::PieceStarts
 pub fn paperpaw_layout::PieceStarts::clear(&self)
@@ -171,10 +180,14 @@ pub const fn paperpaw_layout::Style::lines_kept(self, u8, u8) -> Self
 pub const fn paperpaw_layout::Style::new(f32, f32, f32, bool) -> Self
 pub const fn paperpaw_layout::Style::options(self, paperpaw_layout::LayoutOptions) -> Self
 pub const fn paperpaw_layout::Style::script_options(self, paperpaw_layout::ScriptOptions) -> Self
+pub struct paperpaw_layout::TypesetKey(_)
+impl paperpaw_layout::TypesetKey
+pub const fn paperpaw_layout::TypesetKey::get(self) -> u32
 pub const paperpaw_layout::VERSION: u32
 pub trait paperpaw_layout::Typesetter
 pub fn paperpaw_layout::Typesetter::advance(&self, paperpaw_layout::Face, char) -> f32
 pub fn paperpaw_layout::Typesetter::advance_text(&self, paperpaw_layout::Face, &str, &paperpaw_text::around::Around) -> f32
+pub fn paperpaw_layout::Typesetter::extended(&self, paperpaw_layout::Face, paperpaw_layout::TypesetKey, char) -> core::option::Option<f32>
 pub fn paperpaw_layout::Typesetter::kern(&self, paperpaw_layout::Face, char, char) -> f32
 pub fn paperpaw_layout::Typesetter::line(&self, paperpaw_layout::Face) -> (f32, f32)
 pub fn paperpaw_layout::layout_page(&paperpaw_layout::LayoutContext<'_>, paperpaw_document::Locator, f32) -> core::result::Result<paperpaw_layout::Page, paperpaw_document::DocumentError>

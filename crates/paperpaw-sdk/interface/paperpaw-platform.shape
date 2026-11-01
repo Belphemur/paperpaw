@@ -34,7 +34,7 @@ struct paperpaw_platform::input::InputCaps { buttons: bool, touch: bool, pen: bo
 struct paperpaw_platform::input::Instant(0: u64)
 struct paperpaw_platform::input::PointerEvent { id: u8, phase: paperpaw_platform::input::PointerPhase, point: paperpaw_platform::geometry::Point, tool: paperpaw_platform::input::PointerTool, pressure: u16 }
 struct paperpaw_platform::pixel::Color { r: u8, g: u8, b: u8 }
-struct paperpaw_platform::status::Battery { percent: u8, charging: bool, millivolts: core::option::Option<u16> }
+struct paperpaw_platform::status::Battery { percent: u8, charging: bool, millivolts: core::option::Option<u16>, saver: bool }
 struct paperpaw_platform::status::SystemStatus { clock: core::option::Option<paperpaw_platform::status::WallClock>, battery: core::option::Option<paperpaw_platform::status::Battery>, values: [(&'static str, i64); 8] }
 struct paperpaw_platform::status::WallClock { at: paperpaw_platform::input::Instant, unix_millis: i64, utc_offset_minutes: core::option::Option<i32> }
 struct paperpaw_platform::storage::DirEntry<'a> { name: &'a str, is_dir: bool, size: u64, modified: core::option::Option<i64> }
