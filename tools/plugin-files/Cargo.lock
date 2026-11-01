@@ -155,6 +155,7 @@ dependencies = [
  "paperpaw-plugin-end-of-book",
  "paperpaw-plugin-fonts-browser",
  "paperpaw-plugin-format-docx",
+ "paperpaw-plugin-format-images",
  "paperpaw-plugin-format-mobi",
  "paperpaw-plugin-hyphenation-da",
  "paperpaw-plugin-hyphenation-de",
@@ -198,6 +199,13 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-format-docx"
+version = "1.0.0"
+dependencies = [
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-format-images"
 version = "1.0.0"
 dependencies = [
  "paperpaw-sdk",

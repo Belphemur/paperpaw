@@ -40,6 +40,7 @@ members = [
     "plugins/store",
     "plugins/format-mobi",
     "plugins/format-docx",
+    "plugins/format-images",
     "plugins/format-txt",
     "plugins/format-epub",
     "plugins/format-xtc",
@@ -166,6 +167,7 @@ paperpaw-plugin-end-of-book = { path = "plugins/end-of-book", version = "1.0.0" 
 paperpaw-plugin-notes-overview = { path = "plugins/notes-overview", version = "1.0.0" }
 paperpaw-plugin-format-mobi = { path = "plugins/format-mobi", version = "1.0.0" }
 paperpaw-plugin-format-docx = { path = "plugins/format-docx", version = "1.0.0" }
+paperpaw-plugin-format-images = { path = "plugins/format-images", version = "1.0.0" }
 paperpaw-plugin-wifi = { path = "plugins/wifi", version = "1.0.1" }
 paperpaw-plugin-bluetooth = { path = "plugins/bluetooth", version = "1.0.1" }
 paperpaw-plugin-power = { path = "plugins/power", version = "1.0.1" }

@@ -1,0 +1,21 @@
+[package]
+name = "paperpaw-plugin-format-images"
+description = "PaperPaw pictures as books: a JPEG, PNG or GIF and those after it in its folder, a page each"
+version = "1.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+categories = ["no-std", "multimedia::images"]
+
+[dependencies]
+paperpaw-sdk.workspace = true
+
+[dev-dependencies]
+paperpaw-i18n.workspace = true
+proptest.workspace = true
+
+[lints]
+workspace = true

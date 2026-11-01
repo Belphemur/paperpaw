@@ -11,6 +11,7 @@ end-of-book reading
 fonts-browser look
 format-mobi reading
 format-docx reading
+format-images reading
 hyphenation-da reading
 hyphenation-de reading
 hyphenation-es reading

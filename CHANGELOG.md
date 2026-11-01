@@ -28,6 +28,11 @@ change the plugin SDK.
   text is read in pieces from the archive and written once as blocks, so a long document needs little memory;
   pictures are taken out when their page shows. Footnotes, headers and footers, and comments are not shown.
   It needs no SDK change and is not part of the firmware, so only readers who want it pay for it.
+- *Pictures*, a new store plugin (`format-images`): a JPEG, PNG or GIF opens from the library as a book, one
+  picture to a page, fit to the screen; the pictures after it in its folder (in the order of their names, 2
+  before 10) are the pages after it, up to 300. Each picture is decoded when its page shows, so one is in
+  memory at a time; a file that is no picture or too large shows its name. It needs no SDK change and is not
+  part of the firmware.
 - *End of book*, a new plugin: when the last page of a book is reached, a screen offers the next book of its
   series (or the library), a rating of one to five (`4 / 5`, kept as a book field and shown as a badge on the
   book's row and on its information page) and whether the book counts as finished. Two settings in the reading

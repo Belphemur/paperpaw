@@ -841,3 +841,33 @@ fn a_hostile_word_document_stays_within_the_x4_budget() {
 fn a_word_zip_bomb_stays_within_the_x4_budget() {
     word_stays_within_budget("x4-docx-bomb", bomb_word_document());
 }
+
+/// A folder of pictures read as a book on the X4: a JPEG, a PNG, a GIF, a
+/// damaged JPEG, a file that is no picture and a JPEG again; 30 pages
+/// forward and back and home. (A progressive JPEG of this size takes about
+/// 2 MB to decode: the X4 refuses it, its page names the file; the run is
+/// the same with and without the budget only where nothing is refused.)
+#[test]
+fn pictures_as_a_book_stay_within_the_x4_budget() {
+    let data = root().join("crates/paperpaw-image/tests/data");
+    let read = |name: &str| fs::read(data.join(name)).unwrap();
+    let mut damaged = read("alice-cover.jpg");
+    damaged.truncate(damaged.len() / 3);
+    let files = [
+        ("books/pictures/01.jpg", read("alice-cover.jpg")),
+        ("books/pictures/02.png", read("colors-rgb.png")),
+        ("books/pictures/03.gif", read("alice-cover.gif")),
+        ("books/pictures/04.jpg", damaged),
+        ("books/pictures/05.png", b"not a picture".to_vec()),
+        ("books/pictures/06.jpg", read("alice-cover.jpg")),
+    ];
+    let heap = flow_stays_within_budget(
+        "x4-pictures",
+        "xteink-x4",
+        "books/pictures/01.jpg",
+        &reading_flow(),
+        &files,
+        &[],
+    );
+    eprintln!("pictures as a book: peak {} KiB", heap.peak);
+}
