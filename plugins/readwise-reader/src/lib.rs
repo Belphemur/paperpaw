@@ -431,7 +431,8 @@ impl Fetch {
             );
             let request = self
                 .request(env, "GET", &path, &LISTED)
-                .save_to(data("list.json"));
+                .save_to(data("list.json"))
+                .max_file(MAX_LIST);
             out.push(Command::http(request));
             return;
         }
@@ -439,6 +440,7 @@ impl Fetch {
             let request = self
                 .request(env, "GET", &format!("/api/v3/list/?id={id}"), &CHECKED)
                 .save_to(data("doc.json"))
+                .max_file(MAX_ARTICLE_ANSWER)
                 .with(Params::new().with(ARTICLE, id));
             out.push(Command::http(request));
             return;
@@ -452,6 +454,7 @@ impl Fetch {
                     &DOWNLOADED,
                 )
                 .save_to(data("doc.json"))
+                .max_file(MAX_ARTICLE_ANSWER)
                 .with(Params::new().with(ARTICLE, id).with(params::TITLE, title));
             out.push(Command::http(request));
             return;

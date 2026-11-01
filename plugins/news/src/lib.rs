@@ -62,6 +62,8 @@ const ALL: &str = "all";
 const DONE: &str = "done";
 const FAILED: &str = "failed";
 /// Text kept of an article: little on small devices.
+/// The largest feed taken (it is read as it streams, whatever its size).
+const MAX_FEED_FILE: u64 = 4 * 1024 * 1024;
 const MAX_TEXT_SMALL: usize = 8 * 1024;
 const MAX_TEXT: usize = 64 * 1024;
 
@@ -223,7 +225,8 @@ fn request(
     let (agent, name) = paperpaw_sdk::web::user_agent_of(env);
     let mut request = HttpRequest::new("GET", &feed.url, FETCHED)
         .header(agent, name)
-        .save_to(download(&feed.url));
+        .save_to(download(&feed.url))
+        .max_file(MAX_FEED_FILE);
     let mut params = Params::new()
         .with(URL, feed.url.clone())
         .with(INDEX, format!("{index}"))

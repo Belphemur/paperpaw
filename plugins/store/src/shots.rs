@@ -96,7 +96,9 @@ impl ShotsScreen {
         // Each in a file of its own, its answer known by its number: one
         // turned past while it came is not shown for another.
         let mut request = HttpRequest::new("GET", url, FETCHED);
-        request = request.save_to(part(self.at));
+        request = request
+            .save_to(part(self.at))
+            .max_file(crate::catalog::MAX_SHOT_FILE);
         request = request.with(Params::new().with(SHOT, self.at.to_string()));
         cx.command(Command::http(request));
         self.picture = Picture::Loading;

@@ -65,6 +65,11 @@ use runs::{Cursor, KEYED, Keyed, Output, before, order_of};
 const FORMAT: u32 = 2;
 /// The longest summary kept, in bytes, and the longest name and other
 /// short texts.
+/// The largest files the store takes from the library: the list of
+/// plugins, a plugin's page, a picture of it.
+pub(crate) const MAX_LIST_FILE: u64 = 4 * 1024 * 1024;
+pub(crate) const MAX_PAGE_FILE: u64 = 512 * 1024;
+pub(crate) const MAX_SHOT_FILE: u64 = 2 * 1024 * 1024;
 const MAX_SUMMARY: usize = 300;
 const MAX_NAME: usize = 80;
 /// The longest line of the index read.

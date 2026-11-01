@@ -262,7 +262,9 @@ impl PageScreen {
         let community = crate::community(&env);
         let url = catalog::plugin_url(list.trim(), device.name, language, &self.id, community);
         let mut request = HttpRequest::new("GET", &url, DETAILS);
-        request = request.save_to(catalog::plugin_part(&self.id));
+        request = request
+            .save_to(catalog::plugin_part(&self.id))
+            .max_file(catalog::MAX_PAGE_FILE);
         request = request.with(Params::new().with(params::ID, self.id.clone()));
         cx.command(Command::http(request));
         self.details = Details::Asked(url);

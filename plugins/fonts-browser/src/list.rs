@@ -26,6 +26,8 @@ use crate::{CATALOG, FONT_SCREEN};
 
 /// The answer with the catalog.
 const LOADED: Event<HttpReply> = Event::new("fonts-browser.loaded");
+/// The largest list of fonts taken from a library.
+const MAX_LIST_FILE: u64 = 512 * 1024;
 
 fn fetched_path() -> String {
     format!("{}.part", catalog::path())
@@ -105,7 +107,7 @@ impl ListScreen {
         }
         let url = env.settings().read(&CATALOG);
         let mut request = HttpRequest::new("GET", url.trim(), LOADED);
-        request = request.save_to(fetched_path());
+        request = request.save_to(fetched_path()).max_file(MAX_LIST_FILE);
         cx.command(Command::http(request));
         self.asked = true;
         if self.fonts.is_empty() {
