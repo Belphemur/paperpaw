@@ -20,6 +20,9 @@ There are two kinds:
   the Xteink X4 and X4 Pro load at their start, without a
   new firmware (see [Plugins as files](#plugins-as-files)).
 
+Where a plugin's files go, what they are called and how big its assets
+should be: [Plugin layout and best practices](plugin-conventions.md).
+
 This guide walks through a code plugin, then lists what plugins can
 contribute. Working with an AI assistant: the skill in
 [`.claude/skills/paperpaw-plugin-development`](../.claude/skills/paperpaw-plugin-development/SKILL.md)
@@ -505,6 +508,11 @@ What it is given:
   `cargo run --example paperpaw-dev -- check --plugin my-plugin`.
 - **A data plugin**: its folder, `paperpaw-dev check path/to/my-theme`.
 - **A code plugin built for a device**: `paperpaw-dev package hello.ppn`.
+- **A code plugin's source**: `paperpaw-dev package path/to/crate` reads its
+  `src/` for the conventions of
+  [Plugin layout and best practices](plugin-conventions.md): files over 4 KB
+  embedded in the code, writes under `plugins/<id>/`, ids outside `<id>.`.
+  Only warnings.
 - **PaperPaw's own plugins**, which the app has already:
   `cargo run -p paperpaw-dev -- check --plugin widgets`.
 

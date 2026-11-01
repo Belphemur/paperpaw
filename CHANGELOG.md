@@ -33,6 +33,7 @@ change the plugin SDK.
   before 10) are the pages after it, up to 300. Each picture is decoded when its page shows, so one is in
   memory at a time; a file that is no picture or too large shows its name. It needs no SDK change and is not
   part of the firmware.
+- *Plugin layout and best practices* (`docs/plugin-conventions.md`): the folders of a plugin, names, where pictures and other assets go (on the card, not in the code), translations, data a plugin writes, and the budgets. `paperpaw-dev package` warns where a data plugin's folder or a code plugin's source (`paperpaw-dev package path/to/crate`) does not keep them. It needs no SDK change.
 - *End of book*, a new plugin: when the last page of a book is reached, a screen offers the next book of its
   series (or the library), a rating of one to five (`4 / 5`, kept as a book field and shown as a badge on the
   book's row and on its information page) and whether the book counts as finished. Two settings in the reading

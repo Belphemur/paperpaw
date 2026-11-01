@@ -108,9 +108,54 @@ fn read_dir(root: &Path, dir: &Path, out: &mut BTreeMap<String, Rc<[u8]>>) -> Re
     Ok(())
 }
 
+/// A plugin with code as source: the crate's folder, looked at by
+/// `package` for the conventions of `docs/plugin-conventions.md`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Source {
+    /// The plugin's id: `plugin/plugin.ini`'s, else the crate's name
+    /// without `paperpaw-plugin-`.
+    pub id: String,
+    pub dir: PathBuf,
+}
+
+impl Source {
+    /// The crate in `dir` (it has a `Cargo.toml`).
+    pub fn read(dir: &Path) -> Result<Source, String> {
+        let from_manifest = std::fs::read(dir.join("plugin/plugin.ini"))
+            .ok()
+            .and_then(|bytes| {
+                let files = BTreeMap::from([("plugin.ini".to_string(), Rc::from(bytes))]);
+                data_plugin_id(&files)
+            });
+        let id = from_manifest.or_else(|| {
+            let text = std::fs::read_to_string(dir.join("Cargo.toml")).ok()?;
+            let name = text
+                .lines()
+                .find_map(|l| l.trim().strip_prefix("name")?.trim().strip_prefix('='))?
+                .trim()
+                .trim_matches('"')
+                .to_string();
+            let id = name.strip_prefix("paperpaw-plugin-").unwrap_or(&name);
+            is_plugin_name(id).then(|| id.to_string())
+        });
+        id.map(|id| Source {
+            id,
+            dir: dir.to_path_buf(),
+        })
+        .ok_or_else(|| {
+            format!(
+                "{}: no plugin id (`plugin/plugin.ini` or a crate named `paperpaw-plugin-<id>`)",
+                dir.display()
+            )
+        })
+    }
+}
+
 /// What a run looks at.
 #[derive(Debug, Clone, Default)]
 pub struct Target {
+    /// Plugins with code as source (a crate's folder), for `package`.
+    pub sources: Vec<Source>,
     /// The plugins whose screens, widgets, settings and texts are looked
     /// at, by id. Empty: every plugin of the app (PaperPaw's own
     /// development).
@@ -142,12 +187,12 @@ impl Target {
             return Ok(());
         }
         if path.join("Cargo.toml").is_file() {
-            return Err(format!(
-                "{} is a crate: a plugin with code is checked from its own repository, \
-                 with `paperpaw_dev::main` in an example (see docs/plugins.md, \
-                 \"Checking your plugin\")",
-                path.display()
-            ));
+            // A crate: `package` reads its source for the conventions; a
+            // plugin with code is run from its own repository, with
+            // `paperpaw_dev::main` in an example (docs/plugins.md,
+            // "Checking your plugin").
+            self.sources.push(Source::read(path)?);
+            return Ok(());
         }
         Err(format!(
             "{}: neither a data plugin folder (with plugin.ini) nor a .ppn file",
@@ -182,7 +227,9 @@ impl Target {
     /// Whether the app is looked at in the emulator at all (not only
     /// `.ppn` files).
     pub fn runs(&self) -> bool {
-        !self.plugins.is_empty() || !self.data.is_empty() || self.ppn.is_empty()
+        !self.plugins.is_empty()
+            || !self.data.is_empty()
+            || (self.ppn.is_empty() && self.sources.is_empty())
     }
 }
 
