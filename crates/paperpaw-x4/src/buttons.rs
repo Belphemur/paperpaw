@@ -352,7 +352,7 @@ mod tests {
         // The interval is the reader's own Saving response, and a press of
         // 80 ms is read twice at that rate.
         assert_eq!(SAVING_READ_MS, 50);
-        assert!(2 * SAVING_READ_MS < 120);
+        const { assert!(2 * SAVING_READ_MS < 120) };
     }
 
     #[test]
