@@ -172,6 +172,7 @@ dependencies = [
  "paperpaw-plugin-kosync",
  "paperpaw-plugin-menu-editor",
  "paperpaw-plugin-news",
+ "paperpaw-plugin-notes-overview",
  "paperpaw-plugin-profiles",
  "paperpaw-plugin-reading-goal",
  "paperpaw-plugin-readwise",
@@ -327,6 +328,13 @@ dependencies = [
 [[package]]
 name = "paperpaw-plugin-news"
 version = "1.0.6"
+dependencies = [
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-notes-overview"
+version = "1.0.0"
 dependencies = [
  "paperpaw-sdk",
 ]
