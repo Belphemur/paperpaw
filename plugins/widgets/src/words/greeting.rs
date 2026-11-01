@@ -7,7 +7,7 @@ use alloc::string::String;
 
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::{self, UiStyle};
-use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, Padding, TextSize, WidgetSpec};
+use paperpaw_sdk::widgets::{self, Align, Drawn, FixedWidget, Frame, Padding, TextSize};
 use paperpaw_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec, time};
 
 use super::frame_height;
@@ -69,14 +69,13 @@ pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         &SPEC
     })?;
     r.add_settings(&SETTINGS)?;
-    r.add_widget(
-        WidgetSpec::drawn(
-            ID,
-            "widgets.greeting",
-            Drawn::new(height, draw).shows(shows),
-        )
-        .category(widgets::categories::PERSONAL),
+    static WIDGET: [FixedWidget; 1] = [FixedWidget::drawn(
+        ID,
+        "widgets.greeting",
+        Drawn::new(height, draw).shows(shows),
     )
+    .category(widgets::categories::PERSONAL)];
+    r.add_widgets(&WIDGET)
 }
 
 /// The part of the day an hour is in: morning from 5, afternoon from

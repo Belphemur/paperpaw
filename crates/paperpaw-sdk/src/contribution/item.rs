@@ -174,6 +174,8 @@ pub enum Contribution {
     /// A job: work done in steps (see [`work`](crate::work)).
     Work(Box<crate::work::WorkSpec>),
     Widget(Box<WidgetSpec>),
+    /// Widgets kept in the program.
+    FixedWidgets(&'static [crate::widgets::FixedWidget]),
     SetupStep(Box<SetupStepSpec>),
     /// A preset made at start (see [`presets`](crate::presets)).
     Preset(Box<Preset>),
@@ -276,7 +278,7 @@ impl Contribution {
             Contribution::EventObserver(_) => "event-observer",
             Contribution::Gesture(_) => "gesture",
             Contribution::Work(_) => "work",
-            Contribution::Widget(_) => "widget",
+            Contribution::Widget(_) | Contribution::FixedWidgets(_) => "widget",
             Contribution::SetupStep(_) => "setup-step",
             Contribution::Preset(_) | Contribution::FixedPresets(_) => "preset",
             Contribution::Published { .. } => "service",

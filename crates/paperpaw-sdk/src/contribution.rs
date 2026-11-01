@@ -857,7 +857,42 @@ impl Registrar {
     /// Adds a widget, e.g. for the home screen (see
     /// [`widgets`](crate::widgets)).
     pub fn add_widget(&mut self, widget: WidgetSpec) -> Result<(), RegisterError> {
+        let fixed = self.contributions.iter().any(|c| {
+            matches!(c, Contribution::FixedWidgets(list) if list.iter().any(|w| *w.id() == widget.id))
+        });
+        if fixed {
+            return Err(RegisterError::Duplicate { id: widget.id });
+        }
         self.add_checked(Contribution::Widget(Box::new(widget)))
+    }
+
+    /// Adds widgets kept in the program (a `static` list of
+    /// [`FixedWidget`](crate::widgets::FixedWidget)s): they take next to no
+    /// memory, where each added with [`add_widget`](Self::add_widget)
+    /// takes some hundred bytes.
+    pub fn add_widgets(
+        &mut self,
+        widgets: &'static [crate::widgets::FixedWidget],
+    ) -> Result<(), RegisterError> {
+        // Each in the plugin's namespace, and once.
+        let added = |id: &Id| {
+            self.contributions.iter().any(|c| match c {
+                Contribution::Widget(w) => w.id == *id,
+                Contribution::FixedWidgets(list) => list.iter().any(|w| w.id() == id),
+                _ => false,
+            })
+        };
+        for (n, widget) in widgets.iter().enumerate() {
+            let id = widget.id();
+            if !id.is_owned_by(&self.plugin) {
+                return Err(RegisterError::Namespace { id: id.clone() });
+            }
+            if added(id) || widgets[..n].iter().any(|w| w.id() == id) {
+                return Err(RegisterError::Duplicate { id: id.clone() });
+            }
+        }
+        self.contributions.push(Contribution::FixedWidgets(widgets));
+        Ok(())
     }
 
     /// Adds a step to the first-run setup (see [`setup`](crate::setup)).
@@ -1055,6 +1090,57 @@ mod tests {
 
     fn action(id: &'static str) -> ActionSpec {
         ActionSpec::new(Id::new_static(id), "x")
+    }
+
+    /// Widgets kept in the program: in the namespace, and once among
+    /// them and those made, in either order.
+    #[test]
+    fn widgets_kept_in_the_program_once() {
+        use crate::widgets::{Drawn, FixedWidget, WidgetSpec};
+        fn nothing(_: &crate::Env<'_>, _: u16) -> u16 {
+            0
+        }
+        fn draw(_: &mut crate::Canvas<'_>, _: &crate::Env<'_>, _: crate::Rect) {}
+        static CLOCK: [FixedWidget; 1] = [FixedWidget::drawn(
+            Id::new_static("demo.clock"),
+            "demo.clock",
+            Drawn::new(nothing, draw),
+        )];
+        static OTHER: [FixedWidget; 1] = [FixedWidget::drawn(
+            Id::new_static("other.clock"),
+            "other.clock",
+            Drawn::new(nothing, draw),
+        )];
+        static TWICE: [FixedWidget; 2] = [
+            FixedWidget::drawn(Id::new_static("demo.a"), "a", Drawn::new(nothing, draw)),
+            FixedWidget::drawn(Id::new_static("demo.a"), "a", Drawn::new(nothing, draw)),
+        ];
+        let made =
+            || WidgetSpec::drawn(Id::new_static("demo.clock"), "x", Drawn::new(nothing, draw));
+        let mut r = Registrar::new(Id::new_static("demo"));
+        r.add_widgets(&CLOCK).unwrap();
+        assert!(matches!(
+            r.add_widgets(&OTHER),
+            Err(RegisterError::Namespace { .. })
+        ));
+        assert!(matches!(
+            r.add_widgets(&TWICE),
+            Err(RegisterError::Duplicate { .. })
+        ));
+        assert!(matches!(
+            r.add_widget(made()),
+            Err(RegisterError::Duplicate { .. })
+        ));
+        assert!(matches!(
+            r.add_widgets(&CLOCK),
+            Err(RegisterError::Duplicate { .. })
+        ));
+        let mut r = Registrar::new(Id::new_static("demo"));
+        r.add_widget(made()).unwrap();
+        assert!(matches!(
+            r.add_widgets(&CLOCK),
+            Err(RegisterError::Duplicate { .. })
+        ));
     }
 
     #[test]

@@ -9,7 +9,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::widgets::{
-    self, Align, Frame, Padding, TextSize, Widget, WidgetSpec, WidgetTarget,
+    self, Align, FixedWidget, Frame, Padding, TextSize, Widget, WidgetTarget,
 };
 use paperpaw_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec};
 
@@ -46,10 +46,12 @@ pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         &SPEC
     })?;
     r.add_settings(&SETTINGS)?;
-    r.add_widget(
-        WidgetSpec::new(TODAY, "stats.widget.today", |_| Box::new(Today::default()))
-            .category(widgets::categories::READING),
-    )
+    static WIDGET: [FixedWidget; 1] =
+        [
+            FixedWidget::new(TODAY, "stats.widget.today", |_| Box::new(Today::default()))
+                .category(widgets::categories::READING),
+        ];
+    r.add_widgets(&WIDGET)
 }
 
 /// What the widget shows.

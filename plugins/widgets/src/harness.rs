@@ -145,6 +145,7 @@ impl Harness {
                 }
                 Contribution::SettingGroup(group) => self.settings.add_group(group).unwrap(),
                 Contribution::Widget(widget) => self.widgets.add(*widget),
+                Contribution::FixedWidgets(list) => self.widgets.add_fixed(list),
                 Contribution::Translations(text) => {
                     self.i18n.add(Catalog::parse(text).unwrap());
                 }

@@ -33,6 +33,9 @@ change the plugin SDK.
 - SDK: `Str`, text kept in the program or owned in two words (a `Cow<'static, str>` takes three);
   `Manifest::name`/`description` and `SettingSpec::title`/`description` are `Str`, as the kernel keeps them for
   every plugin and setting (16 bytes less per plugin on 64-bit, 8 on the X4).
+- SDK: widgets kept in the program, `FixedWidget` and `Registrar::add_widgets` (a `static` list, two words of
+  memory for the list where each `WidgetSpec` takes about a hundred bytes); `Drawn::new`, `shows` and `targets`
+  are `const`. Home, stats, vocabulary and six of the widgets plugin's widgets use them.
 - *All notes*, a new plugin (Tools): the books that have bookmarks or highlights with how many, a book's notes
   (a note opens the book there), and *Export as My Clippings.txt*, all notes in one file in Kindle's form
   (UTF-8 with a byte order mark, `Exports/My Clippings.txt` beside the library) that notes apps read. A book's

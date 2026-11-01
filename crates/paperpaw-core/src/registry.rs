@@ -170,6 +170,13 @@ impl Screens {
     }
 }
 
+/// Widgets a plugin added, in order: one made at the start, or a list
+/// kept in the program.
+pub(crate) enum StagedWidgets {
+    One(alloc::boxed::Box<paperpaw_sdk::widgets::WidgetSpec>),
+    List(&'static [paperpaw_sdk::widgets::FixedWidget]),
+}
+
 /// The events plugins subscribed to, plugin by plugin in the order they
 /// registered: each plugin's id once, with how many of the handlers after
 /// those of the plugin before are its (a plugin subscribes to a few
@@ -417,7 +424,7 @@ pub(crate) struct Staging {
     pub(crate) status_places: Vec<paperpaw_sdk::status::Place>,
     pub(crate) widget_places: Vec<paperpaw_sdk::widgets::WidgetPlace>,
     pub(crate) widget_categories: Vec<paperpaw_sdk::widgets::WidgetCategory>,
-    pub(crate) widgets: Vec<paperpaw_sdk::widgets::WidgetSpec>,
+    pub(crate) widgets: Vec<StagedWidgets>,
     pub(crate) setup_steps: Vec<paperpaw_sdk::setup::SetupStepSpec>,
     pub(crate) presets: Vec<paperpaw_sdk::presets::Preset>,
     pub(crate) fixed_presets: Vec<&'static [paperpaw_sdk::presets::Preset]>,
@@ -630,7 +637,8 @@ pub(crate) fn stage(
             Contribution::EventObserver(observer) => staging.event_observers.push(*observer),
             Contribution::Gesture(gesture) => staging.gestures.push(*gesture),
             Contribution::Work(spec) => staging.works.push(*spec),
-            Contribution::Widget(widget) => staging.widgets.push(*widget),
+            Contribution::Widget(widget) => staging.widgets.push(StagedWidgets::One(widget)),
+            Contribution::FixedWidgets(list) => staging.widgets.push(StagedWidgets::List(list)),
             Contribution::SetupStep(step) => staging.setup_steps.push(*step),
             Contribution::Preset(preset) => staging.presets.push(*preset),
             Contribution::FixedPresets(list) => staging.fixed_presets.push(list),

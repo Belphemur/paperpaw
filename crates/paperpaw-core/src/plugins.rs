@@ -371,8 +371,13 @@ impl Kernel {
         for preset in staging.presets.drain(..) {
             self.shared.settings.presets_mut().add(preset);
         }
-        for widget in staging.widgets.drain(..) {
-            self.shared.widgets.add(widget);
+        for widgets in staging.widgets.drain(..) {
+            match widgets {
+                crate::registry::StagedWidgets::One(widget) => {
+                    self.shared.widgets.add_boxed(widget)
+                }
+                crate::registry::StagedWidgets::List(list) => self.shared.widgets.add_fixed(list),
+            }
         }
         self.stylesheet_owners
             .extend(staging.stylesheets.iter().map(|_| plugin.clone()));

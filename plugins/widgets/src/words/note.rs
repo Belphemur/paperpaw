@@ -13,7 +13,7 @@ use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::UiStyle;
 use paperpaw_sdk::widgets::{
-    self, Align, Frame, Padding, TextSize, Widget, WidgetSpec, WidgetTarget,
+    self, Align, FixedWidget, Frame, Padding, TextSize, Widget, WidgetTarget,
 };
 use paperpaw_sdk::{
     Canvas, Command, Env, Id, Rect, RegisterError, Registrar, SettingSpec, SettingValue,
@@ -71,10 +71,12 @@ pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
             SettingValue::Text(Cow::Owned(String::from(text))),
         ));
     })?;
-    r.add_widget(
-        WidgetSpec::new(ID, "widgets.note", |_| Box::new(Note::default()))
-            .category(widgets::categories::PERSONAL),
-    )
+    static WIDGET: [FixedWidget; 1] =
+        [
+            FixedWidget::new(ID, "widgets.note", |_| Box::new(Note::default()))
+                .category(widgets::categories::PERSONAL),
+        ];
+    r.add_widgets(&WIDGET)
 }
 
 /// The note: its text is a setting, laid out where the widget is placed

@@ -8,7 +8,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::ui::UiStyle;
 use paperpaw_sdk::widgets::{
-    self, Align, Frame, Padding, TextSize, Widget, WidgetLook, WidgetSpec, WidgetTarget,
+    self, Align, FixedWidget, Frame, Padding, TextSize, Widget, WidgetLook, WidgetTarget,
 };
 use paperpaw_sdk::{Canvas, Command, Env, Id, Point, Rect, RegisterError, Registrar};
 
@@ -89,10 +89,12 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         },
         &SETTINGS,
     )?;
-    r.add_widget(
-        WidgetSpec::new(ID, "widgets.progress", |_| Box::new(Progress::default()))
-            .category(widgets::categories::BOOKS),
-    )
+    static WIDGET: [FixedWidget; 1] =
+        [
+            FixedWidget::new(ID, "widgets.progress", |_| Box::new(Progress::default()))
+                .category(widgets::categories::BOOKS),
+        ];
+    r.add_widgets(&WIDGET)
 }
 
 /// The book being read, read when updated.

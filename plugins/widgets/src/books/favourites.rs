@@ -8,7 +8,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::library;
 use paperpaw_sdk::ui::UiStyle;
 use paperpaw_sdk::widgets::{
-    self, Align, Frame, Padding, TextSize, Widget, WidgetLook, WidgetSpec, WidgetTarget,
+    self, Align, FixedWidget, Frame, Padding, TextSize, Widget, WidgetLook, WidgetTarget,
 };
 use paperpaw_sdk::{Canvas, Env, Id, Rect, RegisterError, Registrar};
 
@@ -81,14 +81,14 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         },
         &SETTINGS,
     )?;
-    r.add_widget(
-        WidgetSpec::new(
+    static WIDGET: [FixedWidget; 1] =
+        [FixedWidget::new(
             ID,
             "widgets.favourites",
             |_| Box::new(Favourites::default()),
         )
-        .category(widgets::categories::BOOKS),
-    )
+        .category(widgets::categories::BOOKS)];
+    r.add_widgets(&WIDGET)
 }
 
 #[derive(Debug, Default)]

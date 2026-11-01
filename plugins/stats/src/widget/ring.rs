@@ -18,7 +18,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::builtin::{params, slots};
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::widgets::{
-    self, Align, Frame, Padding, TextSize, Widget, WidgetLook, WidgetSpec, WidgetTarget,
+    self, Align, FixedWidget, Frame, Padding, TextSize, Widget, WidgetLook, WidgetTarget,
 };
 use paperpaw_sdk::{
     Arg, Canvas, Command, Env, Id, Params, Rect, RegisterError, Registrar, SettingSpec,
@@ -81,10 +81,12 @@ pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         &SPEC
     })?;
     r.add_settings(&SETTINGS)?;
-    r.add_widget(
-        WidgetSpec::new(RING, "stats.widget.goal", |_| Box::new(Ring::default()))
-            .category(widgets::categories::READING),
-    )
+    static WIDGET: [FixedWidget; 1] =
+        [
+            FixedWidget::new(RING, "stats.widget.goal", |_| Box::new(Ring::default()))
+                .category(widgets::categories::READING),
+        ];
+    r.add_widgets(&WIDGET)
 }
 
 /// What the ring shows.
