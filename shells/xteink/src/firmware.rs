@@ -700,10 +700,13 @@ impl Firmware {
             "sleeping: hardware shutdown (USB {})",
             self.usb_power.is_high()
         );
+        // The power goes, the radio's with it: the network left first, and
+        // before the wait below, which has no end while the button is held
+        // (a case or a sleeve pressing it): the radio would listen all that
+        // time.
+        self.network.leave();
         // Released first: held, the button would wake it at once.
         self.wait_for_power_release();
-        // The power goes, the radio's with it: the network left first.
-        self.network.leave();
         let mut power = input::stop().expect("the power button");
         // The X4 Classic keeps its power on and holds its lines, as its
         // stock firmware sleeps (see its board).
