@@ -19,9 +19,12 @@
 
 use core::fmt::Write;
 
-/// The last panic's message (zero-terminated), kept through the reset.
+/// The last panic's message (zero-terminated), kept through the reset,
+/// sealed with a magic word and a checksum (`paperpaw_x4::rtc_guard`): the
+/// RTC memory also holds what a power-up or the firmware before left.
 #[esp_hal::ram(unstable(rtc_fast, persistent))]
-static mut LAST: [u8; 400] = [0; 400];
+static mut LAST: [u8; paperpaw_x4::rtc_guard::MESSAGE_LEN] =
+    [0; paperpaw_x4::rtc_guard::MESSAGE_LEN];
 /// The calls kept with a panic, at most.
 const CALLS: usize = 16;
 
@@ -49,9 +52,9 @@ impl Write for Cut<'_> {
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
     esp_println::println!("PANIC: {info}");
-    let mut buf = [0u8; 400];
+    let mut buf = [0u8; paperpaw_x4::rtc_guard::MESSAGE_LEN];
     let mut cut = Cut {
-        buf: &mut buf,
+        buf: &mut buf[paperpaw_x4::rtc_guard::BODY],
         len: 0,
     };
     // The message first: the location's path is long.
@@ -116,6 +119,7 @@ fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
             }
         });
     }
+    paperpaw_x4::rtc_guard::seal_message(&mut buf);
     // SAFETY: one core, the firmware stopped: nothing else touches it.
     unsafe { core::ptr::addr_of_mut!(LAST).write_volatile(buf) };
     esp_hal::system::software_reset()
@@ -161,12 +165,19 @@ pub fn keep(storage: &dyn paperpaw_platform::Storage, message: &str) {
 
 /// The last panic's message, if the last run ended in one; cleared.
 pub fn take_last() -> Option<alloc::string::String> {
+    let message = last();
     // SAFETY: as in `panic`; read once at start or over USB.
+    unsafe {
+        core::ptr::addr_of_mut!(LAST).write_volatile([0; paperpaw_x4::rtc_guard::MESSAGE_LEN])
+    };
+    message
+}
+
+/// The same, left where it is: for a start that goes back to the firmware
+/// before it (an update that failed its trial), which reads it as its own.
+/// Noise, or what another firmware left, is no message.
+pub fn last() -> Option<alloc::string::String> {
+    // SAFETY: as in `panic`; read at start or over USB.
     let buf = unsafe { core::ptr::addr_of!(LAST).read_volatile() };
-    unsafe { core::ptr::addr_of_mut!(LAST).write_volatile([0; 400]) };
-    let len = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
-    // Unset memory after a power-up is noise: printable text only.
-    let text = core::str::from_utf8(&buf[..len]).ok()?;
-    (!text.is_empty() && text.chars().all(|c| !c.is_control() || c == '\n'))
-        .then(|| alloc::string::String::from(text))
+    paperpaw_x4::rtc_guard::message(&buf).map(alloc::string::String::from)
 }

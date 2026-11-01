@@ -574,7 +574,7 @@ impl Device {
                 .plugins(Plugins::read(&slot[PLUGINS_AT..]).unwrap_or_default());
             let (updates, start) =
                 Updates::start(chip, &self.slots, running, this, self.board.tag).unwrap();
-            if start == Some(Start::Failed) {
+            if matches!(start, Some(Start::Failed { .. })) {
                 chip = updates.into_flash();
                 continue;
             }

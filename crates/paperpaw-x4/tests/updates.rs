@@ -249,7 +249,7 @@ fn an_update_that_fails_its_trial_is_undone() {
             let target = device.install(running, 9);
             assert_eq!(device.start(), (target, Start::Trial { ran: 0 }), "{name}");
             // It hangs, the watchdog ends it: found on trial, marked bad.
-            assert_eq!(device.start(), (target, Start::Failed), "{name}");
+            assert_eq!(device.start(), (target, Start::Failed { ran: 0 }), "{name}");
             // The bootloader passes over it: the one before is back.
             assert_eq!(device.start(), (running, Start::Undone), "{name}");
             assert_eq!(device.start(), (running, Start::Kept), "{name}");

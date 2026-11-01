@@ -114,8 +114,10 @@ pub enum Start {
     /// cleanly: now on trial, after `ran` milliseconds run before.
     Trial { ran: u32 },
     /// An update on trial whose last run ended other than cleanly: marked
-    /// bad, the device starts again into the firmware before it.
-    Failed,
+    /// bad, the device starts again into the firmware before it. `ran` is
+    /// the milliseconds its earlier runs noted (0: none; a start that did
+    /// not get to note any, or a bootloader that marked the start itself).
+    Failed { ran: u32 },
 }
 
 /// One of the two entries.
@@ -280,9 +282,9 @@ impl OtaData {
                     .ok()?;
                 Some(Start::Trial { ran })
             }
-            (Some(_), Some((State::PendingVerify, _))) => {
+            (Some(_), Some((State::PendingVerify, ran))) => {
                 self.set_state(flash, running, State::Invalid, 0).ok()?;
-                Some(Start::Failed)
+                Some(Start::Failed { ran })
             }
             _ => Some(Start::Kept),
         }
@@ -575,6 +577,28 @@ mod tests {
             OtaData::read(&mut flash).unwrap().state_of(1),
             Some((State::Valid, 0))
         );
+    }
+
+    #[test]
+    fn a_failed_trial_says_how_long_it_ran() {
+        let mut flash = ota_data();
+        let mut data = OtaData::read(&mut flash).unwrap();
+        data.choose(&mut flash, 0, State::Valid, 0).unwrap();
+        data.choose(&mut flash, 1, State::New, 0).unwrap();
+        // Ran 12 s, asleep (new again with its time), started again and
+        // ended other than cleanly: failed, with the 12 s.
+        data.set_state(&mut flash, 1, State::New, 12_000).unwrap();
+        assert_eq!(
+            data.start(&mut flash, 1),
+            Some(Start::Trial { ran: 12_000 })
+        );
+        let mut data = OtaData::read(&mut flash).unwrap();
+        assert_eq!(
+            data.start(&mut flash, 1),
+            Some(Start::Failed { ran: 12_000 })
+        );
+        // Marked bad: the bootloader passes over it at the next start.
+        assert_eq!(data.booted(), 0);
     }
 
     #[test]
