@@ -322,13 +322,17 @@ fn check_pages(cx: &LayoutContext<'_>, book: &Book, pages: &[Page], height: f32,
     let mut words: Vec<(u32, u32, u32)> = Vec::new();
     for page in pages {
         let mut last_baseline = f32::NEG_INFINITY;
-        for (i, line) in page.lines.iter().enumerate() {
-            // A drop capital stands on the baseline of the last line it
-            // spans, which come after it.
-            let capital = page
-                .lines
+        // A drop capital stands on the baseline of the last line it
+        // spans, which come after it.
+        let capital = |i: usize| {
+            page.lines
                 .get(i + 1)
-                .is_some_and(|next| next.baseline <= line.baseline);
+                .is_some_and(|next| next.baseline <= page.lines[i].baseline)
+        };
+        // The lines of text, a capital beside them not counted.
+        let texts = (0..page.lines.len()).filter(|&i| !capital(i)).count();
+        for (i, line) in page.lines.iter().enumerate() {
+            let capital = capital(i);
             // Runs cover the text in order.
             let mut at = 0;
             for run in &line.runs {
@@ -349,7 +353,7 @@ fn check_pages(cx: &LayoutContext<'_>, book: &Book, pages: &[Page], height: f32,
             assert!(line.x >= 0.0);
 
             // No taller than the box: lines go down; a line that does
-            // not fit is alone on its page.
+            // not fit is alone on its page (with its capital, if any).
             let face = line.runs[0].face;
             let (ascent, line_height) = widths.line(face);
             if capital {
@@ -363,7 +367,7 @@ fn check_pages(cx: &LayoutContext<'_>, book: &Book, pages: &[Page], height: f32,
             let line_height = if capital { ascent } else { line_height };
             let bottom = line.baseline - ascent + line_height;
             assert!(
-                bottom <= height + 1e-3 || page.lines.len() == 1,
+                bottom <= height + 1e-3 || texts == 1,
                 "line {:?} reaches {bottom}, page is {height} high",
                 line.text
             );
@@ -602,6 +606,20 @@ fn glyphs_wider_than_the_box_get_a_line_each() {
     let cx = context(&book, 1.0, &style, true, &VARIED);
     let pages = paginate(&cx, 100.0, &book);
     assert_eq!(shown(&pages), [["一", "二", "三"]]);
+}
+
+/// The shrunk case of `lines_fit_and_every_character_is_shown_once`
+/// (#274): a page lower than a line of a paragraph with a drop capital
+/// shows that line beside its capital, alone.
+#[test]
+fn a_line_lower_than_the_page_is_alone_beside_its_capital() {
+    let mut book = one_paragraph("aaaaaaaaaaaaaaaaaaaa  a", Align::Auto);
+    book.sections[0][0].size = Some(170);
+    book.sections[0][0].drop_cap = 5;
+    let cx = context(&book, 50.027_22, &PLAIN, false, &EVEN);
+    let pages = paginate(&cx, 15.0, &book);
+    assert_eq!(shown(&pages), [["a", "aaaaaaaaaaaaaaaaaaa  a"]]);
+    check_pages(&cx, &book, &pages, 15.0, EVEN);
 }
 
 /// A page lower than a single line still shows one line and moves on.
