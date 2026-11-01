@@ -83,7 +83,7 @@ impl Face {
 
 /// Changes whenever the same input is laid out differently, so readers
 /// rebuild page indexes they cached.
-pub const VERSION: u32 = 10;
+pub const VERSION: u32 = 11;
 
 /// Measures text for the layout engine; readers implement it with their
 /// fonts.
@@ -588,6 +588,31 @@ pub struct LineAnnotation {
     pub size: f32,
 }
 
+/// A thin line on the page, as the reader draws it in the text's colour:
+/// a table's borders between and around its cells (see
+/// [`paperpaw_document::TableRow`]).
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[non_exhaustive]
+pub struct PageRule {
+    /// Left and top edges relative to the content box, and its size: one
+    /// side is the line's thickness.
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+}
+
+impl PageRule {
+    pub const fn new(x: f32, y: f32, width: f32, height: f32) -> PageRule {
+        PageRule {
+            x,
+            y,
+            width,
+            height,
+        }
+    }
+}
+
 /// An image at its position and size on the page.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
@@ -654,6 +679,8 @@ pub struct Page {
     pub images: Vec<PageImage>,
     /// Its notes. Reserved: empty until the layout sets them.
     pub notes: Vec<PageNote>,
+    /// Thin lines the reader draws (a table's borders).
+    pub rules: Vec<PageRule>,
 }
 
 impl Page {
@@ -665,6 +692,7 @@ impl Page {
             lines,
             images,
             notes: Vec::new(),
+            rules: Vec::new(),
         }
     }
 
@@ -979,6 +1007,7 @@ pub fn layout_page(
         lines: Vec::new(),
         images: Vec::new(),
         notes: Vec::new(),
+        rules: Vec::new(),
     };
     let mut at = start;
     let mut y = 0.0f32;

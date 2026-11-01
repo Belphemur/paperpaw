@@ -29,6 +29,9 @@ pub use paperpaw_lang::{Direction, Lang, WritingMode};
 
 pub use paperpaw_platform::{DirEntry, NoStorage, Storage};
 
+mod table;
+pub use table::{MAX_COLUMNS, TableCell, TableRow};
+
 /// A reading position.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct Locator {
@@ -142,10 +145,13 @@ pub enum BlockKind {
     Preformatted,
     /// An image ([`Block::image`]); `text` is its alternative text.
     Image,
+    /// A row of a table ([`Block::table`]): its cells side by side in the
+    /// table's columns, its text their texts one after the other.
+    TableRow,
     /// A kind a later build adds, by its number, whose content is in the
     /// block's text, runs and annotations as a paragraph's is. Numbers are
     /// given here when first used and never reused; these are reserved:
-    /// 0 unspecified, 1 a table's row, 2 a list
+    /// 0 unspecified, 1 a table's row (now [`BlockKind::TableRow`]), 2 a list
     /// item, 3 a rule (a line across), 4 a figure's caption, 5 an aside
     /// (a sidebar, a note shown in place), 6 a verse line, 7 maths.
     ///
@@ -448,6 +454,9 @@ pub struct Block {
     /// an opening quote or two), its first lines set in beside it; a
     /// paragraph of fewer lines has a smaller one, of one line none.
     pub drop_cap: u8,
+    /// The row's cells, columns and place in its table, for a block of
+    /// [`BlockKind::TableRow`]; `None` in every other block.
+    pub table: Option<alloc::boxed::Box<TableRow>>,
 }
 
 /// The most blocks a text filter inserts after one ([`Block::inserted`]).
@@ -528,6 +537,7 @@ impl Block {
             lang: Lang::NONE,
             inline_langs: None,
             drop_cap: 0,
+            table: None,
         }
     }
 
@@ -1130,6 +1140,7 @@ mod tests {
             lang: Lang::NONE,
             inline_langs: None,
             drop_cap: 0,
+            table: None,
         };
         block.replace(0..3, "Mister");
         assert_eq!(block.text, "Mister Smith is here.");
@@ -1183,6 +1194,7 @@ mod tests {
             lang: Lang::NONE,
             inline_langs: None,
             drop_cap: 0,
+            table: None,
         }
     }
 

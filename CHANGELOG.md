@@ -53,6 +53,10 @@ change the plugin SDK.
   itself (`paperpaw-sign rotation`; SDK `native::keys`: `remember_recovery`, `rotation_message`,
   `accept_rotation`), and the code of an author whose key the store revoked does not run
   (`PluginProblem::Revoked`, `keys::keep_revoked`). The store does not offer either yet.
+- Layout `VERSION` 11: books cached before are laid out anew once, so drop capitals and the new list markers show
+  in them too. SDK, for real tables: `BlockKind::TableRow`, `Block::table` (`TableRow`, `TableCell`, `MAX_COLUMNS`:
+  a row's cells, the table's column weights, header, first and last row) and `Page::rules` (`PageRule`: thin lines
+  such as a table's borders). Formats and the layout do not fill them yet: rows are still set as one line.
 - *All notes*, a new plugin (Tools): the books that have bookmarks or highlights with how many, a book's notes
   (a note opens the book there), and *Export as My Clippings.txt*, all notes in one file in Kindle's form
   (UTF-8 with a byte order mark, `Exports/My Clippings.txt` beside the library) that notes apps read. A book's
