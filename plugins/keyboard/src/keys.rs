@@ -57,6 +57,28 @@ pub(crate) fn least_letter(env: &Env<'_>, style: &UiStyle, touch: bool, scale: u
     widest as u32 + 2 * (ui::button_border(style) + u32::from(BUTTONS_SEAM))
 }
 
+/// Half the room between two keys, in pixels ((`KeyboardScreen::seam`)).
+pub(crate) fn seam(env: &Env<'_>, style: &UiStyle, touch: bool) -> u16 {
+    if touch {
+        let half = env.metrics().tenth_mm(TOUCH_GAP_TENTHS) / 2;
+        half.max(ui::button_border(style)) as u16
+    } else {
+        BUTTONS_SEAM
+    }
+}
+
+/// The least room, in pixels, between the screen's edge and the keys'
+/// visible edges: a thin margin, so that the keys look set in the screen.
+pub(crate) const LEAST_SIDE: u16 = 4;
+
+/// The room between the screen's edge and the keys' visible edges: a
+/// quarter of the margin other screens keep, so that the keys get nearly
+/// the whole width, but not less than the seam round a key (the key's tap
+/// area then reaches the screen's edge) or [`LEAST_SIDE`].
+pub(crate) fn side_margin(style: &UiStyle, seam: u16) -> u16 {
+    (style.margin() / 4).max(LEAST_SIDE).max(seam)
+}
+
 /// The room between keys that are tapped, in tenths of a millimetre: as
 /// much as keeps a finger on one key and shows them apart.
 pub(crate) const TOUCH_GAP_TENTHS: u32 = 6;

@@ -275,6 +275,10 @@ before it are thrown away.
 
 ### Changed
 
+- *Keyboard: wider keys* (#91): the keys' side margin is a quarter of the margin other screens keep (at least
+  4 pixels), so on small screens the keys get nearly the whole width. Every layout, tapped or chosen with buttons;
+  the text field keeps its margin, the key order and the focus are as before. Round keys are as high as wide, so
+  the keyboard gets a little higher; it still stops at half the screen where the size allows more.
 - *Store: a plugin rebuilt for a newer PaperPaw* is not offered to a device whose firmware lacks what the build
   needs (a newer table or revision of a family of shared functions, as the library lists it in `interface`,
   `needs_api` and `families` of the build). The page says *Needs a newer PaperPaw* in place of *Install* or *Update*,
