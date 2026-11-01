@@ -795,3 +795,67 @@ fn text_in_parts_is_drawn_mirrored_in_order_and_joined() {
     text.push(':');
     assert_eq!(whole(&text, &after_beh), joined);
 }
+
+/// Letters no font has are counted as they are drawn, once each; what
+/// is drawn of them otherwise (a stand-in), spaces, marks and formatting
+/// characters not, nor what is only measured or described.
+#[test]
+fn letters_drawn_missing_are_counted() {
+    use paperpaw_graphics::Framebuffer;
+    use paperpaw_platform::PixelFormat;
+    use paperpaw_text::Around;
+    let (fonts, _storage) = latin_and_letters("");
+    let font = fonts.get("a.latin").unwrap();
+    let mut frame = Framebuffer::new(200, 20, PixelFormat::Gray8).unwrap();
+    let mut canvas = frame.canvas();
+    let mut drawn = |text: &str| {
+        let before = fonts.missing_letters();
+        font.draw(&mut canvas, 10.0, 0.0, 15, text, Color::BLACK);
+        fonts.missing_letters().wrapping_sub(before)
+    };
+    assert_eq!(drawn("a bc"), 0);
+    // Hebrew from the extension: there.
+    assert_eq!(drawn("ab שלום"), 0);
+    // Two Greek letters and a Cyrillic one: missing.
+    assert_eq!(drawn("aΩb λж"), 3);
+    // Marks, a soft hyphen, joiners, a direction mark, a tab: not letters.
+    assert_eq!(drawn("e\u{301}x\u{ad}y\u{200d}\u{200e}\tz"), 0);
+    // Drawn as a stand-in: a non-breaking hyphen as `-`, the long s as s.
+    assert_eq!(drawn("a\u{2011}b \u{17f}"), 0);
+    // A stand-in the font lacks too: missing.
+    assert_eq!(drawn("\u{2023}"), 1);
+    // Drawn in parts, right to left.
+    let rtl = Around::new(crate::lang::Direction::Rtl, crate::lang::Lang::NONE);
+    let before = fonts.missing_letters();
+    font.draw_in(
+        &mut canvas,
+        10.0,
+        0.0,
+        15,
+        "שלום Ω (x)",
+        Color::BLACK,
+        (0, paperpaw_text::ToneCurve::default()),
+        &rtl,
+    );
+    assert_eq!(fonts.missing_letters() - before, 1);
+    // Only measured, or only described: not drawn, not counted.
+    let before = fonts.missing_letters();
+    let _ = font.measure(10.0, "ΩΩ");
+    fonts.set_describing(true);
+    font.draw(&mut canvas, 10.0, 0.0, 15, "ΩΩ", Color::BLACK);
+    fonts.set_describing(false);
+    assert_eq!(fonts.missing_letters(), before);
+    // A set of its own counts its own.
+    let mut set = FontSet::new(1024);
+    let index = set.add(
+        Id::new_static("b.latin"),
+        Font::from_data(pack("ab"), &[]).unwrap(),
+    );
+    set.get(index)
+        .unwrap()
+        .draw(&mut canvas, 10.0, 0.0, 15, "abc", Color::BLACK);
+    assert_eq!(
+        (set.missing_letters(), fonts.missing_letters()),
+        (1, before)
+    );
+}

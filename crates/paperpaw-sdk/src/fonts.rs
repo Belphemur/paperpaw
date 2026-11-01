@@ -170,9 +170,8 @@ pub struct Fonts {
     /// [`STATUS_FONT`](crate::builtin::settings::STATUS_FONT).
     status: Option<String>,
     cache: RefCell<GlyphCache>,
-    /// Only described, not drawn (see [`Fonts::set_describing`]): no
-    /// glyph is made.
-    describing: core::cell::Cell<bool>,
+    /// Only described or not, and the letters drawn missing.
+    drawing: Drawing,
     /// What a font pack read from the storage may take of memory: the
     /// device's ([`Fonts::with_pack_limits`]).
     pack_limits: PackLimits,
@@ -188,7 +187,7 @@ impl Fonts {
     #[cfg(any(test, feature = "kernel"))]
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn set_describing(&self, on: bool) {
-        self.describing.set(on);
+        self.drawing.describing.set(on);
     }
 }
 
@@ -214,7 +213,7 @@ impl Fonts {
             family: None,
             status: None,
             cache: RefCell::new(GlyphCache::new(cache_bytes)),
-            describing: core::cell::Cell::new(false),
+            drawing: Drawing::default(),
             ui_ink: paperpaw_text::TextInk::DEFAULT,
             pack_limits: PackLimits::SMALL,
         }
@@ -686,7 +685,7 @@ impl Fonts {
             // Handles are made for loaded fonts only.
             font: entry.font.as_ref().unwrap_or_else(|| unreachable!()),
             cache: &self.cache,
-            describing: &self.describing,
+            drawing: &self.drawing,
             index: index as u16,
             others,
             larger,
@@ -733,9 +732,8 @@ impl Fonts {
 pub struct FontSet {
     fonts: Vec<(Id, Font)>,
     cache: RefCell<GlyphCache>,
-    /// Only described, not drawn (see [`Fonts::set_describing`]): no
-    /// glyph is made.
-    describing: core::cell::Cell<bool>,
+    /// Only described or not, and the letters drawn missing.
+    drawing: Drawing,
 }
 
 impl fmt::Debug for FontSet {
@@ -755,7 +753,7 @@ impl FontSet {
         Self {
             fonts: Vec::new(),
             cache: RefCell::new(GlyphCache::new(cache_bytes)),
-            describing: core::cell::Cell::new(false),
+            drawing: Drawing::default(),
         }
     }
 
@@ -780,7 +778,7 @@ impl FontSet {
             id,
             font,
             cache: &self.cache,
-            describing: &self.describing,
+            drawing: &self.drawing,
             index: index as u16,
             others: [None; OTHERS],
             larger: None,
@@ -800,7 +798,7 @@ pub struct FontHandle<'a> {
     /// The glyph cache of the registry or set the font is in.
     cache: &'a RefCell<GlyphCache>,
     /// Its registry only describes what is drawn: no glyph is made.
-    describing: &'a core::cell::Cell<bool>,
+    drawing: &'a Drawing,
     /// The font's number in that cache.
     index: u16,
     /// Fonts for the characters this one lacks, asked in turn, and their
@@ -1114,7 +1112,7 @@ impl<'a> FontHandle<'a> {
             return larger.ink(size, text);
         }
         // Only described: as a line would be, no glyph made.
-        if self.describing.get() {
+        if self.drawing.describing.get() {
             let metrics = self.line_metrics(size);
             return Some((-(metrics.ascent as i32), -(metrics.descent as i32)));
         }
@@ -1150,7 +1148,7 @@ impl<'a> FontHandle<'a> {
             return larger.ink_across(size, text);
         }
         // Only described: as far as its advances go, no glyph made.
-        if self.describing.get() {
+        if self.drawing.describing.get() {
             return Some((0, self.measure(size, text) as i32));
         }
         let size = self.size_for(size, text);
@@ -1266,9 +1264,10 @@ impl<'a> FontHandle<'a> {
             return larger.draw_toned(canvas, size, x, baseline, text, color, extra, tone);
         }
         // Only described, as a screen reader asks: no glyph made.
-        if canvas.is_blind() || self.describing.get() {
+        if canvas.is_blind() || self.drawing.describing.get() {
             return self.measure(size, text);
         }
+        self.count_missing(text);
         let size = self.size_for(size, text);
         let mut cache = self.cache.borrow_mut();
         let mut pen = x;
@@ -1358,9 +1357,10 @@ impl<'a> FontHandle<'a> {
         if split::plain_in(text, around) {
             return self.draw_toned(canvas, size, x, baseline, text, color, extra, tone);
         }
-        if canvas.is_blind() || self.describing.get() {
+        if canvas.is_blind() || self.drawing.describing.get() {
             return self.measure_in(size, text, around);
         }
+        self.count_missing(text);
         let size = self.size_for(size, text);
         let style = |font, index| {
             paperpaw_text::TextStyle::new(font, index, size, color)
@@ -1485,6 +1485,8 @@ impl<'a> FontHandle<'a> {
     }
 }
 
+mod missing;
+use missing::Drawing;
 mod split;
 mod storage;
 
