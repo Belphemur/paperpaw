@@ -22,6 +22,7 @@ mod list;
 mod origin;
 mod page;
 mod queue;
+mod request;
 mod room;
 mod rows;
 mod setup;
@@ -176,6 +177,8 @@ impl Plugin for Store {
         r.on(queue::FETCHED, queue::fetched)?;
         // The first-run setup's offer of the plugins most readers add.
         setup::register(r)?;
+        // Plugins another plugin asks for (the reader's packs of letters).
+        request::register(r)?;
         r.on(events::STARTED, |env, _, out| {
             // A download cut off by the restart is begun anew from its
             // page, or first when the queue goes on.
@@ -201,17 +204,24 @@ impl Plugin for Store {
 fn received(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
     let mut said = paperpaw_sdk::Commands::new();
     let installed = match INSTALLER.received(env, reply, out) {
-        Received::Complete(done) => (finish(env, &done, &mut said), done.name),
+        Received::Complete(done) => (finish(env, &done, &mut said), done.name, done.plugin),
         Received::Failed(job) => {
             said.push(failed(env, &job.name));
-            (false, job.name)
+            (false, job.name, job.plugin)
         }
         Received::Next(_) | Received::Other => return,
         _ => return,
     };
+    // Plugins another plugin asked for: told to it, not said here.
+    if queue::requested(env) {
+        request::outcome(env, &installed.2, installed.0);
+        out.extend(
+            said.into_iter()
+                .filter(|c| !matches!(c, Command::Notify(_))),
+        );
     // A quiet queue (the first-run setup's) says it all once, at its end:
     // its notices wait, what installs goes on.
-    if queue::quiet(env) {
+    } else if queue::quiet(env) {
         queue::note(env, &installed.1, installed.0);
         out.extend(
             said.into_iter()

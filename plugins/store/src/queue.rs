@@ -35,6 +35,9 @@ pub(crate) const FETCHED: Event<HttpReply> = Event::new("store.queued");
 const TURN: &str = "> ";
 /// The mark of a plugin put in quietly (the setup's).
 const QUIET: &str = "~";
+/// The mark of a plugin another plugin asked for (see `request`): fetched
+/// quietly too, and told to the one who asked, not said.
+const REQUESTED: &str = "&";
 
 fn path() -> String {
     format!("{}/queue.txt", Env::plugin_dir(PLUGIN.as_str()))
@@ -63,10 +66,31 @@ fn keep(env: &Env<'_>, lines: &[String]) {
 /// A line's plugin, and whether it was put in quietly.
 fn entry(line: &str) -> (&str, bool) {
     let line = line.strip_prefix(TURN).unwrap_or(line);
-    match line.strip_prefix(QUIET) {
+    match line
+        .strip_prefix(QUIET)
+        .or_else(|| line.strip_prefix(REQUESTED))
+    {
         Some(id) => (id, true),
         None => (line, false),
     }
+}
+
+/// Whether the plugin whose turn it is was asked for by a plugin
+/// ([`add_requested`]).
+pub(crate) fn requested(env: &Env<'_>) -> bool {
+    lines(env).first().is_some_and(|line| {
+        line.strip_prefix(TURN)
+            .is_some_and(|rest| rest.starts_with(REQUESTED))
+    })
+}
+
+/// Whether plugins asked for by a plugin are in the queue still.
+pub(crate) fn requested_waiting(env: &Env<'_>) -> bool {
+    lines(env).iter().any(|line| {
+        line.strip_prefix(TURN)
+            .unwrap_or(line)
+            .starts_with(REQUESTED)
+    })
 }
 
 /// The plugins in the queue, in order (the one whose turn it is first).
@@ -166,6 +190,12 @@ pub(crate) fn add(env: &Env<'_>, ids: &[String], out: &mut Commands) {
     put(env, ids, "", out);
 }
 
+/// Puts `ids` in the queue as plugins another plugin asked for (see
+/// `request`).
+pub(crate) fn add_requested(env: &Env<'_>, ids: &[String], out: &mut Commands) {
+    put(env, ids, REQUESTED, out);
+}
+
 /// Puts `ids` in the queue quietly (the first-run setup's, see the
 /// [module](self)).
 pub(crate) fn add_quietly(env: &Env<'_>, ids: &[String], out: &mut Commands) {
@@ -226,6 +256,7 @@ pub(crate) fn next(env: &Env<'_>, out: &mut Commands) {
     all.retain(|line| install::is_plugin_name(entry(line).0));
     let Some(first) = all.first().cloned() else {
         keep(env, &[]);
+        crate::request::finished(env, out);
         return said(env, out);
     };
     let id = entry(&first).0.to_string();
@@ -268,7 +299,9 @@ pub(crate) fn fetched(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         Some(plugin) => {
             trust::expect(env.storage(), &plugin.entry.id, plugin.author_key.as_ref());
             if !INSTALLER.start(env, &plugin.package, out) {
-                if quiet(env) {
+                if requested(env) {
+                    crate::request::outcome(env, &id, false);
+                } else if quiet(env) {
                     note(env, &plugin.entry.name, false);
                 } else {
                     out.push(failed(env, &plugin.entry.name));
@@ -277,7 +310,10 @@ pub(crate) fn fetched(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
             }
         }
         None => {
-            if quiet(env) {
+            if requested(env) {
+                // Already there, or not fetched.
+                crate::request::outcome(env, &id, env.plugins().get(&id).is_some());
+            } else if quiet(env) {
                 note(env, &name_of(env, &id), false);
             }
             next(env, out);

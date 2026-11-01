@@ -500,10 +500,9 @@ impl Screen for ReaderScreen {
             if !book.web() {
                 cx.command(events::BOOK_OPENED.emit(book.reading(cx.env())));
             }
-            // The pack of its letters, if the font lacks them (said once).
-            if let Some(key) = book.script_hint.take() {
-                script_hint::say(cx, key);
-            }
+            // The packs of its letters, if the font lacks them (asked once).
+            let packs = core::mem::take(&mut book.packs);
+            script_hint::ask(cx, &book.dir, &packs);
             // The book shows: its hints may, the first time.
             cx.command(paperpaw_sdk::help::ready(&crate::SCREEN));
             let now = cx.env().now();
@@ -992,6 +991,37 @@ impl ReaderScreen {
         // first.
         if *event == events::SUSPEND || *event == events::STOPPING {
             book.save_due(cx, true);
+        }
+        // What came of the packs of letters asked for: the book is laid out
+        // anew where letters arrived (and asked about the rare ones the
+        // letters of everyday text do not have), what the store could not
+        // get is asked for at the next opening.
+        if let Some(answer) = events::PLUGINS_ANSWERED.read(event, params)
+            && answer.by == crate::PLUGIN
+        {
+            let env = *cx.env();
+            if !answer.error.is_empty() {
+                script_hint::forget(&env, &book.dir, answer.missing_ids());
+                cx.command(Command::Notify(answer.error.clone()));
+            }
+            if answer.installed_ids().next().is_some() {
+                self.selection = None;
+                book.relayout(&env);
+                cx.request_redraw();
+                let now = env.now();
+                cx.wake_at(now);
+                if let Some(font) = book.font(&env) {
+                    let packs = script_hint::needed(
+                        &env,
+                        book.document.as_ref(),
+                        &font,
+                        Some(&book.language),
+                        &book.dir,
+                    );
+                    script_hint::ask(cx, &book.dir, &packs);
+                }
+            }
+            return;
         }
         // Another plugin asks for the page's words.
         if let Some(wanted) = events::PAGE_WORDS_WANTED.read(event, params) {

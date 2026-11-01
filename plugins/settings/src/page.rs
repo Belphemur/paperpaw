@@ -482,6 +482,32 @@ impl GroupPage {
         ui::slider::title_extra(env, &self.style, rect.width, title, &self.number_room)
     }
 
+    /// Number row `spec` drawn as a slider along `track` in `rect`.
+    fn draw_slider(
+        &self,
+        canvas: &mut Canvas<'_>,
+        env: &Env<'_>,
+        (track, spec): (&Track, &SettingSpec),
+        rect: Rect,
+        (focused, editing): (bool, bool),
+    ) {
+        let focus = match (focused, editing) {
+            (false, _) => SliderFocus::None,
+            (true, false) => SliderFocus::Focused,
+            (true, true) => SliderFocus::Editing,
+        };
+        let at = track.at(env.settings().int(spec.id.as_str()));
+        let title = env.i18n().tr(&spec.title);
+        let note = spec.description.as_deref().map_or("", |d| env.i18n().tr(d));
+        let value = ui::setting_value(env, spec);
+        let view = SliderView::new(rect, at, &value)
+            .title(title)
+            .note(if self.noted { note } else { "" })
+            .focus(focus)
+            .room(&self.number_room);
+        track.slider().draw_row(canvas, env, &self.style, &view);
+    }
+
     /// The − and + of number row `index` in `rect`, where it shows them:
     /// a slider's in its band, else beside the value.
     fn steps(&self, env: &Env<'_>, index: usize, rect: Rect) -> Option<(Rect, Rect)> {
@@ -608,18 +634,7 @@ impl Screen for GroupPage {
                 if let Some(track) =
                     Track::of(env, spec, style.is_rtl()).filter(|_| ui::slider::shows(env, spec))
                 {
-                    let focus = match (focused, editing) {
-                        (false, _) => SliderFocus::None,
-                        (true, false) => SliderFocus::Focused,
-                        (true, true) => SliderFocus::Editing,
-                    };
-                    let at = track.at(env.settings().int(spec.id.as_str()));
-                    let view = SliderView::new(rect, at, &value)
-                        .title(title)
-                        .note(note)
-                        .focus(focus)
-                        .room(&self.number_room);
-                    track.slider().draw_row(canvas, env, &style, &view);
+                    self.draw_slider(canvas, env, (&track, spec), rect, (focused, editing));
                     return;
                 }
                 let lines = match all_lines.get(index).copied().flatten() {
