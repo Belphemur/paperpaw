@@ -207,6 +207,7 @@ fn optional_network_work_waits_until_the_radio_is_on() {
         WifiEvent::State(WifiState::Online {
             ssid: "Home".into(),
             address: "10.0.0.2".into(),
+            name: None,
         }),
     );
     assert_eq!(*log.borrow(), ["wk.weather online"]);

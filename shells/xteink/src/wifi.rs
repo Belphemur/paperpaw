@@ -675,6 +675,7 @@ impl Radio {
                 (Some(ssid), true, Some(address)) => WifiState::Online {
                     ssid: ssid.clone(),
                     address: alloc::format!("{}", address.address()),
+                    name: None,
                 },
                 (Some(ssid), _, _) => WifiState::Joining { ssid: ssid.clone() },
                 (None, ..) => WifiState::On,

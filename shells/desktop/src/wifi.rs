@@ -68,6 +68,7 @@ impl Wifi {
             WifiState::Online {
                 ssid: String::from(WORKSHOP_NETWORK),
                 address: String::from(ADDRESS),
+                name: None,
             },
         );
     }
@@ -111,6 +112,7 @@ impl Wifi {
                         WifiState::Online {
                             ssid,
                             address: String::from(ADDRESS),
+                            name: None,
                         },
                     ),
                 }

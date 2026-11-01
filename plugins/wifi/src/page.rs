@@ -52,7 +52,7 @@ fn state_text(env: &Env<'_>, state: &WifiState, scanning: bool) -> String {
         WifiState::Joining { ssid } => env
             .i18n()
             .format("wifi.state.joining", &[("ssid", Arg::Str(ssid))]),
-        WifiState::Online { ssid, address } => env.i18n().format(
+        WifiState::Online { ssid, address, .. } => env.i18n().format(
             "wifi.state.online",
             &[("ssid", Arg::Str(ssid)), ("address", Arg::Str(address))],
         ),

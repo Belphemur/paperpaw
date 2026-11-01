@@ -201,6 +201,7 @@ fn work_that_waited_too_long_fails_once_and_late_answers_are_dropped() {
     let online = WifiState::Online {
         ssid: String::from("Home"),
         address: String::from("10.0.0.2"),
+        name: None,
     };
     kernel.wifi_event(Instant(40_000), WifiEvent::State(online));
     let io = kernel.take_io();
