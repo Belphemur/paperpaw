@@ -104,6 +104,40 @@ const BOARDS: [Board; 4] = [
     },
 ];
 
+/// The boards above are what the firmware's own constants say (the X3's
+/// among them, GitHub #18): a drift would make the tests run a device the
+/// firmware is not (`shells/xteink/src/ota.rs`, `Cargo.toml`).
+#[test]
+fn the_boards_are_what_the_firmware_says() {
+    let ota = include_str!("../../../shells/xteink/src/ota.rs");
+    let manifest = include_str!("../../../shells/xteink/Cargo.toml");
+    for board in BOARDS {
+        let (name, project) = (board.name, board.project);
+        let line =
+            format!("#[cfg(feature = \"{name}\")]\npub const PROJECT: &str = \"{project}\";");
+        assert!(ota.contains(&line), "{name}: {line}");
+        let tag = format!("const BOARD_TAG: &str = \"{}\";", board.tag);
+        assert!(ota.contains(&tag), "{name}: {tag}");
+        // The chip each device's features bring in.
+        let (feature, chip) = if board.chip == CHIP_ESP32_C3 {
+            ("esp32c3", "CHIP_ESP32_C3")
+        } else {
+            ("esp32s3", "CHIP_ESP32_S3")
+        };
+        let features = format!("{name} = [\"{feature}\"");
+        assert!(manifest.contains(&features), "{name}: {features}");
+        let chip = format!(
+            "#[cfg(feature = \"{feature}\")]\nconst CHIP: u16 = paperpaw_sdk::firmware::{chip};"
+        );
+        assert!(ota.contains(&chip), "{name}: {chip}");
+    }
+    // CrossPoint ships one table for the X4 and the X3 (its board tag is
+    // the one `x4`): their images are told by the project alone.
+    let (x4, x3) = (&BOARDS[0], &BOARDS[1]);
+    assert_eq!((x4.tag, x4.chip, x4.table), (x3.tag, x3.chip, x3.table));
+    assert_ne!(x4.project, x3.project);
+}
+
 // Images and update files.
 
 /// An app image as espflash makes it, of about `len` bytes: one segment

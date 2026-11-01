@@ -192,6 +192,34 @@ mod tests {
         assert!(!text.contains("did not stay"), "{text}");
     }
 
+    /// The X3 installs from CrossPoint's menu as the X4 does (GitHub #18):
+    /// its notes carry its name, and the way back is CrossPoint.
+    #[test]
+    fn the_x3s_notes_carry_its_name_and_the_way_back() {
+        let on = |kind| InstallNote {
+            device: "Xteink X3",
+            ..note(kind)
+        };
+        let started = on(Kind::Started {
+            by_bootloader: false,
+        })
+        .to_string();
+        assert!(started.contains("on this Xteink X3"), "{started}");
+        assert!(started.contains("auf diesem Xteink X3"), "{started}");
+        let failed = on(Kind::Failed {
+            panic: None,
+            started: true,
+        })
+        .to_string();
+        assert!(
+            failed.contains("did not stay on this Xteink X3"),
+            "{failed}"
+        );
+        assert!(failed.contains("CrossPoint"), "{failed}");
+        assert!(is_started(started.as_bytes()));
+        assert!(!is_started(failed.as_bytes()));
+    }
+
     #[test]
     fn a_started_note_is_told_from_a_failed_one_by_its_first_line() {
         let started = note(Kind::Started {
