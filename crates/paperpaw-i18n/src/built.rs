@@ -11,11 +11,21 @@ use core::cmp::Ordering;
 use crate::catalog::{Catalog, CatalogError, cmp_plain_key, fingerprint, plain_key, plain_value};
 
 /// In an entry of [`BuiltCatalogs::entries`]: its message is
-/// `decoded[entry & !DECODED]`, not a plain line of a source.
+/// `decoded[low bits]`, not a plain line of a source.
 const DECODED: u32 = 1 << 31;
-/// Bits of an entry's offset in its source; the bits above, below
-/// [`DECODED`], are its source's slot.
+/// Bits of an entry's offset in its source (or its place in `decoded`);
+/// the bits above, below [`DECODED`], are its source's slot.
 const OFFSET_BITS: u32 = 24;
+
+/// The slot of an entry's source.
+const fn slot_of(entry: u32) -> usize {
+    ((entry & !DECODED) >> OFFSET_BITS) as usize
+}
+
+/// An entry's offset in its source, or its place in `decoded`.
+const fn low_of(entry: u32) -> u32 {
+    entry & ((1 << OFFSET_BITS) - 1)
+}
 
 /// The English catalogs of the plugins built in, indexed together by a
 /// build script (`paperpaw-app`'s, with [`BuiltTable`]): kept in the
@@ -83,18 +93,30 @@ impl Built {
         true
     }
 
+    /// The source of an entry, where its plugin's source was added.
+    fn source(&self, entry: u32) -> Option<&'static str> {
+        self.sources.get(slot_of(entry)).copied().flatten()
+    }
+
+    /// An entry's key and message where it is decoded (`None` for a plain
+    /// one or a place the table does not have).
+    fn decoded(&self, entry: u32) -> Option<&(&'static str, &'static str)> {
+        (entry & DECODED != 0)
+            .then(|| self.table.decoded.get(low_of(entry) as usize))
+            .flatten()
+    }
+
+    /// How an entry's key compares with `key`; an entry of a source not
+    /// added compares by nothing (the build script checks that keys never
+    /// collide, so the search below skips such an entry).
     fn key_cmp(&self, entry: u32, key: &str) -> Ordering {
-        if entry & DECODED != 0 {
-            let (theirs, _) = self.table.decoded[(entry & !DECODED) as usize];
-            return theirs.cmp(key);
-        }
-        let slot = (entry >> OFFSET_BITS) as usize;
-        match self.sources.get(slot).copied().flatten() {
-            Some(source) => cmp_plain_key(source, entry & ((1 << OFFSET_BITS) - 1), key),
-            // Not added (its plugin is not here): compared by nothing;
-            // the build script checks that keys never collide, so such an
-            // entry is skipped by the search below.
-            None => Ordering::Less,
+        let Some(source) = self.source(entry) else {
+            return Ordering::Less;
+        };
+        match self.decoded(entry) {
+            Some((theirs, _)) => (*theirs).cmp(key),
+            None if entry & DECODED != 0 => Ordering::Less,
+            None => cmp_plain_key(source, low_of(entry), key),
         }
     }
 
@@ -107,19 +129,10 @@ impl Built {
             let entry = entries[middle];
             // An entry of a source not added: look at its neighbours'
             // keys instead (entries are sorted across all sources).
-            let found = if entry & DECODED == 0
-                && self
-                    .sources
-                    .get((entry >> OFFSET_BITS) as usize)
-                    .copied()
-                    .flatten()
-                    .is_none()
-            {
+            if self.source(entry).is_none() {
                 return self.get_scanning(key, low, high);
-            } else {
-                self.key_cmp(entry, key)
-            };
-            match found {
+            }
+            match self.key_cmp(entry, key) {
                 Ordering::Less => low = middle + 1,
                 Ordering::Greater => high = middle,
                 Ordering::Equal => return self.message(entry),
@@ -131,30 +144,20 @@ impl Built {
     /// The same, through `entries[low..high]` one by one: only where the
     /// search met a source not added (a plugin built in but left out).
     fn get_scanning(&self, key: &str, low: usize, high: usize) -> Option<&'static str> {
-        self.table.entries[low..high]
+        self.table
+            .entries
+            .get(low..high)?
             .iter()
-            .find(|&&entry| {
-                let added = entry & DECODED != 0
-                    || self
-                        .sources
-                        .get((entry >> OFFSET_BITS) as usize)
-                        .copied()
-                        .flatten()
-                        .is_some();
-                added && self.key_cmp(entry, key).is_eq()
-            })
+            .find(|&&entry| self.source(entry).is_some() && self.key_cmp(entry, key).is_eq())
             .and_then(|&entry| self.message(entry))
     }
 
     fn message(&self, entry: u32) -> Option<&'static str> {
+        let source = self.source(entry)?;
         if entry & DECODED != 0 {
-            return Some(self.table.decoded[(entry & !DECODED) as usize].1);
+            return self.decoded(entry).map(|(_, message)| *message);
         }
-        let source = self
-            .sources
-            .get((entry >> OFFSET_BITS) as usize)
-            .copied()??;
-        plain_value(source, entry & ((1 << OFFSET_BITS) - 1))
+        plain_value(source, low_of(entry))
     }
 
     pub(crate) fn len(&self) -> usize {
@@ -164,14 +167,11 @@ impl Built {
     /// The keys it answers ([`Built::get`]), sorted.
     pub(crate) fn keys(&self) -> impl Iterator<Item = &str> {
         self.table.entries.iter().filter_map(|&entry| {
+            let source = self.source(entry)?;
             if entry & DECODED != 0 {
-                return Some(self.table.decoded[(entry & !DECODED) as usize].0);
+                return self.decoded(entry).map(|(key, _)| *key);
             }
-            let source = self
-                .sources
-                .get((entry >> OFFSET_BITS) as usize)
-                .copied()??;
-            Some(plain_key(source, entry & ((1 << OFFSET_BITS) - 1)))
+            Some(plain_key(source, low_of(entry)))
         })
     }
 
@@ -227,9 +227,13 @@ impl BuiltTable {
                 }
             }
         }
+        // Places in `decoded` fit below the slot, as offsets do.
+        if self.decoded.len() + decoded.len() > 1 << OFFSET_BITS {
+            return Ok(false);
+        }
         self.prints.push(print);
         for (key, message) in decoded {
-            let entry = DECODED | self.decoded.len() as u32;
+            let entry = DECODED | slot << OFFSET_BITS | self.decoded.len() as u32;
             self.decoded.push((key.clone(), message));
             added.push((key, entry));
         }
