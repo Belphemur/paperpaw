@@ -40,6 +40,8 @@ change the plugin SDK.
   `Screen::mirrored`: `Auto` by default (as the interface goes), `Ltr` or `Rtl` for a screen with a way of
   its own; the reader gives its book's, so a left-to-right book keeps its sides in Arabic. **Breaking** for
   screens that implemented `mirrored`.
+- SDK: `CellGrid::mirrored` for a right-to-left interface: rows of cells start at the right, taps find them
+  there, and the left button goes on to the next cell.
 - SDK: rows moved by dragging have their grip at the left in a right-to-left interface.
   `Reorder::grip` and `Reorder::content` take the `UiStyle`, and `Reorder::draw` takes `&mut self`
   (it notes the direction for the pointer samples that follow): **breaking** for plugins that move rows.
