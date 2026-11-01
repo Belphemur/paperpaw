@@ -501,6 +501,29 @@ fn low_keys_a_seam_apart_pass_on_the_keyboard_alone() {
     assert!(button_room(&scene).is_empty());
 }
 
+/// A keyboard's keys keep a quarter of the margin from the screen's sides:
+/// closer is found, as for other buttons.
+#[test]
+fn keyboard_keys_keep_a_thin_margin_from_the_sides() {
+    let image = paper();
+    let row = |x0: u16| -> Vec<_> {
+        (0..10u16)
+            .map(|i| d(Role::Button, "q", Rect::new(x0 + i * 46, 400, 42, 45)))
+            .chain([
+                d(Role::Button, "123", Rect::new(x0, 449, 80, 45)),
+                d(Role::Button, "Space", Rect::new(x0 + 84, 449, 248, 45)),
+            ])
+            .collect()
+    };
+    let near = scene(&image, row(10)).keyboard(true);
+    assert!(button_room(&near).is_empty(), "{:?}", button_room(&near));
+    let touching = scene(&image, row(0)).keyboard(true);
+    assert_eq!(checks(&button_room(&touching)), [BUTTON_ROOM]);
+    // Not a keyboard: the margin of the screen's sides.
+    let plain = scene(&image, row(10));
+    assert_eq!(checks(&button_room(&plain)), [BUTTON_ROOM]);
+}
+
 /// A word split onto two lines in a box drawn tight round it is still
 /// found; a button's own label is looked at even where it holds a text
 /// of something else.

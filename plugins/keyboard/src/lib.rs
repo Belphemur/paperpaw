@@ -399,12 +399,7 @@ impl KeyboardScreen {
         // As many units in a row as leave a letter (2 units) its least
         // width.
         let unit = (least_letter(env, &style, touch, scale) / 2).max(1);
-        let seam = if touch {
-            let half = env.metrics().tenth_mm(TOUCH_GAP_TENTHS) / 2;
-            half.max(ui::button_border(&style)) as u16
-        } else {
-            BUTTONS_SEAM
-        };
+        let seam = keys::seam(env, &style, touch);
         let side = keys::side_margin(&style, seam);
         let most = (u32::from(display.width) - 2 * u32::from(side)) / unit;
         let letters = &layouts[current.get()].1;

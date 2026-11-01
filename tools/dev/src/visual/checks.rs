@@ -1202,7 +1202,9 @@ pub fn touch_targets(scene: &Scene<'_>) -> Vec<Issue> {
 /// or bottom keeps it too, `ui::edge_bar_height`), and half a gap (the
 /// room a button has in its row) from the edges of the row they are in
 /// and from each other. A button grown into the room around it (a bar
-/// that did not grow with it, `UiStyle::touch_row`) is found.
+/// that did not grow with it, `UiStyle::touch_row`) is found. A keyboard's
+/// keys keep a quarter of the margin (at least 4 px) from the edges
+/// instead: they take the width (the keyboard's `side_margin`).
 #[expect(
     clippy::too_many_lines,
     reason = "longer than the limit from before it was set; split it when it is next changed"
@@ -1234,6 +1236,11 @@ pub fn button_room(scene: &Scene<'_>) -> Vec<Issue> {
         let a = b.area;
         let (x0, x1) = (i32::from(a.x), a.right() as i32);
         let (y0, y1) = (i32::from(a.y), a.bottom() as i32);
+        let margin = if keyboard_key(scene, b) {
+            (margin / 4).max(4)
+        } else {
+            margin
+        };
         let side = (x0 - left).min(right - x1);
         if side < margin - tolerance {
             found.push((
