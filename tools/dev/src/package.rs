@@ -29,6 +29,7 @@
 
 pub mod device;
 pub mod folder;
+pub mod source;
 
 use paperpaw_sdk::{DATA_FORMATS, SDK_VERSION, Version};
 
@@ -78,6 +79,9 @@ pub fn run(context: &Context, report: &mut Report) -> Result<(), String> {
         .collect();
     if !code.is_empty() {
         device::code_plugins(context, &code, release.as_ref(), report)?;
+    }
+    for source in &context.target.sources {
+        source::check(source, report);
     }
     crate::ppn::check(context, report)
 }

@@ -161,6 +161,7 @@ pub fn check(plugin: &DataPlugin, report: &mut Report) -> Option<Folder> {
     catalogs(&folder, &mut add);
     fonts(&folder, &mut add);
     pictures(plugin, &folder, &mut add);
+    conventions::check(&folder, &mut add);
     package(plugin, &folder, &mut add);
     store_entry(&folder, &mut add);
     Some(folder)
@@ -1059,5 +1060,6 @@ pub fn size_text(bytes: u64) -> String {
     }
 }
 
+mod conventions;
 #[cfg(test)]
 mod tests;

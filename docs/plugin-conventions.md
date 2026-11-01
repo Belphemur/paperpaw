@@ -252,5 +252,6 @@ for them in its own file.
       only the kinds a package may hold.
 - [ ] The code plugin's build is small (`opt-level = "s"`, no float
       parsing) and its `.ppn` fits the plugin room of the X4.
-- [ ] `paperpaw-dev check` and `paperpaw-dev package` are clean.
+- [ ] `paperpaw-dev check` and `paperpaw-dev package` are clean (also
+      `paperpaw-dev package path/to/crate` for a code plugin's source).
 - [ ] No em or en dashes in any text.
