@@ -32,6 +32,9 @@ change the plugin SDK.
 - SDK: `Slider::mirrored` for a right-to-left interface: the lowest value at the right, the track filled from
   there, `−` at the right and `+` at the left (`Slider::parts`), the left button moving it up
   (`Slider::key_step`); `SliderPart::mirrored` tells a theme's painter.
+- SDK: room for later questions without a new plugin interface: `KeyBindings::extended`,
+  `ScreenMaker::extended` and `Typesetter::extended` (with `paperpaw_layout::TypesetKey`) answer `None`
+  by default; none is asked yet (`docs/sdk-design.md`, rule 17).
 - SDK: rows moved by dragging have their grip at the left in a right-to-left interface.
   `Reorder::grip` and `Reorder::content` take the `UiStyle`, and `Reorder::draw` takes `&mut self`
   (it notes the direction for the pointer samples that follow): **breaking** for plugins that move rows.

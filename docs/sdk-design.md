@@ -140,7 +140,15 @@ must leave its list.
 16. **A crossing struct has a typed spare, not a promise.** A struct that a
     plugin builds and the kernel (or another plugin) reads has private spare
     fields, zero now, and getters later; kinds are constants of an open type.
+17. **A crossing trait has a question for later.** A trait implemented on
+    one side and called on the other has a defaulted item that takes a key
+    and answers `None` to keys it does not know: `Screen::extended`,
+    `Widget::on_extended`, `GestureRecognizer::extended`,
+    `Library::extended`, `Document::extended`, `KeyBindings::extended`,
+    `ScreenMaker::extended`, `Typesetter::extended`. A new question is a
+    new key, not a new item. Commands have `Command::Extended`, what a
+    device can do `Capability`, events their ids.
 
-15. **A new API is proposed before it is built.** Send a short sketch:
+18. **A new API is proposed before it is built.** Send a short sketch:
     the types and one call site. Write it out across the plugins only
     after that. An API is easy to add and hard to take back.

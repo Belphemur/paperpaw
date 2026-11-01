@@ -121,6 +121,27 @@ pub trait Typesetter {
         }
         width
     }
+
+    /// A measure later layouts ask of `c` in `face`, by `key` (e.g. its
+    /// advance down a line of vertical text): `None` where the typesetter
+    /// does not know it, and the layout does without. None is asked yet;
+    /// the keys come as constants of [`TypesetKey`].
+    fn extended(&self, face: Face, key: TypesetKey, c: char) -> Option<f32> {
+        let _ = (face, key, c);
+        None
+    }
+}
+
+/// What [`Typesetter::extended`] is asked: constants, so more can come
+/// without a new plugin interface. None is named yet.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TypesetKey(u32);
+
+impl TypesetKey {
+    /// Its number, e.g. for a typesetter that passes questions on.
+    pub const fn get(self) -> u32 {
+        self.0
+    }
 }
 
 /// Which of a book's own styles are followed (see [`Style::book`]): each

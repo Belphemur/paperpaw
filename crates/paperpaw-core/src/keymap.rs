@@ -625,4 +625,14 @@ mod tests {
             assert_eq!(InputKey::parse(name).unwrap().name(), name);
         }
     }
+
+    /// No later question about the bindings is known yet: each answers
+    /// `None`.
+    #[test]
+    fn later_questions_get_no_answer() {
+        use paperpaw_sdk::keys::KeyBindings;
+        let keymap = Keymap::default();
+        let key = paperpaw_sdk::Id::new_static("core.chords");
+        assert_eq!(keymap.extended(&key, &paperpaw_sdk::Params::new()), None);
+    }
 }
