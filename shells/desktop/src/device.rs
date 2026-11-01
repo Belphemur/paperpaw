@@ -854,12 +854,12 @@ impl Device {
         self.panel = Panel::new(width, height, display.color);
         let now = self.now();
         let effects = budget::track(|| self.kernel.resize(now, width, height));
-        let kept = self.kernel.device().display;
-        if (kept.width, kept.height) != (width, height)
-            && let Ok(controller) = Framebuffer::new(kept.width, kept.height, display.format)
+        let (kept_width, kept_height) = self.kernel.frame_size();
+        if (kept_width, kept_height) != (width, height)
+            && let Ok(controller) = Framebuffer::new(kept_width, kept_height, display.format)
         {
             self.controller = controller;
-            self.panel = Panel::new(kept.width, kept.height, display.color);
+            self.panel = Panel::new(kept_width, kept_height, display.color);
             self.size = None;
         }
         self.execute(effects);
@@ -1121,8 +1121,8 @@ mod tests {
         // screen is drawn for it.
         device.resize_to(900, 600);
         assert_eq!((device.panel.width(), device.panel.height()), (900, 600));
+        assert_eq!(device.kernel.frame_size(), (900, 600));
         let shown = device.kernel.device().display;
-        assert_eq!((shown.width, shown.height), (900, 600));
         assert_eq!(device.panel.compose().len(), 900 * 600);
         // The density and the buttons are the profile's.
         assert_eq!(shown.dpi, device.profile.device.display.dpi);

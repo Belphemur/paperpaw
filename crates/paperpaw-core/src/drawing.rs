@@ -614,6 +614,15 @@ impl Kernel {
         self.finish()
     }
 
+    /// The size of the whole screen (the frame's), in pixels: what
+    /// [`Kernel::resize`] left, which is the old one where there was no
+    /// memory for the new one.
+    #[must_use]
+    pub fn frame_size(&self) -> (u16, u16) {
+        let bounds = self.framebuffer.bounds();
+        (bounds.width, bounds.height)
+    }
+
     /// The screen has another size, e.g. turned (see
     /// [`Kernel::rotation`]): every open screen is made anew for it, with
     /// what it was opened with, and the whole screen is drawn again. Turned
