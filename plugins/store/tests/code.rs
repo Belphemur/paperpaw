@@ -16,10 +16,14 @@
 mod common;
 
 use common::{LIST, Shared, Shopping};
-use paperpaw_native::signature::{public_key, sign};
+use paperpaw_native::signature::{public_key, sign, sign_message};
 use paperpaw_native::{Chip, Header, LINK_BASE};
 use paperpaw_plugin_store::OPEN;
 use paperpaw_sdk::builtin::actions;
+use paperpaw_sdk::native::keys::{
+    Revocation, is_revoked, keep_revoked, known_recovery, revocation_message, revoked,
+    rotation_message,
+};
 use paperpaw_sdk::native::{Fingerprint, Native, installed_code, known_author};
 use paperpaw_sdk::{PluginKind, Storage, Version};
 
@@ -30,6 +34,8 @@ const BUILD: Fingerprint = Fingerprint(0x0123_4567_89ab_cdef);
 /// The seeds of the keys of the plugin's author and of someone else.
 const AUTHOR: [u8; 32] = [7; 32];
 const OTHER: [u8; 32] = [9; 32];
+/// The seed of the recovery key the author named.
+const RECOVERY: [u8; 32] = [5; 32];
 
 fn native() -> Native {
     let mut native = Native::new("code.ppn");
@@ -196,6 +202,363 @@ fn a_code_plugin_is_installed_and_starts_after_a_restart() {
         shown.contains("The change applies once PaperPaw starts again."),
         "{shown}"
     );
+}
+
+/// `page` with the author's recovery key named, as a library does.
+fn with_recovery(page: &str, seed: &[u8; 32]) -> String {
+    let author = format!("\"author_key\": \"{}\"", hex(&public_key(&AUTHOR)));
+    let named = format!("{author}, \"recovery_key\": \"{}\"", hex(&public_key(seed)));
+    assert!(page.contains(&author));
+    page.replace(&author, &named)
+}
+
+/// The clock's page, with `recovery` named, opened and installed.
+fn install_naming(shopping: &mut Shopping, version: &str, code: &[u8], recovery: &[u8; 32]) {
+    shopping.choose("Reading");
+    shopping.choose("Clock");
+    let text = with_recovery(&page(version, code), recovery);
+    shopping.serve(PAGE, text.as_bytes());
+    // *Install*; what code plugins are, said once, then taken.
+    shopping.run(actions::CONFIRM);
+    shopping.run(actions::CONFIRM);
+    download(shopping, version, code);
+}
+
+#[test]
+fn the_recovery_key_is_pinned_at_the_first_install() {
+    let mut shopping = store("1.0.0");
+    let code = ppn(BUILD, Some(&AUTHOR));
+    install_naming(&mut shopping, "1.0.0", &code, &RECOVERY);
+    let storage = &shopping.storage;
+    assert_eq!(known_author(storage, "clock"), Some(public_key(&AUTHOR)));
+    assert_eq!(
+        known_recovery(storage, "clock"),
+        Some(public_key(&RECOVERY))
+    );
+}
+
+#[test]
+fn a_recovery_key_named_by_an_update_is_not_pinned() {
+    let mut shopping = store("1.0.0");
+    first_install(&mut shopping, "1.0.0", &ppn(BUILD, Some(&AUTHOR)));
+    assert_eq!(known_recovery(&shopping.storage, "clock"), None);
+    // A newer version by the same author, the library now naming a
+    // recovery key (a taken-over library could).
+    let newer = ppn(BUILD, Some(&AUTHOR));
+    shopping.run(actions::BACK);
+    shopping.run(actions::BACK);
+    shopping.run(OPEN);
+    shopping.serve(LIST, list("1.1.0").as_bytes());
+    shopping.choose("Reading");
+    shopping.choose("Clock");
+    let text = with_recovery(&page("1.1.0", &newer), &RECOVERY);
+    shopping.serve(PAGE, text.as_bytes());
+    shopping.run(actions::DOWN);
+    shopping.run(actions::CONFIRM);
+    download(&mut shopping, "1.1.0", &newer);
+    assert_eq!(installed(&shopping), Some(Version::new(1, 1, 0)));
+    assert_eq!(known_recovery(&shopping.storage, "clock"), None);
+}
+
+/// The clock's page for an update, the library naming `signer` as its
+/// author's key and carrying these rotation steps (`to`, signature).
+fn rotated_page(
+    version: &str,
+    code: &[u8],
+    signer: &[u8; 32],
+    steps: &[([u8; 32], [u8; 64])],
+) -> String {
+    let author = format!("\"author_key\": \"{}\"", hex(&public_key(&AUTHOR)));
+    let steps: Vec<String> = steps
+        .iter()
+        .map(|(to, signature)| {
+            format!(
+                "{{\"to\": \"{}\", \"signature\": \"{}\"}}",
+                hex(to),
+                hex(signature)
+            )
+        })
+        .collect();
+    let named = format!(
+        "\"author_key\": \"{}\", \"rotations\": [{}]",
+        hex(&public_key(signer)),
+        steps.join(", ")
+    );
+    page(version, code).replace(&author, &named)
+}
+
+/// What the recovery key signs to move the clock from the key of seed
+/// `from` to `new`.
+fn moved_from(from: &[u8; 32], new: &[u8; 32]) -> [u8; 64] {
+    let message = rotation_message("clock", &public_key(from), new);
+    sign_message(message.as_bytes(), &RECOVERY)
+}
+
+/// What the recovery key signs to move the clock from [`AUTHOR`] to `new`.
+fn moved(new: &[u8; 32]) -> [u8; 64] {
+    moved_from(&AUTHOR, new)
+}
+
+/// The clock installed by [`AUTHOR`], naming [`RECOVERY`] if `pinned`,
+/// then its update 1.1.0, signed by the key of seed `signer`, offered with
+/// these rotation steps; whether it was installed.
+fn update_signed_by(
+    pinned: bool,
+    signer: &[u8; 32],
+    steps: &[([u8; 32], [u8; 64])],
+) -> (Shopping, bool) {
+    let mut shopping = store("1.0.0");
+    let first = ppn(BUILD, Some(&AUTHOR));
+    if pinned {
+        install_naming(&mut shopping, "1.0.0", &first, &RECOVERY);
+    } else {
+        first_install(&mut shopping, "1.0.0", &first);
+    }
+    let signed = ppn(BUILD, Some(signer));
+    shopping.run(actions::BACK);
+    shopping.run(actions::BACK);
+    shopping.run(OPEN);
+    shopping.serve(LIST, list("1.1.0").as_bytes());
+    shopping.choose("Reading");
+    shopping.choose("Clock");
+    let text = rotated_page("1.1.0", &signed, signer, steps);
+    shopping.serve(PAGE, text.as_bytes());
+    shopping.run(actions::DOWN);
+    shopping.run(actions::CONFIRM);
+    download(&mut shopping, "1.1.0", &signed);
+    let done = installed(&shopping) == Some(Version::new(1, 1, 0));
+    (shopping, done)
+}
+
+#[test]
+fn a_rotation_by_the_recovery_key_moves_the_plugin_to_the_new_key() {
+    let to = public_key(&OTHER);
+    let (shopping, done) = update_signed_by(true, &OTHER, &[(to, moved(&to))]);
+    assert!(done);
+    let storage = &shopping.storage;
+    assert_eq!(known_author(storage, "clock"), Some(to));
+    assert_eq!(
+        known_recovery(storage, "clock"),
+        Some(public_key(&RECOVERY))
+    );
+    let code = ppn(BUILD, Some(&OTHER));
+    assert_eq!(installed_code(storage, "clock"), Some(digest(&code)));
+}
+
+#[test]
+fn a_device_behind_follows_the_steps_from_the_key_it_knows() {
+    let third_seed = [3u8; 32];
+    let (b, c) = (public_key(&OTHER), public_key(&third_seed));
+    // The author moved A to B, then B to C; the device is still on A.
+    let steps = [(b, moved(&b)), (c, moved_from(&OTHER, &c))];
+    let (shopping, done) = update_signed_by(true, &third_seed, &steps);
+    assert!(done);
+    assert_eq!(known_author(&shopping.storage, "clock"), Some(c));
+    // Code signed by B only goes to B, though the library names C too.
+    let (shopping, done) = update_signed_by(true, &OTHER, &steps);
+    assert!(done);
+    assert_eq!(known_author(&shopping.storage, "clock"), Some(b));
+}
+
+#[test]
+fn steps_that_do_not_reach_the_signer_move_nothing() {
+    let third_seed = [3u8; 32];
+    let (b, c) = (public_key(&OTHER), public_key(&third_seed));
+    // The library names a step to B only; the code is signed by C.
+    let (shopping, done) = update_signed_by(true, &third_seed, &[(b, moved(&b))]);
+    assert!(!done);
+    assert_eq!(
+        known_author(&shopping.storage, "clock"),
+        Some(public_key(&AUTHOR))
+    );
+    // A step to C that does not hold after the first one that does.
+    let bad = (c, [0u8; 64]);
+    let (shopping, done) = update_signed_by(true, &third_seed, &[(b, moved(&b)), bad]);
+    assert!(!done);
+    assert_eq!(known_author(&shopping.storage, "clock"), Some(b));
+}
+
+#[test]
+fn a_rotation_that_does_not_hold_is_refused_as_before() {
+    let to = public_key(&OTHER);
+    let stranger = sign_message(
+        rotation_message("clock", &public_key(&AUTHOR), &to).as_bytes(),
+        &OTHER,
+    );
+    let third = public_key(&[3; 32]);
+    let cases = [
+        // Signed by a key that is not the recovery key.
+        (true, to, stranger),
+        // The statement is for another key than the code's.
+        (true, third, moved(&third)),
+        // No recovery key was pinned: the library's rotation is no use.
+        (false, to, moved(&to)),
+    ];
+    for (pinned, to, signature) in cases {
+        let (mut shopping, done) = update_signed_by(pinned, &OTHER, &[(to, signature)]);
+        assert!(!done);
+        assert_eq!(installed(&shopping), Some(Version::new(1, 0, 0)));
+        let storage = &shopping.storage;
+        assert_eq!(known_author(storage, "clock"), Some(public_key(&AUTHOR)));
+        let first = ppn(BUILD, Some(&AUTHOR));
+        assert_eq!(installed_code(storage, "clock"), Some(digest(&first)));
+        let shown = shopping.shown().replace(" | ", " ");
+        assert!(
+            shown.contains("signed by another key than before"),
+            "{shown}"
+        );
+    }
+}
+
+/// One entry of the library's `revoked_keys`: `plugin`'s `key`, with
+/// `signature` as given (hex).
+fn revocation(plugin: &str, key: &[u8; 32], signature: &[u8; 64]) -> String {
+    format!(
+        r#"{{"plugin": "{plugin}", "key": "{}", "signature": "{}"}}"#,
+        hex(key),
+        hex(signature)
+    )
+}
+
+/// What `seed` signs to revoke `key` of `plugin`.
+fn revoking(seed: &[u8; 32], plugin: &str, key: &[u8; 32]) -> [u8; 64] {
+    sign_message(revocation_message(plugin, key).as_bytes(), seed)
+}
+
+/// The clock installed (naming [`RECOVERY`]), then the library's list
+/// read with these `revoked_keys` entries.
+fn list_revoking(entries: &[String]) -> Shopping {
+    let mut shopping = store("1.0.0");
+    install_naming(
+        &mut shopping,
+        "1.0.0",
+        &ppn(BUILD, Some(&AUTHOR)),
+        &RECOVERY,
+    );
+    shopping.run(actions::BACK);
+    shopping.run(actions::BACK);
+    shopping.run(OPEN);
+    let text = list("1.0.0");
+    let text = text.strip_suffix('}').unwrap();
+    let text = format!("{text}, \"revoked_keys\": [{}]}}", entries.join(", "));
+    shopping.serve(LIST, text.as_bytes());
+    shopping
+}
+
+#[test]
+fn revocations_signed_by_the_key_or_the_recovery_key_are_handed_over() {
+    let author = public_key(&AUTHOR);
+    for seed in [AUTHOR, RECOVERY] {
+        let entry = revocation("clock", &author, &revoking(&seed, "clock", &author));
+        let shopping = list_revoking(&[entry]);
+        let storage = &shopping.storage;
+        assert!(is_revoked(storage, "clock"));
+        assert_eq!(revoked(storage).len(), 1);
+    }
+}
+
+#[test]
+fn revocations_that_do_not_hold_stop_nothing() {
+    let author = public_key(&AUTHOR);
+    let other = public_key(&OTHER);
+    let entries = [
+        // Signed by neither the key nor the recovery key.
+        revocation("clock", &author, &revoking(&OTHER, "clock", &author)),
+        // A key that is not the pinned author's, though signed by itself.
+        revocation("clock", &other, &revoking(&OTHER, "clock", &other)),
+        // A plugin nothing is known of.
+        revocation("weather", &other, &revoking(&OTHER, "weather", &other)),
+        // Damaged: a key too short, no signature, no plugin.
+        r#"{"plugin": "clock", "key": "abcd", "signature": "00"}"#.to_string(),
+        format!(r#"{{"plugin": "clock", "key": "{}"}}"#, hex(&author)),
+        revocation("", &author, &revoking(&AUTHOR, "", &author)),
+    ];
+    let shopping = list_revoking(&entries);
+    let storage = &shopping.storage;
+    assert!(!is_revoked(storage, "clock"));
+    assert!(revoked(storage).is_empty());
+    // The plugin goes on as installed.
+    assert_eq!(installed(&shopping), Some(Version::new(1, 0, 0)));
+}
+
+#[test]
+fn a_bad_entry_does_not_cost_the_good_ones_beside_it() {
+    let author = public_key(&AUTHOR);
+    let entries = [
+        r#"{"plugin": "clock", "key": "zz", "signature": "zz"}"#.to_string(),
+        revocation("clock", &author, &revoking(&AUTHOR, "clock", &author)),
+    ];
+    let shopping = list_revoking(&entries);
+    assert!(is_revoked(&shopping.storage, "clock"));
+}
+
+/// `count` well formed entries, each of a plugin that is not here.
+fn junk(count: usize) -> Vec<String> {
+    (0..count)
+        .map(|n| {
+            let seed = [(n % 250 + 1) as u8; 32];
+            let key = public_key(&seed);
+            let plugin = format!("p{n}");
+            revocation(&plugin, &key, &revoking(&seed, &plugin, &key))
+        })
+        .collect()
+}
+
+#[test]
+fn entries_for_plugins_not_here_take_no_place_from_those_that_are() {
+    let author = public_key(&AUTHOR);
+    let mut entries = junk(300);
+    entries.push(revocation(
+        "clock",
+        &author,
+        &revoking(&AUTHOR, "clock", &author),
+    ));
+    let shopping = list_revoking(&entries);
+    assert!(is_revoked(&shopping.storage, "clock"));
+    assert_eq!(revoked(&shopping.storage).len(), 1);
+}
+
+#[test]
+fn a_list_is_read_only_so_far() {
+    let author = public_key(&AUTHOR);
+    let mut entries = junk(4096);
+    entries.push(revocation(
+        "clock",
+        &author,
+        &revoking(&AUTHOR, "clock", &author),
+    ));
+    let shopping = list_revoking(&entries);
+    assert!(!is_revoked(&shopping.storage, "clock"));
+}
+
+#[test]
+fn a_revocation_listed_twice_is_one() {
+    let author = public_key(&AUTHOR);
+    let entry = revocation("clock", &author, &revoking(&AUTHOR, "clock", &author));
+    let shopping = list_revoking(&[entry.clone(), entry]);
+    assert_eq!(revoked(&shopping.storage).len(), 1);
+}
+
+#[test]
+fn a_stopped_plugin_says_so_on_its_page_and_offers_removal() {
+    let mut first = store("1.0.0");
+    let code = ppn(BUILD, Some(&AUTHOR));
+    first_install(&mut first, "1.0.0", &code);
+    let storage = first.storage.clone();
+    // Its author revokes the key; the kernel, started again, does not run it.
+    let author = public_key(&AUTHOR);
+    let revocation = Revocation::new("clock", author, revoking(&AUTHOR, "clock", &author));
+    assert!(keep_revoked(&storage, &[revocation]).is_ok());
+    let mut shopping = Shopping::with(Some("x4"), Some(native()), &list("1.0.0"), storage);
+    shopping.choose("Reading");
+    shopping.choose("Clock");
+    shopping.serve(PAGE, page("1.0.0", &code).as_bytes());
+    let shown = shopping.shown().replace(" | ", " ");
+    assert!(
+        shown.contains("Stopped: the key its author signed it with"),
+        "{shown}"
+    );
+    assert!(shown.contains("Remove"), "{shown}");
 }
 
 #[test]

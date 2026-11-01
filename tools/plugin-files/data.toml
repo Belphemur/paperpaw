@@ -53,30 +53,30 @@ de.description = "Fett-kursiver Buchtext in Literata, wo sonst Fett dafür steht
 # that is ready): tools/script-pack.py builds them for the release.
 
 [script-arabic]
-version = "1.0.0"
+version = "1.1.0"
 group = "look"
 licence = "OFL-1.1"
 devices = ["x4", "x4-pro", "x4-classic"]
 off_by_default = true
 build = "tools/script-pack.py"
-inputs = ["tools/fonts/NotoNaskhArabic.ttf", "tools/fontgen", "crates/paperpaw-text/src/marks.rs"]
+inputs = ["tools/fonts/NotoNaskhArabic.ttf", "tools/fontgen", "crates/paperpaw-text/src/marks.rs", "tools/plugin-files/keyboards/arabic.txt"]
 name = "Arabic letters"
-description = "Arabic, Persian and Urdu books in Noto Naskh Arabic, with their vowel marks."
+description = "Arabic, Persian and Urdu books in Noto Naskh Arabic, with their vowel marks, and keyboards for typing them."
 de.name = "Arabische Schrift"
-de.description = "Bücher auf Arabisch, Persisch und Urdu in Noto Naskh Arabic, mit ihren Vokalzeichen."
+de.description = "Bücher auf Arabisch, Persisch und Urdu in Noto Naskh Arabic, mit ihren Vokalzeichen, und Tastaturen dafür."
 
 [script-hebrew]
-version = "1.0.0"
+version = "1.1.0"
 group = "look"
 licence = "OFL-1.1"
 devices = ["x4", "x4-pro", "x4-classic"]
 off_by_default = true
 build = "tools/script-pack.py"
-inputs = ["tools/fonts/NotoSerifHebrew.ttf", "tools/fontgen", "crates/paperpaw-text/src/marks.rs"]
+inputs = ["tools/fonts/NotoSerifHebrew.ttf", "tools/fontgen", "crates/paperpaw-text/src/marks.rs", "tools/plugin-files/keyboards/hebrew.txt"]
 name = "Hebrew letters"
-description = "Hebrew books in Noto Serif Hebrew, with their points."
+description = "Hebrew books in Noto Serif Hebrew, with their points, and a keyboard for typing it."
 de.name = "Hebräische Schrift"
-de.description = "Bücher auf Hebräisch in Noto Serif Hebrew, mit ihren Punkten."
+de.description = "Bücher auf Hebräisch in Noto Serif Hebrew, mit ihren Punkten, und eine Tastatur dafür."
 
 [script-greek]
 version = "1.0.0"
@@ -103,3 +103,57 @@ name = "Cyrillic letters"
 description = "Russian, Ukrainian, Bulgarian, Serbian and other Cyrillic books in Literata."
 de.name = "Kyrillische Schrift"
 de.description = "Bücher auf Russisch, Ukrainisch, Bulgarisch, Serbisch und anderen kyrillischen Sprachen in Literata."
+
+[language-ar]
+version = "1.0.0"
+group = "look"
+licence = "Apache-2.0"
+formats = 4
+devices = ["x4", "x4-pro", "x4-classic"]
+off_by_default = true
+build = "tools/language-pack.py"
+inputs = ["tools/plugin-files/languages/ar.ini", "tools/language-pack.py", "tools/sign"]
+name = "Arabic (user interface)"
+description = "PaperPaw's menus and settings in Arabic, running from right to left."
+de.name = "Arabisch (Oberfläche)"
+de.description = "PaperPaws Menüs und Einstellungen auf Arabisch, von rechts nach links."
+
+# The Korean packs (#61; owner decision: in the store from the beta).
+# script-korean (#61): the 2,350 Hangul syllables of KS X 1001 with CJK
+# punctuation, compatibility jamo and full-width forms (2,602 characters),
+# seven sizes, one face, from Nanum Myeongjo: 8.2 MiB on the card. Its pack
+# extends Literata's regular face; bold, italic and the interface's font
+# fall back to it. A pack holds up to 65,535 characters, so all 11,172
+# syllables (`hangul`) can come later as data, without a new interface.
+[script-korean]
+version = "1.1.0"
+group = "look"
+licence = "OFL-1.1"
+devices = ["x4", "x4-pro", "x4-classic"]
+off_by_default = true
+build = "tools/script-pack.py"
+inputs = ["tools/fonts/NanumMyeongjo-Regular.ttf", "tools/fontgen", "crates/paperpaw-text/src/charset.rs", "tools/plugin-files/keyboards/korean.txt"]
+name = "Korean letters"
+description = "Korean books in a classic book face: the 2,350 Hangul syllables of everyday text, and a keyboard for typing Korean."
+de.name = "Koreanische Schrift"
+de.description = "Bücher auf Koreanisch in einer klassischen Buchschrift: die 2.350 Hangul-Silben des Alltags, und eine Tastatur dafür."
+
+# script-korean-extra (#61, owner decision 43): the other 8,822 of the
+# 11,172 Hangul syllables, rare ones outside KS X 1001, as a pack of its
+# own that only adds letters to script-korean (it needs that pack, and
+# brings no letters of its own beyond them). About 30 MiB on the card, so
+# the reader offers it only for a book that uses such syllables.
+[script-korean-extra]
+version = "1.0.0"
+group = "look"
+licence = "OFL-1.1"
+devices = ["x4", "x4-pro", "x4-classic"]
+off_by_default = true
+build = "tools/script-pack.py"
+inputs = ["tools/fonts/NanumMyeongjo-Regular.ttf", "tools/fontgen", "tools/fontgen/sets/hangul-rest.txt"]
+name = "Korean letters, rare syllables"
+description = "The rare Hangul syllables outside everyday text, for books that use them. Needs Korean letters. About 30 MiB on the card."
+de.name = "Koreanische Schrift, seltene Silben"
+de.description = "Die seltenen Hangul-Silben außerhalb des Alltagstexts, für Bücher, die sie brauchen. Braucht die Koreanische Schrift. Etwa 30 MiB auf der Karte."
+how = "Korean letters shows the 2,350 Hangul syllables of everyday text. A few books use rarer ones, which then show as question marks. This pack adds the other 8,822 syllables.\n\nIt needs Korean letters and about 30 MiB on the memory card (flash is not used). Install it only if a book shows question marks in Korean text; PaperPaw offers it for such books. It adds letters only and changes nothing else."
+de.how = "Die Koreanische Schrift zeigt die 2.350 Hangul-Silben des Alltagstexts. Einige Bücher brauchen seltenere Silben, die dann als Fragezeichen erscheinen. Dieses Paket ergänzt die übrigen 8.822 Silben.\n\nEs braucht die Koreanische Schrift und etwa 30 MiB auf der Speicherkarte (der Flash-Speicher bleibt unberührt). Installiere es nur, wenn ein Buch in koreanischem Text Fragezeichen zeigt; PaperPaw bietet es für solche Bücher an. Es ergänzt nur Buchstaben und ändert sonst nichts."

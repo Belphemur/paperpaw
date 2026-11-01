@@ -482,6 +482,32 @@ impl GroupPage {
         ui::slider::title_extra(env, &self.style, rect.width, title, &self.number_room)
     }
 
+    /// Number row `spec` drawn as a slider along `track` in `rect`.
+    fn draw_slider(
+        &self,
+        canvas: &mut Canvas<'_>,
+        env: &Env<'_>,
+        (track, spec): (&Track, &SettingSpec),
+        rect: Rect,
+        (focused, editing): (bool, bool),
+    ) {
+        let focus = match (focused, editing) {
+            (false, _) => SliderFocus::None,
+            (true, false) => SliderFocus::Focused,
+            (true, true) => SliderFocus::Editing,
+        };
+        let at = track.at(env.settings().int(spec.id.as_str()));
+        let title = env.i18n().tr(&spec.title);
+        let note = spec.description.as_deref().map_or("", |d| env.i18n().tr(d));
+        let value = ui::setting_value(env, spec);
+        let view = SliderView::new(rect, at, &value)
+            .title(title)
+            .note(if self.noted { note } else { "" })
+            .focus(focus)
+            .room(&self.number_room);
+        track.slider().draw_row(canvas, env, &self.style, &view);
+    }
+
     /// The − and + of number row `index` in `rect`, where it shows them:
     /// a slider's in its band, else beside the value.
     fn steps(&self, env: &Env<'_>, index: usize, rect: Rect) -> Option<(Rect, Rect)> {
@@ -489,7 +515,8 @@ impl GroupPage {
         if ui::slider::shows(env, spec) {
             let extra = self.slider_extra(env, spec, rect);
             let band = ui::slider::band_below(&self.style, rect, extra);
-            let parts = ui::slider::parts(&self.style, band);
+            let slider = ui::slider::Slider::of(spec)?.mirrored(self.style.is_rtl());
+            let parts = slider.parts(&self.style, band);
             return Some((parts.minus, parts.plus));
         }
         let value = ui::setting_value(env, spec);
@@ -604,19 +631,10 @@ impl Screen for GroupPage {
                 let note = spec.description.as_deref().map_or("", |d| env.i18n().tr(d));
                 let note = if noted { note } else { "" };
                 let mut value = ui::setting_value(env, spec);
-                if let Some(track) = Track::of(env, spec).filter(|_| ui::slider::shows(env, spec)) {
-                    let focus = match (focused, editing) {
-                        (false, _) => SliderFocus::None,
-                        (true, false) => SliderFocus::Focused,
-                        (true, true) => SliderFocus::Editing,
-                    };
-                    let at = track.at(env.settings().int(spec.id.as_str()));
-                    let view = SliderView::new(rect, at, &value)
-                        .title(title)
-                        .note(note)
-                        .focus(focus)
-                        .room(&self.number_room);
-                    track.slider().draw_row(canvas, env, &style, &view);
+                if let Some(track) =
+                    Track::of(env, spec, style.is_rtl()).filter(|_| ui::slider::shows(env, spec))
+                {
+                    self.draw_slider(canvas, env, (&track, spec), rect, (focused, editing));
                     return;
                 }
                 let lines = match all_lines.get(index).copied().flatten() {
@@ -771,7 +789,7 @@ impl Screen for GroupPage {
         };
         let Some((index, track, id, rect)) = index.and_then(|i| {
             let spec = self.spec(i).filter(|s| ui::slider::shows(&env, s))?;
-            let track = Track::of(&env, spec)?;
+            let track = Track::of(&env, spec, self.style.is_rtl())?;
             Some((i, track, spec.id.clone(), self.rows.rect_of(i)?))
         }) else {
             return Handled::No;

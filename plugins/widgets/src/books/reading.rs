@@ -728,8 +728,11 @@ fn layout(env: &Env<'_>, rest: Rect, book: &Book, position: &Position) -> Layout
             lines = match (broken, counted) {
                 (Some(broken), _) => broken,
                 (None, Some((page, pages))) => {
-                    let short = format!("{page}/{pages} · {percent}");
-                    let shorter = format!("{page}/{pages}");
+                    let shorter = env
+                        .i18n()
+                        .localize_digits(&format!("{page}/{pages}"))
+                        .into_owned();
+                    let short = format!("{shorter} · {percent}");
                     if whole(&short) {
                         alloc::vec![short]
                     } else if whole(&shorter) {

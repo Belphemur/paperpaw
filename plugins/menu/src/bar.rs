@@ -189,15 +189,19 @@ impl BarScreen {
             .collect();
         let cell_height = (size + small) as u16 + 2 * gap;
         let top = info.y + info.height + gap;
+        // The first entry at the start side: the right where the UI runs
+        // right to left.
+        let rtl = style.is_rtl();
         let cells: Vec<Rect> = (0..entries.len())
             .map(|i| {
                 let (row, column) = (i / columns, i % columns);
-                Rect::new(
-                    lefts[column] as u16,
-                    top + row as u16 * cell_height,
-                    column_width[column] as u16,
-                    cell_height,
-                )
+                let (x, width) = (lefts[column] as u16, column_width[column] as u16);
+                let x = if rtl {
+                    display.width.saturating_sub(x + width)
+                } else {
+                    x
+                };
+                Rect::new(x, top + row as u16 * cell_height, width, cell_height)
             })
             .collect();
         // Taps count up to halfway to the next entry.
@@ -432,24 +436,17 @@ impl Screen for BarScreen {
         if !self.keys && (*a == actions::NEXT_PAGE || *a == actions::PREV_PAGE) {
             return Handled::Yes;
         }
-        if [
-            actions::LEFT,
-            actions::UP,
-            actions::PREVIOUS,
-            actions::PREV_PAGE,
-        ]
-        .contains(a)
-        {
+        // The entries run from the right where the UI runs right to left, so
+        // the left button goes on and the right one back.
+        let sideways = if self.style.is_rtl() { -1 } else { 1 };
+        if [actions::UP, actions::PREVIOUS, actions::PREV_PAGE].contains(a) {
             self.move_focus(-1, cx);
-        } else if [
-            actions::RIGHT,
-            actions::DOWN,
-            actions::NEXT,
-            actions::NEXT_PAGE,
-        ]
-        .contains(a)
-        {
+        } else if [actions::DOWN, actions::NEXT, actions::NEXT_PAGE].contains(a) {
             self.move_focus(1, cx);
+        } else if *a == actions::LEFT {
+            self.move_focus(-sideways, cx);
+        } else if *a == actions::RIGHT {
+            self.move_focus(sideways, cx);
         } else if *a == actions::CONFIRM {
             self.run(self.focus, cx);
         } else if *a == actions::MENU {

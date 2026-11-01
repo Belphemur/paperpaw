@@ -253,7 +253,9 @@ impl ListScreen {
             )
         );
         let mut request = HttpRequest::new("GET", &url, LOADED);
-        request = request.save_to(catalog::list_part());
+        request = request
+            .save_to(catalog::list_part())
+            .max_file(catalog::MAX_LIST_FILE);
         cx.command(Command::http(request));
         self.trouble = Trouble::Loading;
         self.redraw(cx);

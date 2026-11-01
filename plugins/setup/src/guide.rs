@@ -81,6 +81,26 @@ pub(crate) struct Guide {
 }
 
 /// The height of a line of text at `size`.
+/// The buttons for less and for more at the sides of `card`, `inset` in
+/// and `size` large: less at the left, at the right in a right-to-left
+/// language.
+fn steppers(card: Rect, inset: u16, top: u16, size: u16, rtl: bool) -> (Rect, Rect) {
+    let left = Rect::new(card.x + inset, top, size, size);
+    let right = Rect::new(card.x + card.width - inset - size, top, size, size);
+    if rtl { (right, left) } else { (left, right) }
+}
+
+/// Two columns of `row` `gap` apart: the first at the left, at the right
+/// in a right-to-left language.
+fn two_columns(row: Rect, gap: u16, rtl: bool) -> (Rect, Rect) {
+    let cells = ui::columns(row, 2, gap);
+    if rtl {
+        (cells[1], cells[0])
+    } else {
+        (cells[0], cells[1])
+    }
+}
+
 fn line(env: &Env<'_>, style: &UiStyle, size: f32) -> u16 {
     style
         .font(env)
@@ -410,10 +430,7 @@ impl Guide {
                     let size = button;
                     let top = card.y + gap;
                     let inset = style.margin();
-                    (
-                        Rect::new(card.x + inset, top, size, size),
-                        Rect::new(card.x + card.width - inset - size, top, size, size),
-                    )
+                    steppers(card, inset, top, size, style.is_rtl())
                 });
                 let segments = self.two(env).map(|_| {
                     // Close, the two use the card's whole width.
@@ -427,8 +444,7 @@ impl Guide {
                         card.width.saturating_sub(2 * inset),
                         card.height.saturating_sub(2 * above),
                     );
-                    let cells = ui::columns(row, 2, inset.max(gap / 2));
-                    (cells[0], cells[1])
+                    two_columns(row, inset.max(gap / 2), style.is_rtl())
                 });
                 (Some(card), stepper, segments)
             }
@@ -909,4 +925,29 @@ fn draw_card_label(ui: &mut ui::Ui<'_>, (card, inner): (Rect, Rect), label: &str
         .px(size)
         .color(Color::BLACK)
         .draw_from(ui, x, row);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_first_of_two_starts_where_the_language_does() {
+        let row = Rect::new(20, 100, 440, 60);
+        let (first, second) = two_columns(row, 10, false);
+        assert!(first.x < second.x);
+        let (first, second) = two_columns(row, 10, true);
+        assert!(first.x > second.x);
+        assert_eq!(first.right(), row.right());
+    }
+
+    #[test]
+    fn less_is_at_the_right_where_numbers_run_right_to_left() {
+        let card = Rect::new(20, 100, 440, 200);
+        let (less, more) = steppers(card, 16, 110, 60, false);
+        assert!(less.x < more.x);
+        let (less, more) = steppers(card, 16, 110, 60, true);
+        assert!(less.x > more.x);
+        assert_eq!(less.right(), card.right() - 16);
+    }
 }

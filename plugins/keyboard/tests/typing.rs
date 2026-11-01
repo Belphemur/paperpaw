@@ -88,6 +88,11 @@ impl Plugin for Listener {
                 "huge.layout; HUGE; {rows}; a={variants}\nkeyboard.layout.de; XX; abc\ndutch.layout; NX; abc"
             ),
         )?;
+        // Korean: jamo that join to syllables.
+        r.contribute(
+            Id::new_static("keyboard.layouts"),
+            "korean.layout; KO; ㅂㅈㄷㄱㅅㅛㅕㅑㅐㅔ ㅁㄴㅇㄹㅎㅗㅓㅏㅣ ㅋㅌㅊㅍㅠㅜㅡ",
+        )?;
         let heard = self.0.clone();
         r.on(TYPED, move |_, typed, _| {
             heard.borrow_mut().push(typed.clone())
@@ -1197,6 +1202,39 @@ fn a_layout_another_plugin_adds_is_typed_with() {
     touch.tap("ï");
     touch.tap("OK");
     assert_eq!(touch.answer(), "ï");
+}
+
+/// Jamo from outside (a keyboard, a remote control) join to syllables as
+/// they come; a layout of letters the fonts lack is not offered (the
+/// letters of the Korean pack are the fonts' here), so it is never
+/// chosen; text from a phone is taken as it is.
+#[test]
+fn korean_jamo_join_to_syllables() {
+    let mut touch = Typing::new(TOUCH);
+    touch.open(&[]);
+    assert!(touch.typed_from_outside("ㅎㅏㄴㄱㅡㄹ", false));
+    touch.tap("OK");
+    assert_eq!(touch.answer(), "한글");
+
+    // A letter of Latin text between: nothing joins across it.
+    let mut touch = Typing::new(TOUCH);
+    touch.open(&[]);
+    touch.typed_from_outside("ㄱaㅏ", false);
+    touch.tap("OK");
+    assert_eq!(touch.answer(), "ㄱaㅏ");
+
+    // Not offered where the fonts lack Hangul.
+    let config = "[keyboard]\nlayouts = korean.layout\n";
+    let mut touch = Typing::with_config(TOUCH, config);
+    touch.open(&[]);
+    assert!(touch.part("ㅎ").is_none(), "{:?}", touch.parts());
+
+    // Text from a phone is not joined to what is there.
+    let mut touch = Typing::new(TOUCH);
+    touch.open(&[]);
+    touch.typed_on_phone("ㅎㅏ");
+    touch.tap("OK");
+    assert_eq!(touch.answer(), "ㅎㅏ");
 }
 
 #[test]

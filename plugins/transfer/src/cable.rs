@@ -599,7 +599,6 @@ impl CableScreen {
 /// sizes below it.
 fn question(env: &Env<'_>, offer: &Offer) -> (String, String) {
     let i18n = env.i18n();
-    let decimal = i18n.tr("transfer.cable.decimal");
     let key = match (offer.plugin.is_some(), offer.books.is_empty()) {
         (true, true) => "transfer.cable.ask-plugin",
         (true, false) => "transfer.cable.ask-both",
@@ -614,7 +613,7 @@ fn question(env: &Env<'_>, offer: &Offer) -> (String, String) {
             "transfer.cable.plugin",
             &[
                 ("name", Arg::Str(id)),
-                ("size", Arg::Str(&files::size(size, decimal))),
+                ("size", Arg::Str(&files::shown_size(env, size))),
             ],
         ));
         if offer.code() {
@@ -622,7 +621,7 @@ fn question(env: &Env<'_>, offer: &Offer) -> (String, String) {
         }
     }
     for (name, size) in &offer.named {
-        lines.push(format!("{name} ({})", files::size(*size, decimal)));
+        lines.push(format!("{name} ({})", files::shown_size(env, *size)));
     }
     if offer.books.len() > offer.named.len() {
         let more = (offer.books.len() - offer.named.len()) as i64;

@@ -10,6 +10,9 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use paperpaw_sdk::event::Event;
+
+/// The largest sample of a font taken from a library.
+const MAX_SAMPLE_FILE: u64 = 1024 * 1024;
 use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::ui::UiStyle;
 use paperpaw_sdk::{
@@ -165,7 +168,9 @@ impl Samples {
             );
             let mut request = HttpRequest::new("GET", &url, SAMPLE);
             let _ = env.storage().create_dir(&dir());
-            request = request.save_to(self.path(env, font));
+            request = request
+                .save_to(self.path(env, font))
+                .max_file(MAX_SAMPLE_FILE);
             request = request.with(Params::new().with(FONT, font.id.clone()));
             out.push(Command::http(request));
             self.fetching = Some(font.id.clone());

@@ -64,18 +64,22 @@ fn duration(env: &Env<'_>, ms: u64) -> String {
 /// A share of the battery with one decimal, e.g. `4.2 %`.
 fn percent(env: &Env<'_>, value: f32) -> String {
     let tenths = (value * 10.0 + 0.5) as u32;
-    let point = env.i18n().tr("battery.decimal-point");
-    let number = format!("{}{point}{}", tenths / 10, tenths % 10);
+    let point = paperpaw_sdk::numbers::decimal_mark(env);
+    let number = env
+        .i18n()
+        .localize_digits(&format!("{}{point}{}", tenths / 10, tenths % 10))
+        .into_owned();
     env.i18n()
         .format("battery.percent", &[("value", Arg::Str(&number))])
 }
 
 /// The voltage, e.g. `4.01 V`.
 fn volts(env: &Env<'_>, millivolts: u16) -> String {
-    let point = env.i18n().tr("battery.decimal-point");
+    let point = paperpaw_sdk::numbers::decimal_mark(env);
     // Rounded to hundredths first, so that 3999 mV is 4.00 V.
     let hundredths = (u32::from(millivolts) + 5) / 10;
-    format!("{}{point}{:02} V", hundredths / 100, hundredths % 100)
+    let text = format!("{}{point}{:02} V", hundredths / 100, hundredths % 100);
+    env.i18n().localize_digits(&text).into_owned()
 }
 
 /// Plugins listed in each section.
@@ -109,8 +113,9 @@ fn network_setting(env: &Env<'_>, plugin: &str) -> String {
 /// Microseconds as seconds with a decimal, e.g. `3.2 s`.
 fn seconds(env: &Env<'_>, micros: u64) -> String {
     let tenths = micros / 100_000;
-    let point = env.i18n().tr("battery.decimal-point");
-    format!("{}{point}{} s", tenths / 10, tenths % 10)
+    let point = paperpaw_sdk::numbers::decimal_mark(env);
+    let text = format!("{}{point}{} s", tenths / 10, tenths % 10);
+    env.i18n().localize_digits(&text).into_owned()
 }
 
 /// What a time awake used, for the list of recent ones.
@@ -181,11 +186,11 @@ impl BatteryView {
             }
             lines.push(Line::Value(
                 tr("battery.pages"),
-                format!("{}", current.pages()),
+                env.i18n().number(i64::from(current.pages())),
             ));
             lines.push(Line::Value(
                 tr("battery.refreshes"),
-                format!("{}", current.refreshes()),
+                env.i18n().number(i64::from(current.refreshes())),
             ));
         }
 

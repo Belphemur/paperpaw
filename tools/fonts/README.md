@@ -7,11 +7,22 @@ the firmware holds none of them.
 |---|---|---|---|
 | `NotoNaskhArabic.ttf` | Noto Naskh Arabic, variable (`wght` 400 to 700) | SIL OFL 1.1, no Reserved Font Name (`NotoNaskhArabic-OFL.txt`) | `ofl/notonaskharabic/NotoNaskhArabic[wght].ttf` of github.com/google/fonts at 6c1dbe27 |
 | `NotoSerifHebrew.ttf` | Noto Serif Hebrew, variable (`wdth`, `wght`) | SIL OFL 1.1, no Reserved Font Name (`NotoSerifHebrew-OFL.txt`) | `ofl/notoserifhebrew/NotoSerifHebrew[wdth,wght].ttf` of github.com/google/fonts at 6c1dbe27 |
+| `NanumMyeongjo-Regular.ttf` | Nanum Myeongjo Regular, static | SIL OFL 1.1, **with** Reserved Font Names (`NanumMyeongjo-OFL.txt`): packs made from it are not named after it (NOTICE) | `ofl/nanummyeongjo/NanumMyeongjo-Regular.ttf` of github.com/google/fonts at 6c1dbe27 (SHA-256 `7ed9e865…`) |
 
 Greek (`script-greek`) and Cyrillic (`script-cyrillic`) have no file
 here: they are drawn in Literata's own faces
 (`plugins/fonts-default/fonts`, SIL OFL 1.1, `Literata-OFL.txt`), which
 hold modern and polytonic Greek and the Cyrillic block (U+0400 to U+04FF).
+
+Nanum Myeongjo is the book face for Korean (#61; `paperpaw-notes`
+design `korean-support.md` §4): a classic Myeongjo, light enough for
+the small sizes. `script-korean` holds the 2,350 Hangul syllables of
+KS X 1001 (`tools/fontgen/sets/hangul-ks.txt`), which ordinary modern
+text keeps to, with CJK punctuation, compatibility jamo and full-width
+forms: 8.2 MiB for one face in seven sizes (all 11,172 syllables would
+be 38 MiB). It extends Literata's regular face only; text in bold,
+italic or the interface's font finds Hangul there, as the reading font
+is where a font lacking a letter looks last.
 
 Noto Naskh Arabic is the reading font for Arabic, Persian and Urdu
 (#33): it holds the presentation forms with their dots, which packs draw

@@ -42,7 +42,11 @@ pub(crate) fn state(
         if job.done >= job.total {
             return State::Busy(env.i18n().tr("store.state.waiting").to_string());
         }
-        return State::Busy(format!("{} / {}", job.done, job.total));
+        return State::Busy(
+            env.i18n()
+                .localize_digits(&format!("{} / {}", job.done, job.total))
+                .into_owned(),
+        );
     }
     if queued.contains(&plugin.id) {
         return State::Busy(env.i18n().tr("store.state.queued").to_string());
@@ -60,7 +64,7 @@ pub(crate) fn state(
     } else if plugin.installed(env).is_some() {
         State::Installed
     } else {
-        State::Offered(files::size(plugin.size, env.i18n().tr("store.decimal")))
+        State::Offered(files::shown_size(env, plugin.size))
     }
 }
 

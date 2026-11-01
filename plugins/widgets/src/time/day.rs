@@ -102,9 +102,9 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     match chosen_name(env, ID.as_str(), "style") {
         "number" => {
             // "14" large; beside it the weekday, and the month below it.
-            let number = format!("{}", t.day);
+            let number = env.i18n().number(i64::from(t.day));
             let month_line = if with_year {
-                format!("{month} {}", t.year)
+                format!("{month} {}", env.i18n().number(i64::from(t.year)))
             } else {
                 String::from(month)
             };
@@ -300,7 +300,7 @@ fn draw_sheet(
     let short = super::month_short(env, t.month);
     let mut names = Vec::new();
     if with_year {
-        names.push(format!("{full} {}", t.year));
+        names.push(format!("{full} {}", env.i18n().number(i64::from(t.year))));
     }
     names.push(String::from(full));
     names.push(String::from(short));
@@ -357,7 +357,7 @@ fn draw_sheet(
     );
     let notes_h = line(font, note) * notes.len() as f32;
     let room = f32::from(inner.height) - notes_h;
-    let number = format!("{}", t.day);
+    let number = env.i18n().number(i64::from(t.day));
     let size = super::fit_size(font, room * 0.72, &number, width * 0.8);
     let digits = super::cap_height(font, size);
     let gap = (room - digits) / 2.0 * 0.6;

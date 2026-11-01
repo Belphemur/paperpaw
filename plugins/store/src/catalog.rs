@@ -55,6 +55,8 @@ use paperpaw_sdk::web::{encode, join_url};
 use paperpaw_sdk::{Env, PluginKind, Plugins, Storage, Version};
 
 use crate::PLUGIN;
+use crate::revoked::Revocations;
+use crate::trust::{Named, Rotation};
 
 mod runs;
 
@@ -65,6 +67,11 @@ use runs::{Cursor, KEYED, Keyed, Output, before, order_of};
 const FORMAT: u32 = 2;
 /// The longest summary kept, in bytes, and the longest name and other
 /// short texts.
+/// The largest files the store takes from the library: the list of
+/// plugins, a plugin's page, a picture of it.
+pub(crate) const MAX_LIST_FILE: u64 = 4 * 1024 * 1024;
+pub(crate) const MAX_PAGE_FILE: u64 = 512 * 1024;
+pub(crate) const MAX_SHOT_FILE: u64 = 2 * 1024 * 1024;
 const MAX_SUMMARY: usize = 300;
 const MAX_NAME: usize = 80;
 /// The longest line of the index read.
@@ -282,6 +289,14 @@ struct Item {
     formats: u32,
     /// The key its author signs its code with, as the library says.
     author_key: String,
+    /// The recovery key its author named, as the library says.
+    recovery_key: String,
+    /// The step of `rotations` being read: the key it moves to (`to`) and
+    /// the recovery key's signature of that, both hexadecimal.
+    rotation_to: String,
+    rotation_signature: String,
+    /// The steps read, in the order the library gives them.
+    rotations: Vec<Rotation>,
     /// The files read so far (a plugin's page only), and the one being
     /// read.
     files: Vec<PackageFile>,
@@ -402,6 +417,7 @@ impl Item {
                     self.more.repository = cut(value, 200);
                 }
                 "author_key" => self.author_key = cut(value, MAX_NAME),
+                "recovery_key" => self.recovery_key = cut(value, MAX_NAME),
                 "added" => entry.added = date(value),
                 // Its home; `latest.source.url` (that version's source)
                 // goes before it.
@@ -411,6 +427,11 @@ impl Item {
                 "author_since" => self.more.author_since = date(value),
                 "description" => self.more.description = cut(value, MAX_DESCRIPTION),
                 "author_plugins" => self.more.author_plugins = value.parse().unwrap_or(0),
+                _ => {}
+            },
+            [rotations, at, key] if rotations == "rotations" && at == "[]" => match key.as_str() {
+                "to" => self.rotation_to = cut(value, MAX_NAME),
+                "signature" => self.rotation_signature = cut(value, 2 * MAX_NAME),
                 _ => {}
             },
             [latest, source, url] if latest == "latest" && source == "source" && url == "url" => {
@@ -506,6 +527,19 @@ impl Item {
     }
 
     /// A screenshot of `screenshots` was read whole.
+    /// One step of `rotations` is read: kept if it is whole, and not more
+    /// than [`trust::MAX_STEPS`].
+    fn rotation_done(&mut self) {
+        let step = key(&self.rotation_to).zip(signature(&self.rotation_signature));
+        self.rotation_to.clear();
+        self.rotation_signature.clear();
+        if let Some((to, signature)) = step
+            && self.rotations.len() < crate::trust::MAX_STEPS
+        {
+            self.rotations.push(Rotation { to, signature });
+        }
+    }
+
     fn shot_done(&mut self) {
         let shot = core::mem::take(&mut self.shot);
         // The library keeps them as their authors made them: only those
@@ -542,6 +576,13 @@ impl Item {
 }
 
 /// An Ed25519 public key written as 64 hex digits.
+/// A signature in hexadecimal (128 digits).
+fn signature(hex: &str) -> Option<[u8; 64]> {
+    paperpaw_sdk::digest::hex::decode(hex.trim())?
+        .try_into()
+        .ok()
+}
+
 fn key(hex: &str) -> Option<[u8; 32]> {
     let hex = hex.trim().as_bytes();
     if hex.len() != 64 {
@@ -594,8 +635,19 @@ fn read_list(
     let mut format = None;
     let mut item: Option<Item> = None;
     let mut picks = Picks::default();
+    let mut revoked = Revocations::default();
     read_file(storage, path, &mut |event| match event {
         Event::Value([key], value) if key == "format" => format = value.parse::<u32>().ok(),
+        Event::Value([list, at, field], value) if list == "revoked_keys" && at == "[]" => {
+            revoked.field(field, value);
+        }
+        // After `format`, which a list names first: that it is a list this
+        // plugin reads comes before anything it says is taken.
+        Event::Close([list, at])
+            if list == "revoked_keys" && at == "[]" && format == Some(FORMAT) =>
+        {
+            revoked.entry_done(storage);
+        }
         Event::Open([key, ..]) if key == "sections" => picks.fair = true,
         Event::Value([key, section, at], value) if key == "sections" && at == "[]" => {
             picks.fair = true;
@@ -629,6 +681,10 @@ fn read_list(
         }
         _ => {}
     });
+    // Only a list this plugin reads is believed at all.
+    if format == Some(FORMAT) {
+        revoked.hand_over(storage);
+    }
     (format == Some(FORMAT)).then_some(picks)
 }
 
@@ -640,7 +696,24 @@ pub(crate) struct Plugin {
     pub entry: Entry,
     pub package: Package,
     pub author_key: Option<[u8; 32]>,
+    /// The key its author named to replace a lost author key (#20): only
+    /// taken at the plugin's first install ([`trust`](crate::trust)).
+    pub recovery_key: Option<[u8; 32]>,
+    /// The moves to other keys its author's recovery key signed, in order
+    /// (a key moved from twice is two), if the library says so (#20).
+    pub rotations: Vec<Rotation>,
     pub more: More,
+}
+
+impl Plugin {
+    /// What it names for its author's key.
+    pub(crate) fn named(&self) -> Option<Named> {
+        Some(Named {
+            author: self.author_key?,
+            recovery: self.recovery_key,
+            rotations: self.rotations.clone(),
+        })
+    }
 }
 
 /// Reads a plugin's page at `path` (`{"format": 2, "plugin": {…}}`): the
@@ -667,6 +740,11 @@ fn read_plugin(
         {
             item.shot_done();
         }
+        Event::Close([plugin, rotations, at])
+            if plugin == "plugin" && rotations == "rotations" && at == "[]" =>
+        {
+            item.rotation_done();
+        }
         Event::Value([plugin, rest @ ..], value) if plugin == "plugin" => {
             item.read(rest, value, device);
         }
@@ -681,6 +759,8 @@ fn read_plugin(
         file.url = join_url(base, &file.url);
     }
     let author_key = key(&item.author_key);
+    let recovery_key = key(&item.recovery_key);
+    let rotations = core::mem::take(&mut item.rotations);
     let code = item.code.is_some();
     let mut more = core::mem::take(&mut item.more);
     if author_key.is_some() {
@@ -697,6 +777,8 @@ fn read_plugin(
         entry,
         package,
         author_key,
+        recovery_key,
+        rotations,
         more,
     })
 }

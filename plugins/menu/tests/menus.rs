@@ -602,3 +602,49 @@ fn a_tap_at_the_bottom_of_a_page_opens_the_panel_directly() {
     app.tap(Point::new(240, 650));
     assert_eq!(app.screen(), PANEL, "{}", app.described());
 }
+
+/// A card with a right to left language, `ar`: its catalog says the
+/// direction and nothing else (the other texts are English).
+fn arabic() -> Shared {
+    let text = "Alice was beginning to get very tired of sitting by her sister.\n\n".repeat(200);
+    Shared::memory(
+        "[core]\nlanguage = ar\n",
+        &[
+            (BOOK, text.as_bytes()),
+            (
+                "plugins/language-ar/plugin.ini",
+                b"[plugin]\nid = language-ar\nname = Arabic\nversion = 1.0.0\nformats = 3\n",
+            ),
+            (
+                "plugins/language-ar/i18n/ar.ini",
+                b"[meta]\nlanguage = ar\nname = Arabic\nplural = arabic\ndirection = rtl\nscript = Arab\n",
+            ),
+        ],
+    )
+}
+
+/// Where the bar's entry `label` is.
+fn bar_entry(app: &mut App, label: &str) -> paperpaw_sdk::Rect {
+    app.parts()
+        .into_iter()
+        .find(|p| p.role == Role::Button && p.label == label)
+        .map(|p| p.area)
+        .unwrap_or_else(|| panic!("{label}: {}", app.described()))
+}
+
+/// Where the UI runs right to left the bar's first entry is at the right,
+/// and the left button goes on along the bar, the right one back.
+#[test]
+fn the_reader_menu_bar_runs_from_the_right_in_a_right_to_left_language() {
+    let mut app = App::new(X4, arabic());
+    app.open_slot(slots::READER, Params::new().with(params::PATH, BOOK));
+    reader_menu(&mut app);
+    let (font, contents) = (bar_entry(&mut app, "Font"), bar_entry(&mut app, "Contents"));
+    assert!(font.x > contents.x, "{font:?} {contents:?}");
+    // Same row, so the first is still the focus's start.
+    assert_eq!(font.y, contents.y);
+    // Left goes on to Contents, right back to Font.
+    app.run(actions::LEFT);
+    app.run(actions::CONFIRM);
+    assert_eq!(app.screen(), "reader.toc", "{}", app.described());
+}

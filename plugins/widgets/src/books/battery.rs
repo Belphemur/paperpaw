@@ -5,7 +5,7 @@
 //! service offers it), so no time left is shown.
 
 use alloc::boxed::Box;
-use alloc::string::{String, ToString};
+use alloc::string::String;
 
 use paperpaw_sdk::builtin::settings::BATTERY_LOW;
 use paperpaw_sdk::ui::UiStyle;
@@ -138,7 +138,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, percent: u8, 
     let low = i64::from(percent) <= env.settings().read(&BATTERY_LOW);
     let number = Number {
         font: &font,
-        text: percent.to_string(),
+        text: env.i18n().number(i64::from(percent)),
         bolt: if charging { 0.55 } else { 0.0 },
         least: style.small() * 0.6,
         ratio: font.line_metrics(style.text()).ascent / style.text().max(1.0),

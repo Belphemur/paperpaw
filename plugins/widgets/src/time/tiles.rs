@@ -129,6 +129,13 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let twelve = paperpaw_sdk::time::twelve_hours(env);
     let pairs = chosen_name(env, ID.as_str(), "group") == "pairs";
     let (hours, minutes) = tiles(&now, twelve, pairs);
+    let local = |parts: Vec<String>| -> Vec<String> {
+        parts
+            .iter()
+            .map(|p| env.i18n().localize_digits(p).into_owned())
+            .collect()
+    };
+    let (hours, minutes) = (local(hours), local(minutes));
     let colon = widgets::shows(env, ID.as_str(), "colon");
     let small = line(&font, style.small());
     let mut date = widgets::shows(env, ID.as_str(), "date")

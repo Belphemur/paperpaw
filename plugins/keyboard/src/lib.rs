@@ -52,6 +52,7 @@ extern crate alloc;
 
 mod choose;
 mod draw;
+mod hangul;
 mod keys;
 mod layouts;
 
@@ -627,12 +628,34 @@ impl KeyboardScreen {
         }
     }
 
+    /// Whether the layout has letters with capitals (Latin, Greek,
+    /// Cyrillic: not Hebrew, Arabic, Korean).
+    fn cases(&self) -> bool {
+        self.layouts[self.current.get()]
+            .1
+            .chars()
+            .any(char::is_lowercase)
+    }
+
+    /// Whether the layout types jamo, which join to syllables (*Delete*
+    /// then takes back one jamo).
+    fn composing(&self) -> bool {
+        self.layouts[self.current.get()]
+            .1
+            .chars()
+            .any(hangul::is_jamo)
+    }
+
     /// What *Shift* is after the text changed: locked capitals stay, else
     /// one where a sentence starts and capitals come by themselves.
     fn auto_shift(&self) -> Shift {
         match self.shift {
             Shift::Locked => Shift::Locked,
-            _ if self.auto && self.layer == Layer::Letters && sentence_starts(&self.text) => {
+            _ if self.auto
+                && self.layer == Layer::Letters
+                && self.cases()
+                && sentence_starts(&self.text) =>
+            {
                 Shift::Once
             }
             _ => Shift::Off,
@@ -661,10 +684,17 @@ impl KeyboardScreen {
         }
     }
 
-    /// Adds text at the end, as far as there is room.
-    fn insert(&mut self, text: &str, cx: &mut Cx<'_, '_>) {
+    /// Adds text at the end, as far as there is room; jamo (of a Korean
+    /// layout) join to syllables where `join` says.
+    fn insert(&mut self, text: &str, join: bool, cx: &mut Cx<'_, '_>) {
         let room = MAX_CHARS.saturating_sub(self.text.chars().count());
-        self.text.extend(text.chars().take(room));
+        for c in text.chars().take(room) {
+            if join && hangul::is_jamo(c) {
+                hangul::push(&mut self.text, c);
+            } else {
+                self.text.push(c);
+            }
+        }
         if text.chars().nth(room).is_some() {
             let env = *cx.env();
             let full = env.i18n().format(
@@ -683,11 +713,16 @@ impl KeyboardScreen {
             Key::Char(c) => {
                 let c = self.cased(c);
                 let mut buffer = [0u8; 4];
-                return self.insert(c.encode_utf8(&mut buffer), cx);
+                return self.insert(c.encode_utf8(&mut buffer), true, cx);
             }
-            Key::Space => return self.insert(" ", cx),
+            Key::Space => return self.insert(" ", false, cx),
             Key::Delete => {
-                if self.text.pop().is_some() {
+                let taken = if self.composing() {
+                    hangul::pop(&mut self.text)
+                } else {
+                    self.text.pop().is_some()
+                };
+                if taken {
                     self.shift_after_typing(cx);
                     return self.changed(cx);
                 }
@@ -747,7 +782,7 @@ impl KeyboardScreen {
             .filter(|c| !c.is_control())
             .filter(|c| self.layer != Layer::Digits || c.is_ascii_digit())
             .collect();
-        self.insert(&text, cx);
+        self.insert(&text, true, cx);
     }
 
     /// Inserts pasted text: one line, digits only for numbers.
@@ -757,7 +792,7 @@ impl KeyboardScreen {
             .map(|c| if c.is_control() { ' ' } else { c })
             .filter(|c| self.layer != Layer::Digits || c.is_ascii_digit())
             .collect();
-        self.insert(line.trim(), cx);
+        self.insert(line.trim(), false, cx);
     }
 
     /// Shows the variants of the letter at `(row, index)`, if it has any.
@@ -987,7 +1022,7 @@ impl KeyboardScreen {
             let c = popup.chars[focus];
             self.close_variants(cx);
             let mut buffer = [0u8; 4];
-            self.insert(c.encode_utf8(&mut buffer), cx);
+            self.insert(c.encode_utf8(&mut buffer), true, cx);
             return Handled::Yes;
         } else if *a == actions::BACK || held(a) {
             self.close_variants(cx);
@@ -1022,6 +1057,9 @@ impl KeyboardScreen {
 
 /// `c`'s capital, where it has one of its own.
 fn capital(c: char) -> char {
+    if let Some(double) = hangul::shifted(c) {
+        return double;
+    }
     let mut upper = c.to_uppercase();
     match (upper.next(), upper.next()) {
         (Some(u), None) => u,
@@ -1152,7 +1190,7 @@ impl Screen for KeyboardScreen {
             self.close_variants(cx);
             if let Some(c) = chosen.filter(|_| gesture.kind == GestureKind::Tap) {
                 let mut buffer = [0u8; 4];
-                self.insert(c.encode_utf8(&mut buffer), cx);
+                self.insert(c.encode_utf8(&mut buffer), true, cx);
             }
             return Handled::Yes;
         }

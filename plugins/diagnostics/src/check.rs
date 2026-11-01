@@ -561,9 +561,10 @@ impl Screen for Check {
         if self.step != Some(Step::Touch) {
             // Which step, as a note: the header's page arrows would turn
             // nothing here.
-            let step = self
-                .step
-                .map(|s| format!("{} / {}", s.index() + 1, Step::ALL.len()));
+            let step = self.step.map(|s| {
+                let text = format!("{} / {}", s.index() + 1, Step::ALL.len());
+                env.i18n().localize_digits(&text).into_owned()
+            });
             let title = env.i18n().tr("diagnostics.check.title");
             self.header.draw(&mut ui, title, step.as_deref(), None);
         }
@@ -859,7 +860,8 @@ impl Check {
             controls.push((Control::Help, title));
         }
         for (row, list) in [(tool_row, &tools), (answer_row, &answers)] {
-            for (control, rect) in list.iter().zip(ui::columns(row, list.len(), gap)) {
+            let cells = columns(row, list.len(), gap, style.is_rtl());
+            for (control, rect) in list.iter().zip(cells) {
                 controls.push((*control, rect));
             }
         }
@@ -914,9 +916,12 @@ impl Check {
                 if let Some((brightness, warmth)) = level {
                     lines.push((
                         tr("diagnostics.check.brightness"),
-                        format!("{brightness} %"),
+                        env.i18n().number(*brightness) + " %",
                     ));
-                    lines.push((tr("diagnostics.check.warmth"), format!("{warmth} %")));
+                    lines.push((
+                        tr("diagnostics.check.warmth"),
+                        env.i18n().number(*warmth) + " %",
+                    ));
                 }
             }
             Some(Step::Battery) => battery_lines(env, &mut lines),
@@ -949,7 +954,10 @@ impl Check {
         let speed = |us: Option<u64>| {
             us.map_or_else(
                 || tr("diagnostics.check.unknown"),
-                |us| format!("{} KiB/s", steps::speed(test.bytes, us)),
+                |us| {
+                    let text = format!("{} KiB/s", steps::speed(test.bytes, us));
+                    env.i18n().localize_digits(&text).into_owned()
+                },
             )
         };
         lines.push((tr("diagnostics.check.write"), speed(test.write_us)));
@@ -959,7 +967,7 @@ impl Check {
     fn wifi_lines(&self, env: &Env<'_>, lines: &mut Vec<(String, String)>) {
         let tr = |key: &str| env.i18n().tr(key).to_string();
         let found = match self.networks {
-            Some(n) => n.to_string(),
+            Some(n) => env.i18n().number(n as i64),
             None => tr("diagnostics.check.looking"),
         };
         lines.push((tr("diagnostics.check.networks"), found));
@@ -1001,6 +1009,16 @@ impl Check {
 }
 
 /// The report written before, to go on from; empty where there is none.
+/// `count` columns of `row` `gap` apart, the first at the left, at the
+/// right in a right-to-left language.
+fn columns(row: Rect, count: usize, gap: u16, rtl: bool) -> Vec<Rect> {
+    let mut cells = ui::columns(row, count, gap);
+    if rtl {
+        cells.reverse();
+    }
+    cells
+}
+
 fn read_report(env: &Env<'_>) -> Results {
     paperpaw_sdk::files::read_text(env.storage(), steps::REPORT, REPORT_CAP)
         .map_or_else(|_| Results::default(), |text| Results::parse(&text))
@@ -1256,4 +1274,20 @@ fn draw_screen_test(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, flipped:
 /// The check's screen, for `ScreenSpec`.
 pub(crate) fn make(env: &Env<'_>) -> Box<dyn Screen> {
     Box::new(Check::new(env))
+}
+
+#[cfg(test)]
+mod column_tests {
+    use super::*;
+
+    #[test]
+    fn answers_start_at_the_right_in_a_right_to_left_language() {
+        let row = Rect::new(20, 700, 440, 60);
+        let ltr = columns(row, 3, 8, false);
+        let rtl = columns(row, 3, 8, true);
+        assert!(ltr[0].x < ltr[1].x && ltr[1].x < ltr[2].x);
+        assert!(rtl[0].x > rtl[1].x && rtl[1].x > rtl[2].x);
+        assert_eq!(rtl[0].right(), row.right());
+        assert_eq!(rtl[2].x, row.x);
+    }
 }

@@ -150,8 +150,10 @@ fn notes(env: &Env<'_>, p: &Progress, short: bool) -> Vec<String> {
     notes
 }
 
-fn percent_text(p: &Progress) -> String {
-    format!("{} %", p.permille / 10)
+pub(super) fn percent_text(env: &Env<'_>, p: &Progress) -> String {
+    env.i18n()
+        .localize_digits(&format!("{} %", p.permille / 10))
+        .into_owned()
 }
 
 fn height(env: &Env<'_>, _: u16) -> u16 {
@@ -182,7 +184,8 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         return;
     };
     let p = progress(&now);
-    let year = widgets::shows(env, ID.as_str(), "year").then(|| format!("{}", now.year));
+    let year =
+        widgets::shows(env, ID.as_str(), "year").then(|| env.i18n().number(i64::from(now.year)));
     match chosen_name(env, ID.as_str(), "style") {
         "ring" => {
             let mut area = look.area;
@@ -248,7 +251,7 @@ fn draw_bar(
     let height = f32::from(area.height);
     let items = notes(env, p, false);
     let short = notes(env, p, true);
-    let text = percent_text(p);
+    let text = percent_text(env, p);
     let percent = widgets::shows(env, ID.as_str(), "percent");
     let ink = |lines: Vec<&str>, size: f32| {
         let part = super::Part {
@@ -482,7 +485,7 @@ fn draw_ring(
     let sweep = u32::from(p.permille) * 360 / 1000;
     canvas.fill_ring(center, radius, thick, 0, sweep, look.ink);
     if widgets::shows(env, ID.as_str(), "percent") {
-        let text = percent_text(p);
+        let text = percent_text(env, p);
         let inner = (radius - thick) as f32 * 2.0 * 0.78;
         let size = super::fit_size(font, inner * 0.42, &text, inner);
         super::draw_centred(

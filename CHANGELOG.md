@@ -14,6 +14,16 @@ refused too. Store, test-card and Workshop builds from commits before `e5f4a41a`
 
 ### Added
 
+- Screens mirror in a user-interface language that runs right to left (#33): the switch, value rows and their
+  chevrons, ticked rows, the number buttons, text fields, dialog buttons, list rows' icons, chips, the date
+  and time pickers, headings and the reader's menu bar start at the right, and left/right follow them. The
+  shared UI functions changed for this: `switch_rect` is the one whose partner stays a copy in plugins
+  (ADR 0026 case 3), which the interface raise of this release makes moot, as every plugin is rebuilt.
+- A book in Greek, Cyrillic, Arabic or Hebrew whose letters the reading font lacks names the pack that brings
+  them, once for each script (to become one dialog with *Download* once for each book).
+- Keyboards for Arabic, Persian, Urdu and Hebrew come with their letters packs (`script-arabic`,
+  `script-hebrew`, 1.1.0), and a two-set Korean keyboard with the Korean pack: letters typed join to syllables
+  (jamo), *Delete* takes back one jamo and *Shift* types the doubled letters (#61, keyboard 1.0.2).
 - SDK (document): a table cell can span rows (`TableCell::rows`) and say where its lines sit
   (`TableCell::vertical`, `VerticalAlign`); `TableRow`, `TableCell` and `MAX_COLUMNS` are in `paperpaw_sdk::document`
   for format plugins.
@@ -223,6 +233,19 @@ refused too. Store, test-card and Workshop builds from commits before `e5f4a41a`
   (as before), put a short line such as `[Picture: Rings of light]` in their place (the picture's description,
   centred, italic), or leave them out. No picture is decoded for a picture not shown. Comics and other books
   made of pictures (CBZ, XTC) are not changed. It needs no SDK change.
+- A Korean letters pack, `script-korean` (#61): the 2,350 Hangul syllables of KS X 1001, which ordinary modern
+  text keeps to, with CJK punctuation, compatibility jamo and full-width forms, drawn from Nanum Myeongjo (SIL OFL
+  1.1; the pack is not named after it, as its licence reserves the name). One face in seven sizes, 8.2 MiB on the
+  card, for books whose Korean shows as `?` on a device whose fonts hold Latin only. It is a data plugin that
+  `tools/script-pack.py korean` builds from the repository, with no code and no interface change. Its entry in
+  `tools/plugin-files/data.toml` is commented out until the owner decides to offer it in the store; its keyboard
+  layout (two-set Hangul, `tools/plugin-files/keyboards/korean.txt`) comes with it.
+- A second Korean pack, `script-korean-extra` (#61): the other 8,822 of the 11,172 Hangul syllables (rare ones outside
+  KS X 1001), about 30 MiB on the card and no flash. It only adds letters to `script-korean`, so it needs no interface
+  change; `tools/script-pack.py korean-extra` builds it (`tools/fontgen/sets/hangul-rest.txt`). Its entry in
+  `tools/plugin-files/data.toml` is commented out like the Korean pack's, and the reader is to offer it only for a
+  book that uses such syllables, with its size.
+- A data plugin's entry in `tools/plugin-files/data.toml` may have `how` and `de.how`: its *How it works* text.
 
 ### Changed
 

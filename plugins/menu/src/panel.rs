@@ -232,6 +232,16 @@ fn layout(lines: &[Line], g: Geometry) -> Layout {
     }
 }
 
+/// `count` columns of `area` side by side, the first at the side the
+/// interface starts from: on the right in a right-to-left language.
+fn columns(area: Rect, count: usize, g: Geometry) -> Vec<Rect> {
+    let mut cells = ui::columns(area, count, g.spacing);
+    if g.style.is_rtl() {
+        cells.reverse();
+    }
+    cells
+}
+
 /// The controls of `line` in its row, `area`.
 fn place(line: &Line, area: Rect, g: Geometry) -> Row {
     let inner = inset(area, &g);
@@ -243,7 +253,7 @@ fn place(line: &Line, area: Rect, g: Geometry) -> Row {
     );
     let (label, controls) = match line {
         Line::Buttons(controls) => {
-            let cells = ui::columns(inner, controls.len(), g.spacing);
+            let cells = columns(inner, controls.len(), g);
             (None, controls.iter().cloned().zip(cells).collect())
         }
         // Drawn as the settings pages draw it, across the row.
@@ -260,7 +270,7 @@ fn place(line: &Line, area: Rect, g: Geometry) -> Row {
             (Some(id.clone()), controls)
         }
         Line::Segments(id, options) => {
-            let cells = ui::columns(rest, options.len(), g.spacing);
+            let cells = columns(rest, options.len(), g);
             let controls = options
                 .iter()
                 .zip(cells)
@@ -490,7 +500,10 @@ impl PanelScreen {
         match self.focus.and_then(|f| self.controls().nth(f)) {
             Some((Control::Slide(id), _)) => {
                 let spec = spec(env, id)?;
-                Some((spec, ui::slider::Slider::of(spec)?))
+                Some((
+                    spec,
+                    ui::slider::Slider::of(spec)?.mirrored(self.style.is_rtl()),
+                ))
             }
             _ => None,
         }
@@ -517,7 +530,7 @@ impl PanelScreen {
             return Handled::No;
         };
         let id = spec.id.clone();
-        if let Some(step) = ui::slider::key_step(action) {
+        if let Some(step) = slider.key_step(action) {
             let now = env.settings().int(id.as_str());
             // The size of book text on to the next that looks different.
             let value = ui::shown_step(&env, spec, now, slider.stepped(now, step));
@@ -709,7 +722,9 @@ impl PanelScreen {
 /// the focus bar when focused.
 fn draw_slider(ui: &mut ui::Ui<'_>, id: &Id, rect: Rect, focus: ui::slider::SliderFocus) {
     let (env, style) = (ui.env(), ui.style());
-    let Some((spec, track)) = spec(env, id).and_then(|s| Some((s, Track::of(env, s)?))) else {
+    let Some((spec, track)) =
+        spec(env, id).and_then(|s| Some((s, Track::of(env, s, style.is_rtl())?)))
+    else {
         return;
     };
     if focus != ui::slider::SliderFocus::None {
@@ -1016,7 +1031,7 @@ impl Screen for PanelScreen {
             let [(Control::Slide(id), area)] = row.controls.as_slice() else {
                 return None;
             };
-            let track = spec(&env, id).and_then(|s| Track::of(&env, s))?;
+            let track = spec(&env, id).and_then(|s| Track::of(&env, s, self.style.is_rtl()))?;
             // Shown faint by its plugin: not moved.
             Control::Slide(id.clone()).enabled(&env).then_some(())?;
             Some((index, id.clone(), track, *area))
@@ -1116,6 +1131,10 @@ impl Screen for PanelScreen {
 #[cfg(test)]
 mod layout_tests {
     use super::*;
+
+    fn g_style_rtl() -> UiStyle {
+        UiStyle::PLAIN.with_margin(20).with_rtl(true)
+    }
 
     fn geometry() -> Geometry {
         // Margins of 20: wider than the plain style's.
@@ -1225,6 +1244,17 @@ mod layout_tests {
         assert!(widths.iter().all(|w| w.abs_diff(widths[0]) <= 1));
         assert_eq!(row.controls[2].1.right(), 480 - 20);
         assert_eq!(row.controls[1].1.x, row.controls[0].1.right() as u16 + 5);
+
+        // Right to left, the first is the one at the right.
+        let g = Geometry {
+            style: g_style_rtl(),
+            ..geometry()
+        };
+        let mirrored = place(&buttons, Rect::new(0, 100, 480, 60), g);
+        assert_eq!(mirrored.controls[0].0, Control::Toggle(id("a.one")));
+        assert!(mirrored.controls[0].1.x > mirrored.controls[1].1.x);
+        assert!(mirrored.controls[1].1.x > mirrored.controls[2].1.x);
+        assert_eq!(mirrored.controls[0].1.right(), 480 - 20);
 
         // A slider is its whole row, across the screen.
         let area = Rect::new(0, 0, 480, 150);

@@ -474,6 +474,13 @@ pub(crate) fn download(env: &Env<'_>, offer: &Offer, out: &mut Commands) {
         .save_to(String::from(PART))
         .param("version", offer.version.as_str())
         .param("size", offer.size.to_string());
+    // The size the server named is the most the file may be (none named: the
+    // largest file the kernel takes).
+    let request = if offer.size > 0 {
+        request.max_file(offer.size)
+    } else {
+        request
+    };
     out.push(Command::http(request));
 }
 

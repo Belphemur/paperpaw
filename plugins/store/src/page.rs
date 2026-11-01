@@ -25,7 +25,7 @@ use paperpaw_sdk::ui::choice::Picked;
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id,
-    MemoryClass, Params, Rect, RefreshMode, Screen, files,
+    MemoryClass, Params, PluginProblem, Rect, RefreshMode, Screen, files,
 };
 
 use crate::catalog::{self, Device, Entry, Index, More, Plugin};
@@ -262,7 +262,9 @@ impl PageScreen {
         let community = crate::community(&env);
         let url = catalog::plugin_url(list.trim(), device.name, language, &self.id, community);
         let mut request = HttpRequest::new("GET", &url, DETAILS);
-        request = request.save_to(catalog::plugin_part(&self.id));
+        request = request
+            .save_to(catalog::plugin_part(&self.id))
+            .max_file(catalog::MAX_PAGE_FILE);
         request = request.with(Params::new().with(params::ID, self.id.clone()));
         cx.command(Command::http(request));
         self.details = Details::Asked(url);
@@ -334,7 +336,7 @@ impl PageScreen {
         match &self.details {
             Details::Here(plugin) => {
                 let mut out = paperpaw_sdk::Commands::new();
-                trust::expect(env.storage(), &plugin.entry.id, plugin.author_key.as_ref());
+                trust::expect(env.storage(), &plugin.entry.id, plugin.named().as_ref());
                 if !INSTALLER.start(&env, &plugin.package, &mut out) {
                     out.push(failed(&env, name));
                 }
@@ -446,13 +448,15 @@ impl PageScreen {
                 };
                 (tr(name), tr("store.preparing"))
             }
-            Row::Install => (
-                tr("store.install"),
-                files::size(plugin.size, env.i18n().tr("store.decimal")),
-            ),
+            Row::Install => (tr("store.install"), files::shown_size(env, plugin.size)),
             Row::Stop => {
                 let job = self.job.clone().unwrap_or_default();
-                (tr("store.stop"), format!("{} / {}", job.done, job.total))
+                (
+                    tr("store.stop"),
+                    env.i18n()
+                        .localize_digits(&format!("{} / {}", job.done, job.total))
+                        .into_owned(),
+                )
             }
             Row::Update => (tr("store.update"), plugin.version.clone()),
             Row::UseStore => (tr("store.use-store"), plugin.version.clone()),
@@ -461,10 +465,7 @@ impl PageScreen {
             Row::Restart => (tr("store.restart"), String::new()),
             Row::Understood => (tr("store.code.understood"), String::new()),
             Row::Cancel => (tr("store.not-now"), String::new()),
-            Row::NoRoom => (
-                tr("store.no-room"),
-                files::size(plugin.size, env.i18n().tr("store.decimal")),
-            ),
+            Row::NoRoom => (tr("store.no-room"), files::shown_size(env, plugin.size)),
             Row::Shots => {
                 let count = match &self.details {
                     Details::Here(details) => details.more.shots.len(),
@@ -504,7 +505,7 @@ fn version_line(env: &Env<'_>, plugin: &Entry) -> String {
             &[("version", Arg::Str(&plugin.version))],
         );
     }
-    let size = files::size(plugin.size, i18n.tr("store.decimal"));
+    let size = files::shown_size(env, plugin.size);
     i18n.format(
         "store.version",
         &[
@@ -548,6 +549,15 @@ fn facts(
             from => i18n.format("store.unreviewed.from", &[("repository", Arg::Str(from))]),
         };
         facts.insert(0, ("alert-triangle", text));
+    }
+    // The kernel stopped it: the key its author signed it with was
+    // withdrawn. Said first; *Remove* is among the rows.
+    if env
+        .plugins()
+        .get(&plugin.id)
+        .is_some_and(|info| info.problem == Some(PluginProblem::Revoked))
+    {
+        facts.insert(0, ("alert-triangle", i18n.tr("store.revoked").to_string()));
     }
     if plugin.official {
         facts.push(("paw", i18n.tr("store.official").to_string()));
@@ -597,7 +607,7 @@ fn facts(
         facts.push(("stack-2", needs));
     }
     if let Some(heap) = more.and_then(|m| m.heap) {
-        let size = files::size(heap, i18n.tr("store.decimal"));
+        let size = files::shown_size(env, heap);
         let small = env.device().memory == MemoryClass::Small;
         let key = if small && heap > TIGHT_HEAP {
             "store.heap.tight"

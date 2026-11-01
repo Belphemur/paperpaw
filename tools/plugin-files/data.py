@@ -38,22 +38,26 @@ def plugin_ini(plugin, fields):
         f"name = {fields['name']}\n"
         f"description = {fields['description']}\n"
         f"version = {fields['version']}\n"
+        + (f"formats = {fields['formats']}\n" if "formats" in fields else "")
     )
 
 
 def catalogs(plugin, fields):
     """Its translations (`i18n/<lang>.ini`, text): its name and description
-    in English and German, for the plugin manager and the store."""
+    in English and German, for the plugin manager and the store, and where
+    it has one, how it works (`how`)."""
     out = []
-    for lang, name, words in [
-        ("en", fields["name"], fields["description"]),
-        ("de", fields["de"]["name"], fields["de"]["description"]),
+    for lang, name, words, how in [
+        ("en", fields["name"], fields["description"], fields.get("how")),
+        ("de", fields["de"]["name"], fields["de"]["description"], fields["de"].get("how")),
     ]:
-        out.append((
-            f"i18n/{lang}.ini",
-            f"[meta]\nlanguage = {lang}\n\n[messages]\n"
-            f"{plugin}.plugin.name = {name}\n{plugin}.plugin.description = {words}\n",
-        ))
+        text = (f"[meta]\nlanguage = {lang}\n\n[messages]\n"
+                f"{plugin}.plugin.name = {name}\n{plugin}.plugin.description = {words}\n")
+        if how:
+            # *How it works*: quoted, paragraphs apart by `\n\n`.
+            quoted = how.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+            text += f'{plugin}.plugin.how = "{quoted}"\n'
+        out.append((f"i18n/{lang}.ini", text))
     return out
 
 

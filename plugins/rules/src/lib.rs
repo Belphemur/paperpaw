@@ -259,8 +259,14 @@ fn condition_text(env: &Env<'_>, condition: &Condition) -> Option<String> {
         Condition::Between { from, to } => env.i18n().format(
             "rules.if.between",
             &[
-                ("from", Arg::Str(&rule::clock(*from))),
-                ("to", Arg::Str(&rule::clock(*to))),
+                (
+                    "from",
+                    Arg::Str(&env.i18n().localize_digits(&rule::clock(*from))),
+                ),
+                (
+                    "to",
+                    Arg::Str(&env.i18n().localize_digits(&rule::clock(*to))),
+                ),
             ],
         ),
         Condition::Reading => tr("rules.if.reading"),
@@ -284,7 +290,10 @@ fn trigger_text(env: &Env<'_>, trigger: &Trigger) -> String {
     match trigger {
         Trigger::Start => tr("rules.when.start"),
         Trigger::Time { minute, days } => {
-            let time = rule::clock(*minute);
+            let time = env
+                .i18n()
+                .localize_digits(&rule::clock(*minute))
+                .into_owned();
             let days = days_text(env, *days);
             env.i18n().format(
                 "rules.when.time",

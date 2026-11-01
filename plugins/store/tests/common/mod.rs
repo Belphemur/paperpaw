@@ -8,11 +8,14 @@
     reason = "shared by the tests; not every test file uses every helper"
 )]
 
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use paperpaw_core::{CodeLoader, HttpCall, HttpResponse, Io, Kernel};
 use paperpaw_platform::Rotation;
 use paperpaw_plugin_store::{OPEN, Store};
+use paperpaw_sdk::builtin::events;
+use paperpaw_sdk::event::EventData;
 use paperpaw_sdk::native::Native;
 use paperpaw_sdk::{
     DeviceInfo, DirEntry, DisplayInfo, Id, InputCaps, Instant, MemoryClass, MemoryStorage,
@@ -123,6 +126,30 @@ impl Plugin for BuiltInStats {
     }
 }
 
+/// What came of plugins asked for, as the one who asked hears it.
+pub type Answers = Rc<RefCell<Vec<events::PluginsAnswered>>>;
+
+/// Hears what came of plugins asked for.
+pub struct Hear(pub Answers);
+
+impl Plugin for Hear {
+    fn manifest(&self) -> paperpaw_sdk::Manifest {
+        paperpaw_sdk::Manifest::new(
+            Id::new_static("hear"),
+            "Hear",
+            paperpaw_sdk::Version::new(0, 1, 0),
+        )
+        .uses(paperpaw_sdk::Uses::NOTHING)
+    }
+
+    fn register(&self, r: &mut paperpaw_sdk::Registrar) -> Result<(), paperpaw_sdk::RegisterError> {
+        let answers = self.0.clone();
+        r.on(events::PLUGINS_ANSWERED, move |_, answer, _| {
+            answers.borrow_mut().push(answer.clone());
+        })
+    }
+}
+
 /// The kernel with the store, as the reader uses it.
 pub struct Shopping {
     pub kernel: Kernel,
@@ -211,9 +238,67 @@ impl Shopping {
         firmware: Option<paperpaw_sdk::firmware::Firmware>,
         stats_off: bool,
     ) -> Self {
+        Self::built(
+            info,
+            device,
+            native,
+            list,
+            storage,
+            firmware,
+            stats_off,
+            (true, None),
+        )
+    }
+
+    /// The store on the X4 for plugins asked for: `network` says whether
+    /// there is a connection, and what is answered to the one who asked is
+    /// in the answers returned.
+    pub fn asked_for(list: &str, network: bool) -> (Self, Answers) {
+        let answers = Answers::default();
+        let shopping = Self::built(
+            DEVICE,
+            Some("x4"),
+            None,
+            list,
+            Shared::default(),
+            None,
+            false,
+            (network, Some(Hear(answers.clone()))),
+        );
+        (shopping, answers)
+    }
+
+    /// Time passing, `millis` of it.
+    pub fn wait(&mut self, millis: u64) {
+        self.now += millis;
+    }
+
+    /// Plugins asked for by the reader, as the kernel sends them to the
+    /// store.
+    pub fn ask(&mut self, ids: &str) {
+        self.now += 100;
+        let request = events::PluginsRequested::new(Id::new_static("reader"), ids.to_string());
+        self.kernel.send_event(
+            Instant(self.now),
+            events::PLUGINS_REQUESTED.id().clone(),
+            request.to_params(),
+        );
+    }
+
+    #[allow(clippy::too_many_arguments, reason = "what a test says of its device")]
+    fn built(
+        info: DeviceInfo,
+        device: Option<&'static str>,
+        native: Option<Native>,
+        list: &str,
+        storage: Shared,
+        firmware: Option<paperpaw_sdk::firmware::Firmware>,
+        stats_off: bool,
+        (network, hear): (bool, Option<Hear>),
+    ) -> Self {
         let mut builder = Kernel::builder(info)
             .storage(storage.clone())
-            .network(true)
+            .network(network)
             .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
             .plugin(paperpaw_plugin_fonts_browser::FontsBrowser)
             // Shows the notices.
@@ -221,6 +306,9 @@ impl Shopping {
             // Asks for text and numbers.
             .plugin(paperpaw_plugin_keyboard::Keyboard)
             .plugin(Store);
+        if let Some(hear) = hear {
+            builder = builder.plugin(hear);
+        }
         if stats_off {
             builder = builder.plugin_off(BuiltInStats);
         }
@@ -241,7 +329,7 @@ impl Shopping {
             now: 0,
         };
         shopping.run(OPEN);
-        if let Some(device) = device {
+        if let Some(device) = device.filter(|_| network) {
             let list_url = LIST.replace("device=x4&", &format!("device={device}&"));
             let call = shopping.request(&list_url);
             shopping.answer(&call, 200, list.as_bytes());

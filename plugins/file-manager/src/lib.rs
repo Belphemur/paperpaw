@@ -645,7 +645,6 @@ impl Screen for Browser {
                 env.i18n().tr("file-manager.empty"),
             );
         }
-        let decimal = env.i18n().tr("file-manager.decimal");
         let room = ui::icon_room(ui.env(), ui.style(), true);
         let (page, first) = (&self.page, self.first);
         let active = self.focus == Focus::List;
@@ -657,7 +656,7 @@ impl Screen for Browser {
             let value = if entry.is_dir {
                 String::from("›")
             } else {
-                ops::size(entry.size, decimal)
+                ops::shown_size(ui.env(), entry.size)
             };
             // Folders with a folder before their name, files with a
             // page: told apart at a glance.
