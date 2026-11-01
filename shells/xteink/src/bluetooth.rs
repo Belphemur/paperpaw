@@ -309,23 +309,35 @@ impl Bluetooth {
         }
     }
 
-    /// Moves the host on; what it reports.
+    /// Moves the host on; what it reports (also what [`Bluetooth::keep_polled`]
+    /// left since the last call).
     // A frame of its own: the host's futures are deep.
     #[inline(never)]
     pub fn poll(&mut self) -> Vec<BtReport> {
-        let mut reports = core::mem::take(&mut self.reports);
+        self.keep_polled();
+        core::mem::take(&mut self.reports)
+    }
+
+    /// Moves the host on and nothing else: the controller's events and the
+    /// links' packets are taken, the host's timers run. For the long waits
+    /// of the main loop (a refresh of the panel, up to 3.5 s) where
+    /// [`Bluetooth::poll`] cannot be called: a remote's keys come on, the
+    /// links are answered in time. What the host reports is kept for the
+    /// next [`Bluetooth::poll`], which hands it to the kernel.
+    // A frame of its own: the host's futures are deep.
+    #[inline(never)]
+    pub fn keep_polled(&mut self) {
         if let Some(on) = &mut self.on {
             let mut cx = Context::from_waker(Waker::noop());
             let stopped = on.session.as_mut().poll(&mut cx).is_ready();
-            reports.append(&mut on.shared.reports.borrow_mut());
+            self.reports.append(&mut on.shared.reports.borrow_mut());
             if stopped {
                 log::warn!("bluetooth: the host stopped");
                 self.hid = on.shared.hid.take();
                 self.on = None;
-                reports.push(BtReport::Radio { on: false });
+                self.reports.push(BtReport::Radio { on: false });
             }
         }
-        reports
     }
 }
 
