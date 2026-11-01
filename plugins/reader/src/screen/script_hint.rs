@@ -16,16 +16,22 @@ const SCRIPTS: [(&str, char, &str); 4] = [
     ("Hebr", 'א', "reader.script.hebrew"),
 ];
 
-/// Where the notices said are kept, one key a line.
+/// Where the notices said are kept, one key a line (only the keys of
+/// [`SCRIPTS`], each once: the file stays a few lines long).
 fn kept() -> String {
     format!("{}/script-hints.txt", Env::plugin_dir("reader"))
 }
 
-fn said(env: &Env<'_>, key: &str) -> bool {
+/// The keys said before.
+fn said_before(env: &Env<'_>) -> String {
     paperpaw_sdk::read_file(env.storage(), &kept(), 1024)
         .ok()
         .and_then(|bytes| String::from_utf8(bytes).ok())
-        .is_some_and(|text| text.lines().any(|line| line == key))
+        .unwrap_or_default()
+}
+
+fn said(env: &Env<'_>, key: &str) -> bool {
+    said_before(env).lines().any(|line| line == key)
 }
 
 /// The notice for a book in the language `tag` that says it declares: when
@@ -46,7 +52,17 @@ pub(super) fn say(cx: &mut Cx<'_, '_>, key: &str) {
     )]
     {
         let _ = env.storage().create_dir(&Env::plugin_dir("reader"));
-        let _ = env.storage().append(&kept(), format!("{key}\n").as_bytes());
+        // Written anew, from the keys of scripts there are: a file that
+        // grew or was written to by something else comes back to a few lines.
+        let before = said_before(&env);
+        let mut lines = String::new();
+        for (.., known) in SCRIPTS {
+            if known == key || before.lines().any(|line| line == known) {
+                lines.push_str(known);
+                lines.push('\n');
+            }
+        }
+        let _ = env.storage().write(&kept(), lines.as_bytes());
     }
     cx.command(Command::Notify(env.i18n().tr(key).to_string()));
 }

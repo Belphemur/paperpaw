@@ -23,6 +23,11 @@ use paperpaw_zip::testing::ZipBuilder;
 
 const BOOK_IN: &str = "books/lang.epub";
 
+/// Where the notices said are kept.
+fn kept() -> String {
+    format!("{}/script-hints.txt", paperpaw_sdk::Env::plugin_dir("reader"))
+}
+
 /// The notices shown.
 type Notices = Rc<RefCell<Vec<String>>>;
 
@@ -98,14 +103,20 @@ fn epub_in(language: &str) -> Vec<u8> {
         .build()
 }
 
-/// The notices said on opening the book in `language` over `storage`.
+/// The notices said on opening the book in `language` over `storage`, with
+/// the fonts of a device of packs (Latin alone).
 fn opened_in(language: &str, storage: &Shared) -> Vec<String> {
+    opened_with(language, storage, paperpaw_plugin_fonts_default::DefaultFontPacks)
+}
+
+/// The same with `fonts`.
+fn opened_with(language: &str, storage: &Shared, fonts: impl Plugin + 'static) -> Vec<String> {
     storage.create_dir("books").ok();
     storage.write(BOOK_IN, &epub_in(language)).unwrap();
     let notices = Notices::default();
     let mut kernel = Kernel::builder(BUTTONS)
         .storage(storage.clone())
-        .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+        .plugin(fonts)
         .plugin(paperpaw_plugin_format_epub::EpubFormat)
         .plugin(Reader)
         .plugin(NoticeTaker(notices.clone()))
@@ -158,4 +169,36 @@ fn books_in_latin_script_or_with_no_language_say_nothing() {
         let said = opened_in(language, &Shared::default());
         assert!(said.is_empty(), "{language}: {said:?}");
     }
+}
+
+/// Fonts that have the letters (the scalable Literata has Greek and
+/// Cyrillic, as an installed pack does for its script): no notice, and
+/// none kept to be said later. The script it lacks still gets its notice.
+#[test]
+fn a_font_with_the_letters_shows_no_notice() {
+    use paperpaw_plugin_fonts_default::DefaultFonts;
+    for language in ["el", "ru"] {
+        let storage = Shared::default();
+        assert!(opened_with(language, &storage, DefaultFonts).is_empty(), "{language}");
+        assert_eq!(storage.text(&kept()), None, "{language}");
+    }
+    let said = opened_with("ar", &Shared::default(), DefaultFonts);
+    assert_eq!(said.len(), 1, "{said:?}");
+}
+
+/// What is kept about the notices said stays a few lines of known keys,
+/// whatever the file held.
+#[test]
+fn the_notices_kept_stay_a_few_lines() {
+    let storage = Shared::default();
+    let mut dir = String::new();
+    for part in kept().rsplit_once('/').unwrap().0.split('/') {
+        dir.push_str(part);
+        storage.create_dir(&dir).ok();
+        dir.push('/');
+    }
+    let junk = "junk\n".repeat(150);
+    storage.write(&kept(), junk.as_bytes()).unwrap();
+    assert_eq!(opened_in("el", &storage).len(), 1);
+    assert_eq!(storage.text(&kept()).unwrap(), "reader.script.greek\n");
 }

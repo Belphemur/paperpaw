@@ -19,7 +19,7 @@ paperpaw-core.workspace = true
 paperpaw-platform.workspace = true
 paperpaw-plugin-format-epub.workspace = true
 paperpaw-plugin-format-txt.workspace = true
-paperpaw-plugin-fonts-default = { workspace = true, features = ["packs"] }
+paperpaw-plugin-fonts-default = { workspace = true, features = ["packs", "outline"] }
 paperpaw-zip = { workspace = true, features = ["testing"] }
 # Scalable fonts, as Android and the emulator have them: a book's own
 # fonts draw at any size, and drop capitals are set.

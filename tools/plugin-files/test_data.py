@@ -10,7 +10,13 @@ import unittest
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import data  # noqa: E402
 
-PACKS = ["script-arabic", "script-hebrew", "script-greek", "script-cyrillic"]
+# The versions they are at now: a change of a pack bumps it here too.
+PACKS = {
+    "script-arabic": "1.1.0",
+    "script-hebrew": "1.1.0",
+    "script-greek": "1.0.0",
+    "script-cyrillic": "1.0.0",
+}
 
 
 class ScriptPacks(unittest.TestCase):
@@ -19,9 +25,9 @@ class ScriptPacks(unittest.TestCase):
 
     def test_each_is_complete(self):
         listed = data.plugins()
-        for pack in PACKS:
+        for pack, version in PACKS.items():
             fields = listed[pack]
-            self.assertRegex(fields["version"], r"^1\.\d+\.\d+$")
+            self.assertEqual(fields["version"], version, pack)
             self.assertEqual(fields["build"], "tools/script-pack.py")
             self.assertTrue(fields["off_by_default"])
             self.assertEqual(fields["licence"], "OFL-1.1")
