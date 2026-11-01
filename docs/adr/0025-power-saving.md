@@ -24,6 +24,18 @@ less of what the reader wants. Where readers want to trade features for
 battery, one switch should do it, for every plugin, including those
 written by others.
 
+> **Status 2026-11-01 (code of `iface5`, audit in paperpaw-notes
+> `investigations/2026-11-01-battery-audit.md`):** the survey below is of
+> 2026-10-20 and part of it has moved. The shell now sets the radio's power
+> saving (`PowerSaveMode::Minimum` while no data moves and nothing is
+> served, `shells/xteink/src/wifi.rs` `save_power`), so item 1's "listens all
+> the time" holds only while data moves, a server runs or a socket is open.
+> The awake USB sleep loop is gone: a sleep is a light sleep (X4, X3; then
+> switched off after the reader's chosen time, #51) or a switch-off, whether
+> or not USB is in. Light sleep while awake is still capped at 30 ms (Saving
+> 50 ms, Faster 10 ms) and the CPU clock is still fixed at the maximum. No
+> number here was measured on a device since.
+
 ### Where the energy goes today
 
 Read from the code on 2026-10-20 (a survey of the shells, the kernel and
