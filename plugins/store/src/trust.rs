@@ -92,6 +92,10 @@ pub(crate) enum Verdict {
 pub(crate) struct Code {
     pub(crate) author: [u8; 32],
     pub(crate) sha256: [u8; 32],
+    /// The recovery key the library named for the author, to pin with
+    /// the author's key where this is the plugin's first install; the
+    /// kernel pins it at no other time.
+    pub(crate) recovery: Option<[u8; 32]>,
 }
 
 /// The key the library names for `plugin`'s author, kept from when its
@@ -101,14 +105,20 @@ fn expected_path() -> String {
 }
 
 /// Keeps the key the library names for the author of `plugin`, which is
-/// being downloaded (`None` for a data plugin).
-pub(crate) fn expect(storage: &dyn Storage, plugin: &str, key: Option<&[u8; 32]>) {
+/// being downloaded (`None` for a data plugin), and the recovery key it
+/// names for the author, if any.
+pub(crate) fn expect(
+    storage: &dyn Storage,
+    plugin: &str,
+    key: Option<&[u8; 32]>,
+    recovery: Option<&[u8; 32]>,
+) {
     match key {
         Some(key) => {
             let mut text = String::from(plugin);
-            text.push('\t');
-            for byte in key {
-                text.push_str(&format!("{byte:02x}"));
+            for key in core::iter::once(key).chain(recovery) {
+                text.push('\t');
+                text.push_str(&paperpaw_sdk::digest::hex::encode(key));
             }
             let _ = storage.write(&expected_path(), text.as_bytes());
         }
@@ -118,19 +128,19 @@ pub(crate) fn expect(storage: &dyn Storage, plugin: &str, key: Option<&[u8; 32]>
     }
 }
 
-fn expected(storage: &dyn Storage, plugin: &str) -> Option<[u8; 32]> {
+/// The author's key and recovery key the library named for `plugin`.
+fn expected(storage: &dyn Storage, plugin: &str) -> Option<([u8; 32], Option<[u8; 32]>)> {
     let text = paperpaw_sdk::read_file(storage, &expected_path(), 256).ok()?;
     let text = core::str::from_utf8(&text).ok()?;
-    let (id, hex) = text.trim().split_once('\t')?;
-    if id != plugin || hex.len() != 64 {
+    let mut parts = text.trim().split('\t');
+    if parts.next()? != plugin {
         return None;
     }
-    let mut key = [0u8; 32];
-    for (byte, pair) in key.iter_mut().zip(hex.as_bytes().chunks(2)) {
-        let pair = core::str::from_utf8(pair).ok()?;
-        *byte = u8::from_str_radix(pair, 16).ok()?;
-    }
-    Some(key)
+    let key = |hex: Option<&str>| -> Option<[u8; 32]> {
+        paperpaw_sdk::digest::hex::decode(hex?)?.try_into().ok()
+    };
+    let author = key(parts.next())?;
+    Some((author, key(parts.next())))
 }
 
 /// Whether the plugin downloaded into `folder` may be installed.
@@ -179,14 +189,17 @@ pub(crate) fn verdict(env: &Env<'_>, plugin: &str, folder: &str) -> Verdict {
     let code = Code {
         author: key,
         sha256: header.sha256,
+        recovery: None,
     };
     match native::author(storage, plugin, &key) {
         Author::Known => Verdict::Install { code: Some(code) },
         Author::Other => Verdict::Refused(Refusal::KeyChanged),
-        Author::New if expected(storage, plugin) == Some(key) => {
-            Verdict::Install { code: Some(code) }
-        }
-        Author::New => Verdict::Refused(Refusal::NotTheAuthor),
+        Author::New => match expected(storage, plugin) {
+            Some((author, recovery)) if author == key => Verdict::Install {
+                code: Some(Code { recovery, ..code }),
+            },
+            _ => Verdict::Refused(Refusal::NotTheAuthor),
+        },
         _ => Verdict::Refused(Refusal::NotTheAuthor),
     }
 }
@@ -207,6 +220,9 @@ pub(crate) fn install(env: &Env<'_>, code: Option<Code>, out: &mut Commands) -> 
     let mut marks = Marks::new(from);
     if let Some(code) = code {
         marks = marks.code(code.sha256).author(code.author);
+        if let Some(recovery) = code.recovery {
+            marks = marks.recovery(recovery);
+        }
     }
     if install::marks::write(env.storage(), &folder, &marks).is_err() {
         return None;

@@ -287,6 +287,8 @@ struct Item {
     formats: u32,
     /// The key its author signs its code with, as the library says.
     author_key: String,
+    /// The recovery key its author named, as the library says.
+    recovery_key: String,
     /// The files read so far (a plugin's page only), and the one being
     /// read.
     files: Vec<PackageFile>,
@@ -407,6 +409,7 @@ impl Item {
                     self.more.repository = cut(value, 200);
                 }
                 "author_key" => self.author_key = cut(value, MAX_NAME),
+                "recovery_key" => self.recovery_key = cut(value, MAX_NAME),
                 "added" => entry.added = date(value),
                 // Its home; `latest.source.url` (that version's source)
                 // goes before it.
@@ -645,6 +648,9 @@ pub(crate) struct Plugin {
     pub entry: Entry,
     pub package: Package,
     pub author_key: Option<[u8; 32]>,
+    /// The key its author named to replace a lost author key (#20): only
+    /// taken at the plugin's first install ([`trust`](crate::trust)).
+    pub recovery_key: Option<[u8; 32]>,
     pub more: More,
 }
 
@@ -686,6 +692,7 @@ fn read_plugin(
         file.url = join_url(base, &file.url);
     }
     let author_key = key(&item.author_key);
+    let recovery_key = key(&item.recovery_key);
     let code = item.code.is_some();
     let mut more = core::mem::take(&mut item.more);
     if author_key.is_some() {
@@ -702,6 +709,7 @@ fn read_plugin(
         entry,
         package,
         author_key,
+        recovery_key,
         more,
     })
 }

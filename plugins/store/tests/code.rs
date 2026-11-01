@@ -20,6 +20,7 @@ use paperpaw_native::signature::{public_key, sign};
 use paperpaw_native::{Chip, Header, LINK_BASE};
 use paperpaw_plugin_store::OPEN;
 use paperpaw_sdk::builtin::actions;
+use paperpaw_sdk::native::keys::known_recovery;
 use paperpaw_sdk::native::{Fingerprint, Native, installed_code, known_author};
 use paperpaw_sdk::{PluginKind, Storage, Version};
 
@@ -30,6 +31,8 @@ const BUILD: Fingerprint = Fingerprint(0x0123_4567_89ab_cdef);
 /// The seeds of the keys of the plugin's author and of someone else.
 const AUTHOR: [u8; 32] = [7; 32];
 const OTHER: [u8; 32] = [9; 32];
+/// The seed of the recovery key the author named.
+const RECOVERY: [u8; 32] = [5; 32];
 
 fn native() -> Native {
     let mut native = Native::new("code.ppn");
@@ -196,6 +199,62 @@ fn a_code_plugin_is_installed_and_starts_after_a_restart() {
         shown.contains("The change applies once PaperPaw starts again."),
         "{shown}"
     );
+}
+
+/// `page` with the author's recovery key named, as a library does.
+fn with_recovery(page: &str, seed: &[u8; 32]) -> String {
+    let author = format!("\"author_key\": \"{}\"", hex(&public_key(&AUTHOR)));
+    let named = format!("{author}, \"recovery_key\": \"{}\"", hex(&public_key(seed)));
+    assert!(page.contains(&author));
+    page.replace(&author, &named)
+}
+
+/// The clock's page, with `recovery` named, opened and installed.
+fn install_naming(shopping: &mut Shopping, version: &str, code: &[u8], recovery: &[u8; 32]) {
+    shopping.choose("Reading");
+    shopping.choose("Clock");
+    let text = with_recovery(&page(version, code), recovery);
+    shopping.serve(PAGE, text.as_bytes());
+    // *Install*; what code plugins are, said once, then taken.
+    shopping.run(actions::CONFIRM);
+    shopping.run(actions::CONFIRM);
+    download(shopping, version, code);
+}
+
+#[test]
+fn the_recovery_key_is_pinned_at_the_first_install() {
+    let mut shopping = store("1.0.0");
+    let code = ppn(BUILD, Some(&AUTHOR));
+    install_naming(&mut shopping, "1.0.0", &code, &RECOVERY);
+    let storage = &shopping.storage;
+    assert_eq!(known_author(storage, "clock"), Some(public_key(&AUTHOR)));
+    assert_eq!(
+        known_recovery(storage, "clock"),
+        Some(public_key(&RECOVERY))
+    );
+}
+
+#[test]
+fn a_recovery_key_named_by_an_update_is_not_pinned() {
+    let mut shopping = store("1.0.0");
+    first_install(&mut shopping, "1.0.0", &ppn(BUILD, Some(&AUTHOR)));
+    assert_eq!(known_recovery(&shopping.storage, "clock"), None);
+    // A newer version by the same author, the library now naming a
+    // recovery key (a taken-over library could).
+    let newer = ppn(BUILD, Some(&AUTHOR));
+    shopping.run(actions::BACK);
+    shopping.run(actions::BACK);
+    shopping.run(OPEN);
+    shopping.serve(LIST, list("1.1.0").as_bytes());
+    shopping.choose("Reading");
+    shopping.choose("Clock");
+    let text = with_recovery(&page("1.1.0", &newer), &RECOVERY);
+    shopping.serve(PAGE, text.as_bytes());
+    shopping.run(actions::DOWN);
+    shopping.run(actions::CONFIRM);
+    download(&mut shopping, "1.1.0", &newer);
+    assert_eq!(installed(&shopping), Some(Version::new(1, 1, 0)));
+    assert_eq!(known_recovery(&shopping.storage, "clock"), None);
 }
 
 #[test]
