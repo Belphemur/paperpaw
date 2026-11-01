@@ -398,6 +398,37 @@ fn code_that_does_not_fit_is_refused_once_here() {
     );
 }
 
+/// The Installed list's line says, on the stock layout only, that a full
+/// install via USB gives more, with the room it would give.
+#[test]
+fn the_installed_list_names_the_bigger_room_of_a_full_install_on_the_stock_layout() {
+    for (room, said) in [
+        ("1126400 4096 4096 83 1 0 3000000\n", true),
+        ("1126400 4096 4096 83 1 0 0\n", false),
+    ] {
+        let storage = with_room_line(room);
+        let mut shopping = Shopping::with(Some("x4"), Some(native()), &list("1.0.0"), storage);
+        first_install(&mut shopping, "1.0.0", &ppn(BUILD, Some(&AUTHOR)));
+        shopping.run(actions::BACK);
+        shopping.run(actions::BACK);
+        shopping.run(actions::BACK);
+        shopping.run(OPEN);
+        shopping.serve(LIST, list("1.0.0").as_bytes());
+        shopping.choose("Installed");
+        let shown = shopping.shown();
+        assert!(shown.contains("code plugins:"), "{shown}");
+        assert_eq!(
+            shown.contains("paperpaw.org/flash"),
+            said,
+            "{room}: {shown}"
+        );
+        if said {
+            assert!(shown.contains("about 2.9 MB"), "{shown}");
+            assert!(shown.contains("used. A full install"), "{shown}");
+        }
+    }
+}
+
 #[test]
 fn code_that_just_fits_is_installed() {
     // Room for exactly two pages and two plugins: the other one's and

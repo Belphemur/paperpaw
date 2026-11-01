@@ -118,6 +118,10 @@ struct OfferScreen {
     on_button: bool,
     /// Those chosen were added (*Done*, or the page left): not again.
     added: bool,
+    /// On the X4's stock layout (after an SD install from CrossPoint), the
+    /// room for code plugins and that a full install via USB gives more,
+    /// above the bar; the setup shows the page once.
+    note: Option<(String, Rect)>,
 }
 
 impl OfferScreen {
@@ -135,11 +139,19 @@ impl OfferScreen {
             display.width,
             bar_height,
         );
+        let note = crate::room::Room::of(env, None)
+            .setup_note(env)
+            .map(|text| {
+                let height = ui::note_line_height(env, &style, display.width, &text);
+                let y = bar.y.saturating_sub(height);
+                (text, Rect::new(0, y, display.width, height))
+            });
+        let below = note.as_ref().map_or(0, |(_, rect)| rect.height);
         let area = Rect::new(
             0,
             top,
             display.width,
-            display.height.saturating_sub(top + bar_height),
+            display.height.saturating_sub(top + bar_height + below),
         );
         Self {
             rows: OFFERED
@@ -153,6 +165,7 @@ impl OfferScreen {
             bar,
             on_button: false,
             added: false,
+            note,
         }
     }
 
@@ -278,6 +291,9 @@ impl Screen for OfferScreen {
                 .focused(focused)
                 .draw(ui, rect);
         });
+        if let Some((text, rect)) = &self.note {
+            ui.note_line(*rect, text);
+        }
         let line = Rect::new(0, self.bar.y, self.bar.width, (style.line()).max(1));
         ui.canvas().fill(line, Color::gray(150));
         if let Some(button) = button {

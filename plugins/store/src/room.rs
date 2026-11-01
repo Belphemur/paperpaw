@@ -104,7 +104,37 @@ impl Room {
             let args = [("used", Arg::Str(&used)), ("total", Arg::Str(&total))];
             parts.push(env.i18n().format(key, &args));
         }
-        (!parts.is_empty()).then(|| parts.join(" · "))
+        let mut line = parts.join(" · ");
+        if let Some(flash) = self.flash(env) {
+            if !line.is_empty() {
+                line.push_str(". ");
+            }
+            line.push_str(&flash);
+        }
+        (!line.is_empty()).then_some(line)
+    }
+
+    /// Where the room is the stock layout's (the X4 after an SD install
+    /// from CrossPoint): that a full install via USB gives more, with the
+    /// room it would give; `None` elsewhere.
+    pub(crate) fn flash(&self, env: &Env<'_>) -> Option<String> {
+        let larger = self.code.filter(stock_flash)?.larger?;
+        let larger = size(env, larger);
+        Some(
+            env.i18n()
+                .format("store.room.flash", &[("larger", Arg::Str(&larger))]),
+        )
+    }
+
+    /// The note of the first-run setup: the room for code plugins now and
+    /// that a full install gives more; `None` except on the stock layout.
+    pub(crate) fn setup_note(&self, env: &Env<'_>) -> Option<String> {
+        let flash = self.flash(env)?;
+        let left = size(env, self.code_left()?);
+        let now = env
+            .i18n()
+            .format("store.room.now", &[("left", Arg::Str(&left))]);
+        Some(alloc::format!("{now} {flash}"))
     }
 
     /// What `plugin` needs and what is left, for its page; `None` where

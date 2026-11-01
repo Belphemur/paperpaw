@@ -109,6 +109,59 @@ fn offer() -> Shopping {
     shopping
 }
 
+/// The offer on an X4 whose shell kept the room as `room` says.
+fn offer_with_room(room: &str) -> Shopping {
+    let storage = common::Shared::default();
+    storage
+        .write(".paperpaw/code-room.txt", room.as_bytes())
+        .unwrap();
+    let mut shopping = Shopping::with(
+        Some("x4"),
+        Some(native()),
+        r#"{"format": 2, "plugins": []}"#,
+        storage,
+    );
+    shopping.now += 100;
+    shopping.kernel.open_screen(
+        Instant(shopping.now),
+        Id::new_static("store.offer"),
+        Params::new(),
+    );
+    shopping
+}
+
+/// After an SD install from CrossPoint (the stock layout: the shell says a
+/// full flash gives more) the setup's offer says what room there is for
+/// code plugins and that a full install via USB gives more; on PaperPaw's
+/// own layout, or where the shell says nothing of it, not a word.
+#[test]
+fn the_offer_says_a_full_install_gives_more_room_only_on_the_stock_layout() {
+    // 1,126,400 B of room (1.1 MB), 3,000,000 B (2.9 MB) with a full flash.
+    for (room, said) in [
+        ("1126400 0 4096 83 0 0 3000000\n", true),
+        ("1126400 0 4096 83 0 0 0\n", false),
+        ("1126400 0 4096 83 0 0\n", false),
+    ] {
+        let mut shopping = offer_with_room(room);
+        let shown = shopping.shown();
+        assert!(shown.contains("Reading statistics"), "{shown}");
+        assert_eq!(
+            shown.contains("paperpaw.org/flash"),
+            said,
+            "{room}: {shown}"
+        );
+        if said {
+            assert!(shown.contains("Room for plugins: 1.1 MB"), "{shown}");
+            assert!(shown.contains("about 2.9 MB"), "{shown}");
+        } else {
+            assert!(!shown.contains("Room for plugins"), "{room}: {shown}");
+        }
+    }
+    // And not on a device with no room for code of its own to speak of.
+    let shown = offer().shown();
+    assert!(!shown.contains("paperpaw.org/flash"), "{shown}");
+}
+
 /// Plugin `id`'s page and files answered.
 fn serve(shopping: &mut Shopping, id: &str, code: &[u8]) {
     shopping.serve(&page_url(id), page(id, code).as_bytes());

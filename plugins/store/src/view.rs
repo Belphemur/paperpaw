@@ -134,9 +134,15 @@ impl ViewScreen {
         let display = env.device().display;
         let top = header.area().height + style.gap();
         let view = View::of(params);
-        // The installed list says at its foot how much room is left.
+        // The installed list says at its foot how much room is left, and
+        // on the X4's stock layout that a full install gives more: as many
+        // lines as that takes.
         let line = if view == View::Installed {
-            (style.small() * 1.3) as u16 + style.gap() * 2
+            let one = (style.small() * 1.3) as u16 + style.gap() * 2;
+            match Room::of(env, None).line(env) {
+                Some(text) => one.max(ui::note_line_height(env, &style, display.width, &text)),
+                None => one,
+            }
         } else {
             0
         };
