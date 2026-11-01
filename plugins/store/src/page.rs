@@ -336,12 +336,7 @@ impl PageScreen {
         match &self.details {
             Details::Here(plugin) => {
                 let mut out = paperpaw_sdk::Commands::new();
-                trust::expect(
-                    env.storage(),
-                    &plugin.entry.id,
-                    plugin.author_key.as_ref(),
-                    plugin.recovery_key.as_ref(),
-                );
+                trust::expect(env.storage(), &plugin.entry.id, plugin.named().as_ref());
                 if !INSTALLER.start(&env, &plugin.package, &mut out) {
                     out.push(failed(&env, name));
                 }

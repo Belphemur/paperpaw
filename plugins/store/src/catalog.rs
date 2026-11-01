@@ -55,6 +55,7 @@ use paperpaw_sdk::web::{encode, join_url};
 use paperpaw_sdk::{Env, PluginKind, Plugins, Storage, Version};
 
 use crate::PLUGIN;
+use crate::trust::{Named, Rotation};
 
 mod runs;
 
@@ -289,6 +290,10 @@ struct Item {
     author_key: String,
     /// The recovery key its author named, as the library says.
     recovery_key: String,
+    /// The key it moves to (`rotation.to`), and the recovery key's
+    /// signature of that (`rotation.signature`), both hexadecimal.
+    rotation_to: String,
+    rotation_signature: String,
     /// The files read so far (a plugin's page only), and the one being
     /// read.
     files: Vec<PackageFile>,
@@ -421,6 +426,11 @@ impl Item {
                 "author_plugins" => self.more.author_plugins = value.parse().unwrap_or(0),
                 _ => {}
             },
+            [rotation, key] if rotation == "rotation" => match key.as_str() {
+                "to" => self.rotation_to = cut(value, MAX_NAME),
+                "signature" => self.rotation_signature = cut(value, 2 * MAX_NAME),
+                _ => {}
+            },
             [latest, source, url] if latest == "latest" && source == "source" && url == "url" => {
                 if value.starts_with("https://") {
                     self.more.source = cut(value, 200);
@@ -550,6 +560,13 @@ impl Item {
 }
 
 /// An Ed25519 public key written as 64 hex digits.
+/// A signature in hexadecimal (128 digits).
+fn signature(hex: &str) -> Option<[u8; 64]> {
+    paperpaw_sdk::digest::hex::decode(hex.trim())?
+        .try_into()
+        .ok()
+}
+
 fn key(hex: &str) -> Option<[u8; 32]> {
     let hex = hex.trim().as_bytes();
     if hex.len() != 64 {
@@ -651,7 +668,21 @@ pub(crate) struct Plugin {
     /// The key its author named to replace a lost author key (#20): only
     /// taken at the plugin's first install ([`trust`](crate::trust)).
     pub recovery_key: Option<[u8; 32]>,
+    /// A move to another key its author's recovery key signed, if the
+    /// library says so (#20).
+    pub rotation: Option<Rotation>,
     pub more: More,
+}
+
+impl Plugin {
+    /// What it names for its author's key.
+    pub(crate) fn named(&self) -> Option<Named> {
+        Some(Named {
+            author: self.author_key?,
+            recovery: self.recovery_key,
+            rotation: self.rotation,
+        })
+    }
 }
 
 /// Reads a plugin's page at `path` (`{"format": 2, "plugin": {…}}`): the
@@ -693,6 +724,8 @@ fn read_plugin(
     }
     let author_key = key(&item.author_key);
     let recovery_key = key(&item.recovery_key);
+    let rotation = key(&item.rotation_to).zip(signature(&item.rotation_signature));
+    let rotation = rotation.map(|(to, signature)| Rotation { to, signature });
     let code = item.code.is_some();
     let mut more = core::mem::take(&mut item.more);
     if author_key.is_some() {
@@ -710,6 +743,7 @@ fn read_plugin(
         package,
         author_key,
         recovery_key,
+        rotation,
         more,
     })
 }

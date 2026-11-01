@@ -16,11 +16,11 @@
 mod common;
 
 use common::{LIST, Shared, Shopping};
-use paperpaw_native::signature::{public_key, sign};
+use paperpaw_native::signature::{public_key, sign, sign_message};
 use paperpaw_native::{Chip, Header, LINK_BASE};
 use paperpaw_plugin_store::OPEN;
 use paperpaw_sdk::builtin::actions;
-use paperpaw_sdk::native::keys::known_recovery;
+use paperpaw_sdk::native::keys::{known_recovery, rotation_message};
 use paperpaw_sdk::native::{Fingerprint, Native, installed_code, known_author};
 use paperpaw_sdk::{PluginKind, Storage, Version};
 
@@ -255,6 +255,99 @@ fn a_recovery_key_named_by_an_update_is_not_pinned() {
     download(&mut shopping, "1.1.0", &newer);
     assert_eq!(installed(&shopping), Some(Version::new(1, 1, 0)));
     assert_eq!(known_recovery(&shopping.storage, "clock"), None);
+}
+
+/// The clock's page for an update signed by [`OTHER`], the library naming
+/// that key and `rotation`'s signature of the move (`to` as given).
+fn rotated_page(version: &str, code: &[u8], to: &[u8; 32], signature: &[u8; 64]) -> String {
+    let author = format!("\"author_key\": \"{}\"", hex(&public_key(&AUTHOR)));
+    let named = format!(
+        "\"author_key\": \"{}\", \"rotation\": {{\"to\": \"{}\", \"signature\": \"{}\"}}",
+        hex(&public_key(&OTHER)),
+        hex(to),
+        hex(signature)
+    );
+    page(version, code).replace(&author, &named)
+}
+
+/// What the recovery key signs to move the clock from [`AUTHOR`] to `new`.
+fn moved(new: &[u8; 32]) -> [u8; 64] {
+    let message = rotation_message("clock", &public_key(&AUTHOR), new);
+    sign_message(message.as_bytes(), &RECOVERY)
+}
+
+/// The clock installed by [`AUTHOR`], naming [`RECOVERY`] if `pinned`,
+/// then its update 1.1.0 offered as `rotated_page` says; whether it was
+/// installed.
+fn update_signed_by_other(pinned: bool, to: &[u8; 32], signature: &[u8; 64]) -> (Shopping, bool) {
+    let mut shopping = store("1.0.0");
+    let first = ppn(BUILD, Some(&AUTHOR));
+    if pinned {
+        install_naming(&mut shopping, "1.0.0", &first, &RECOVERY);
+    } else {
+        first_install(&mut shopping, "1.0.0", &first);
+    }
+    let other = ppn(BUILD, Some(&OTHER));
+    shopping.run(actions::BACK);
+    shopping.run(actions::BACK);
+    shopping.run(OPEN);
+    shopping.serve(LIST, list("1.1.0").as_bytes());
+    shopping.choose("Reading");
+    shopping.choose("Clock");
+    let text = rotated_page("1.1.0", &other, to, signature);
+    shopping.serve(PAGE, text.as_bytes());
+    shopping.run(actions::DOWN);
+    shopping.run(actions::CONFIRM);
+    download(&mut shopping, "1.1.0", &other);
+    let done = installed(&shopping) == Some(Version::new(1, 1, 0));
+    (shopping, done)
+}
+
+#[test]
+fn a_rotation_by_the_recovery_key_moves_the_plugin_to_the_new_key() {
+    let to = public_key(&OTHER);
+    let (shopping, done) = update_signed_by_other(true, &to, &moved(&to));
+    assert!(done);
+    let storage = &shopping.storage;
+    assert_eq!(known_author(storage, "clock"), Some(to));
+    assert_eq!(
+        known_recovery(storage, "clock"),
+        Some(public_key(&RECOVERY))
+    );
+    let code = ppn(BUILD, Some(&OTHER));
+    assert_eq!(installed_code(storage, "clock"), Some(digest(&code)));
+}
+
+#[test]
+fn a_rotation_that_does_not_hold_is_refused_as_before() {
+    let to = public_key(&OTHER);
+    let stranger = sign_message(
+        rotation_message("clock", &public_key(&AUTHOR), &to).as_bytes(),
+        &OTHER,
+    );
+    let third = public_key(&[3; 32]);
+    let cases = [
+        // Signed by a key that is not the recovery key.
+        (true, to, stranger),
+        // The statement is for another key than the code's.
+        (true, third, moved(&third)),
+        // No recovery key was pinned: the library's rotation is no use.
+        (false, to, moved(&to)),
+    ];
+    for (pinned, to, signature) in cases {
+        let (mut shopping, done) = update_signed_by_other(pinned, &to, &signature);
+        assert!(!done);
+        assert_eq!(installed(&shopping), Some(Version::new(1, 0, 0)));
+        let storage = &shopping.storage;
+        assert_eq!(known_author(storage, "clock"), Some(public_key(&AUTHOR)));
+        let first = ppn(BUILD, Some(&AUTHOR));
+        assert_eq!(installed_code(storage, "clock"), Some(digest(&first)));
+        let shown = shopping.shown().replace(" | ", " ");
+        assert!(
+            shown.contains("signed by another key than before"),
+            "{shown}"
+        );
+    }
 }
 
 #[test]

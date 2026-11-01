@@ -13,7 +13,7 @@ use alloc::string::String;
 
 use paperpaw_sdk::install::marks::{From, Marks};
 use paperpaw_sdk::install::{self, Progress};
-use paperpaw_sdk::native::{self, Author, check_file};
+use paperpaw_sdk::native::{self, Author, check_file, keys};
 use paperpaw_sdk::{Commands, Env, Storage};
 
 use crate::INSTALLER;
@@ -104,43 +104,78 @@ fn expected_path() -> String {
     format!("{}/author.txt", Env::plugin_dir(crate::PLUGIN.as_str()))
 }
 
-/// Keeps the key the library names for the author of `plugin`, which is
-/// being downloaded (`None` for a data plugin), and the recovery key it
-/// names for the author, if any.
-pub(crate) fn expect(
-    storage: &dyn Storage,
-    plugin: &str,
-    key: Option<&[u8; 32]>,
-    recovery: Option<&[u8; 32]>,
-) {
-    match key {
-        Some(key) => {
-            let mut text = String::from(plugin);
-            for key in core::iter::once(key).chain(recovery) {
-                text.push('\t');
-                text.push_str(&paperpaw_sdk::digest::hex::encode(key));
-            }
-            let _ = storage.write(&expected_path(), text.as_bytes());
-        }
-        None => {
-            let _ = storage.remove(&expected_path());
-        }
-    }
+/// What the library names for the author of a code plugin.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Named {
+    /// The key it signs its code with.
+    pub(crate) author: [u8; 32],
+    /// The key it named to replace a lost one, pinned at the first
+    /// install only.
+    pub(crate) recovery: Option<[u8; 32]>,
+    /// A move to another key, signed by the recovery key.
+    pub(crate) rotation: Option<Rotation>,
 }
 
-/// The author's key and recovery key the library named for `plugin`.
-fn expected(storage: &dyn Storage, plugin: &str) -> Option<([u8; 32], Option<[u8; 32]>)> {
-    let text = paperpaw_sdk::read_file(storage, &expected_path(), 256).ok()?;
+/// The recovery key's statement that the plugin moves to key `to`
+/// (`keys::rotation_message`). Only the device decides whether it holds:
+/// the library's word is not taken.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Rotation {
+    pub(crate) to: [u8; 32],
+    pub(crate) signature: [u8; 64],
+}
+
+/// Keeps what the library names for the author of `plugin`, which is
+/// being downloaded (`None` for a data plugin).
+pub(crate) fn expect(storage: &dyn Storage, plugin: &str, named: Option<&Named>) {
+    let Some(named) = named else {
+        let _ = storage.remove(&expected_path());
+        return;
+    };
+    let hex = paperpaw_sdk::digest::hex::encode;
+    let mut text = format!("{plugin}\nauthor {}\n", hex(&named.author));
+    if let Some(recovery) = &named.recovery {
+        text.push_str(&format!("recovery {}\n", hex(recovery)));
+    }
+    if let Some(rotation) = &named.rotation {
+        let (to, signature) = (hex(&rotation.to), hex(&rotation.signature));
+        text.push_str(&format!("rotation {to} {signature}\n"));
+    }
+    let _ = storage.write(&expected_path(), text.as_bytes());
+}
+
+/// What the library named for `plugin` when its download started.
+fn expected(storage: &dyn Storage, plugin: &str) -> Option<Named> {
+    let text = paperpaw_sdk::read_file(storage, &expected_path(), 1024).ok()?;
     let text = core::str::from_utf8(&text).ok()?;
-    let mut parts = text.trim().split('\t');
-    if parts.next()? != plugin {
+    let mut lines = text.lines();
+    if lines.next()? != plugin {
         return None;
     }
-    let key = |hex: Option<&str>| -> Option<[u8; 32]> {
-        paperpaw_sdk::digest::hex::decode(hex?)?.try_into().ok()
-    };
-    let author = key(parts.next())?;
-    Some((author, key(parts.next())))
+    let (mut author, mut recovery, mut rotation) = (None, None, None);
+    for line in lines {
+        let mut words = line.split(' ');
+        match (words.next(), words.next(), words.next()) {
+            (Some("author"), Some(key), None) => author = bytes(key),
+            (Some("recovery"), Some(key), None) => recovery = bytes(key),
+            (Some("rotation"), Some(to), Some(signature)) => {
+                rotation = Some(Rotation {
+                    to: bytes(to)?,
+                    signature: bytes(signature)?,
+                });
+            }
+            _ => {}
+        }
+    }
+    Some(Named {
+        author: author?,
+        recovery,
+        rotation,
+    })
+}
+
+fn bytes<const N: usize>(hex: &str) -> Option<[u8; N]> {
+    paperpaw_sdk::digest::hex::decode(hex)?.try_into().ok()
 }
 
 /// Whether the plugin downloaded into `folder` may be installed.
@@ -193,10 +228,27 @@ pub(crate) fn verdict(env: &Env<'_>, plugin: &str, folder: &str) -> Verdict {
     };
     match native::author(storage, plugin, &key) {
         Author::Known => Verdict::Install { code: Some(code) },
-        Author::Other => Verdict::Refused(Refusal::KeyChanged),
+        // Another key than the one known: only a rotation the pinned
+        // recovery key signed moves the plugin to it, and the kernel
+        // checks that (the library's word is only carried). It forgets
+        // the code installed before, so a cut here leaves the plugin off
+        // until the update runs again.
+        Author::Other => match expected(storage, plugin).and_then(|named| named.rotation) {
+            Some(rotation)
+                if rotation.to == key
+                    && keys::accept_rotation(storage, plugin, &key, &rotation.signature)
+                        .is_ok() =>
+            {
+                Verdict::Install { code: Some(code) }
+            }
+            _ => Verdict::Refused(Refusal::KeyChanged),
+        },
         Author::New => match expected(storage, plugin) {
-            Some((author, recovery)) if author == key => Verdict::Install {
-                code: Some(Code { recovery, ..code }),
+            Some(named) if named.author == key => Verdict::Install {
+                code: Some(Code {
+                    recovery: named.recovery,
+                    ..code
+                }),
             },
             _ => Verdict::Refused(Refusal::NotTheAuthor),
         },
