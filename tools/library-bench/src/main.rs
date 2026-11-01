@@ -6,11 +6,12 @@
 //! estimate: an SD card over SPI reads a block in a few hundred µs) and
 //! the heap's peak above what was live before (host sizes: 64-bit).
 //!
-//! usage: `paperpaw-library-bench <library-dir> [<more-books-dir>]`
+//! usage: `paperpaw-library-bench [--walks] <library-dir> [<more-books-dir>]`
 //!
 //! `<library-dir>/books` goes onto the card; the books of
 //! `<more-books-dir>/books` are added after the first walks, as books
-//! copied onto the card later.
+//! copied onto the card later. `--walks` measures the catalog's walks
+//! only.
 
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::RefCell;
@@ -351,6 +352,7 @@ const DEVICE: DeviceInfo = DeviceInfo::new(
 /// Hears the start and runs the operations ([`run::all`]).
 struct Bench {
     more: Option<String>,
+    walks: bool,
 }
 
 impl Plugin for Bench {
@@ -359,18 +361,21 @@ impl Plugin for Bench {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        let more = self.more.clone();
+        let (more, walks) = (self.more.clone(), self.walks);
         r.on(events::STARTED, move |env: &Env<'_>, _: &(), _| {
-            run::all(env, more.as_deref());
+            run::all(env, more.as_deref(), walks);
         })
     }
 }
 
 fn main() -> Result<(), String> {
-    let mut args = std::env::args().skip(1);
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
+    let walks = args.iter().any(|a| a == "--walks");
+    args.retain(|a| a != "--walks");
+    let mut args = args.into_iter();
     let library = args
         .next()
-        .ok_or("usage: paperpaw-library-bench <library-dir> [<more>]")?;
+        .ok_or("usage: paperpaw-library-bench [--walks] <library-dir> [<more>]")?;
     let more = args.next();
     // FAT32 with clusters of 32 KiB needs 65525 of them at least: 4 GiB
     // (its memory is taken only where written).
@@ -381,7 +386,7 @@ fn main() -> Result<(), String> {
         .storage(card)
         .setting_default(&settings::LIBRARY_FOLDER, "books".into())
         .plugin(paperpaw_plugin_format_epub::EpubFormat)
-        .plugin(Bench { more })
+        .plugin(Bench { more, walks })
         .build()
         .map_err(|e| format!("{e:?}"))?;
     kernel.start(paperpaw_platform::Instant(0));

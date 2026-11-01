@@ -15,10 +15,16 @@ use super::{copy, measure, report};
 
 const CATALOG: &str = ".paperpaw/library/catalog.txt";
 
-/// Every operation, reported a line each.
-pub(super) fn all(env: &Env<'_>, more: Option<&str>) {
+/// Every operation, reported a line each; only the walks with `walks`.
+pub(super) fn all(env: &Env<'_>, more: Option<&str>, walks: bool) {
     walk(env, "walk: first catalog (every book opened)");
     walk(env, "walk: again, nothing changed");
+    if walks {
+        if let Some(more) = more {
+            add(env, more);
+        }
+        return;
+    }
     let size = env.storage().size(CATALOG).unwrap_or(0);
     println!("catalog on the card\t{:.1} KiB", size as f64 / 1024.0);
     list(env);

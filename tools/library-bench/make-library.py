@@ -3,11 +3,12 @@
 benchmark (#79): mixed folders and depths, long and non-Latin names,
 series, some covers. Deterministic for a seed; nothing of it is committed.
 
-usage: make-library.py <out-dir> <books> [--seed N] [--covers PERCENT]
+usage: make-library.py <out-dir> <books> [--seed N] [--covers PERCENT] [--flat]
 
 The books go under <out-dir>/books/. Each holds a title, an author,
 a language, a series and number for about a third, and a cover (a small
-PNG) for --covers percent of them.
+PNG) for --covers percent of them. With --flat every book lies in
+books/ itself: one large folder, as many cards keep them.
 """
 
 import argparse
@@ -135,6 +136,7 @@ def main():
     parser.add_argument("books", type=int)
     parser.add_argument("--seed", type=int, default=79)
     parser.add_argument("--covers", type=int, default=10)
+    parser.add_argument("--flat", action="store_true", help="every book in one folder")
     args = parser.parse_args()
     rng = random.Random(args.seed)
     root = Path(args.out) / "books"
@@ -162,6 +164,8 @@ def main():
             stem = f"{stem} ({' '.join(rng.choice(WORDS) for _ in range(25))})"[:200]
         # Depth 0 to 4: the folder, an author's, their series, a genre above.
         depth = rng.choices([0, 1, 2, 3, 4], weights=[20, 35, 25, 15, 5])[0]
+        if args.flat:
+            depth = 0
         parts = [f"Genre {rng.randint(1, 12)}", author, series[0] if series else "Single", "Box"]
         folder = root.joinpath(*[safe(p) for p in parts[:depth]]) if depth else root
         name = safe(stem)
