@@ -269,16 +269,19 @@ impl Firmware {
     }
 
     /// The longest the processor sleeps between readings of the buttons, by
-    /// the button response.
+    /// the button response, and by the power level (ADR 0025: the buttons
+    /// are read every 60 ms in Saving and Offline).
     fn idle_ms(&self) -> u64 {
         let response = self.kernel.settings().read(&device::BUTTON_RESPONSE);
-        if response == device::RESPONSE_FASTER {
+        let response_ms = if response == device::RESPONSE_FASTER {
             IDLE_FAST_MS
         } else if response == device::RESPONSE_SAVING {
             IDLE_SAVING_MS
         } else {
             IDLE_MS
-        }
+        };
+        let saving = self.kernel.power().level != paperpaw_sdk::power::PowerLevel::Normal;
+        paperpaw_x4::buttons::read_interval_ms(response_ms, saving)
     }
 
     /// How long after a refresh the panel's power goes off: never where
