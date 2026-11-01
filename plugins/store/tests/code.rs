@@ -20,7 +20,9 @@ use paperpaw_native::signature::{public_key, sign, sign_message};
 use paperpaw_native::{Chip, Header, LINK_BASE};
 use paperpaw_plugin_store::OPEN;
 use paperpaw_sdk::builtin::actions;
-use paperpaw_sdk::native::keys::{known_recovery, rotation_message};
+use paperpaw_sdk::native::keys::{
+    is_revoked, known_recovery, revocation_message, revoked, rotation_message,
+};
 use paperpaw_sdk::native::{Fingerprint, Native, installed_code, known_author};
 use paperpaw_sdk::{PluginKind, Storage, Version};
 
@@ -348,6 +350,113 @@ fn a_rotation_that_does_not_hold_is_refused_as_before() {
             "{shown}"
         );
     }
+}
+
+/// One entry of the library's `revoked_keys`: `plugin`'s `key`, with
+/// `signature` as given (hex).
+fn revocation(plugin: &str, key: &[u8; 32], signature: &[u8; 64]) -> String {
+    format!(
+        r#"{{"plugin": "{plugin}", "key": "{}", "signature": "{}"}}"#,
+        hex(key),
+        hex(signature)
+    )
+}
+
+/// What `seed` signs to revoke `key` of `plugin`.
+fn revoking(seed: &[u8; 32], plugin: &str, key: &[u8; 32]) -> [u8; 64] {
+    sign_message(revocation_message(plugin, key).as_bytes(), seed)
+}
+
+/// The clock installed (naming [`RECOVERY`]), then the library's list
+/// read with these `revoked_keys` entries.
+fn list_revoking(entries: &[String]) -> Shopping {
+    let mut shopping = store("1.0.0");
+    install_naming(
+        &mut shopping,
+        "1.0.0",
+        &ppn(BUILD, Some(&AUTHOR)),
+        &RECOVERY,
+    );
+    shopping.run(actions::BACK);
+    shopping.run(actions::BACK);
+    shopping.run(OPEN);
+    let text = list("1.0.0");
+    let text = text.strip_suffix('}').unwrap();
+    let text = format!("{text}, \"revoked_keys\": [{}]}}", entries.join(", "));
+    shopping.serve(LIST, text.as_bytes());
+    shopping
+}
+
+#[test]
+fn revocations_signed_by_the_key_or_the_recovery_key_are_handed_over() {
+    let author = public_key(&AUTHOR);
+    for seed in [AUTHOR, RECOVERY] {
+        let entry = revocation("clock", &author, &revoking(&seed, "clock", &author));
+        let shopping = list_revoking(&[entry]);
+        let storage = &shopping.storage;
+        assert!(is_revoked(storage, "clock"));
+        assert_eq!(revoked(storage).len(), 1);
+    }
+}
+
+#[test]
+fn revocations_that_do_not_hold_stop_nothing() {
+    let author = public_key(&AUTHOR);
+    let other = public_key(&OTHER);
+    let entries = [
+        // Signed by neither the key nor the recovery key.
+        revocation("clock", &author, &revoking(&OTHER, "clock", &author)),
+        // A key that is not the pinned author's, though signed by itself.
+        revocation("clock", &other, &revoking(&OTHER, "clock", &other)),
+        // A plugin nothing is known of.
+        revocation("weather", &other, &revoking(&OTHER, "weather", &other)),
+        // Damaged: a key too short, no signature, no plugin.
+        r#"{"plugin": "clock", "key": "abcd", "signature": "00"}"#.to_string(),
+        format!(r#"{{"plugin": "clock", "key": "{}"}}"#, hex(&author)),
+        revocation("", &author, &revoking(&AUTHOR, "", &author)),
+    ];
+    let shopping = list_revoking(&entries);
+    let storage = &shopping.storage;
+    assert!(!is_revoked(storage, "clock"));
+    assert!(revoked(storage).is_empty());
+    // The plugin goes on as installed.
+    assert_eq!(installed(&shopping), Some(Version::new(1, 0, 0)));
+}
+
+#[test]
+fn a_bad_entry_does_not_cost_the_good_ones_beside_it() {
+    let author = public_key(&AUTHOR);
+    let entries = [
+        r#"{"plugin": "clock", "key": "zz", "signature": "zz"}"#.to_string(),
+        revocation("clock", &author, &revoking(&AUTHOR, "clock", &author)),
+    ];
+    let shopping = list_revoking(&entries);
+    assert!(is_revoked(&shopping.storage, "clock"));
+}
+
+#[test]
+fn a_long_list_is_read_in_parts_and_cut_at_what_the_kernel_keeps() {
+    let author = public_key(&AUTHOR);
+    let mut entries: Vec<String> = (0..300)
+        .map(|n| {
+            let seed = [(n % 250 + 1) as u8; 32];
+            let key = public_key(&seed);
+            let plugin = format!("p{n}");
+            revocation(&plugin, &key, &revoking(&seed, &plugin, &key))
+        })
+        .collect();
+    entries.push(revocation(
+        "clock",
+        &author,
+        &revoking(&AUTHOR, "clock", &author),
+    ));
+    // Past the cut, the kernel would drop it anyway.
+    let shopping = list_revoking(&entries[299..]);
+    assert!(is_revoked(&shopping.storage, "clock"));
+    let shopping = list_revoking(&entries);
+    // No plugin of them is installed: only the clock's could hold, and
+    // it came after the cut of 256.
+    assert_eq!(revoked(&shopping.storage).len(), 0);
 }
 
 #[test]

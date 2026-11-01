@@ -25,7 +25,7 @@ use paperpaw_sdk::ui::choice::Picked;
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id,
-    MemoryClass, Params, Rect, RefreshMode, Screen, files,
+    MemoryClass, Params, PluginProblem, Rect, RefreshMode, Screen, files,
 };
 
 use crate::catalog::{self, Device, Entry, Index, More, Plugin};
@@ -549,6 +549,15 @@ fn facts(
             from => i18n.format("store.unreviewed.from", &[("repository", Arg::Str(from))]),
         };
         facts.insert(0, ("alert-triangle", text));
+    }
+    // The kernel stopped it: the key its author signed it with was
+    // withdrawn. Said first; *Remove* is among the rows.
+    if env
+        .plugins()
+        .get(&plugin.id)
+        .is_some_and(|info| info.problem == Some(PluginProblem::Revoked))
+    {
+        facts.insert(0, ("alert-triangle", i18n.tr("store.revoked").to_string()));
     }
     if plugin.official {
         facts.push(("paw", i18n.tr("store.official").to_string()));

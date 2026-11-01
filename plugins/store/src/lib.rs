@@ -23,6 +23,7 @@ mod origin;
 mod page;
 mod queue;
 mod request;
+mod revoked;
 mod room;
 mod rows;
 mod setup;

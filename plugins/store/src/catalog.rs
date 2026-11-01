@@ -55,6 +55,7 @@ use paperpaw_sdk::web::{encode, join_url};
 use paperpaw_sdk::{Env, PluginKind, Plugins, Storage, Version};
 
 use crate::PLUGIN;
+use crate::revoked::Revocations;
 use crate::trust::{Named, Rotation};
 
 mod runs;
@@ -619,8 +620,19 @@ fn read_list(
     let mut format = None;
     let mut item: Option<Item> = None;
     let mut picks = Picks::default();
+    let mut revoked = Revocations::default();
     read_file(storage, path, &mut |event| match event {
         Event::Value([key], value) if key == "format" => format = value.parse::<u32>().ok(),
+        Event::Value([list, at, field], value) if list == "revoked_keys" && at == "[]" => {
+            revoked.field(field, value);
+        }
+        // After `format`, which a list names first: that it is a list this
+        // plugin reads comes before anything it says is taken.
+        Event::Close([list, at])
+            if list == "revoked_keys" && at == "[]" && format == Some(FORMAT) =>
+        {
+            revoked.entry_done(storage);
+        }
         Event::Open([key, ..]) if key == "sections" => picks.fair = true,
         Event::Value([key, section, at], value) if key == "sections" && at == "[]" => {
             picks.fair = true;
@@ -654,6 +666,10 @@ fn read_list(
         }
         _ => {}
     });
+    // Only a list this plugin reads is believed at all.
+    if format == Some(FORMAT) {
+        revoked.hand_over(storage);
+    }
     (format == Some(FORMAT)).then_some(picks)
 }
 
