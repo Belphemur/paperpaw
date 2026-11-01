@@ -654,6 +654,19 @@ impl Registrar {
         })
     }
 
+    /// Hears events with handlers kept in the program (a `static` list of
+    /// [`FixedSubscription`](crate::FixedSubscription)s): they take next to
+    /// no memory, where each added with [`on`](Self::on) takes some thirty
+    /// bytes.
+    pub fn add_subscriptions(
+        &mut self,
+        subscriptions: &'static [crate::event::FixedSubscription],
+    ) -> Result<(), RegisterError> {
+        self.contributions
+            .push(Contribution::FixedSubscriptions(subscriptions));
+        Ok(())
+    }
+
     /// Hears `event` with what it carries (see [`event`](crate::event)):
     /// `handler` is not called for an emit of it that lacks what it needs.
     pub fn on<P: crate::event::EventData>(

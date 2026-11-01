@@ -161,7 +161,7 @@ pub use contribution::item::Contribution;
 #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub use env::EnvParts;
 pub use env::{Capabilities, Capability, Env, Metrics};
-pub use event::{Event, EventData, EventHandler};
+pub use event::{Event, EventData, EventHandler, FixedSubscription};
 pub use fonts::{FontFace, FontHandle, FontSet, FontSpec, Fonts};
 pub use formats::{
     COVER_FIT, FormatOpener, FormatPrepared, FormatSpec, Formats, IMAGE_FIT, OpenOptions, cover_fit,

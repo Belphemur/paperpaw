@@ -199,6 +199,31 @@ static SCREENS: [FixedScreen; 1] = [FixedScreen::new(PAGE, "update.title", |env,
 })
 .instances(paperpaw_sdk::Instances::SINGLE)];
 
+/// The events it hears, kept in the program.
+static HEARS: [paperpaw_sdk::FixedSubscription; 7] = [
+    paperpaw_sdk::hears!(CHECK_DUE, |env, (), out| {
+        online::check(env, true, Trigger::Auto, out);
+    }),
+    // Looking by itself: declared at each start and when the setting
+    // changes.
+    paperpaw_sdk::hears!(look::LOOK_DUE, |env, (), out| look::due(env, out)),
+    paperpaw_sdk::hears!(events::SETTING_CHANGED, |env, changed, out| {
+        if changed.id == *look::LOOK.id() {
+            look::plan(env, out);
+        }
+    }),
+    // Answers and downloads go on while the page is closed.
+    paperpaw_sdk::hears!(online::CHECKED, online::checked),
+    paperpaw_sdk::hears!(online::DOWNLOADED, online::downloaded),
+    paperpaw_sdk::hears!(fetch::FETCHED, fetch::received),
+    paperpaw_sdk::hears!(events::STARTED, |env, _, out| {
+        if let Some(firmware) = env.firmware() {
+            started(env, firmware, out);
+        }
+        look::plan(env, out);
+    }),
+];
+
 impl Plugin for Update {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Update", paperpaw_sdk::package_version!())
@@ -223,17 +248,7 @@ impl Plugin for Update {
         r.set_menu_need(online::SERVER.id().clone(), MenuNeed::Firmware)?;
         r.add_screens(&SCREENS)?;
         r.add_actions(&ACTIONS)?;
-        r.on(CHECK_DUE, |env, (), out| {
-            online::check(env, true, Trigger::Auto, out);
-        })?;
-        // Looking by itself: declared at each start and when the setting
-        // changes.
-        r.on(look::LOOK_DUE, |env, (), out| look::due(env, out))?;
-        r.on(events::SETTING_CHANGED, |env, changed, out| {
-            if changed.id == *look::LOOK.id() {
-                look::plan(env, out);
-            }
-        })?;
+        r.add_subscriptions(&HEARS)?;
         r.set_menu_need(look::LOOK.id().clone(), MenuNeed::Firmware)?;
         // The first-run setup asks it, as the setting it is.
         r.add_setup_step(
@@ -247,10 +262,6 @@ impl Plugin for Update {
         )?;
         r.set_menu_need(CHECK, MenuNeed::Firmware)?;
         r.add_icons(&ICONS)?;
-        // Answers and downloads go on while the page is closed.
-        r.on(online::CHECKED, online::checked)?;
-        r.on(online::DOWNLOADED, online::downloaded)?;
-        r.on(fetch::FETCHED, fetch::received)?;
         r.add_menu_entries(&ENTRIES)?;
         r.set_menu_need(OPEN, MenuNeed::Firmware)?;
         // An update the server named waits quietly: a badge on the entry.
@@ -260,12 +271,6 @@ impl Plugin for Update {
             } else {
                 ItemState::new()
             }
-        })?;
-        r.on(events::STARTED, |env, _, out| {
-            if let Some(firmware) = env.firmware() {
-                started(env, firmware, out);
-            }
-            look::plan(env, out);
         })?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;

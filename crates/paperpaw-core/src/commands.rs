@@ -552,7 +552,9 @@ impl Kernel {
         {
             let _running = self.shared.meter.enter(plugin.as_str());
             let from = self.output.commands.len();
-            handing(&mut self.output.commands, |out| handler(&env, params, out));
+            handing(&mut self.output.commands, |out| {
+                handler.call(&env, params, out)
+            });
             let reserved = Reserved::of(&self.shared.settings, &self.shared.registry);
             let out = &mut self.output.commands;
             refused_secret |= vet_reserved(out, from, plugin.as_str(), &reserved);
@@ -631,7 +633,9 @@ impl Kernel {
         {
             let _running = self.shared.meter.enter(plugin.as_str());
             let from = self.output.commands.len();
-            handing(&mut self.output.commands, |out| handler(&env, params, out));
+            handing(&mut self.output.commands, |out| {
+                handler.call(&env, params, out)
+            });
             let reserved = Reserved::of(&self.shared.settings, &self.shared.registry);
             vet_reserved(&mut self.output.commands, from, plugin.as_str(), &reserved);
         }

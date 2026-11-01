@@ -140,6 +140,8 @@ pub enum Contribution {
         event: Id,
         handler: EventHandler,
     },
+    /// Subscriptions kept in the program.
+    FixedSubscriptions(&'static [crate::event::FixedSubscription]),
     StatusItem(Box<StatusItemSpec>),
     StatusLine(Box<StatusLineSpec>),
     /// Boxed: four ids, larger than the other contributions.
@@ -255,7 +257,9 @@ impl Contribution {
             Contribution::ItemState { .. } => "item-state",
             Contribution::ItemDescription { .. } => "item-description",
             Contribution::ScreenHints { .. } => "screen-hints",
-            Contribution::Subscription { .. } => "subscription",
+            Contribution::Subscription { .. } | Contribution::FixedSubscriptions(_) => {
+                "subscription"
+            }
             Contribution::StatusItem(_) => "status-item",
             Contribution::StatusLine(_) => "status-line",
             Contribution::StatusPlace(_) => "status-place",

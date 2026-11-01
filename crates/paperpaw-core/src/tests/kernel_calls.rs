@@ -185,6 +185,43 @@ impl Plugin for OffAtStart {
     }
 }
 
+/// The same, its subscription kept in the program.
+struct OffAtStartFixed;
+
+impl Plugin for OffAtStartFixed {
+    fn manifest(&self) -> Manifest {
+        Manifest::new(Id::new_static("off"), "Off", Version::new(1, 0, 0))
+            .uses(paperpaw_sdk::Uses::NOTHING)
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        static HEARS: [paperpaw_sdk::FixedSubscription; 2] = [
+            paperpaw_sdk::hears!(paperpaw_sdk::builtin::events::STARTED, |_, _, out| {
+                out.push(Command::PowerOff);
+            }),
+            // Another event: not called at the start.
+            paperpaw_sdk::hears!(
+                paperpaw_sdk::builtin::events::CATALOG_CHANGED,
+                |_, _, out| {
+                    out.push(Command::Sleep);
+                }
+            ),
+        ];
+        r.add_subscriptions(&HEARS)
+    }
+}
+
+#[test]
+fn subscriptions_kept_in_the_program_are_heard() {
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(OffAtStartFixed)
+        .power_off(true)
+        .build()
+        .unwrap();
+    let effects = kernel.start(Instant(0));
+    assert!(effects.power_off() && !effects.sleep());
+}
+
 #[test]
 fn plugins_switch_the_device_off_where_the_shell_can() {
     // Where the system decides (Android), nothing happens.
