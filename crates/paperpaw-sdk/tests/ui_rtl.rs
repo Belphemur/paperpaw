@@ -493,7 +493,7 @@ fn a_heading_starts_at_the_right_margin() {
     let env = h.env();
     let ltr = UiStyle::new(&env);
     let rtl = ltr.with_rtl(true);
-    let rect = Rect::new(0, 100, WIDTH, ltr.row() as u16);
+    let rect = Rect::new(0, 100, WIDTH, ltr.row());
     let rows = rect.y..rect.bottom() as u16;
     let ink = |style: &UiStyle| {
         let mut frame = support::frame(WIDTH, 800);
