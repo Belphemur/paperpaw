@@ -49,6 +49,10 @@ change the plugin SDK.
   hyphenation data; `tools/plugin-files/data.toml`) reaches readers alone
   between releases, as for the plugins with code: tagged `<id>-v<version>`,
   a pre-release with its own catalogue (`store-plugin.yml`).
+- `paperpaw-sqlite`: `Database::scan_bounded` reads a table like `scan`, but a row whose payload is more than a
+  given number of bytes comes as `Row::Oversized(size)`: nothing of it is allocated and its overflow pages are not
+  read. One huge row (a picture kept in a note) then no longer fails the whole table for want of memory. Not part
+  of the plugin interface.
 
 ### Changed
 

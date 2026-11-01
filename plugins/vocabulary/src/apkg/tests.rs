@@ -416,3 +416,47 @@ fn what_a_deck_left_behind_is_removed_when_a_job_starts() {
     let _ = sync::Job::new(&storage, FOLDER, sync::Mode::Auto);
     assert!(!storage.exists(&database_path()) && !storage.exists(&text_path()));
 }
+
+#[test]
+fn a_note_of_200_kib_is_passed_over_without_a_big_allocation() {
+    let storage = MemoryStorage::new();
+    let notes = [
+        note(&["one", "first"]),
+        note(&["huge", &"x".repeat(200 * 1024)]),
+        // Under the payload cap: read, and cut to what a card holds.
+        note(&["two", &"y".repeat(6 * 1024)]),
+        note(&["three", "last"]),
+    ];
+    put(
+        &storage,
+        "Big.apkg",
+        &deck_with("collection.anki21", &notes),
+    );
+    inflate(&storage, &alloc::format!("{FOLDER}/Big.apkg")).unwrap();
+    // The reading of the notes, as the plugin's own heap sees it: the
+    // storage's files are not counted, and nothing near the note's size
+    // is asked for (the X4 holds 256 KiB in all).
+    let (made, biggest, peak) = crate::sync::tests::heap::measure(|| notes_of(&storage));
+    assert_eq!(
+        made.unwrap(),
+        Notes {
+            count: 3,
+            skipped: 1
+        }
+    );
+    assert!(biggest < 64 * 1024, "biggest {biggest}");
+    assert!(peak < 96 * 1024, "peak {peak}");
+    assert_eq!(fronts_of_text(&storage), ["one", "two", "three"]);
+}
+
+fn notes_of(storage: &MemoryStorage) -> Result<Notes, Fault> {
+    notes(storage)
+}
+
+fn fronts_of_text(storage: &MemoryStorage) -> Vec<String> {
+    read(storage, &text_path())
+        .lines()
+        .skip(1)
+        .map(|l| l.split('\t').next().unwrap_or("").to_string())
+        .collect()
+}

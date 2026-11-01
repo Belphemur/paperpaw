@@ -4,6 +4,7 @@
 //! - [`Database`] reads tables page by page from storage, so memory stays
 //!   at a page and the row at hand whatever the file's size. Rollback-journal
 //!   and WAL files (after a checkpoint) both work; free pages are ignored.
+//!   [`Database::scan_bounded`] passes over rows too large to hold.
 //! - [`Writer`] builds a new database file from rows and index entries
 //!   given in order: tables and indexes as B-trees written leaf by leaf,
 //!   long values in overflow pages, the schema on page 1.
@@ -25,7 +26,7 @@ mod record;
 mod varint;
 mod write;
 
-pub use read::{Database, SchemaEntry, columns};
+pub use read::{Database, Row, SchemaEntry, columns};
 pub use record::{Value, compare_records, decode_record, encode_record};
 pub use write::Writer;
 
