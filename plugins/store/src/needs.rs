@@ -50,6 +50,10 @@ pub(crate) struct Provides {
     pub families: [u16; FAMILIES],
     /// The oldest revision of each family it still runs.
     pub oldest: [u16; FAMILIES],
+    /// Whether the firmware checks families at all: it does on the X4's
+    /// chip (RISC-V) only, as [`Native::problem`] does, so a build for the
+    /// X4 Pro is not held back by families it never reads.
+    pub checks_families: bool,
 }
 
 impl Provides {
@@ -58,6 +62,9 @@ impl Provides {
             api: native.api_size,
             families: native.family_revs,
             oldest: native.family_min,
+            // The shell names the target it was built for; the chip is not
+            // in `Native`, and the RISC-V one is the X4's.
+            checks_families: native.toolchain.contains("riscv32"),
         }
     }
 
@@ -69,7 +76,8 @@ impl Provides {
         }
         let mut older = false;
         let mut newer = interface > INTERFACE || needs.api.is_some_and(|api| api > self.api);
-        if let Some(used) = needs.families {
+        let used = needs.families.filter(|_| self.checks_families);
+        if let Some(used) = used {
             for (i, &rev) in used.iter().enumerate().filter(|(_, rev)| **rev != 0) {
                 newer |= rev > self.families[i];
                 older |= rev < self.oldest[i];
@@ -97,6 +105,7 @@ mod tests {
             api: 400,
             families: [3, 2, 0, 0, 0, 0, 0, 0],
             oldest: [2, 1, 0, 0, 0, 0, 0, 0],
+            checks_families: true,
         }
     }
 
@@ -151,56 +160,65 @@ mod tests {
         assert_eq!(p.fit(&needing(500, [1, 0, 0, 0, 0, 0, 0, 0])), Fit::Newer);
     }
 
-    /// The firmware's own check says the same of a file that needs this.
+    /// The firmware's own check says the same of a file that needs this,
+    /// on the X4's chip (which checks families) and the X4 Pro's (which
+    /// does not).
     #[test]
     fn it_says_what_the_firmware_says_of_the_file() {
-        let mut native = Native::new("code.ppn");
-        native.api_size = 400;
-        native.family_revs = [3, 2, 0, 0, 0, 0, 0, 0];
-        native.family_min = [2, 1, 0, 0, 0, 0, 0, 0];
-        let provides = Provides::of(&native);
-        let base = Header {
-            chip: Chip::Esp32C3,
-            fingerprint: native.fingerprint.0,
-            base: 0,
-            image_len: 0,
-            code_at: 0,
-            entry: 0,
-            api: 0,
-            relocs: 0,
-            align: 4,
-            compiler: 0,
-            hot_at: 0,
-            hot_len: 0,
-            patches: 0,
-            needs_api: 0,
-            families: [0; 8],
-            interface: INTERFACE,
-            sha256: [0; 32],
-        };
-        for (api, families) in [
-            (400, [3, 2, 0, 0, 0, 0, 0, 0]),
-            (404, [0; 8]),
-            (400, [4, 0, 0, 0, 0, 0, 0, 0]),
-            (400, [0, 0, 1, 0, 0, 0, 0, 0]),
-            (0, [1, 0, 0, 0, 0, 0, 0, 0]),
-            (0, [2, 1, 0, 0, 0, 0, 0, 0]),
+        for (chip, toolchain) in [
+            (Chip::Esp32C3, "rustc 1.99.0, riscv32imc-unknown-none-elf"),
+            (Chip::Esp32S3, "esp 1.97.0.0, xtensa-esp32s3-none-elf"),
         ] {
-            let file = Header {
-                needs_api: api,
-                families,
-                ..base
+            let mut native = Native::new("code.ppn");
+            native.toolchain = toolchain.into();
+            native.api_size = 400;
+            native.family_revs = [3, 2, 0, 0, 0, 0, 0, 0];
+            native.family_min = [2, 1, 0, 0, 0, 0, 0, 0];
+            let provides = Provides::of(&native);
+            assert_eq!(provides.checks_families, chip == Chip::Esp32C3);
+            let base = Header {
+                chip,
+                fingerprint: native.fingerprint.0,
+                base: 0,
+                image_len: 0,
+                code_at: 0,
+                entry: 0,
+                api: 0,
+                relocs: 0,
+                align: 4,
+                compiler: 0,
+                hot_at: 0,
+                hot_len: 0,
+                patches: 0,
+                needs_api: 0,
+                families: [0; 8],
+                interface: INTERFACE,
+                sha256: [0; 32],
             };
-            let problem = native.problem(&file);
-            let fit = provides.fit(&needing(api, families));
-            let said = match fit {
-                Fit::Yes => None,
-                Fit::Newer => Some(PluginProblem::NeedsNewerPaperPaw),
-                Fit::Older => Some(PluginProblem::OlderInterface {
-                    built_for: INTERFACE,
-                }),
-            };
-            assert_eq!(problem, said, "{api} {families:?}");
+            for (api, families) in [
+                (400, [3, 2, 0, 0, 0, 0, 0, 0]),
+                (404, [0; 8]),
+                (400, [4, 0, 0, 0, 0, 0, 0, 0]),
+                (400, [0, 0, 1, 0, 0, 0, 0, 0]),
+                (0, [1, 0, 0, 0, 0, 0, 0, 0]),
+                (0, [2, 1, 0, 0, 0, 0, 0, 0]),
+            ] {
+                let file = Header {
+                    needs_api: api,
+                    families,
+                    ..base
+                };
+                let problem = native.problem(&file);
+                let fit = provides.fit(&needing(api, families));
+                let said = match fit {
+                    Fit::Yes => None,
+                    Fit::Newer => Some(PluginProblem::NeedsNewerPaperPaw),
+                    Fit::Older => Some(PluginProblem::OlderInterface {
+                        built_for: INTERFACE,
+                    }),
+                };
+                assert_eq!(problem, said, "{chip:?} {api} {families:?}");
+            }
         }
     }
 }

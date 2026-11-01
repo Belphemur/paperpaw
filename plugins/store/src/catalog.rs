@@ -525,7 +525,6 @@ impl Item {
                 "size" => build.size = value.parse().unwrap_or(0),
                 "sha256" => build.sha256 = value.to_ascii_lowercase(),
                 "image_len" => build.image_len = value.parse().ok(),
-                "interface" => build.needs.interface = value.parse().ok(),
                 "needs_api" => build.needs.api = value.parse().ok(),
                 "rebuilt" if value == "differs" => self.more.verified = "failed".into(),
                 _ => {}
@@ -564,6 +563,9 @@ impl Item {
         if !right || self.code.is_some() {
             return;
         }
+        // The interface is the fingerprint's own (the library's `interface`
+        // field says the same, and is not taken twice).
+        build.needs.interface = Fingerprint::parse(&build.abi).map(Fingerprint::interface);
         // Eight revisions, each a number: else the list is not read.
         build.needs.families = <[u16; crate::needs::FAMILIES]>::try_from(build.families.as_slice())
             .ok()

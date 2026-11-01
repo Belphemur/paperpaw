@@ -30,7 +30,7 @@ use paperpaw_sdk::{PluginKind, Storage, Version};
 const PAGE: &str = "https://paperpaw.org/api/v1/plugins/clock.json?device=x4&lang=en";
 const FILES: &str = "https://paperpaw.org/api/v1/plugins/clock";
 /// The build of this PaperPaw.
-const BUILD: Fingerprint = Fingerprint(0x0123_4567_89ab_cdef);
+const BUILD: Fingerprint = Fingerprint::of(paperpaw_sdk::native::INTERFACE, 0x4567_89ab_cdef);
 /// The seeds of the keys of the plugin's author and of someone else.
 const AUTHOR: [u8; 32] = [7; 32];
 const OTHER: [u8; 32] = [9; 32];
@@ -927,6 +927,7 @@ fn a_community_plugin_is_marked_and_its_key_may_not_change() {
 /// a table of 400 bytes.
 fn native_with_families() -> Native {
     let mut native = native();
+    native.toolchain = "rustc 1.99.0, riscv32imc-unknown-none-elf".into();
     native.api_size = 400;
     native.family_revs = [3, 2, 0, 0, 0, 0, 0, 0];
     native.family_min = [1, 1, 0, 0, 0, 0, 0, 0];
@@ -1004,4 +1005,21 @@ fn an_update_made_for_a_newer_paperpaw_is_not_offered_and_the_old_version_stays(
         shown.contains("Update") && !shown.contains("Needs a newer"),
         "{shown}"
     );
+}
+
+#[test]
+fn families_do_not_hold_back_a_build_on_a_chip_that_does_not_read_them() {
+    // The X4 Pro's firmware reads no families (`Native::problem`): a build
+    // that names one past its list is still for it.
+    let mut pro = native_with_families();
+    pro.toolchain = "esp 1.97.0.0, xtensa-esp32s3-none-elf".into();
+    let needs = "\"families\": [4, 0, 0, 0, 0, 0, 0, 0]";
+    let mut shopping = Shopping::on(Some("x4"), Some(pro), &needing(&list("1.0.0"), needs));
+    let code = ppn(BUILD, Some(&AUTHOR));
+    shopping.choose("Reading");
+    shopping.choose("Clock");
+    shopping.serve(PAGE, needing(&page("1.0.0", &code), needs).as_bytes());
+    let shown = shopping.shown();
+    assert!(!shown.contains("Needs a newer"), "{shown}");
+    assert!(shown.contains("Install"), "{shown}");
 }

@@ -19,7 +19,7 @@ use paperpaw_sdk::native::{Fingerprint, Native, installed_code};
 use paperpaw_sdk::{Id, Instant, Params, PluginKind, Storage};
 
 /// The build of this PaperPaw.
-const BUILD: Fingerprint = Fingerprint(0x0123_4567_89ab_cdef);
+const BUILD: Fingerprint = Fingerprint::of(paperpaw_sdk::native::INTERFACE, 0x4567_89ab_cdef);
 /// The seed of PaperPaw's key for its own plugins.
 const PAPERPAW: [u8; 32] = [5; 32];
 
