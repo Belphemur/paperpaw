@@ -121,12 +121,21 @@ pub fn accept_rotation(
 
 /// The keys the store said were revoked.
 pub fn revoked(storage: &dyn Storage) -> Vec<[u8; 32]> {
-    let Ok(text) = crate::read_file(storage, REVOKED, 64 * 1024) else {
-        return Vec::new();
-    };
-    core::str::from_utf8(&text)
-        .unwrap_or_default()
-        .lines()
+    match crate::files::load_for_update(storage, REVOKED, MAX_REVOKED_BYTES) {
+        Ok(Some(data)) => revoked_in(&data),
+        _ => Vec::new(),
+    }
+}
+
+/// How large the list of revoked keys may be: [`MAX_REVOKED`] lines of
+/// 65 bytes, with room for line breaks of two.
+const MAX_REVOKED_BYTES: usize = 64 * 1024;
+
+/// The revoked keys in `data`, a line each. A line that is none (a
+/// damaged byte) is left out on its own: the others stay revoked.
+fn revoked_in(data: &[u8]) -> Vec<[u8; 32]> {
+    data.split(|&b| b == b'\n')
+        .filter_map(|line| core::str::from_utf8(line).ok())
         .filter_map(|line| paperpaw_digest::hex::decode(line.trim())?.try_into().ok())
         .take(MAX_REVOKED)
         .collect()
@@ -144,8 +153,8 @@ pub enum RevokedError {
     /// More than [`MAX_REVOKED`] in all: those kept before and the first
     /// of the new ones up to it are kept, the rest not (tell the reader).
     Full,
-    /// They could not be written, or the list kept could not be read:
-    /// it stays as it is.
+    /// They could not be written, or the list kept could not be read
+    /// (too large, a failing card): it stays as it is.
     NotKept,
 }
 
@@ -157,11 +166,11 @@ pub enum RevokedError {
 #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub fn keep_revoked(storage: &dyn Storage, keys: &[[u8; 32]]) -> Result<(), RevokedError> {
     // A list there that cannot be read is not written over by a shorter
-    // one.
-    if crate::files::load_text_for_update(storage, REVOKED, 64 * 1024).is_err() {
-        return Err(RevokedError::NotKept);
-    }
-    let mut all = revoked(storage);
+    // one; one with damaged lines is written anew from the others.
+    let mut all = match crate::files::load_for_update(storage, REVOKED, MAX_REVOKED_BYTES) {
+        Ok(data) => data.as_deref().map(revoked_in).unwrap_or_default(),
+        Err(_) => return Err(RevokedError::NotKept),
+    };
     let before = all.len();
     let mut full = false;
     for key in keys {
@@ -370,8 +379,36 @@ mod tests {
         assert_eq!((kept[0], kept[1]), (AUTHOR, many[0]));
         assert!(is_revoked(&storage, &many[MAX_REVOKED - 2]));
         assert!(!is_revoked(&storage, &many[MAX_REVOKED - 1]));
-        // A list that cannot be read is not written over.
-        storage.write(REVOKED, &[0xff, 0xfe, b'\n']).unwrap();
-        assert_eq!(keep_revoked(&storage, &[NEW]), Err(RevokedError::NotKept));
+    }
+
+    /// A damaged line leaves the others revoked, and does not keep new
+    /// keys out: the list is written anew from what can be read. One that
+    /// cannot be read at all (too large) is not written over.
+    #[test]
+    fn a_damaged_line_costs_only_itself() {
+        let storage = crate::MemoryStorage::new();
+        let mut text = alloc::format!("{}\n", paperpaw_digest::hex::encode(&AUTHOR)).into_bytes();
+        text.extend_from_slice(&[0xff, 0xfe, b'\n']);
+        text.extend_from_slice(
+            alloc::format!("{}\r\n", paperpaw_digest::hex::encode(&[3; 32])).as_bytes(),
+        );
+        storage.write(REVOKED, &text).unwrap();
+        assert_eq!(revoked(&storage), [AUTHOR, [3; 32]]);
+        assert_eq!(keep_revoked(&storage, &[NEW]), Ok(()));
+        assert_eq!(revoked(&storage), [AUTHOR, [3; 32], NEW]);
+        assert!(
+            !crate::read_file(&storage, REVOKED, MAX_REVOKED_BYTES)
+                .unwrap()
+                .contains(&0xff)
+        );
+
+        storage
+            .write(REVOKED, &alloc::vec![b'0'; MAX_REVOKED_BYTES + 1])
+            .unwrap();
+        assert_eq!(
+            keep_revoked(&storage, &[[4; 32]]),
+            Err(RevokedError::NotKept)
+        );
+        assert_eq!(storage.size(REVOKED), Ok(MAX_REVOKED_BYTES as u64 + 1));
     }
 }

@@ -107,7 +107,8 @@ are reported as [SECURITY.md](../SECURITY.md) says.
   only an update by the new key runs. Keys the store says were
   **revoked** (stolen; `.paperpaw/revoked-keys.txt`) stop their authors'
   code: the kernel does not load it (`Revoked`); a key once revoked is
-  never taken off the list, whatever a later list says. From the web flasher and from a
+  never taken off the list, whatever a later list says, and a damaged line
+  costs only its own key. From the web flasher and from a
   computer the firmware also takes a file not signed (one's own build):
   from the flasher only for a plugin that has no author's key remembered
   yet, from a computer only once the reader said yes to its code on the
