@@ -1121,7 +1121,14 @@ pub fn draw_lines(
             false => inks.get(i).copied().flatten(),
         };
         let baseline = (top + line.baseline + 0.5) as i32;
-        let above = baseline - (2.0 * page_type.line_height) as i32;
+        // Letters reach up to two lines, or as high as the line's largest
+        // text (a drop capital spans several lines above its baseline).
+        let tallest = line
+            .runs
+            .iter()
+            .map(|run| faces.size(run.face))
+            .fold(0.0f32, f32::max);
+        let above = baseline - (2.0 * page_type.line_height).max(1.2 * tallest) as i32;
         let below = baseline + page_type.line_height as i32;
         let shown = below >= i32::from(clip.y) && above <= clip.bottom() as i32;
         if !shown {

@@ -13,7 +13,8 @@
 //!   in percent of its text size (0 if it sets none), its language as
 //!   `Lang` bits (u32), its direction (u8: 0 from its text, 1 left to
 //!   right, 2 right to left), the number of its inline languages (u8,
-//!   their `Lang` bits as u32 each after its style runs) and two bytes 0.
+//!   their `Lang` bits as u32 each after its style runs), the lines of
+//!   its drop capital (u8, 0 for none) and a byte 0.
 //!   Kept apart from the
 //!   text so positions in it stay the same when more is stored per
 //!   block.
@@ -67,7 +68,7 @@ mod direction;
 mod elements;
 use crate::package::error;
 pub(crate) use direction::{BookText, dir_from_bits};
-use elements::{element_props, furniture, heading_level, is_block, is_void, styled};
+use elements::{element_props, furniture, heading_level, is_block, is_capital, is_void, styled};
 
 /// Size of a record header.
 pub(crate) const HEADER: u32 = 8;
@@ -346,6 +347,9 @@ struct Converter<'a> {
     dir: Option<Direction>,
     lang: Option<Lang>,
     inline_langs: Vec<Lang>,
+    /// The lines of the current block's drop capital, and the depth of
+    /// the element that asked for it while it is open.
+    drop_cap: (u8, Option<usize>),
     /// The book's indent of the current block, set by its first character.
     indent: Option<i16>,
     /// The book's text size of the current block, set likewise.
@@ -419,10 +423,13 @@ impl Converter<'_> {
             }
             self.dir.get_or_insert(dir);
             self.lang.get_or_insert(lang);
-            self.indent = self.stack.last().and_then(|f| f.indent);
-            self.size = self.stack.last().and_then(|f| f.size);
-            self.margins = self.stack.last().map_or((0, 0), |f| f.margins);
-            self.line_height = self.stack.last().and_then(|f| f.line_height);
+            // The block's, not a drop capital's (its large size).
+            let cap = self.drop_cap.1.map(|at| at.checked_sub(1));
+            let block = cap.map_or(self.stack.last(), |at| at.and_then(|at| self.stack.get(at)));
+            self.indent = block.and_then(|f| f.indent);
+            self.size = block.and_then(|f| f.size);
+            self.margins = block.map_or((0, 0), |f| f.margins);
+            self.line_height = block.and_then(|f| f.line_height);
             self.block_path.clone_from(&self.path);
         }
         let start = self.text.len() as u32;
@@ -684,6 +691,11 @@ impl Converter<'_> {
             Some(size) => Some(size.of(parent_size.unwrap_or(100))),
             None => parent_size,
         };
+        // A drop capital: an element that starts a paragraph asks for one.
+        if self.text.is_empty() && !is_block(&tag) && self.drop_cap.1.is_none() {
+            let lines = elements::drop_cap(&props, size, parent_size);
+            self.drop_cap = (lines, (lines > 0).then_some(self.stack.len()));
+        }
         // Paragraphs take the direction of the block elements around them
         // (inline ones are not set apart yet); text the language of the
         // innermost element that names one.
@@ -905,6 +917,9 @@ impl Converter<'_> {
             }
         }
         self.close_inline(open);
+        if self.drop_cap.1 == Some(open) && !is_capital(&self.text) {
+            self.drop_cap = (0, None);
+        }
         if let Some(frame) = self.stack.get(open) {
             self.path.truncate(frame.path);
         }
@@ -1108,6 +1123,7 @@ impl Converter<'_> {
         self.dir = None;
         self.lang = None;
         self.inline_langs.clear();
+        self.drop_cap = (0, None);
         self.indent = None;
         self.size = None;
         self.margins = (0, 0);
@@ -1204,7 +1220,7 @@ impl Converter<'_> {
         self.index.extend_from_slice(&lang.to_bits().to_le_bytes());
         let langs = self.inline_langs.len() as u8;
         self.index
-            .extend_from_slice(&[direction::dir_bits(dir), langs, 0, 0]);
+            .extend_from_slice(&[direction::dir_bits(dir), langs, self.drop_cap.0, 0]);
         if self.index.len() >= FLUSH_SMALL {
             self.write_index();
         }
@@ -1412,6 +1428,7 @@ pub(crate) fn convert(
         dir: None,
         lang: None,
         inline_langs: Vec::new(),
+        drop_cap: (0, None),
         indent: None,
         size: None,
         margins: (0, 0),

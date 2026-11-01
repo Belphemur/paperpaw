@@ -2,7 +2,8 @@
 //! white (`core.smooth-text`), and how dark (`core.text-contrast`). A page
 //! of text without smooth letters asks for no refresh in grays on a panel
 //! of black and white; sharp letters have no grays; darker steps ink
-//! more; the defaults draw as before. And where lines are set: hanging
+//! more; the defaults draw as before. And drop capitals: a book's large
+//! first letter set over its first lines. And where lines are set: hanging
 //! punctuation (`core.hanging-punctuation`) moves marks, never lines.
 
 #![allow(
@@ -153,4 +154,85 @@ fn hanging_punctuation_moves_marks_out_and_keeps_the_lines() {
             .max()
     };
     assert!(right(&hung_lines) > right(&plain_lines));
+}
+
+/// A book whose paragraph starts with a drop capital as EPUBs set one
+/// (a large letter floated left), or the same letter without its style;
+/// in the reader's font (bitmap packs here, as on the X4), or in the
+/// book's own, scalable one (Literata, embedded).
+fn capital_book(capital: bool, embedded: bool) -> Reading {
+    use paperpaw_zip::testing::ZipBuilder;
+    const LITERATA: &[u8] = include_bytes!("../../fonts-default/fonts/Literata.ttf");
+    let mut css = String::from(".dc { float: left; font-size: 3em }\n");
+    if embedded {
+        css.push_str("@font-face { font-family: B; src: url(fonts/b.ttf) } p { font-family: B }\n");
+    }
+    let class = if capital { " class=\"dc\"" } else { "" };
+    let words = "lorem ipsum dolor sit amet ".repeat(30);
+    let chapter = format!(
+        r#"<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml"><head><title>c</title>
+<link rel="stylesheet" type="text/css" href="style.css"/></head>
+<body><p><span{class}>L</span>orem {words}</p></body></html>"#
+    );
+    let opf = r#"<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Capital</dc:title><dc:language>en</dc:language></metadata>
+  <manifest><item id="c" href="c.xhtml" media-type="application/xhtml+xml"/>
+  <item id="s" href="style.css" media-type="text/css"/>
+  <item id="f" href="fonts/b.ttf" media-type="font/ttf"/></manifest>
+  <spine><itemref idref="c"/></spine>
+</package>"#;
+    let container = r#"<?xml version="1.0"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles>
+</container>"#;
+    let data = ZipBuilder::new()
+        .stored("mimetype", "application/epub+zip")
+        .deflated("META-INF/container.xml", container)
+        .deflated("OEBPS/content.opf", opf)
+        .deflated("OEBPS/style.css", css)
+        .stored("OEBPS/fonts/b.ttf", LITERATA)
+        .deflated("OEBPS/c.xhtml", chapter)
+        .build();
+    let mut reading = Reading::new(MONO, Shared::default(), "books/capital.epub", &data, "");
+    reading.open();
+    reading
+}
+
+#[test]
+fn a_drop_capital_spans_the_first_lines_and_its_word_stays_whole() {
+    let (mut plain, mut capped) = (capital_book(false, true), capital_book(true, true));
+    let (plain_lines, capped_lines) = (plain.lines(3), capped.lines(3));
+    let height = |line: &Line| line.0.1 - line.0.0;
+    // The capital's ink joins the rows of the lines beside it into one,
+    // as high as more than two of them.
+    assert!(
+        height(&capped_lines[0]) > 2 * height(&plain_lines[0]),
+        "{:?} {:?}",
+        capped_lines[0].0,
+        plain_lines[0].0
+    );
+    // It stands at the margin, its first lines set in beside it.
+    let margin = plain_lines[1].1[0].0;
+    let (capital, beside) = (capped_lines[0].1[0].0, capped_lines[0].1[1].0);
+    // (Its ink a little in: a large letter's side bearing.)
+    assert!(capital.abs_diff(margin) <= 15, "{capital} {margin}");
+    assert!(beside > margin + 20, "{beside} {margin}");
+    // A bookmark's text has the word whole.
+    capped.run(paperpaw_plugin_reader::actions::TOGGLE_BOOKMARK);
+    let kept = paperpaw_sdk::annotations::load(&capped.storage, "books/capital.epub");
+    assert_eq!(kept.len(), 1);
+    assert!(
+        kept[0].text.starts_with("Lorem lorem ipsum"),
+        "{:?}",
+        kept[0].text
+    );
+}
+
+#[test]
+fn in_a_font_of_fixed_sizes_a_drop_capital_is_left_out() {
+    // The packs are no larger than a heading: the page as without it.
+    let page = |capital: bool| capital_book(capital, false).snapshot();
+    assert_eq!(page(true), page(false));
 }

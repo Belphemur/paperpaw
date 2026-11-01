@@ -480,3 +480,51 @@ fn sides_lists_marks_and_line_heights_of_the_book_come_along() {
     assert_eq!(block("Airy").line_height, Some(180));
     assert_eq!(block("Quoted").line_height, None);
 }
+
+#[test]
+fn drop_capitals_come_from_a_large_letter_floated_left_or_initial_letter() {
+    let caps = |body: &str| -> Vec<u8> {
+        let (storage, doc) = one(body);
+        blocks(&doc, &storage)
+            .into_iter()
+            .map(|(_, b)| b.drop_cap)
+            .collect()
+    };
+    let floated = "<span style=\"float: left; font-size: 3em\">L</span>orem ipsum";
+    // Three ems over lines of 1.2: three lines; only where it starts the
+    // paragraph, which takes it.
+    assert_eq!(caps(&format!("<p>{floated}</p><p>Lorem</p>")), [3, 0]);
+    assert_eq!(caps(&format!("<p>Lorem {floated}</p>")), [0]);
+    // An opening quote may go with the letter; a whole word is no
+    // capital, nor a letter as large as the text, nor one not floated.
+    assert_eq!(
+        caps("<p><span style=\"float:left;font-size:2em\">\u{201c}A</span>b</p>"),
+        [2]
+    );
+    assert_eq!(
+        caps("<p><span style=\"float:left;font-size:3em\">Lorem</span> ipsum</p>"),
+        [0]
+    );
+    assert_eq!(caps("<p><span style=\"float:left\">L</span>orem</p>"), [0]);
+    assert_eq!(
+        caps("<p><span style=\"font-size:3em\">L</span>orem</p>"),
+        [0]
+    );
+    // CSS `initial-letter`, its sink left out; nonsense is none.
+    assert_eq!(
+        caps("<p><span style=\"initial-letter: 4 3\">L</span>orem</p>"),
+        [4]
+    );
+    assert_eq!(
+        caps("<p><span style=\"initial-letter: -7\">L</span>orem</p>"),
+        [0]
+    );
+    assert_eq!(
+        caps("<p><span style=\"initial-letter: x\">L</span>orem</p>"),
+        [0]
+    );
+    // From the book's stylesheet too, by class.
+    let styled = "<style>.dc { float: left; font-size: 400% }</style>\
+                  <p><span class=\"dc\">L</span>orem ipsum</p>";
+    assert_eq!(caps(styled), [3]);
+}

@@ -22,9 +22,13 @@ change the plugin SDK.
   just outside the text, so its edges look straight (optical margin alignment). Lines break as before, so pages hold
   the same text and kept page indexes stay valid; only left-to-right lines hang. The layout does what the reserved
   `ScriptOptions::HANGING_PUNCTUATION` bit names; no SDK change.
-
-### Changed
-
+- Drop capitals: a book's large first letter (an EPUB's letter floated left at 1.5 times the text size or more, or
+  CSS `initial-letter`) is set over the paragraph's first two to five lines, which are set in beside it. Only
+  paragraphs that run left to right and start with a letter (after an opening quote or two); a paragraph of fewer
+  lines gets a smaller capital. Only where the font can be drawn that large: fonts of fixed sizes (the X4's font
+  packs) show the paragraph as before. The layout does what the reserved `Block::drop_cap` names (no SDK change).
+  EPUB chapters converted before keep no capitals until they are converted again. The paragraph's own size is no
+  longer taken from such a letter (it was set as large as the letter before).
 - Line breaking follows Unicode (UAX #14) where the text needs it: Korean breaks between syllables, Chinese and
   Japanese between characters, never before a closing mark (。」) or after an opening one (「), and U+200B (the zero
   width space) is a place to break; it and the word joiner U+2060 are now zero width and not drawn (they took

@@ -1204,10 +1204,25 @@ impl ReaderScreen {
 /// The words of `lines` with their places, from the lines (nothing
 /// measured); a word broken at the end of a line is its two parts, each
 /// with the whole word as its text (see `reading::Word`).
+/// Whether line `i` of `lines` is a drop capital: it stands on the
+/// baseline of a line after it, the one beside it, which goes on with its
+/// word.
+pub(super) fn is_capital(lines: &[PageLine], i: usize) -> bool {
+    let (Some(line), Some(next)) = (lines.get(i), lines.get(i + 1)) else {
+        return false;
+    };
+    next.baseline <= line.baseline
+}
+
 pub(super) fn page_words(lines: &[PageLine]) -> Vec<paperpaw_sdk::reading::Word> {
     use paperpaw_sdk::reading::Word;
     let mut words: Vec<Word> = Vec::new();
-    for line in lines {
+    // The words that are drop capitals.
+    let mut capitals = Vec::new();
+    for (i, line) in lines.iter().enumerate() {
+        if is_capital(lines, i) {
+            capitals.push(words.len());
+        }
         let parts = line.text.split(' ').filter(|part| !part.is_empty());
         for (part, &(start, end)) in parts.zip(&line.words) {
             // Without the controls an EPUB's `dir` puts in, which draw
@@ -1225,7 +1240,17 @@ pub(super) fn page_words(lines: &[PageLine]) -> Vec<paperpaw_sdk::reading::Word>
     }
     for i in 1..words.len() {
         let (first, next) = (&words[i - 1], &words[i]);
-        if !first.text.ends_with('-') || next.start != first.end {
+        if next.start != first.end {
+            continue;
+        }
+        if capitals.contains(&(i - 1)) {
+            // A drop capital: the word it starts.
+            let whole = format!("{}{}", first.text, next.text);
+            words[i - 1].text.clone_from(&whole);
+            words[i].text = whole;
+            continue;
+        }
+        if !first.text.ends_with('-') {
             continue;
         }
         // The layout's hyphen where the word is shorter in the book.
@@ -1254,6 +1279,12 @@ pub(super) fn page_text(lines: &[PageLine]) -> String {
         }
         if i > 0 && !joined && !out.is_empty() {
             out.push(' ');
+        }
+        if is_capital(lines, i) {
+            // The word it starts goes on beside it.
+            out.push_str(&line.text);
+            joined = true;
+            continue;
         }
         let last = line.words.last().copied();
         let next = lines.get(i + 1).filter(|n| n.section == line.section);

@@ -2,7 +2,9 @@
 
 use super::*;
 use alloc::vec;
-use paperpaw_document::{MAX_INSERTED, MAX_INSERTED_TEXT, Metadata, NoStorage, OffsetMap, Run};
+use paperpaw_document::{
+    Direction, MAX_INSERTED, MAX_INSERTED_TEXT, Metadata, NoStorage, OffsetMap, Run,
+};
 
 /// Paragraphs separated by single newlines; offsets are bytes. Lines
 /// starting with `#` are headings; `*word*` is bold.
@@ -920,6 +922,7 @@ fn reserved_parts_are_built_whole() {
     assert!(LineBidi::new(3, LineBidi::REORDER | LineBidi::VERTICAL).is_rtl());
 }
 
+mod drop_cap;
 mod hanging;
 mod rtl;
 
