@@ -18,8 +18,21 @@ pub struct Addresses<const N: usize>(pub [*const (); N]);
 // never written.
 unsafe impl<const N: usize> Sync for Addresses<N> {}
 
+// Only where a plugin can call the tables: a RISC-V chip's firmware, and
+// a computer's build (the tests of table mode). Elsewhere (the X4 Pro's
+// Xtensa chip) the addresses would only keep the firmware's compiler from
+// inlining the shared functions into their one caller.
+#[cfg(any(target_arch = "riscv32", not(target_os = "none")))]
 #[path = "shared_table.rs"]
 mod tables;
+
+/// A chip whose plugins carry their own copies: no tables.
+#[cfg(not(any(target_arch = "riscv32", not(target_os = "none"))))]
+mod tables {
+    pub(super) const fn of(_: usize) -> paperpaw_table::Table {
+        paperpaw_table::Table::NONE
+    }
+}
 
 /// The table of `family`, [`Table::NONE`] for one the firmware does not
 /// share. The revisions of the families are `paperpaw_table::REVISIONS`.
