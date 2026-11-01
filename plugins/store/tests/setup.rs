@@ -151,10 +151,10 @@ fn the_offer_says_a_full_install_gives_more_room_only_on_the_stock_layout() {
             "{room}: {shown}"
         );
         if said {
-            assert!(shown.contains("Room for code plugins: 1.1 MB"), "{shown}");
+            assert!(shown.contains("Room for plugins: 1.1 MB"), "{shown}");
             assert!(shown.contains("about 2.9 MB"), "{shown}");
         } else {
-            assert!(!shown.contains("Room for code plugins"), "{room}: {shown}");
+            assert!(!shown.contains("Room for plugins"), "{room}: {shown}");
         }
     }
     // And not on a device with no room for code of its own to speak of.

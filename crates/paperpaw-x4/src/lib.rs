@@ -40,6 +40,7 @@ pub mod cw2017;
 pub mod dhcp;
 pub mod display;
 pub mod ds3231;
+pub mod flash_room;
 pub mod generation;
 pub mod gt911;
 pub mod install_note;

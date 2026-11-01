@@ -199,25 +199,42 @@ impl Flash {
     /// the store then says has no room. `None` where the running image
     /// cannot be measured.
     pub fn room(&self) -> Option<CodeRoom> {
-        let (start, end, images_end) = match &self.layout {
+        let (start, end, images_end, free_total) = match &self.layout {
             Some(Some(layout)) => {
                 let region = layout.region();
-                (region.start, region.end, layout.end())
+                // The entries the region itself holds are free again for a
+                // full flash.
+                let mapped = region.end.div_ceil(PAGE) - region.start / PAGE;
+                (
+                    region.start,
+                    region.end,
+                    layout.end(),
+                    free_entries().1 + mapped,
+                )
             }
             Some(None) | None => {
                 let behind = behind_image(&mut self.flash.borrow_mut()).ok()?;
                 let (_, free) = free_entries();
                 let first_page = behind.start / PAGE;
                 let end = behind.end.min((first_page + free) * PAGE);
-                (behind.start, end, behind.start)
+                (behind.start, end, behind.start, free)
             }
         };
         let room = CodeRoom::in_flash(start, end, images_end, self.placed);
         // A slot smaller than PaperPaw's own (a CrossPoint SD install):
-        // the store says a full flash gives more.
+        // the store says a full flash gives more, as much as the MMU's
+        // free entries let plugins use of its larger slot, not the raw
+        // difference.
         Some(match running_partition(&mut self.flash.borrow_mut()) {
-            Ok((_, slot)) => room.in_slot(slot, OWN_SLOT),
-            Err(_) => room,
+            Ok((offset, slot)) if slot < OWN_SLOT => {
+                let len = paperpaw_x4::flash_room::full_flash_len(
+                    start, offset, OWN_SLOT, free_total, PAGE,
+                );
+                let full = CodeRoom::in_flash(start, start.saturating_add(len), start, 0);
+                let growth = u32::try_from(full.total.saturating_sub(room.total)).unwrap_or(0);
+                room.in_slot(slot, slot.saturating_add(growth))
+            }
+            _ => room,
         })
     }
 
