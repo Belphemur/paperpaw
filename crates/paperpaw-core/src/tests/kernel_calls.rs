@@ -222,6 +222,67 @@ fn subscriptions_kept_in_the_program_are_heard() {
     assert!(effects.power_off() && !effects.sleep());
 }
 
+/// Asks for the card as a USB drive at the start, and notes what it
+/// hears after.
+struct Drive {
+    log: Log,
+}
+
+impl Plugin for Drive {
+    fn manifest(&self) -> Manifest {
+        Manifest::new(Id::new_static("drive"), "Drive", Version::new(1, 0, 0))
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        use paperpaw_sdk::builtin::events;
+        r.on(events::STARTED, |_, _, out| out.push(Command::UsbDrive))?;
+        for (event, name) in [
+            (events::RESUME.id(), "resume"),
+            (events::USB_DRIVE_ENDED.id(), "ended"),
+            (events::LIBRARY_CHANGED.id(), "library"),
+        ] {
+            let log = self.log.clone();
+            r.subscribe(
+                event.clone(),
+                Box::new(move |_, _, _| log.borrow_mut().push(String::from(name))),
+            )?;
+        }
+        Ok(())
+    }
+}
+
+#[test]
+fn the_card_goes_to_a_computer_as_a_drive_where_the_device_can() {
+    // Where it cannot, nothing happens.
+    let log = log();
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(Drive { log: log.clone() })
+        .build()
+        .unwrap();
+    assert!(!kernel.start(Instant(0)).usb_drive());
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(Drive { log: log.clone() })
+        .capability(paperpaw_sdk::Capability::USB_DRIVE)
+        .build()
+        .unwrap();
+    assert!(
+        kernel
+            .shared
+            .env(Instant(0))
+            .caps()
+            .has(paperpaw_sdk::Capability::USB_DRIVE)
+    );
+    let effects = kernel.start(Instant(0));
+    assert!(effects.usb_drive() && !effects.power_off());
+    assert!(effects.iter().any(|e| e == crate::Effect::UsbDrive));
+    // The computer had it; back: woken, told, the library walked anew.
+    kernel.suspend(Instant(10));
+    log.borrow_mut().clear();
+    let effects = kernel.usb_drive_ended(Instant(60_000));
+    assert!(!effects.usb_drive());
+    assert_eq!(*log.borrow(), ["resume", "ended", "library"]);
+}
+
 #[test]
 fn plugins_switch_the_device_off_where_the_shell_can() {
     // Where the system decides (Android), nothing happens.

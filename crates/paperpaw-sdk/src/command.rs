@@ -916,6 +916,15 @@ pub enum Command {
     /// the next start is a cold one. Ignored elsewhere; to put the device
     /// to sleep, [`Command::Sleep`].
     PowerOff,
+    /// Shows the card to a computer as a USB drive once the frame is shown,
+    /// where the device can ([`Capability::USB_DRIVE`](crate::Capability)):
+    /// plugins hear [`events::SUSPEND`](crate::builtin::events::SUSPEND)
+    /// first and PaperPaw leaves the card alone while the computer has it;
+    /// when it ejects it or the cable goes, plugins hear
+    /// [`events::USB_DRIVE_ENDED`](crate::builtin::events::USB_DRIVE_ENDED)
+    /// and the library is walked anew. The frame shown should say that the
+    /// device is connected to a computer. Ignored elsewhere.
+    UsbDrive,
 }
 
 impl Command {

@@ -610,6 +610,11 @@ pub const SUSPEND: Event<()> = Event::new("core.suspend");
 /// the sleep, so a plugin that does something on waking needs nothing
 /// more; a power-up with no sleep before it sends [`STARTED`] alone.
 pub const RESUME: Event<()> = Event::new("core.resume");
+/// The card is PaperPaw's again after a computer had it as a USB drive
+/// ([`Command::UsbDrive`](crate::Command::UsbDrive)): files may have come,
+/// gone or changed; what a plugin keeps of the card it reads anew. The
+/// kernel walks the library anew too.
+pub const USB_DRIVE_ENDED: Event<()> = Event::new("core.usb-drive-ended");
 /// PaperPaw stops (the device restarts, or an app closes for good):
 /// save what is pending, as at [`SUSPEND`]; the device may lose its
 /// power right after. No [`RESUME`] follows, and it is no sleep.

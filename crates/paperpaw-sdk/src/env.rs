@@ -109,6 +109,9 @@ impl Capability {
     /// ([`Painters::extras`](crate::ui::look::Painters::extras)); where it
     /// is missing none is asked.
     pub const LOOK_EXTRAS: Self = Self(1 << 10);
+    /// The card can be shown to a computer as a USB drive
+    /// ([`Command::UsbDrive`](crate::Command::UsbDrive)), e.g. the X4 Pro.
+    pub const USB_DRIVE: Self = Self(1 << 11);
 }
 
 impl Capabilities {

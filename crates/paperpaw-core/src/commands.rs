@@ -90,6 +90,7 @@ impl Kernel {
             restart: mem::take(&mut self.restart),
             sleep: mem::take(&mut self.sleep),
             power_off: mem::take(&mut self.power_off),
+            usb_drive: mem::take(&mut self.usb_drive),
             pace: mode.frame_interval(),
             ..Effects::default()
         };
@@ -400,6 +401,9 @@ impl Kernel {
             Command::InstallPlugin(id, folder) => self.install_plugin(&id, &folder),
             Command::Sleep => self.sleep = self.shared.caps.sleep,
             Command::PowerOff => self.power_off = self.shared.caps.power_off,
+            Command::UsbDrive => {
+                self.usb_drive = self.shared.caps.has(paperpaw_sdk::Capability::USB_DRIVE);
+            }
             Command::KeepAwake(hold) => self.keep_awake(hold),
             Command::LetSleep(id) => self.let_sleep(&id),
             // Keys of later releases: none known yet, left as they are.

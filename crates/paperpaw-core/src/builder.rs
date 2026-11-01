@@ -355,6 +355,14 @@ impl KernelBuilder {
         self
     }
 
+    /// The device can do `capability` too
+    /// ([`Capabilities::has`](paperpaw_sdk::Capabilities::has)), e.g.
+    /// [`Capability::USB_DRIVE`](paperpaw_sdk::Capability::USB_DRIVE).
+    pub fn capability(mut self, capability: paperpaw_sdk::Capability) -> Self {
+        self.0.caps = self.0.caps.with(capability);
+        self
+    }
+
     /// What the shell changes by the power level
     /// ([`Capabilities::power`](paperpaw_sdk::Capabilities::power)), read
     /// from [`Kernel::power`]; without, nothing beyond what every device
@@ -677,6 +685,7 @@ impl BuilderParts {
             restart: false,
             sleep: false,
             power_off: false,
+            usb_drive: false,
             suspended_at: None,
             hint: hints::HintRow::new(self.button_row),
             busy_mark: self.busy_mark,
