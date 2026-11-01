@@ -1031,7 +1031,7 @@ impl Kernel {
             )
             .description("core.setting.reading-app.format.help")
             .with_extra(&READING_APPS);
-            spec.title = title;
+            spec.title = paperpaw_sdk::Str::new(title);
             let _ = self.shared.settings.define(spec);
         }
     }

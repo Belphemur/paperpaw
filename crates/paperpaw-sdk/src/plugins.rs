@@ -335,8 +335,8 @@ mod tests {
         PluginInfo {
             manifest: Manifest {
                 id: Id::new_static(id),
-                name: Cow::Borrowed("Name"),
-                description: Cow::Borrowed("Does things."),
+                name: crate::Str::new_static("Name"),
+                description: crate::Str::new_static("Does things."),
                 version: Version::new(1, 0, 0),
                 uses: crate::Uses::NOTHING,
                 how: &[],

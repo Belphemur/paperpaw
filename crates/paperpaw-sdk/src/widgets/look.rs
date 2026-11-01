@@ -374,7 +374,7 @@ pub fn part_setting(
         widget.clone(),
     )
     .description("core.setting.part.help");
-    spec.title = title.into();
+    spec.title = crate::Str::new(title);
     spec
 }
 
@@ -399,7 +399,7 @@ pub fn choice_setting(
         SettingValue::Text(Cow::Borrowed(default)),
         widget.clone(),
     );
-    spec.title = title.into();
+    spec.title = crate::Str::new(title);
     spec
 }
 

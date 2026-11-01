@@ -30,7 +30,7 @@ pub(crate) struct Text {
 const OWNED: usize = 1 << (usize::BITS - 1);
 
 impl Text {
-    const fn borrowed(text: &'static str) -> Self {
+    pub(crate) const fn borrowed(text: &'static str) -> Self {
         // SAFETY: a reference's pointer is never null.
         let start = unsafe { NonNull::new_unchecked(text.as_ptr().cast_mut()) };
         Self {
@@ -60,6 +60,18 @@ impl Text {
 
     const fn is_owned(&self) -> bool {
         self.len & OWNED != 0
+    }
+
+    /// The text where it is kept in the program, not owned.
+    pub(crate) const fn kept(&self) -> Option<&'static str> {
+        if self.is_owned() {
+            return None;
+        }
+        // SAFETY: not owned: text kept in the program.
+        unsafe {
+            let bytes = core::slice::from_raw_parts(self.start.as_ptr(), self.len);
+            Some(core::str::from_utf8_unchecked(bytes))
+        }
     }
 
     const fn as_str(&self) -> &str {

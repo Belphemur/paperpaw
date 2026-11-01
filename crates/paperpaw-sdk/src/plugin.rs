@@ -13,10 +13,10 @@ pub struct Manifest {
     pub id: Id,
     /// Human-readable name in English. Plugins translate it with the key
     /// `<id>.plugin.name`.
-    pub name: Cow<'static, str>,
+    pub name: crate::Str,
     /// What the plugin does, one English sentence for plugin managers.
     /// Plugins translate it with the key `<id>.plugin.description`.
-    pub description: Cow<'static, str>,
+    pub description: crate::Str,
     pub version: Version,
     /// What it uses beyond its own files, e.g. the network: shown before
     /// it is installed, and the kernel refuses what is not declared
@@ -32,16 +32,16 @@ impl Manifest {
     pub fn new(id: Id, name: impl Into<Cow<'static, str>>, version: Version) -> Self {
         Self {
             id,
-            name: name.into(),
+            name: crate::Str::new(name),
             version,
-            description: Cow::Borrowed(""),
+            description: crate::Str::new_static(""),
             uses: Uses::default(),
             how: &[],
         }
     }
 
     pub fn description(mut self, description: impl Into<Cow<'static, str>>) -> Self {
-        self.description = description.into();
+        self.description = crate::Str::new(description);
         self
     }
 

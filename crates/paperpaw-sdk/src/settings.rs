@@ -173,7 +173,7 @@ pub struct SettingSpec {
     /// `<plugin>.<name>`; in configuration files written as `[<plugin>] <name> = …`.
     pub id: Id,
     /// Translation key of the setting's display name.
-    pub title: Cow<'static, str>,
+    pub title: crate::Str,
     pub kind: SettingKind,
     pub default: SettingValue,
     /// The group it is shown in, e.g.
@@ -181,7 +181,7 @@ pub struct SettingSpec {
     pub group: Id,
     pub level: Level,
     /// Translation key of a short help text.
-    pub description: Option<Cow<'static, str>>,
+    pub description: Option<crate::Str>,
     /// May differ per scope, e.g. per book (see [`Settings::scope`]).
     pub scoped: bool,
     /// It keeps the device safe (a lock's): changed by its own plugin and
@@ -458,7 +458,7 @@ impl SettingSpec {
     ) -> Self {
         Self {
             id,
-            title: Cow::Borrowed(title),
+            title: crate::Str::new_static(title),
             kind,
             default,
             group,
@@ -570,7 +570,7 @@ impl SettingSpec {
 
     /// With a help text, the translation key `key`.
     pub const fn description(mut self, key: &'static str) -> Self {
-        core::mem::forget(self.description.replace(Cow::Borrowed(key)));
+        core::mem::forget(self.description.replace(crate::Str::new_static(key)));
         self
     }
 

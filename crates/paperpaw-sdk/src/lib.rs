@@ -122,6 +122,7 @@ pub mod setup;
 ))]
 #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub mod shared;
+mod shared_str;
 pub mod status;
 pub mod time;
 pub mod ui;
@@ -187,6 +188,7 @@ pub use settings::{
     Choices, Editor, Level, SettingCheck, SettingError, SettingExtra, SettingGroup,
     SettingGroupSpec, SettingKind, SettingSpec, SettingValue, Settings,
 };
+pub use shared_str::Str;
 pub use version::{DATA_FORMATS, SDK_VERSION, Version};
 
 /// Round shapes' geometry: angles as on a clock face, points around a

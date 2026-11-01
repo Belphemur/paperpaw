@@ -2,8 +2,6 @@
 //! defaults, bounds and help.
 
 #[cfg(any(test, feature = "kernel"))]
-use alloc::borrow::Cow;
-
 #[cfg(any(test, feature = "kernel"))]
 use super::{SettingError, SettingKind, Settings};
 
@@ -41,7 +39,7 @@ impl Settings {
     pub fn set_description(&mut self, id: &str, key: &'static str) -> bool {
         match self.specs.get_mut(id) {
             Ok(spec) => {
-                spec.description = Some(Cow::Borrowed(key));
+                spec.description = Some(crate::Str::new_static(key));
                 true
             }
             Err(_) => false,
