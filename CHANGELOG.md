@@ -15,6 +15,9 @@ change the plugin SDK.
   English. SDK: `Catalog::compile`, `Catalog::open`, `CatalogFile`, `Translator::forget_read`,
   `Registrar::add_translation_file`; plugin interface 5 is written anew for it (every plugin is built again),
   `DATA_FORMATS` is 4.
+- When the library's folder cannot be read (a failing card, one the device cannot use), the library says
+  *Couldn’t read the books folder* instead of collecting books for ever or saying there are none; PaperPaw tries
+  again by itself. SDK: `events::CATALOG_FAILED`.
 - *All notes*, a new plugin (Tools): the books that have bookmarks or highlights with how many, a book's notes
   (a note opens the book there), and *Export as My Clippings.txt*, all notes in one file in Kindle's form
   (UTF-8 with a byte order mark, `Exports/My Clippings.txt` beside the library) that notes apps read. A book's

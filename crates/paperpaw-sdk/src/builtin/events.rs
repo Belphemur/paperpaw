@@ -510,6 +510,12 @@ pub const BOOK_CHOSEN: Event<BookChosen> = Event::new("core.book-chosen");
 /// ([`library::catalog`](crate::library::catalog)): views of it read it
 /// again.
 pub const CATALOG_CHANGED: Event<()> = Event::new("core.catalog-changed");
+/// The catalog of the library could not be made: the library folder or
+/// the card could not be read or written. The old catalog stays and the
+/// kernel tries again after a while; views stop saying the books are being
+/// collected and say the folder could not be read, until
+/// [`CATALOG_CHANGED`].
+pub const CATALOG_FAILED: Event<()> = Event::new("core.catalog-failed");
 /// The catalog is wanted ([`CatalogWanted`],
 /// [`library::request_catalog`](crate::library::request_catalog)):
 /// the kernel walks the library in the background where needed.

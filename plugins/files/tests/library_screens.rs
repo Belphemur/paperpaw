@@ -182,9 +182,10 @@ fn books_copied_in_beside_an_empty_catalog_show_at_the_first_opening() {
 /// Used to panic: `Listing::page` underflowed for an empty folder (as the
 /// library showed again).
 /// A card the device cannot use (exFAT on an X4): no catalog ever comes,
-/// so the library does not say it is collecting books for ever.
+/// so the library does not say it is collecting books for ever; it says
+/// the folder could not be read.
 #[test]
-fn a_card_that_cannot_be_read_shows_an_empty_library() {
+fn a_card_that_cannot_be_read_says_so() {
     let _turn = turn();
     for device in DEVICES {
         let storage = Shared(std::rc::Rc::new(paperpaw_platform::NoStorage));
@@ -196,7 +197,66 @@ fn a_card_that_cannot_be_read_shows_an_empty_library() {
         app.run(actions::LIBRARY);
         app.wait(3000);
         assert!(!app.shows("Collecting"), "{}", app.described());
-        assert!(app.shows("No books here yet"), "{}", app.described());
+        assert!(app.shows("Couldn’t read the books"), "{}", app.described());
+    }
+}
+
+/// A card whose books folder cannot be listed (a failing card).
+struct BrokenFolder(paperpaw_sdk::MemoryStorage);
+
+impl paperpaw_platform::Storage for BrokenFolder {
+    fn read_at(
+        &self,
+        path: &str,
+        offset: u64,
+        buf: &mut [u8],
+    ) -> Result<usize, paperpaw_platform::StorageError> {
+        self.0.read_at(path, offset, buf)
+    }
+
+    fn size(&self, path: &str) -> Result<u64, paperpaw_platform::StorageError> {
+        self.0.size(path)
+    }
+
+    fn write(&self, path: &str, data: &[u8]) -> Result<(), paperpaw_platform::StorageError> {
+        self.0.write(path, data)
+    }
+
+    fn append(&self, path: &str, data: &[u8]) -> Result<(), paperpaw_platform::StorageError> {
+        self.0.append(path, data)
+    }
+
+    fn list(
+        &self,
+        dir: &str,
+        visit: &mut dyn FnMut(paperpaw_platform::DirEntry<'_>),
+    ) -> Result<(), paperpaw_platform::StorageError> {
+        if dir.trim_matches('/').starts_with("books") {
+            return Err(paperpaw_platform::StorageError::Io);
+        }
+        self.0.list(dir, visit)
+    }
+
+    fn remove(&self, path: &str) -> Result<(), paperpaw_platform::StorageError> {
+        self.0.remove(path)
+    }
+}
+
+/// The card can be read but its books folder cannot be listed: the walk
+/// fails, and the library says so instead of collecting books for ever.
+#[test]
+fn a_books_folder_that_cannot_be_read_says_so() {
+    let _turn = turn();
+    for device in DEVICES {
+        let memory = paperpaw_sdk::MemoryStorage::new().with("books/a.txt", TEXT);
+        let storage = Shared(std::rc::Rc::new(BrokenFolder(memory)));
+        storage.set_config("");
+        storage.write(SETUP_DONE, b"").unwrap();
+        let mut app = App::new(device, storage);
+        app.run(actions::LIBRARY);
+        app.wait(3000);
+        assert!(!app.shows("Collecting"), "{}", app.described());
+        assert!(app.shows("Couldn’t read the books"), "{}", app.described());
     }
 }
 

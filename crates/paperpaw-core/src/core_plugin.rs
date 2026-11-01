@@ -524,6 +524,7 @@ impl Catalog {
                 Ok(started) => *job = Some(started),
                 Err(error) => {
                     self.give_back(walk);
+                    out.push(events::CATALOG_FAILED.emit(()));
                     return Step::Failed(alloc::format!("catalog: {error:?}"));
                 }
             }
@@ -545,9 +546,11 @@ impl Catalog {
                 }
             }
             Err(error) => {
-                // The old catalog stays; tried again after a while.
+                // The old catalog stays; tried again after a while. Views
+                // stop saying the books are being collected.
                 *job = None;
                 self.give_back(walk);
+                out.push(events::CATALOG_FAILED.emit(()));
                 Step::Failed(alloc::format!("catalog: {error:?}"))
             }
         }

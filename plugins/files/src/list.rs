@@ -331,6 +331,9 @@ struct ListScreen {
     index: Index,
     /// No catalog yet: the kernel is making the first.
     collecting: bool,
+    /// The kernel could not make the catalog (`CATALOG_FAILED`): the
+    /// folder could not be read; until a catalog is made.
+    failed: bool,
     filter: Filter,
     by_recent: bool,
     /// The books shown, as indices of the index's items.
@@ -378,6 +381,7 @@ impl ListScreen {
             archive: archive(env),
             index: make_index(env),
             collecting: collecting(env),
+            failed: false,
             filter: Filter::All,
             by_recent: env.settings().read(&crate::SORT) != crate::SORT_NAME,
             order: Vec::new(),
@@ -512,7 +516,12 @@ impl ListScreen {
         } else {
             env.i18n().plural("files.books", self.len() as i64, &[])
         };
-        (self.empty_title, self.empty_text) = if self.collecting && self.index.items.is_empty() {
+        (self.empty_title, self.empty_text) = if self.failed && self.index.items.is_empty() {
+            (
+                env.i18n().tr("files.list.failed.title").to_string(),
+                env.i18n().tr("files.list.failed").to_string(),
+            )
+        } else if self.collecting && self.index.items.is_empty() {
             (
                 String::new(),
                 env.i18n().tr("files.list.collecting").to_string(),
@@ -1059,7 +1068,7 @@ impl Screen for ListScreen {
         }
         if len == 0 {
             let area = layout.area;
-            if self.collecting && !has_books {
+            if self.collecting && !self.failed && !has_books {
                 ui.message(area, &self.empty_text);
             } else {
                 let (title, text) = (&self.empty_title, &self.empty_text);
@@ -1261,10 +1270,20 @@ impl Screen for ListScreen {
             return;
         }
         let env = *cx.env();
+        if *event == events::CATALOG_FAILED {
+            // The folder could not be read: said instead of "collecting"
+            // (the old catalog, if any, stays shown) until one is made.
+            self.failed = true;
+            self.collecting = false;
+            self.refilter(&env);
+            cx.request_redraw();
+            return;
+        }
         if *event == events::CATALOG_CHANGED {
             // Made anew (books came, went or moved): the index from it,
             // or, while covered, when it shows (the one kept is of the old
             // catalog).
+            self.failed = false;
             if self.covered {
                 self.gone.clear();
                 self.collecting = false;
