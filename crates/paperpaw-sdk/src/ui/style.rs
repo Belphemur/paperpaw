@@ -597,7 +597,7 @@ impl Default for Palette {
 /// script of the interface's `language` (a code as a catalog names it,
 /// `ar`); the stock ink where it is empty or says nothing usable. The
 /// kernel makes it once, when the setting or the language changes
-/// ([`Fonts::set_ui_ink`](crate::Fonts::set_ui_ink)); the UI font's
+/// (`Fonts::set_ui_ink`, kernel only); the UI font's
 /// handles carry it, so plugins do not parse the setting.
 pub fn text_ink(value: &str, language: &str) -> TextInk {
     if value.is_empty() {
