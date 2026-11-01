@@ -180,7 +180,9 @@ fn family_plugin(
 ) -> Result<(), String> {
     let id = slug(name);
     if id.is_empty() || name.contains(['\n', '\r']) {
-        return Err(format!("the name `{name}` needs letters (a to z) or digits"));
+        return Err(format!(
+            "the name `{name}` needs letters (a to z) or digits"
+        ));
     }
     let Some(regular) = faces[0].as_deref() else {
         return Err("a family needs a regular face: add --regular <font>".into());
