@@ -57,6 +57,12 @@ pub(super) fn element_props(
         "ul" | "ol" | "dd" => props.margin_left = Some(150),
         _ => {}
     }
+    // The marker an old `type` attribute asks for, below the stylesheet's.
+    if matches!(tag, "ol" | "ul" | "li")
+        && let Some(value) = attrs.get("type")
+    {
+        props.list_style = super::lists::type_attribute(&value);
+    }
     let classes = attrs.get("class").unwrap_or_default();
     props.apply(&rules.props_remembered(tag, &classes));
     if let Some(value) = attrs.get("align") {

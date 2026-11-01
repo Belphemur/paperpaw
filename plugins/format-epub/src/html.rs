@@ -378,8 +378,8 @@ mod tests {
                 "Überschrift",
                 "Erster Absatz mit Link und Fußnote",
                 "Zweiter Absatz\nneue Zeile",
-                "• Eins",
-                "• Zwei",
+                "•\u{a0}Eins",
+                "•\u{a0}Zwei",
                 "Die Fußnote."
             ]
         );

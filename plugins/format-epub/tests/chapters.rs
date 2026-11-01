@@ -466,10 +466,15 @@ fn sides_lists_marks_and_line_heights_of_the_book_come_along() {
     assert_eq!(block("Quoted").margins, (150, 150));
     assert_eq!(block("Hanging").margins, (200, 0));
     assert_eq!(block("Hanging").indent, Some(-200));
-    assert_eq!(block("3. Third").margins, (150, 0));
-    assert!(block("4. Fourth").text.starts_with("4. "));
-    // A list in a list: set in twice, with bullets.
-    assert_eq!(block("• Inner").margins, (300, 0));
+    // Set in by the list and by its marker, the first line back by the
+    // marker: the lines after it stand under the text, not the number.
+    assert_eq!(block("3.\u{a0}Third").margins, (250, 0));
+    assert_eq!(block("3.\u{a0}Third").indent, Some(-100));
+    assert!(block("4.\u{a0}Fourth").text.starts_with("4.\u{a0}"));
+    // A list in a list: set in by both lists and the outer marker, with
+    // bullets.
+    assert_eq!(block("•\u{a0}Inner").margins, (470, 0));
+    assert_eq!(block("•\u{a0}Inner").indent, Some(-70));
     let note = block("Note");
     let at = |word: &str| note.style_at(note.text.find(word).unwrap());
     assert!(at("1").superscript());

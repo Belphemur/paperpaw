@@ -69,15 +69,15 @@ fn markdown_lists_quotes_rules_and_code() {
     assert_eq!(
         texts,
         [
-            "• a",
-            "• b",
-            "• c",
-            "• nested",
+            "•\u{a0}a",
+            "•\u{a0}b",
+            "•\u{a0}c",
+            "•\u{a0}nested",
             // Numbered, in the one list Markdown here makes of them.
-            "1. deep",
-            "2. one",
+            "1.\u{a0}deep",
+            "2.\u{a0}one",
             // A line after an item goes on with it.
-            "3. two goes on",
+            "3.\u{a0}two goes on",
             "1234567890. not a number",
             "quote one quote two",
             "* * *",
