@@ -578,15 +578,24 @@ fn x3_panel_or_back(
 ) -> Option<ota::Ota> {
     if probe.x3_uc8279d() {
         log::error!("display: a UC8279d ({probe}), which this build does not drive: nothing shows");
+        // Only an update on trial goes back (`give_up` below); a cable or
+        // web-flasher install, or one already kept, stays with a blank
+        // screen, and the note says that instead.
         let note = alloc::format!(
             "{}",
             paperpaw_x4::probe::X3Note {
                 probe,
-                version: env!("PAPERPAW_VERSION")
+                version: env!("PAPERPAW_VERSION"),
+                went_back: ota.as_ref().is_some_and(ota::Ota::on_trial),
             }
         );
-        // Best effort: no card, no note.
-        let _ = storage.write(paperpaw_x4::probe::X3_NOTE_FILE, note.as_bytes());
+        // Not again at every start of the same note.
+        let file = paperpaw_x4::probe::X3_NOTE_FILE;
+        if storage.size(file).ok() != Some(note.len() as u64)
+            && let Err(e) = storage.write(file, note.as_bytes())
+        {
+            log::warn!("card: the display note was not written: {e:?}");
+        }
         if let Some(ota) = ota.as_mut() {
             ota.give_up("this X3's display is not driven");
         }
