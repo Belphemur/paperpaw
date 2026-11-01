@@ -86,8 +86,14 @@ fn a_deck_is_written_as_plain_text_with_its_first_three_fields() {
         note(&["gato", "cat"]),
     ];
     put(&storage, "de.apkg", &deck_with("collection.anki21", &notes));
-    let count = convert(&storage, &alloc::format!("{FOLDER}/de.apkg")).unwrap();
-    assert_eq!(count, 3);
+    let made = convert(&storage, &alloc::format!("{FOLDER}/de.apkg")).unwrap();
+    assert_eq!(
+        made,
+        Notes {
+            count: 3,
+            skipped: 0
+        }
+    );
     assert_eq!(
         read(&storage, &text_path()),
         "#separator:tab\n\
@@ -107,7 +113,13 @@ fn an_older_ankis_database_name_is_read_too() {
         "x.apkg",
         &deck_with("collection.anki2", &[note(&["a", "b"])]),
     );
-    assert_eq!(convert(&storage, &alloc::format!("{FOLDER}/x.apkg")), Ok(1));
+    assert_eq!(
+        convert(&storage, &alloc::format!("{FOLDER}/x.apkg")),
+        Ok(Notes {
+            count: 1,
+            skipped: 0
+        })
+    );
 }
 
 #[test]
@@ -281,4 +293,126 @@ fn a_deck_of_an_anki_file_is_not_saved_over_it() {
         zip
     );
     assert!(!storage.exists(&alloc::format!("{path}.part")));
+}
+
+#[test]
+fn a_note_over_the_cap_is_left_out_before_anything_of_it_is_copied() {
+    let storage = MemoryStorage::new();
+    let picture = alloc::format!(
+        "<img src=\"data:image/png;base64,{}\">",
+        "QUJD".repeat(1500)
+    );
+    let notes = [
+        note(&["one", "first"]),
+        // 200 KiB: a page of text, or a few pictures.
+        note(&["huge", &"x".repeat(200 * 1024)]),
+        // Under the cap, with a picture in it: the picture is not a card's.
+        note(&["two", &alloc::format!("see {picture} here")]),
+        note(&["three", "last"]),
+    ];
+    put(
+        &storage,
+        "Big.apkg",
+        &deck_with("collection.anki21", &notes),
+    );
+    let made = convert(&storage, &alloc::format!("{FOLDER}/Big.apkg")).unwrap();
+    assert_eq!(
+        made,
+        Notes {
+            count: 3,
+            skipped: 1
+        }
+    );
+    assert_eq!(
+        read(&storage, &text_path()),
+        "#separator:tab\none\tfirst\t\ntwo\tsee here\t\nthree\tlast\t\n"
+    );
+    // The job counts the note left out, and says so, as it does lines.
+    let reports = run(&storage, false, true);
+    assert_eq!(
+        (reports[0].added, reports[0].skipped),
+        (3, 1),
+        "{reports:?}"
+    );
+}
+
+#[test]
+fn fields_are_cut_and_open_tags_and_data_addresses_cost_no_more() {
+    let long = "é".repeat(5000);
+    let text = note_text(&long);
+    assert!(text.len() <= table::MAX_FIELD && text.chars().all(|c| c == 'é'));
+    // A tag that never closes, then more.
+    assert_eq!(note_text("a <b never closed and more"), "a");
+    // A data address goes, whatever it is in; the word `data:` alone does not.
+    assert_eq!(note_text("x data:image/png;base64,AAAA y"), "x y");
+    assert_eq!(
+        note_text("metadata: and data: here"),
+        "metadata: and data: here"
+    );
+    assert_eq!(note_text("[sound:a.mp3]word[sound:b"), "word");
+    // Any cut falls on a character.
+    for most in 0..8 {
+        assert!("aé€😀".is_char_boundary(cut("aé€😀", most).len()));
+    }
+}
+
+#[test]
+fn a_zip_comment_does_not_hide_the_number_of_files() {
+    let storage = MemoryStorage::new();
+    let mut zip = ZipBuilder::new().deflated("collection.anki21", database(&[note(&["a", "b"])]));
+    for i in 0..usize::from(MAX_FILES) {
+        zip = zip.stored(&alloc::format!("{i}"), b"x".to_vec());
+    }
+    let mut bytes = zip.build();
+    // A comment of 30,000 bytes after the end record.
+    let at = bytes.len() - 2;
+    bytes[at..].copy_from_slice(&30_000u16.to_le_bytes());
+    bytes.extend(core::iter::repeat_n(b'c', 30_000));
+    put(&storage, "comment.apkg", &bytes);
+    let path = alloc::format!("{FOLDER}/comment.apkg");
+    assert_eq!(file_count(&storage, &path), Ok(Some(MAX_FILES + 1)));
+    assert_eq!(convert(&storage, &path), Err(Fault::TooLarge));
+    // Without a comment, and where there is no end record at all.
+    let plain = ZipBuilder::new().stored("a", b"x".to_vec()).build();
+    put(&storage, "plain.apkg", &plain);
+    assert_eq!(
+        file_count(&storage, &alloc::format!("{FOLDER}/plain.apkg")),
+        Ok(Some(1))
+    );
+    put(&storage, "none.apkg", &[7u8; 100_000]);
+    assert_eq!(
+        file_count(&storage, &alloc::format!("{FOLDER}/none.apkg")),
+        Ok(None)
+    );
+    put(&storage, "tiny.apkg", b"PK");
+    assert_eq!(
+        file_count(&storage, &alloc::format!("{FOLDER}/tiny.apkg")),
+        Ok(None)
+    );
+}
+
+#[test]
+fn a_database_over_the_cap_is_told_before_it_is_inflated() {
+    let storage = MemoryStorage::new();
+    let filler = "w".repeat(7000);
+    let notes: Vec<String> = (0..700)
+        .map(|i| note(&[&alloc::format!("n{i}"), &filler]))
+        .collect();
+    let zip = deck_with("collection.anki21", &notes);
+    put(&storage, "Large.apkg", &zip);
+    assert_eq!(
+        convert(&storage, &alloc::format!("{FOLDER}/Large.apkg")),
+        Err(Fault::TooLarge)
+    );
+    assert!(!storage.exists(&database_path()) && !storage.exists(&text_path()));
+}
+
+#[test]
+fn what_a_deck_left_behind_is_removed_when_a_job_starts() {
+    let storage = MemoryStorage::new();
+    // The power went while a deck was being read.
+    storage.write(&database_path(), b"half a database").unwrap();
+    storage.write(&text_path(), b"half a text").unwrap();
+    let _ = sync::Job::new(&storage, FOLDER, sync::Mode::Auto);
+    assert!(!storage.exists(&database_path()) && !storage.exists(&text_path()));
 }

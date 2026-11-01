@@ -19,14 +19,23 @@ use paperpaw_zip::{ZipArchive, ZipError};
 
 use crate::{cards, table};
 
-/// The deck's database inflated: at most this large. A deck exported
-/// without scheduling is far smaller than one with.
-pub(crate) const MAX_DB: u32 = 16 * 1024 * 1024;
+/// The deck's database inflated: at most this large. Inflating it and
+/// reading it are a step each; on the X4 (an SD card on the SPI bus) a step
+/// must end well within the watchdog's 20 s. A deck exported without
+/// scheduling is far smaller than one with.
+pub(crate) const MAX_DB: u32 = 4 * 1024 * 1024;
 /// A ZIP of at most this many files (the media of a deck are files too):
 /// its index takes 8 bytes of memory for each.
 const MAX_FILES: u16 = 4000;
 /// The notes of a deck, as many as the cards a deck holds.
 const MAX_NOTES: usize = cards::MAX_CARDS;
+/// A note whose fields are longer than this (in bytes, together) is left
+/// out, unread: its pictures are in it as text. A card holds 500 letters
+/// on each side, so nothing a card can hold is lost.
+const MAX_NOTE: usize = table::MAX_RECORD;
+/// How far back from the end of a ZIP its end record is looked for: a
+/// comment is at most 64 KiB.
+const COMMENT: u64 = 0xffff;
 
 /// Why a deck could not be read.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -98,34 +107,62 @@ pub(crate) fn tidy(storage: &dyn Storage) {
     }
 }
 
-/// How many files the ZIP at `path` holds, from its end record (no
-/// comment); `None` where it is not found there.
+/// How many files the ZIP at `path` holds, from its end record, looked for
+/// in the last 64 KiB (the record is followed by a comment of up to that
+/// size), a piece at a time; `None` where it is not found.
 fn file_count(storage: &dyn Storage, path: &str) -> Result<Option<u16>, StorageError> {
+    const PIECE: usize = 1024;
     let size = storage.size(path)?;
-    let Some(at) = size.checked_sub(22) else {
-        return Ok(None);
-    };
-    let mut record = [0u8; 22];
-    if storage.read_at(path, at, &mut record)? != record.len() || record[..4] != [0x50, 0x4b, 5, 6]
-    {
-        return Ok(None);
+    let mut piece = [0u8; PIECE + 21];
+    // The piece that ends at `end`, from the end of the file back.
+    let mut end = size;
+    while size - end <= COMMENT + 22 && end >= 22 {
+        let start = end
+            .saturating_sub(PIECE as u64 + 21)
+            .max(size.saturating_sub(COMMENT + 22));
+        let got = usize::try_from(end - start).unwrap_or(0);
+        if got < 22 || storage.read_at(path, start, &mut piece[..got])? != got {
+            return Ok(None);
+        }
+        for at in (0..=got - 22).rev() {
+            let record = &piece[at..at + 22];
+            let comment = u64::from(u16::from_le_bytes([record[20], record[21]]));
+            // The record, and a comment that ends where the file does.
+            if record[..4] == [0x50, 0x4b, 5, 6] && start + at as u64 + 22 + comment == size {
+                return Ok(Some(u16::from_le_bytes([record[10], record[11]])));
+            }
+        }
+        if start == 0 || start <= size.saturating_sub(COMMENT + 22) {
+            break;
+        }
+        // The next piece ends where this one starts, and 21 bytes more:
+        // a record that lay across the edge is whole in one of them.
+        end = start + 21;
     }
-    Ok(Some(u16::from_le_bytes([record[10], record[11]])))
+    Ok(None)
 }
 
-/// The deck at `path` written as text to [`text_path`]; how many notes.
-pub(crate) fn convert(storage: &dyn Storage, path: &str) -> Result<usize, Fault> {
+/// What was made of a deck's notes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Notes {
+    /// The notes written as cards' text.
+    pub count: usize,
+    /// The notes left out as too long.
+    pub skipped: usize,
+}
+
+/// The deck at `path`'s database inflated to the plugin's folder, in one
+/// step (see [`MAX_DB`]); [`notes`] reads it in the next.
+pub(crate) fn inflate(storage: &dyn Storage, path: &str) -> Result<(), Fault> {
     tidy(storage);
-    let result = read(storage, path);
-    // The database is only needed while it is read.
-    let db = database_path();
-    if storage.exists(&db) {
-        let _ = storage.remove(&db);
+    let result = inflate_database(storage, path);
+    if result.is_err() {
+        tidy(storage);
     }
     result
 }
 
-fn read(storage: &dyn Storage, path: &str) -> Result<usize, Fault> {
+fn inflate_database(storage: &dyn Storage, path: &str) -> Result<(), Fault> {
     if file_count(storage, path)?.is_some_and(|n| n > MAX_FILES) {
         return Err(Fault::TooLarge);
     }
@@ -156,14 +193,31 @@ fn read(storage: &dyn Storage, path: &str) -> Result<usize, Fault> {
             }
         },
     )?;
-    if let Some(e) = failed {
-        return Err(e.into());
+    match failed {
+        Some(e) => Err(e.into()),
+        None => Ok(()),
     }
-    notes(storage, &db)
+}
+
+/// The notes of the inflated database written as text to [`text_path`], in
+/// one step; the database is removed after it.
+pub(crate) fn notes(storage: &dyn Storage) -> Result<Notes, Fault> {
+    let db = database_path();
+    let result = write_notes(storage, &db);
+    // The database is only needed while it is read.
+    let _ = storage.remove(&db);
+    result
+}
+
+/// [`inflate`] and [`notes`] in a row.
+#[cfg(test)]
+pub(crate) fn convert(storage: &dyn Storage, path: &str) -> Result<Notes, Fault> {
+    inflate(storage, path)?;
+    notes(storage)
 }
 
 /// The notes table of the database at `db` written as text.
-fn notes(storage: &dyn Storage, db: &str) -> Result<usize, Fault> {
+fn write_notes(storage: &dyn Storage, db: &str) -> Result<Notes, Fault> {
     let database = Database::open(storage, db)?;
     let (columns, root) = database.table("notes").map_err(|_| Fault::NoNotes)?;
     let flds = columns
@@ -172,7 +226,7 @@ fn notes(storage: &dyn Storage, db: &str) -> Result<usize, Fault> {
         .ok_or(Fault::NoNotes)?;
     let out = text_path();
     storage.write(&out, b"#separator:tab\n")?;
-    let (mut count, mut buffer, mut failed) = (0usize, String::new(), None);
+    let (mut count, mut skipped, mut buffer, mut failed) = (0usize, 0usize, String::new(), None);
     let mut put = |buffer: &mut String| match storage.append(&out, buffer.as_bytes()) {
         Ok(()) => {
             buffer.clear();
@@ -188,6 +242,11 @@ fn notes(storage: &dyn Storage, db: &str) -> Result<usize, Fault> {
         let Some(Value::Text(text)) = values.get(flds) else {
             return true;
         };
+        // Nothing of a long note is copied: its pictures are text in it.
+        if text.len() > MAX_NOTE {
+            skipped += 1;
+            return true;
+        }
         let mut fields = text.split('\x1f').map(note_text);
         let front = fields.next().unwrap_or_default();
         if front.is_empty() {
@@ -218,26 +277,59 @@ fn notes(storage: &dyn Storage, db: &str) -> Result<usize, Fault> {
     match failed {
         Some(e) => Err(e.into()),
         None if count == 0 => Err(Fault::NoNotes),
-        None => Ok(count),
+        None => Ok(Notes { count, skipped }),
     }
 }
 
-/// A field of Anki's as plain text: markup and sounds out.
+/// A field of Anki's as plain text: markup and sounds out, pictures that
+/// are text (`data:` addresses) out, cut at what a card's text may be.
 fn note_text(field: &str) -> String {
-    let mut text = String::with_capacity(field.len());
+    let mut text = String::with_capacity(field.len().min(table::MAX_FIELD) + 16);
     let mut rest = field;
-    while let Some(at) = rest.find("[sound:") {
+    while let Some((at, end)) = next_hole(rest) {
         text.push_str(&rest[..at]);
-        match rest[at..].find(']') {
-            Some(end) => rest = &rest[at + end + 1..],
-            None => {
-                rest = "";
-                break;
-            }
-        }
+        rest = &rest[end..];
     }
     text.push_str(rest);
-    table::plain(&text)
+    table::plain(cut(&text, table::MAX_FIELD))
+}
+
+/// Where the next sound (`[sound:…]`) or `data:` address (`data:image/png;…`)
+/// of `text` is, from where it begins to where it ends.
+fn next_hole(text: &str) -> Option<(usize, usize)> {
+    let sound = text
+        .find("[sound:")
+        .map(|at| (at, text[at..].find(']').map_or(text.len(), |e| at + e + 1)));
+    let mut data = None;
+    let mut from = 0;
+    while let Some(found) = text[from..].find("data:") {
+        let at = from + found;
+        let after = &text[at + 5..];
+        let kind = after
+            .find([';', ',', ' ', '"', '\''])
+            .map_or(after, |e| &after[..e]);
+        if kind.contains('/') {
+            let end = text[at..]
+                .find(['"', '\'', ' ', ')', '<', '>', '\n'])
+                .map_or(text.len(), |e| at + e);
+            data = Some((at, end));
+            break;
+        }
+        from = at + 5;
+    }
+    match (sound, data) {
+        (Some(a), Some(b)) => Some(if a.0 <= b.0 { a } else { b }),
+        (a, b) => a.or(b),
+    }
+}
+
+/// `text` cut to at most `most` bytes, at a character.
+fn cut(text: &str, most: usize) -> &str {
+    let mut end = most.min(text.len());
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    &text[..end]
 }
 
 /// `cell` as a field of a tab separated file, quoted where it has to be.

@@ -500,8 +500,10 @@ pub(crate) enum Step {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Stage {
-    /// An Anki deck (`.apkg`) written as a text file, in one step.
+    /// An Anki deck's (`.apkg`) database inflated, in one step.
     Convert,
+    /// Its notes written as a text file, in one step.
+    Notes,
     /// The file hashed, a step at a time.
     Hash,
     /// Its lines counted, a step at a time.
@@ -593,6 +595,8 @@ pub(crate) struct Job {
 impl Job {
     /// The job for the files of `folder` that `mode` takes.
     pub(crate) fn new(storage: &dyn Storage, folder: &str, mode: Mode) -> Self {
+        // What a deck left in the plugin's folder when the power went.
+        apkg::tidy(storage);
         let (_, found) = files(storage, folder);
         // A ledger that cannot be read: every file is taken, and fails,
         // so that nothing is written over it.
@@ -635,6 +639,7 @@ impl Job {
         let name = self.todo.get(self.at).map_or("", |f| f.name.as_str());
         let within = self.work.as_ref().map_or(0, |w| match w.stage {
             Stage::Convert => 0,
+            Stage::Notes => 10,
             Stage::Hash => (50 * w.hashed / w.text_size.max(1)).min(50) as usize,
             Stage::Count => (50 + 50 * w.resume.at / w.text_size.max(1)).min(100) as usize,
             Stage::Decide | Stage::Asked => 100,
@@ -740,6 +745,7 @@ impl Job {
         let stage = self.work.as_ref().map_or(Stage::Finish, |w| w.stage);
         let done = match stage {
             Stage::Convert => self.convert(storage),
+            Stage::Notes => self.notes(storage),
             Stage::Hash => self.hash(storage),
             Stage::Count => self.count(storage),
             Stage::Decide => self.decide(storage),
@@ -761,23 +767,30 @@ impl Job {
         }
     }
 
-    /// An Anki deck written as text, whole: the notes are read from its
-    /// database page by page, so it takes time but no memory (see
-    /// [`apkg`]); the text is then merged as a file is, from its own
-    /// place.
+    /// An Anki deck's database inflated to the plugin's folder (see
+    /// [`apkg`]): a step of its own, as long as the card is slow, and
+    /// then the notes in the next. A step ends well within the X4's
+    /// watchdog because the database is at most [`apkg::MAX_DB`].
     fn convert(&mut self, storage: &dyn Storage) -> Result<(), Failure> {
         let Some(work) = self.work.as_mut() else {
             return Ok(());
         };
-        match apkg::convert(storage, &work.path) {
-            Ok(_) => {}
-            Err(apkg::Fault::NoNotes) => return Err(Failure::Outcome(Outcome::NoNotes)),
-            Err(apkg::Fault::NewerAnki) => return Err(Failure::Outcome(Outcome::NewerAnki)),
-            Err(apkg::Fault::TooLarge | apkg::Fault::Memory) => {
-                return Err(Failure::Outcome(Outcome::DeckTooLarge));
-            }
-            Err(apkg::Fault::Storage) => return Err(Failure::Storage),
-        }
+        apkg::inflate(storage, &work.path).map_err(fault_of)?;
+        work.stage = Stage::Notes;
+        Ok(())
+    }
+
+    /// The notes of the inflated deck written as text, read page by page,
+    /// so the heap needs no more than for a text file; the text is then
+    /// merged as a file is, from its own place.
+    fn notes(&mut self, storage: &dyn Storage) -> Result<(), Failure> {
+        let Some(work) = self.work.as_mut() else {
+            return Ok(());
+        };
+        let notes = apkg::notes(storage).map_err(fault_of)?;
+        // Notes left out as too long count as lines left out: the cards
+        // they may have made are not removed for lacking.
+        work.report.skipped += notes.skipped;
         work.path = apkg::text_path();
         work.text_size = storage.size(&work.path)?;
         work.stage = Stage::Hash;
@@ -1321,6 +1334,16 @@ pub(crate) fn tidy(storage: &dyn Storage, ledger: &mut Ledger, listed: &[String]
             decks.iter().any(|d| d.id == s.deck)
         }
     });
+}
+
+/// What a deck that could not be read comes to.
+fn fault_of(fault: apkg::Fault) -> Failure {
+    match fault {
+        apkg::Fault::NoNotes => Failure::Outcome(Outcome::NoNotes),
+        apkg::Fault::NewerAnki => Failure::Outcome(Outcome::NewerAnki),
+        apkg::Fault::TooLarge | apkg::Fault::Memory => Failure::Outcome(Outcome::DeckTooLarge),
+        apkg::Fault::Storage => Failure::Storage,
+    }
 }
 
 /// Why a step could not go on.

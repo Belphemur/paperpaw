@@ -233,7 +233,15 @@ impl SdScreen {
         }
         if report.skipped > 0 {
             rows.push((
-                i18n.plural("vocabulary.sd.skipped", report.skipped as i64, &[]),
+                i18n.plural(
+                    if crate::apkg::is_apkg(&report.file) {
+                        "vocabulary.sd.skipped-notes"
+                    } else {
+                        "vocabulary.sd.skipped"
+                    },
+                    report.skipped as i64,
+                    &[],
+                ),
                 String::new(),
             ));
         }

@@ -38,7 +38,7 @@ use paperpaw_sdk::{Storage, StorageError};
 pub(crate) const MAX_RECORD: usize = 8 * 1024;
 /// How much of a field is kept, in bytes (more than a text may be: the
 /// text is cut to its characters later).
-const MAX_FIELD: usize = 2 * 1024;
+pub(crate) const MAX_FIELD: usize = 2 * 1024;
 /// Columns looked at.
 const MAX_COLUMNS: usize = 8;
 /// How much of the file's start tells its delimiter and header.
