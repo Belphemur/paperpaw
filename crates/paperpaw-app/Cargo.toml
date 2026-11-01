@@ -38,6 +38,7 @@ store-plugins = [
     "dep:paperpaw-plugin-end-of-book",
     "dep:paperpaw-plugin-notes-overview",
     "dep:paperpaw-plugin-format-mobi",
+    "dep:paperpaw-plugin-format-docx",
     "dep:paperpaw-plugin-browser",
     "dep:paperpaw-plugin-readwise",
     "dep:paperpaw-plugin-readwise-reader",
@@ -102,6 +103,7 @@ paperpaw-plugin-reading-goal = { workspace = true, optional = true }
 paperpaw-plugin-end-of-book = { workspace = true, optional = true }
 paperpaw-plugin-notes-overview = { workspace = true, optional = true }
 paperpaw-plugin-format-mobi = { workspace = true, optional = true }
+paperpaw-plugin-format-docx = { workspace = true, optional = true }
 paperpaw-plugin-widgets = { workspace = true, optional = true }
 paperpaw-plugin-wifi.workspace = true
 paperpaw-plugin-bluetooth.workspace = true

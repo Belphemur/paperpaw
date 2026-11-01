@@ -1,0 +1,22 @@
+[package]
+name = "paperpaw-plugin-format-docx"
+description = "PaperPaw Word documents: .docx text, headings, lists, tables, links and pictures"
+version = "1.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+categories = ["no-std", "text-processing"]
+
+[dependencies]
+paperpaw-sdk = { workspace = true, features = ["unstable"] }
+
+[dev-dependencies]
+paperpaw-i18n.workspace = true
+paperpaw-zip = { workspace = true, features = ["testing"] }
+proptest.workspace = true
+
+[lints]
+workspace = true

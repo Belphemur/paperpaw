@@ -22,6 +22,12 @@ change the plugin SDK.
   at a time. It asks for the Readwise access token once; articles read to the end are archived in Reader with
   the next fetch and their books removed (not those with highlights, notes or bookmarks). It keeps within
   Reader's limit of twenty list requests a minute and stops where Reader asks to wait. It needs no SDK change.
+- *Word documents*, a new store plugin (`format-docx`): opens `.docx` files as books, with headings and a table
+  of contents, lists (bulleted, numbered, nested), tables (a row a line), bold, italic, underline, links (also
+  within the document) and pictures (JPEG, PNG, GIF), and the title, author and language of the document. The
+  text is read in pieces from the archive and written once as blocks, so a long document needs little memory;
+  pictures are taken out when their page shows. Footnotes, headers and footers, and comments are not shown.
+  It needs no SDK change and is not part of the firmware, so only readers who want it pay for it.
 - *End of book*, a new plugin: when the last page of a book is reached, a screen offers the next book of its
   series (or the library), a rating of one to five (`4 / 5`, kept as a book field and shown as a badge on the
   book's row and on its information page) and whether the book counts as finished. Two settings in the reading

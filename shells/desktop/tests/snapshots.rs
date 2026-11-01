@@ -871,6 +871,25 @@ const CASES: &[Case] = &[
         fixtures: false,
     },
     Case {
+        name: "x4-docx-reading",
+        profile: "xteink-x4",
+        book: Some("books/report.docx"),
+        sets: &[],
+        script: "wait:1500",
+        colour: 0,
+        fixtures: false,
+    },
+    // The end-of-book screen would show on the last page.
+    Case {
+        name: "x4-docx-second-page",
+        profile: "xteink-x4",
+        book: Some("books/report.docx"),
+        sets: &["plugins.end-of-book=off"],
+        script: "wait:1500,page-forward,wait:1500",
+        colour: 0,
+        fixtures: false,
+    },
+    Case {
         name: "x4-endbook-next",
         profile: "xteink-x4",
         book: Some("books/moor-1.epub"),
@@ -973,6 +992,9 @@ fn library(case: &Case) -> PathBuf {
     let mut sources = vec![root().join("samples/library/books"), fixtures.clone()];
     if case.name.contains("endbook") {
         sources.push(fixtures.with_file_name("fixtures-endbook"));
+    }
+    if case.name.contains("docx") {
+        sources.push(fixtures.with_file_name("fixtures-docx"));
     }
     if case.name.contains("pictures") {
         sources.push(fixtures.with_file_name("fixtures-pictures"));

@@ -4,7 +4,8 @@
 //! device would. Here the main flows run headless on the X4 profiles: a
 //! book opened (EPUB and TXT), 30 pages forward and 30 back, home, the
 //! library (with many books) opened and scrolled, the main menu, the
-//! settings and a page of them; and the store, online with the
+//! settings and a page of them; a long Word document and a hostile one,
+//! converted on opening; and the store, online with the
 //! emulator's own catalogue: its list, a plugin's page and the install of
 //! a plugin (the TLS session and the Wi-Fi stack are not modelled: a
 //! measured allowance stands for them).
@@ -96,7 +97,7 @@ fn emulator_with(
     name: &str,
     profile: &str,
     book: Option<&str>,
-    files: &[(&str, String)],
+    files: &[(&str, Vec<u8>)],
     args: &[&str],
 ) -> Output {
     let library = library(name, book);
@@ -206,7 +207,7 @@ fn flow_stays_within_budget(
     profile: &str,
     book: &str,
     flow: &str,
-    files: &[(&str, String)],
+    files: &[(&str, Vec<u8>)],
     args: &[&str],
 ) -> Heap {
     let with = |extra: &[&str]| {
@@ -478,7 +479,10 @@ fn bluetooth_stays_within_the_x4_pro_budget() {
         "PaperPaw Remote",
         "fa:ke:00:00:00:01	PaperPaw Remote	remote	0		keys",
     ));
-    let secrets = (paperpaw_core::sdk::secrets::FILE, secrets.encode());
+    let secrets = (
+        paperpaw_core::sdk::secrets::FILE,
+        secrets.encode().into_bytes(),
+    );
     let flow = [
         "wait:1000".into(),
         times("ble-key:right", 20),
@@ -688,4 +692,145 @@ fn the_heap_report_lists_the_live_heap_by_call_site() {
         at_peak >= live - 0.2,
         "at the peak {at_peak} KiB, live {live} KiB"
     );
+}
+
+const WORD_NS: &str = "xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\" \
+    xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\" \
+    xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" \
+    xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\"";
+
+/// A Word document with the body `body` and the parts it needs: the picture
+/// `rId1`, a link `rId2`, a heading style and two lists.
+fn word_document(body: &str) -> Vec<u8> {
+    let w = "xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"";
+    let styles = format!(
+        "<w:styles {w}><w:style w:type=\"paragraph\" w:styleId=\"Heading1\"><w:name w:val=\"heading 1\"/></w:style></w:styles>"
+    );
+    let numbering = format!(
+        "<w:numbering {w}><w:abstractNum w:abstractNumId=\"0\"><w:lvl w:ilvl=\"0\"><w:numFmt w:val=\"bullet\"/></w:lvl></w:abstractNum>\
+         <w:abstractNum w:abstractNumId=\"1\"><w:lvl w:ilvl=\"0\"><w:numFmt w:val=\"decimal\"/></w:lvl></w:abstractNum>\
+         <w:num w:numId=\"1\"><w:abstractNumId w:val=\"0\"/></w:num><w:num w:numId=\"2\"><w:abstractNumId w:val=\"1\"/></w:num></w:numbering>"
+    );
+    let rels = "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">\
+        <Relationship Id=\"rId1\" Type=\"http://x/image\" Target=\"media/image1.png\"/>\
+        <Relationship Id=\"rId2\" Type=\"http://x/hyperlink\" Target=\"https://example.org/a\" TargetMode=\"External\"/>\
+        </Relationships>";
+    paperpaw_zip::testing::ZipBuilder::new()
+        .deflated(
+            "word/document.xml",
+            format!(
+                "<?xml version=\"1.0\"?><w:document {WORD_NS}><w:body>{body}</w:body></w:document>"
+            ),
+        )
+        .deflated("word/styles.xml", styles)
+        .deflated("word/numbering.xml", numbering)
+        .deflated("word/_rels/document.xml.rels", rels)
+        .deflated(
+            "word/media/image1.png",
+            include_bytes!("../../../crates/paperpaw-image/tests/data/gray.png").to_vec(),
+        )
+        .build()
+}
+
+/// A long Word document: 25,000 paragraphs (about 4 MB of XML) with a
+/// heading in each tenth, bold runs, links and bookmarks, 50 pictures,
+/// lists and tables, and nesting of 200 levels twice.
+fn long_word_document() -> Vec<u8> {
+    let mut body = String::new();
+    for i in 0..25_000 {
+        if i % 10 == 0 {
+            body.push_str(&format!(
+                "<w:p><w:pPr><w:pStyle w:val=\"Heading1\"/></w:pPr><w:bookmarkStart w:id=\"{i}\" w:name=\"h{i}\"/><w:r><w:t>Chapter {i}</w:t></w:r></w:p>"
+            ));
+        }
+        body.push_str("<w:p><w:r><w:rPr><w:b/></w:rPr><w:t>The wind came over the hills and over the sea, </w:t></w:r><w:r><w:t>and the old house stood quiet in the grey light.</w:t></w:r></w:p>");
+        if i % 50 == 0 {
+            body.push_str("<w:p><w:hyperlink r:id=\"rId2\"><w:r><w:t>a link</w:t></w:r></w:hyperlink><w:hyperlink w:anchor=\"h0\"><w:r><w:t> back</w:t></w:r></w:hyperlink></w:p>");
+        }
+        if i % 100 == 0 {
+            for level in 0..4 {
+                body.push_str(&format!(
+                    "<w:p><w:pPr><w:numPr><w:ilvl w:val=\"{level}\"/><w:numId w:val=\"{}\"/></w:numPr></w:pPr><w:r><w:t>item {level}</w:t></w:r></w:p>",
+                    1 + level % 2
+                ));
+            }
+        }
+        if i % 500 == 0 {
+            body.push_str("<w:p><w:r><w:drawing><wp:inline><wp:docPr id=\"1\" name=\"P\" descr=\"A picture\"/><a:graphic><a:graphicData><a:blip r:embed=\"rId1\"/></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>");
+        }
+        if i % 700 == 0 {
+            body.push_str("<w:tbl>");
+            for _ in 0..3 {
+                body.push_str("<w:tr><w:tc><w:p><w:r><w:t>one</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>two</w:t></w:r></w:p></w:tc></w:tr>");
+            }
+            body.push_str("</w:tbl>");
+        }
+    }
+    body.push_str(&"<w:p>".repeat(200));
+    body.push_str(&"</w:p>".repeat(200));
+    body.push_str(&"<w:tbl><w:tr><w:tc>".repeat(200));
+    body.push_str(&"</w:tc></w:tr></w:tbl>".repeat(200));
+    word_document(&body)
+}
+
+/// Documents made to do harm: one paragraph of 3 MB with spaces and one of
+/// 1 MB without, a hundred thousand bookmarks, runs and pictures in one
+/// paragraph, and nesting of 100,000 levels.
+fn hostile_word_document() -> Vec<u8> {
+    let mut body = format!(
+        "<w:p><w:r><w:t>{}</w:t></w:r></w:p>",
+        "word ".repeat(600_000)
+    );
+    body.push_str(&format!(
+        "<w:p><w:r><w:t>{}</w:t></w:r></w:p>",
+        "x".repeat(1_000_000)
+    ));
+    body.push_str(&"<w:bookmarkStart w:name=\"a\"/>".repeat(100_000));
+    body.push_str(&format!(
+        "<w:p>{}</w:p>",
+        "<w:r><w:rPr><w:b/></w:rPr><w:t>b</w:t></w:r><w:r><w:t>n</w:t></w:r>".repeat(50_000)
+    ));
+    body.push_str(&format!(
+        "<w:p>{}</w:p>",
+        "<w:r><w:drawing><a:blip r:embed=\"rId1\"/></w:drawing></w:r>".repeat(1000)
+    ));
+    body.push_str(&"<w:p>".repeat(100_000));
+    body.push_str(&"</w:p>".repeat(100_000));
+    word_document(&body)
+}
+
+/// A zip bomb: 24 MB of XML that is 30 KB deflated, in the archive.
+fn bomb_word_document() -> Vec<u8> {
+    word_document(&"<w:p><w:r><w:t>a</w:t></w:r></w:p>".repeat(700_000))
+}
+
+/// A Word document opened on the X4 (converted, then 30 pages forward and
+/// back and home) stays within the budget, whatever it holds.
+fn word_stays_within_budget(name: &str, document: Vec<u8>) -> Heap {
+    let book = "books/document.docx";
+    let heap = flow_stays_within_budget(
+        name,
+        "xteink-x4",
+        book,
+        &reading_flow(),
+        &[(book, document)],
+        &[],
+    );
+    eprintln!("{name}: peak {} KiB of {:?}", heap.peak, heap.limit);
+    heap
+}
+
+#[test]
+fn a_long_word_document_stays_within_the_x4_budget() {
+    word_stays_within_budget("x4-docx-long", long_word_document());
+}
+
+#[test]
+fn a_hostile_word_document_stays_within_the_x4_budget() {
+    word_stays_within_budget("x4-docx-hostile", hostile_word_document());
+}
+
+#[test]
+fn a_word_zip_bomb_stays_within_the_x4_budget() {
+    word_stays_within_budget("x4-docx-bomb", bomb_word_document());
 }

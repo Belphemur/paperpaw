@@ -10,6 +10,7 @@ diagnostics system
 end-of-book reading
 fonts-browser look
 format-mobi reading
+format-docx reading
 hyphenation-da reading
 hyphenation-de reading
 hyphenation-es reading
