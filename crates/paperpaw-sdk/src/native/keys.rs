@@ -4,11 +4,11 @@
 //! revoked, whose code the kernel does not load.
 //!
 //! A **recovery key** is pinned with the author's key at a plugin's first
-//! install, and only then ([`remember_first_install`]): never later, not
+//! install, and only then (`remember_first_install` (kernel)): never later, not
 //! even signed by the author's key, which may be the stolen one. The
 //! author keeps it offline. To move
 //! to a new key the author signs [`rotation_message`] with it; a store
-//! that gets the statement with an update hands it to [`accept_rotation`],
+//! that gets the statement with an update hands it to `accept_rotation` (kernel),
 //! which checks it against the pinned keys, so neither a moderator's
 //! mistake nor a taken-over server can forge one. The code installed
 //! before the rotation is not loaded from then on: it may be the stolen
@@ -17,7 +17,7 @@
 //! id).
 //!
 //! **Revoked keys** come from the store (its library lists them); it
-//! adds them with [`keep_revoked`], and none is ever taken off. The kernel does not load the code of
+//! adds them with `keep_revoked` (kernel), and none is ever taken off. The kernel does not load the code of
 //! a plugin whose known author's key is among them
 //! ([`PluginProblem::Revoked`](crate::PluginProblem::Revoked)).
 
@@ -68,7 +68,7 @@ pub fn rotation_message(plugin: &str, old: &[u8; 32], new: &[u8; 32]) -> String 
     paperpaw_native::signature::rotation_message(plugin, old, new)
 }
 
-/// Why a rotation was not taken ([`accept_rotation`]).
+/// Why a rotation was not taken (`accept_rotation` (kernel)).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum RotationError {
@@ -146,7 +146,7 @@ pub fn is_revoked(storage: &dyn Storage, key: &[u8; 32]) -> bool {
     revoked(storage).contains(key)
 }
 
-/// Why revoked keys were not all kept ([`keep_revoked`]).
+/// Why revoked keys were not all kept (`keep_revoked` (kernel)).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum RevokedError {
