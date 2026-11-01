@@ -218,7 +218,10 @@ impl Font {
 
     paperpaw_table::shared! {
     /// Whether the font draws `ch`: its own glyph, or for a jamo of a
-    /// modern Hangul syllable, the syllables it is set as.
+    /// modern Hangul syllable, the syllables it is set as. A font that
+    /// holds 가 is taken to hold all modern syllables (as the Korean packs
+    /// do); one with only some draws a jamo alone where its syllable is
+    /// missing, which this does not count as missing.
     pub fn has_char(&self, ch: char) -> bool {
         let has = |ch| match self {
             Font::Bitmap(font) => font.has_char(ch),
