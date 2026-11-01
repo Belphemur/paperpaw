@@ -1,4 +1,4 @@
-Mobipocket-Bücher (.mobi, .azw) öffnen sich aus der Bibliothek wie jedes Buch, ohne Einrichtung. Titel, Autoren, Sprache und Cover stammen aus dem Buch, die Inhaltsliste entsteht aus seinen Überschriften.
+MOBI-Bücher (.mobi, .azw) öffnen sich aus der Bibliothek wie jedes Buch, ohne Einrichtung. Titel, Autoren, Sprache und Cover stammen aus dem Buch, die Inhaltsliste entsteht aus seinen Überschriften.
 
 Das Buch wird beim ersten Öffnen umgewandelt, bei einem langen dauert das einige Sekunden; danach öffnet es sofort. Text, Überschriften, Fett und Kursiv, Links und Bilder werden angezeigt.
 

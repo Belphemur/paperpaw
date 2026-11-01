@@ -136,8 +136,8 @@ static SCREENS: [FixedScreen; 1] = [FixedScreen::new(SCREEN, "joplin.title", |en
 
 impl Plugin for Joplin {
     fn manifest(&self) -> Manifest {
-        Manifest::new(PLUGIN, "Joplin notes", paperpaw_sdk::package_version!())
-            .description("Keeps the highlights and notes of each book in Joplin.")
+        Manifest::new(PLUGIN, "Book notes sync", paperpaw_sdk::package_version!())
+            .description("Keeps each book's highlights and notes in a note. Works with Joplin (Joplin Cloud, Joplin Server or WebDAV).")
             .how(&HOW)
             .uses(paperpaw_sdk::Uses::NETWORK)
     }

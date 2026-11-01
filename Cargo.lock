@@ -1418,10 +1418,10 @@ dependencies = [
  "paperpaw-plugin-plugin-manager",
  "paperpaw-plugin-power",
  "paperpaw-plugin-profiles",
+ "paperpaw-plugin-read-later-cloud",
  "paperpaw-plugin-reader",
  "paperpaw-plugin-reading-goal",
  "paperpaw-plugin-readwise",
- "paperpaw-plugin-readwise-reader",
  "paperpaw-plugin-rules",
  "paperpaw-plugin-settings",
  "paperpaw-plugin-setup",
@@ -2186,6 +2186,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "paperpaw-plugin-read-later-cloud"
+version = "1.0.0"
+dependencies = [
+ "paperpaw-core",
+ "paperpaw-i18n",
+ "paperpaw-platform",
+ "paperpaw-sdk",
+ "proptest",
+]
+
+[[package]]
 name = "paperpaw-plugin-reader"
 version = "1.0.6"
 dependencies = [
@@ -2218,17 +2229,6 @@ dependencies = [
 [[package]]
 name = "paperpaw-plugin-readwise"
 version = "1.0.3"
-dependencies = [
- "paperpaw-core",
- "paperpaw-i18n",
- "paperpaw-platform",
- "paperpaw-sdk",
- "proptest",
-]
-
-[[package]]
-name = "paperpaw-plugin-readwise-reader"
-version = "1.0.0"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",

@@ -73,7 +73,7 @@ members = [
     "plugins/sleep",
     "plugins/translate",
     "plugins/readwise",
-    "plugins/readwise-reader",
+    "plugins/read-later-cloud",
     "plugins/joplin",
     "plugins/koreader",
     "plugins/wallabag",
@@ -188,7 +188,7 @@ paperpaw-plugin-vocabulary = { path = "plugins/vocabulary", version = "1.0.5" }
 paperpaw-plugin-sleep = { path = "plugins/sleep", version = "1.0.1" }
 paperpaw-plugin-translate = { path = "plugins/translate", version = "1.0.2" }
 paperpaw-plugin-readwise = { path = "plugins/readwise", version = "1.0.2" }
-paperpaw-plugin-readwise-reader = { path = "plugins/readwise-reader", version = "1.0.0" }
+paperpaw-plugin-read-later-cloud = { path = "plugins/read-later-cloud", version = "1.0.0" }
 paperpaw-plugin-joplin = { path = "plugins/joplin", version = "1.0.2" }
 paperpaw-plugin-koreader = { path = "plugins/koreader", version = "1.0.3" }
 paperpaw-plugin-wallabag = { path = "plugins/wallabag", version = "1.0.2" }

@@ -1,4 +1,4 @@
-Wikipedia lookup looks words up online, beside the dictionaries. When you look up a word in a book, the dictionary panel lists what your dictionaries find. Choose Online to ask Wikipedia too: the short summary of its article appears as one more entry, in the language of the book, else of PaperPaw.
+Encyclopedia lookup looks words up on Wikipedia, beside the dictionaries. When you look up a word in a book, the dictionary panel lists what your dictionaries find. Choose Online to ask Wikipedia too: the short summary of its article appears as one more entry, in the language of the book, else of PaperPaw.
 
 Open the entry to read it on a screen of its own. The page buttons or taps scroll it, and Select or a tap at its end closes it.
 

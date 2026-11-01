@@ -55,8 +55,8 @@ fn is_mobi(head: &[u8]) -> bool {
 
 impl Plugin for MobiFormat {
     fn manifest(&self) -> Manifest {
-        Manifest::new(PLUGIN, "Mobipocket", paperpaw_sdk::package_version!())
-            .description("Opens Mobipocket books (.mobi, .azw) without DRM.")
+        Manifest::new(PLUGIN, "MOBI books", paperpaw_sdk::package_version!())
+            .description("Opens .mobi and .azw files without DRM.")
             .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)
     }

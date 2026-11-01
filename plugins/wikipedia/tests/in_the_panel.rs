@@ -278,10 +278,13 @@ fn wikipedia_is_asked_once_online_is_chosen_and_shown_in_the_panel() {
         // Opened by a tap on its line, or by confirm wherever the entry
         // shows (as the hint says).
         if device.input.touch {
-            while !panel.labels().iter().any(|l| l == "Open Wikipedia ›") {
+            for _ in 0..20 {
+                if panel.labels().iter().any(|l| l == "Open Encyclopedia ›") {
+                    break;
+                }
                 panel.press(actions::NEXT_PAGE);
             }
-            panel.tap_on("Open Wikipedia");
+            panel.tap_on("Open Encyclopedia");
         } else {
             // Its heading is on the first page already.
             panel.press(actions::CONFIRM);

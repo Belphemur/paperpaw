@@ -214,10 +214,14 @@ static HOW: [(&str, &str); 2] = [
 
 impl Plugin for Readwise {
     fn manifest(&self) -> Manifest {
-        Manifest::new(PLUGIN, "Readwise export", paperpaw_sdk::package_version!())
-            .description("Sends the highlights of exported notes to Readwise.")
-            .how(&HOW)
-            .uses(paperpaw_sdk::Uses::NETWORK)
+        Manifest::new(
+            PLUGIN,
+            "Highlights export (cloud)",
+            paperpaw_sdk::package_version!(),
+        )
+        .description("Sends highlights to Readwise.")
+        .how(&HOW)
+        .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {

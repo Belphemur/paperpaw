@@ -51,32 +51,32 @@ use answers::Answer;
 
 pub use screen::{ENTERED, FIELD};
 
-pub const PLUGIN: Id = Id::new_static("readwise-reader");
+pub const PLUGIN: Id = Id::new_static("read-later-cloud");
 /// Opens the set-up.
-pub const OPEN: Id = Id::new_static("readwise-reader.open");
+pub const OPEN: Id = Id::new_static("read-later-cloud.open");
 /// Fetches the articles.
-pub const FETCH: Id = Id::new_static("readwise-reader.fetch");
+pub const FETCH: Id = Id::new_static("read-later-cloud.fetch");
 /// Declared work: a fetch no reader waits for (a rule's).
-const FETCH_DUE: Event = Event::new("readwise-reader.fetch-due");
+const FETCH_DUE: Event = Event::new("read-later-cloud.fetch-due");
 /// Where the articles are fetched from: [`FROM_LATER`] or [`FROM_INBOX`]
 /// (each its name's key).
-pub const FROM: Setting<Text> = Setting::new("readwise-reader.from");
-pub const FROM_LATER: &str = "readwise-reader.from.later";
-pub const FROM_INBOX: &str = "readwise-reader.from.inbox";
+pub const FROM: Setting<Text> = Setting::new("read-later-cloud.from");
+pub const FROM_LATER: &str = "read-later-cloud.from.later";
+pub const FROM_INBOX: &str = "read-later-cloud.from.inbox";
 /// The access token, among the passwords and keys.
-pub const SECRET: &str = "readwise-reader.token";
+pub const SECRET: &str = "read-later-cloud.token";
 /// What tells the accounts apart, kept beside the token among the
 /// passwords and keys (nothing derived from the token is left on the
 /// card): a number made of the token the lists belong to.
-pub const ACCOUNT: &str = "readwise-reader.account";
-const SCREEN: Id = Id::new_static("readwise-reader.setup");
+pub const ACCOUNT: &str = "read-later-cloud.account";
+const SCREEN: Id = Id::new_static("read-later-cloud.setup");
 /// Answers: the list, an article asked about, a book, an archived one.
-const LISTED: Event<HttpReply> = Event::new("readwise-reader.listed");
-const CHECKED: Event<HttpReply> = Event::new("readwise-reader.checked");
-const DOWNLOADED: Event<HttpReply> = Event::new("readwise-reader.downloaded");
-const ARCHIVED: Event<HttpReply> = Event::new("readwise-reader.archived");
+const LISTED: Event<HttpReply> = Event::new("read-later-cloud.listed");
+const CHECKED: Event<HttpReply> = Event::new("read-later-cloud.checked");
+const DOWNLOADED: Event<HttpReply> = Event::new("read-later-cloud.downloaded");
+const ARCHIVED: Event<HttpReply> = Event::new("read-later-cloud.archived");
 /// Emitted with a message (`text`) when a fetch ends.
-const DONE: Event<Finished> = Event::new("readwise-reader.done");
+const DONE: Event<Finished> = Event::new("read-later-cloud.done");
 
 paperpaw_sdk::event_data! {
     /// How a fetch ended ([`DONE`]), in words.
@@ -190,7 +190,7 @@ fn lists_of_account(
         env.storage().write(&data("finished.txt"), b"")?;
     }
     out.push(Command::set_secret(
-        SecretChange::keep(ACCOUNT, "readwise-reader.secret.account", &account).changeable(false),
+        SecretChange::keep(ACCOUNT, "read-later-cloud.secret.account", &account).changeable(false),
     ));
     Ok((Vec::new(), Vec::new()))
 }
@@ -341,13 +341,13 @@ impl Fetch {
             return;
         }
         if !env.caps().network {
-            return done(env, "readwise-reader.no-network", &[], out);
+            return done(env, "read-later-cloud.no-network", &[], out);
         }
         let Some(token) = env.secrets().get(SECRET).filter(|t| !t.is_empty()) else {
-            return done(env, "readwise-reader.setup-needed", &[], out);
+            return done(env, "read-later-cloud.setup-needed", &[], out);
         };
         let Ok((fetched, finished)) = lists_of_account(env, token, out) else {
-            return done(env, "readwise-reader.unreadable", &[], out);
+            return done(env, "read-later-cloud.unreadable", &[], out);
         };
         *self = Self {
             running: true,
@@ -359,7 +359,7 @@ impl Fetch {
             ..Self::default()
         };
         out.push(Command::Notify(
-            env.i18n().tr("readwise-reader.fetching").to_string(),
+            env.i18n().tr("read-later-cloud.fetching").to_string(),
         ));
         self.next(env, out);
     }
@@ -368,9 +368,9 @@ impl Fetch {
     /// token or asks to wait: asking on would not help.
     fn stopped(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) -> bool {
         let key = match reply.status {
-            0 => "readwise-reader.unreachable",
-            401 | 403 => "readwise-reader.bad-token",
-            429 => "readwise-reader.wait",
+            0 => "read-later-cloud.unreachable",
+            401 | 403 => "read-later-cloud.bad-token",
+            429 => "read-later-cloud.wait",
             _ => return false,
         };
         self.finish(env);
@@ -398,7 +398,7 @@ impl Fetch {
             return false;
         }
         self.finish(env);
-        done(env, "readwise-reader.too-big", &[], out);
+        done(env, "read-later-cloud.too-big", &[], out);
         true
     }
 
@@ -461,9 +461,9 @@ impl Fetch {
         }
         self.finish(env);
         let key = if self.failed > 0 {
-            "readwise-reader.done-failed"
+            "read-later-cloud.done-failed"
         } else {
-            "readwise-reader.done"
+            "read-later-cloud.done"
         };
         let args = [
             ("fetched", Arg::Int(self.fetched as i64)),
@@ -642,39 +642,46 @@ fn done(env: &Env<'_>, key: &str, args: &[(&str, Arg<'_>)], out: &mut Commands) 
 
 /// The Readwise Reader plugin.
 #[derive(Debug, Default)]
-pub struct ReadwiseReader;
+pub struct ReadLaterCloud;
 
 static SETTINGS: [SettingSpec; 1] = [SettingSpec::choice(
     FROM.static_str(),
-    "readwise-reader.from",
+    "read-later-cloud.from",
     &[FROM_LATER, FROM_INBOX],
     FROM_LATER,
     groups::LIBRARY,
 )
 .kept_on_reset()
-.description("readwise-reader.from.help")];
+.description("read-later-cloud.from.help")];
 
 static HOW: [(&str, &str); 2] = [
     ("en", include_str!("../how/en.txt")),
     ("de", include_str!("../how/de.txt")),
 ];
 
-static ACTIONS: [FixedAction; 1] = [FixedAction::new(OPEN, "readwise-reader.title")
+static ACTIONS: [FixedAction; 1] = [FixedAction::new(OPEN, "read-later-cloud.title")
     .handler(|_, _, out| out.push(Command::OpenScreen(SCREEN, Params::new())))];
 static ENTRIES: [MenuEntry; 1] = [MenuEntry::new(menus::TOOLS, OPEN).order(49)];
 static ICONS: [(Id, &str); 2] = [(OPEN, "article"), (FETCH, "refresh")];
 
-static SCREENS: [FixedScreen; 1] = [FixedScreen::new(SCREEN, "readwise-reader.title", |env, _| {
-    Box::new(screen::SetupScreen::new(env))
-})
-.instances(paperpaw_sdk::Instances::SINGLE)];
+static SCREENS: [FixedScreen; 1] =
+    [
+        FixedScreen::new(SCREEN, "read-later-cloud.title", |env, _| {
+            Box::new(screen::SetupScreen::new(env))
+        })
+        .instances(paperpaw_sdk::Instances::SINGLE),
+    ];
 
-impl Plugin for ReadwiseReader {
+impl Plugin for ReadLaterCloud {
     fn manifest(&self) -> Manifest {
-        Manifest::new(PLUGIN, "Readwise Reader", paperpaw_sdk::package_version!())
-            .description("Articles saved in Readwise Reader, fetched as books.")
-            .how(&HOW)
-            .uses(paperpaw_sdk::Uses::NETWORK)
+        Manifest::new(
+            PLUGIN,
+            "Read-later articles (cloud)",
+            paperpaw_sdk::package_version!(),
+        )
+        .description("Fetches articles saved in Readwise Reader.")
+        .how(&HOW)
+        .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
@@ -683,7 +690,7 @@ impl Plugin for ReadwiseReader {
         r.add_screens(&SCREENS)?;
         r.add_actions(&ACTIONS)?;
         let s = state.clone();
-        r.add_action(ActionSpec::new(FETCH, "readwise-reader.fetch").handler(
+        r.add_action(ActionSpec::new(FETCH, "read-later-cloud.fetch").handler(
             move |env: &Env<'_>, _, out: &mut Commands| {
                 if env.reader() {
                     s.borrow_mut().start(env, out);

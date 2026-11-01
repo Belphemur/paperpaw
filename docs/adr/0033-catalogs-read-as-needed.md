@@ -120,7 +120,7 @@ for others, in one list:
   check, kosync) send `Command::GoOnlineFor`; power settings follow
   `Capabilities::power` (#35).
 - Downloads of known or bounded size set `HttpRequest::max_file`
-  (store, readwise-reader, news, catalogs) (#31).
+  (store, read-later-cloud, news, catalogs) (#31).
 - The transfer screen shows `WifiState::reach`; a "Connect to
   computer" entry and screen for the USB drive (#32).
 - The reader's zoom asks for `Document::prepare_image_larger` (#28).

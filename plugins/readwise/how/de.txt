@@ -1,4 +1,4 @@
-Der Readwise-Export schickt deine Markierungen an Readwise, mit ihren Notizen und ihrer Stelle im Buch. Es sendet, wenn du am Ende von Lesezeichen und Markierungen eines Buchs Als Markdown exportieren wählst.
+Markierungen exportieren (Cloud) schickt deine Markierungen an Readwise, mit ihren Notizen und ihrer Stelle im Buch. Es sendet, wenn du am Ende von Lesezeichen und Markierungen eines Buchs Als Markdown exportieren wählst.
 
 Beim ersten Export fragt es nach deinem Zugangstoken (readwise.io/access_token); er wird mit den anderen Passwörtern und Schlüsseln aufbewahrt. Readwise behält jede Markierung nur einmal, ein weiterer Export schickt also nur Neues.
 
