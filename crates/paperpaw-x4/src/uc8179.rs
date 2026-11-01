@@ -925,10 +925,16 @@ where
     /// too, but the frame kept goes again, as the stock firmware sends
     /// it).
     pub fn wait(&mut self) -> Result<(), Error> {
+        self.wait_with(|| {})
+    }
+
+    /// As [`Self::wait`], calling `meanwhile` each round of the wait (a
+    /// millisecond and what it takes), e.g. to serve the radio.
+    pub fn wait_with(&mut self, mut meanwhile: impl FnMut()) -> Result<(), Error> {
         let Some(pending) = self.pending.take() else {
             return Ok(());
         };
-        let done = self.wait_ready();
+        let done = self.wait_ready_with(&mut meanwhile);
         if pending.partial {
             self.command(cmd::PARTIAL_OUT, &[])?;
         }
@@ -960,10 +966,15 @@ where
 
     /// Waits while the controller is busy (its busy pin low).
     fn wait_ready(&mut self) -> Result<(), Error> {
+        self.wait_ready_with(&mut || {})
+    }
+
+    fn wait_ready_with(&mut self, meanwhile: &mut dyn FnMut()) -> Result<(), Error> {
         for _ in 0..BUSY_TIMEOUT_MS {
             if self.busy.is_high().map_err(|_| Error::Pin)? {
                 return Ok(());
             }
+            meanwhile();
             self.delay.delay_ms(1);
             self.busy_ms += 1;
         }

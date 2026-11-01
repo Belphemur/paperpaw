@@ -589,13 +589,19 @@ where
 
     /// Waits for a refresh started by [`Display::start_refresh`] to end.
     pub fn wait(&mut self) -> Result<(), Error> {
+        self.wait_with(|| {})
+    }
+
+    /// As [`Self::wait`], calling `meanwhile` each round of the wait (a
+    /// millisecond and what it takes), e.g. to serve the radio.
+    pub fn wait_with(&mut self, mut meanwhile: impl FnMut()) -> Result<(), Error> {
         let Some(pending) = self.pending.take() else {
             return Ok(());
         };
         let done = if pending.started {
-            self.wait_idle()
+            self.wait_idle_with(&mut meanwhile)
         } else {
-            self.wait_busy()
+            self.wait_busy_with(&mut meanwhile)
         };
         self.command(cmd::PARTIAL_OUT, &[])?;
         if let Err(e) = done {
@@ -707,8 +713,12 @@ where
     /// `X3TwoPhase`, lines 359 to 377 of `EpdBus.cpp`). Without a low
     /// edge within [`BUSY_EDGE_MS`], it was done before it was seen.
     fn wait_busy(&mut self) -> Result<(), Error> {
+        self.wait_busy_with(&mut || {})
+    }
+
+    fn wait_busy_with(&mut self, meanwhile: &mut dyn FnMut()) -> Result<(), Error> {
         if self.busy_starts(BUSY_EDGE_MS)? {
-            self.wait_idle()
+            self.wait_idle_with(meanwhile)
         } else {
             Ok(())
         }
@@ -727,10 +737,15 @@ where
 
     /// Waits while the controller is busy (its busy pin low).
     fn wait_idle(&mut self) -> Result<(), Error> {
+        self.wait_idle_with(&mut || {})
+    }
+
+    fn wait_idle_with(&mut self, meanwhile: &mut dyn FnMut()) -> Result<(), Error> {
         for _ in 0..BUSY_TIMEOUT_MS {
             if self.busy.is_high().map_err(|_| Error::Pin)? {
                 return Ok(());
             }
+            meanwhile();
             self.delay.delay_ms(1);
         }
         Err(Error::Timeout)
@@ -1465,6 +1480,20 @@ mod tests {
             "{}",
             b.waited_ms()
         );
+    }
+
+    #[test]
+    fn work_is_done_in_the_rounds_of_a_wait_that_goes_on() {
+        let mut b = bench((1, 300));
+        b.display.start_refresh(Refresh::Fast, false).unwrap();
+        let mut rounds = 0u32;
+        b.display.wait_with(|| rounds += 1).unwrap();
+        // Busy for about 300 readings: a round for each.
+        assert!(rounds >= 200, "{rounds}");
+        // And none for a wait with nothing to wait for.
+        let mut more = 0u32;
+        b.display.wait_with(|| more += 1).unwrap();
+        assert_eq!(more, 0);
     }
 
     #[test]
