@@ -10,6 +10,7 @@
 
 use alloc::format;
 use alloc::string::String;
+use alloc::vec::Vec;
 
 use paperpaw_sdk::install::marks::{From, Marks};
 use paperpaw_sdk::install::{self, Progress};
@@ -105,16 +106,21 @@ fn expected_path() -> String {
 }
 
 /// What the library names for the author of a code plugin.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Named {
     /// The key it signs its code with.
     pub(crate) author: [u8; 32],
     /// The key it named to replace a lost one, pinned at the first
     /// install only.
     pub(crate) recovery: Option<[u8; 32]>,
-    /// A move to another key, signed by the recovery key.
-    pub(crate) rotation: Option<Rotation>,
+    /// The moves to other keys, signed by the recovery key, in the order
+    /// the author made them: a device that has not seen the first still
+    /// follows them from the key it knows.
+    pub(crate) rotations: Vec<Rotation>,
 }
+
+/// The most steps of rotations taken from the library at a time.
+pub(crate) const MAX_STEPS: usize = 8;
 
 /// The recovery key's statement that the plugin moves to key `to`
 /// (`keys::rotation_message`). Only the device decides whether it holds:
@@ -137,7 +143,7 @@ pub(crate) fn expect(storage: &dyn Storage, plugin: &str, named: Option<&Named>)
     if let Some(recovery) = &named.recovery {
         text.push_str(&format!("recovery {}\n", hex(recovery)));
     }
-    if let Some(rotation) = &named.rotation {
+    for rotation in named.rotations.iter().take(MAX_STEPS) {
         let (to, signature) = (hex(&rotation.to), hex(&rotation.signature));
         text.push_str(&format!("rotation {to} {signature}\n"));
     }
@@ -146,20 +152,20 @@ pub(crate) fn expect(storage: &dyn Storage, plugin: &str, named: Option<&Named>)
 
 /// What the library named for `plugin` when its download started.
 fn expected(storage: &dyn Storage, plugin: &str) -> Option<Named> {
-    let text = paperpaw_sdk::read_file(storage, &expected_path(), 1024).ok()?;
+    let text = paperpaw_sdk::read_file(storage, &expected_path(), 2048).ok()?;
     let text = core::str::from_utf8(&text).ok()?;
     let mut lines = text.lines();
     if lines.next()? != plugin {
         return None;
     }
-    let (mut author, mut recovery, mut rotation) = (None, None, None);
+    let (mut author, mut recovery, mut rotations) = (None, None, Vec::new());
     for line in lines {
         let mut words = line.split(' ');
         match (words.next(), words.next(), words.next()) {
             (Some("author"), Some(key), None) => author = bytes(key),
             (Some("recovery"), Some(key), None) => recovery = bytes(key),
-            (Some("rotation"), Some(to), Some(signature)) => {
-                rotation = Some(Rotation {
+            (Some("rotation"), Some(to), Some(signature)) if rotations.len() < MAX_STEPS => {
+                rotations.push(Rotation {
                     to: bytes(to)?,
                     signature: bytes(signature)?,
                 });
@@ -170,7 +176,7 @@ fn expected(storage: &dyn Storage, plugin: &str) -> Option<Named> {
     Some(Named {
         author: author?,
         recovery,
-        rotation,
+        rotations,
     })
 }
 
@@ -178,7 +184,33 @@ fn bytes<const N: usize>(hex: &str) -> Option<[u8; N]> {
     paperpaw_sdk::digest::hex::decode(hex)?.try_into().ok()
 }
 
-/// Whether the plugin downloaded into `folder` may be installed.
+/// Takes `plugin`'s author along the library's rotation `steps` to `key`,
+/// the key its code is signed with: from the key this device knows, which
+/// may be any before it (the steps before it do not hold here and are
+/// skipped), through every step to the one that names `key`. `false`, and
+/// nothing taken, where no step names `key`; where a step after the first
+/// taken does not hold, the author stays where the steps got to.
+fn follow(storage: &dyn Storage, plugin: &str, key: &[u8; 32], steps: &[Rotation]) -> bool {
+    let Some(last) = steps.iter().position(|step| step.to == *key) else {
+        return false;
+    };
+    let mut moved = false;
+    for step in &steps[..=last] {
+        match keys::accept_rotation(storage, plugin, &step.to, &step.signature) {
+            Ok(()) => moved = true,
+            // Before the key known: one of an older move.
+            Err(_) if !moved => {}
+            Err(_) => return false,
+        }
+    }
+    native::known_author(storage, plugin) == Some(*key)
+}
+
+/// Whether the plugin downloaded into `folder` may be installed. For a
+/// code plugin with another author's key than the one known, this takes
+/// the rotations the library carries (see [`follow`]) and so changes what
+/// is known: it is called once, where the download is done, and is no
+/// dry run.
 pub(crate) fn verdict(env: &Env<'_>, plugin: &str, folder: &str) -> Verdict {
     let storage = env.storage();
     let code = paperpaw_sdk::native::CODE_FILES
@@ -228,17 +260,11 @@ pub(crate) fn verdict(env: &Env<'_>, plugin: &str, folder: &str) -> Verdict {
     };
     match native::author(storage, plugin, &key) {
         Author::Known => Verdict::Install { code: Some(code) },
-        // Another key than the one known: only a rotation the pinned
-        // recovery key signed moves the plugin to it, and the kernel
-        // checks that (the library's word is only carried). It forgets
-        // the code installed before, so a cut here leaves the plugin off
-        // until the update runs again.
-        Author::Other => match expected(storage, plugin).and_then(|named| named.rotation) {
-            Some(rotation)
-                if rotation.to == key
-                    && keys::accept_rotation(storage, plugin, &key, &rotation.signature)
-                        .is_ok() =>
-            {
+        // Another key than the one known: only rotations the pinned
+        // recovery key signed move the plugin to it, and the kernel checks
+        // each (the library's word is only carried).
+        Author::Other => match expected(storage, plugin) {
+            Some(named) if follow(storage, plugin, &key, &named.rotations) => {
                 Verdict::Install { code: Some(code) }
             }
             _ => Verdict::Refused(Refusal::KeyChanged),

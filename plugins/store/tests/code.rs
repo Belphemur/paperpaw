@@ -260,29 +260,53 @@ fn a_recovery_key_named_by_an_update_is_not_pinned() {
     assert_eq!(known_recovery(&shopping.storage, "clock"), None);
 }
 
-/// The clock's page for an update signed by [`OTHER`], the library naming
-/// that key and `rotation`'s signature of the move (`to` as given).
-fn rotated_page(version: &str, code: &[u8], to: &[u8; 32], signature: &[u8; 64]) -> String {
+/// The clock's page for an update, the library naming `signer` as its
+/// author's key and carrying these rotation steps (`to`, signature).
+fn rotated_page(
+    version: &str,
+    code: &[u8],
+    signer: &[u8; 32],
+    steps: &[([u8; 32], [u8; 64])],
+) -> String {
     let author = format!("\"author_key\": \"{}\"", hex(&public_key(&AUTHOR)));
+    let steps: Vec<String> = steps
+        .iter()
+        .map(|(to, signature)| {
+            format!(
+                "{{\"to\": \"{}\", \"signature\": \"{}\"}}",
+                hex(to),
+                hex(signature)
+            )
+        })
+        .collect();
     let named = format!(
-        "\"author_key\": \"{}\", \"rotation\": {{\"to\": \"{}\", \"signature\": \"{}\"}}",
-        hex(&public_key(&OTHER)),
-        hex(to),
-        hex(signature)
+        "\"author_key\": \"{}\", \"rotations\": [{}]",
+        hex(&public_key(signer)),
+        steps.join(", ")
     );
     page(version, code).replace(&author, &named)
 }
 
-/// What the recovery key signs to move the clock from [`AUTHOR`] to `new`.
-fn moved(new: &[u8; 32]) -> [u8; 64] {
-    let message = rotation_message("clock", &public_key(&AUTHOR), new);
+/// What the recovery key signs to move the clock from the key of seed
+/// `from` to `new`.
+fn moved_from(from: &[u8; 32], new: &[u8; 32]) -> [u8; 64] {
+    let message = rotation_message("clock", &public_key(from), new);
     sign_message(message.as_bytes(), &RECOVERY)
 }
 
+/// What the recovery key signs to move the clock from [`AUTHOR`] to `new`.
+fn moved(new: &[u8; 32]) -> [u8; 64] {
+    moved_from(&AUTHOR, new)
+}
+
 /// The clock installed by [`AUTHOR`], naming [`RECOVERY`] if `pinned`,
-/// then its update 1.1.0 offered as `rotated_page` says; whether it was
-/// installed.
-fn update_signed_by_other(pinned: bool, to: &[u8; 32], signature: &[u8; 64]) -> (Shopping, bool) {
+/// then its update 1.1.0, signed by the key of seed `signer`, offered with
+/// these rotation steps; whether it was installed.
+fn update_signed_by(
+    pinned: bool,
+    signer: &[u8; 32],
+    steps: &[([u8; 32], [u8; 64])],
+) -> (Shopping, bool) {
     let mut shopping = store("1.0.0");
     let first = ppn(BUILD, Some(&AUTHOR));
     if pinned {
@@ -290,18 +314,18 @@ fn update_signed_by_other(pinned: bool, to: &[u8; 32], signature: &[u8; 64]) -> 
     } else {
         first_install(&mut shopping, "1.0.0", &first);
     }
-    let other = ppn(BUILD, Some(&OTHER));
+    let signed = ppn(BUILD, Some(signer));
     shopping.run(actions::BACK);
     shopping.run(actions::BACK);
     shopping.run(OPEN);
     shopping.serve(LIST, list("1.1.0").as_bytes());
     shopping.choose("Reading");
     shopping.choose("Clock");
-    let text = rotated_page("1.1.0", &other, to, signature);
+    let text = rotated_page("1.1.0", &signed, signer, steps);
     shopping.serve(PAGE, text.as_bytes());
     shopping.run(actions::DOWN);
     shopping.run(actions::CONFIRM);
-    download(&mut shopping, "1.1.0", &other);
+    download(&mut shopping, "1.1.0", &signed);
     let done = installed(&shopping) == Some(Version::new(1, 1, 0));
     (shopping, done)
 }
@@ -309,7 +333,7 @@ fn update_signed_by_other(pinned: bool, to: &[u8; 32], signature: &[u8; 64]) -> 
 #[test]
 fn a_rotation_by_the_recovery_key_moves_the_plugin_to_the_new_key() {
     let to = public_key(&OTHER);
-    let (shopping, done) = update_signed_by_other(true, &to, &moved(&to));
+    let (shopping, done) = update_signed_by(true, &OTHER, &[(to, moved(&to))]);
     assert!(done);
     let storage = &shopping.storage;
     assert_eq!(known_author(storage, "clock"), Some(to));
@@ -319,6 +343,39 @@ fn a_rotation_by_the_recovery_key_moves_the_plugin_to_the_new_key() {
     );
     let code = ppn(BUILD, Some(&OTHER));
     assert_eq!(installed_code(storage, "clock"), Some(digest(&code)));
+}
+
+#[test]
+fn a_device_behind_follows_the_steps_from_the_key_it_knows() {
+    let third_seed = [3u8; 32];
+    let (b, c) = (public_key(&OTHER), public_key(&third_seed));
+    // The author moved A to B, then B to C; the device is still on A.
+    let steps = [(b, moved(&b)), (c, moved_from(&OTHER, &c))];
+    let (shopping, done) = update_signed_by(true, &third_seed, &steps);
+    assert!(done);
+    assert_eq!(known_author(&shopping.storage, "clock"), Some(c));
+    // Code signed by B only goes to B, though the library names C too.
+    let (shopping, done) = update_signed_by(true, &OTHER, &steps);
+    assert!(done);
+    assert_eq!(known_author(&shopping.storage, "clock"), Some(b));
+}
+
+#[test]
+fn steps_that_do_not_reach_the_signer_move_nothing() {
+    let third_seed = [3u8; 32];
+    let (b, c) = (public_key(&OTHER), public_key(&third_seed));
+    // The library names a step to B only; the code is signed by C.
+    let (shopping, done) = update_signed_by(true, &third_seed, &[(b, moved(&b))]);
+    assert!(!done);
+    assert_eq!(
+        known_author(&shopping.storage, "clock"),
+        Some(public_key(&AUTHOR))
+    );
+    // A step to C that does not hold after the first one that does.
+    let bad = (c, [0u8; 64]);
+    let (shopping, done) = update_signed_by(true, &third_seed, &[(b, moved(&b)), bad]);
+    assert!(!done);
+    assert_eq!(known_author(&shopping.storage, "clock"), Some(b));
 }
 
 #[test]
@@ -338,7 +395,7 @@ fn a_rotation_that_does_not_hold_is_refused_as_before() {
         (false, to, moved(&to)),
     ];
     for (pinned, to, signature) in cases {
-        let (mut shopping, done) = update_signed_by_other(pinned, &to, &signature);
+        let (mut shopping, done) = update_signed_by(pinned, &OTHER, &[(to, signature)]);
         assert!(!done);
         assert_eq!(installed(&shopping), Some(Version::new(1, 0, 0)));
         let storage = &shopping.storage;

@@ -291,10 +291,12 @@ struct Item {
     author_key: String,
     /// The recovery key its author named, as the library says.
     recovery_key: String,
-    /// The key it moves to (`rotation.to`), and the recovery key's
-    /// signature of that (`rotation.signature`), both hexadecimal.
+    /// The step of `rotations` being read: the key it moves to (`to`) and
+    /// the recovery key's signature of that, both hexadecimal.
     rotation_to: String,
     rotation_signature: String,
+    /// The steps read, in the order the library gives them.
+    rotations: Vec<Rotation>,
     /// The files read so far (a plugin's page only), and the one being
     /// read.
     files: Vec<PackageFile>,
@@ -427,7 +429,7 @@ impl Item {
                 "author_plugins" => self.more.author_plugins = value.parse().unwrap_or(0),
                 _ => {}
             },
-            [rotation, key] if rotation == "rotation" => match key.as_str() {
+            [rotations, at, key] if rotations == "rotations" && at == "[]" => match key.as_str() {
                 "to" => self.rotation_to = cut(value, MAX_NAME),
                 "signature" => self.rotation_signature = cut(value, 2 * MAX_NAME),
                 _ => {}
@@ -525,6 +527,19 @@ impl Item {
     }
 
     /// A screenshot of `screenshots` was read whole.
+    /// One step of `rotations` is read: kept if it is whole, and not more
+    /// than [`trust::MAX_STEPS`].
+    fn rotation_done(&mut self) {
+        let step = key(&self.rotation_to).zip(signature(&self.rotation_signature));
+        self.rotation_to.clear();
+        self.rotation_signature.clear();
+        if let Some((to, signature)) = step
+            && self.rotations.len() < crate::trust::MAX_STEPS
+        {
+            self.rotations.push(Rotation { to, signature });
+        }
+    }
+
     fn shot_done(&mut self) {
         let shot = core::mem::take(&mut self.shot);
         // The library keeps them as their authors made them: only those
@@ -684,9 +699,9 @@ pub(crate) struct Plugin {
     /// The key its author named to replace a lost author key (#20): only
     /// taken at the plugin's first install ([`trust`](crate::trust)).
     pub recovery_key: Option<[u8; 32]>,
-    /// A move to another key its author's recovery key signed, if the
-    /// library says so (#20).
-    pub rotation: Option<Rotation>,
+    /// The moves to other keys its author's recovery key signed, in order
+    /// (a key moved from twice is two), if the library says so (#20).
+    pub rotations: Vec<Rotation>,
     pub more: More,
 }
 
@@ -696,7 +711,7 @@ impl Plugin {
         Some(Named {
             author: self.author_key?,
             recovery: self.recovery_key,
-            rotation: self.rotation,
+            rotations: self.rotations.clone(),
         })
     }
 }
@@ -725,6 +740,11 @@ fn read_plugin(
         {
             item.shot_done();
         }
+        Event::Close([plugin, rotations, at])
+            if plugin == "plugin" && rotations == "rotations" && at == "[]" =>
+        {
+            item.rotation_done();
+        }
         Event::Value([plugin, rest @ ..], value) if plugin == "plugin" => {
             item.read(rest, value, device);
         }
@@ -740,8 +760,7 @@ fn read_plugin(
     }
     let author_key = key(&item.author_key);
     let recovery_key = key(&item.recovery_key);
-    let rotation = key(&item.rotation_to).zip(signature(&item.rotation_signature));
-    let rotation = rotation.map(|(to, signature)| Rotation { to, signature });
+    let rotations = core::mem::take(&mut item.rotations);
     let code = item.code.is_some();
     let mut more = core::mem::take(&mut item.more);
     if author_key.is_some() {
@@ -759,7 +778,7 @@ fn read_plugin(
         package,
         author_key,
         recovery_key,
-        rotation,
+        rotations,
         more,
     })
 }

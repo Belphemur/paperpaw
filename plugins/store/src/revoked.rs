@@ -87,7 +87,11 @@ impl Revocations {
     }
 
     /// Hands over what is new, at once and only if there is any. A card
-    /// that could not be written is tried again at the next list.
+    /// that could not be written (`NotKept`) is tried again at the next
+    /// list: what was not kept is new again then. `Full` cannot happen:
+    /// what is handed over is at most one entry for each plugin here, as
+    /// the kernel keeps one for each, and a plugin has no logging to say
+    /// so to the reader.
     pub(crate) fn hand_over(&mut self, storage: &dyn Storage) {
         if !self.pending.is_empty() {
             let _ = keys::keep_revoked(storage, &self.pending);
