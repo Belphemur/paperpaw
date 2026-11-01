@@ -6,6 +6,13 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+**Plugins of this release must be built from `ba270129` or later** (the interface 5 amendment, #259). The plugin
+fingerprint changed with its bless (`0005c55d0a4fa341`), so plugins built at `60752ff6` are refused; but shared
+UI and text bodies changed after the bless without changing the fingerprint (the right-to-left mirroring, digits,
+Hangul composition), so a plugin built from a commit between the bless (`26bdc02c`) and `ba270129` loads and keeps old
+copies that no longer agree with them (in a right-to-left language, taps on a switch miss). Store, test-card and
+Workshop builds from those commits are thrown away.
+
 ### Added
 
 - SDK (document): a table cell can span rows (`TableCell::rows`) and say where its lines sit
