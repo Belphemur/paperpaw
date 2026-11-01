@@ -860,7 +860,8 @@ impl Check {
             controls.push((Control::Help, title));
         }
         for (row, list) in [(tool_row, &tools), (answer_row, &answers)] {
-            for (control, rect) in list.iter().zip(ui::columns(row, list.len(), gap)) {
+            let cells = columns(row, list.len(), gap, style.is_rtl());
+            for (control, rect) in list.iter().zip(cells) {
                 controls.push((*control, rect));
             }
         }
@@ -1008,6 +1009,16 @@ impl Check {
 }
 
 /// The report written before, to go on from; empty where there is none.
+/// `count` columns of `row` `gap` apart, the first at the left, at the
+/// right in a right-to-left language.
+fn columns(row: Rect, count: usize, gap: u16, rtl: bool) -> Vec<Rect> {
+    let mut cells = ui::columns(row, count, gap);
+    if rtl {
+        cells.reverse();
+    }
+    cells
+}
+
 fn read_report(env: &Env<'_>) -> Results {
     paperpaw_sdk::files::read_text(env.storage(), steps::REPORT, REPORT_CAP)
         .map_or_else(|_| Results::default(), |text| Results::parse(&text))
@@ -1263,4 +1274,20 @@ fn draw_screen_test(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, flipped:
 /// The check's screen, for `ScreenSpec`.
 pub(crate) fn make(env: &Env<'_>) -> Box<dyn Screen> {
     Box::new(Check::new(env))
+}
+
+#[cfg(test)]
+mod column_tests {
+    use super::*;
+
+    #[test]
+    fn answers_start_at_the_right_in_a_right_to_left_language() {
+        let row = Rect::new(20, 700, 440, 60);
+        let ltr = columns(row, 3, 8, false);
+        let rtl = columns(row, 3, 8, true);
+        assert!(ltr[0].x < ltr[1].x && ltr[1].x < ltr[2].x);
+        assert!(rtl[0].x > rtl[1].x && rtl[1].x > rtl[2].x);
+        assert_eq!(rtl[0].right(), row.right());
+        assert_eq!(rtl[2].x, row.x);
+    }
 }

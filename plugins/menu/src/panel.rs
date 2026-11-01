@@ -232,6 +232,16 @@ fn layout(lines: &[Line], g: Geometry) -> Layout {
     }
 }
 
+/// `count` columns of `area` side by side, the first at the side the
+/// interface starts from: on the right in a right-to-left language.
+fn columns(area: Rect, count: usize, g: Geometry) -> Vec<Rect> {
+    let mut cells = ui::columns(area, count, g.spacing);
+    if g.style.is_rtl() {
+        cells.reverse();
+    }
+    cells
+}
+
 /// The controls of `line` in its row, `area`.
 fn place(line: &Line, area: Rect, g: Geometry) -> Row {
     let inner = inset(area, &g);
@@ -243,7 +253,7 @@ fn place(line: &Line, area: Rect, g: Geometry) -> Row {
     );
     let (label, controls) = match line {
         Line::Buttons(controls) => {
-            let cells = ui::columns(inner, controls.len(), g.spacing);
+            let cells = columns(inner, controls.len(), g);
             (None, controls.iter().cloned().zip(cells).collect())
         }
         // Drawn as the settings pages draw it, across the row.
@@ -260,7 +270,7 @@ fn place(line: &Line, area: Rect, g: Geometry) -> Row {
             (Some(id.clone()), controls)
         }
         Line::Segments(id, options) => {
-            let cells = ui::columns(rest, options.len(), g.spacing);
+            let cells = columns(rest, options.len(), g);
             let controls = options
                 .iter()
                 .zip(cells)
@@ -1122,6 +1132,10 @@ impl Screen for PanelScreen {
 mod layout_tests {
     use super::*;
 
+    fn g_style_rtl() -> UiStyle {
+        UiStyle::PLAIN.with_margin(20).with_rtl(true)
+    }
+
     fn geometry() -> Geometry {
         // Margins of 20: wider than the plain style's.
         let style = UiStyle::PLAIN.with_margin(20);
@@ -1230,6 +1244,17 @@ mod layout_tests {
         assert!(widths.iter().all(|w| w.abs_diff(widths[0]) <= 1));
         assert_eq!(row.controls[2].1.right(), 480 - 20);
         assert_eq!(row.controls[1].1.x, row.controls[0].1.right() as u16 + 5);
+
+        // Right to left, the first is the one at the right.
+        let g = Geometry {
+            style: g_style_rtl(),
+            ..geometry()
+        };
+        let mirrored = place(&buttons, Rect::new(0, 100, 480, 60), g);
+        assert_eq!(mirrored.controls[0].0, Control::Toggle(id("a.one")));
+        assert!(mirrored.controls[0].1.x > mirrored.controls[1].1.x);
+        assert!(mirrored.controls[1].1.x > mirrored.controls[2].1.x);
+        assert_eq!(mirrored.controls[0].1.right(), 480 - 20);
 
         // A slider is its whole row, across the screen.
         let area = Rect::new(0, 0, 480, 150);
