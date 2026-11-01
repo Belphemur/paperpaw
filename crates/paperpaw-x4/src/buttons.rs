@@ -43,6 +43,22 @@ pub const ALL: [&str; 7] = [
 /// A reading must hold this long to count: three readings 5 ms apart.
 pub const DEBOUNCE_MS: u64 = 15;
 
+/// The longest the processor sleeps between readings of the buttons when
+/// the power level asks to save (Saving and Offline, ADR 0025): a press
+/// lasts 80 ms and more, so a reading every 60 ms still sees each one.
+pub const SAVING_READ_MS: u64 = 60;
+
+/// How long the processor sleeps between readings of the buttons: the
+/// reader's own choice (`response_ms`), and not less than
+/// [`SAVING_READ_MS`] where the power level saves.
+pub const fn read_interval_ms(response_ms: u64, saving: bool) -> u64 {
+    if saving && response_ms < SAVING_READ_MS {
+        SAVING_READ_MS
+    } else {
+        response_ms
+    }
+}
+
 /// The buttons of each ladder, as bits of [`State`]: one ladder reads one
 /// button at a time.
 const LADDERS: [u8; 2] = [0b0000_1111, 0b0011_0000];
@@ -319,5 +335,18 @@ mod tests {
             events,
             [(buttons::CONFIRM, true), (buttons::CONFIRM, false)]
         );
+    }
+
+    #[test]
+    fn saving_reads_the_buttons_no_oftener_than_every_sixty_milliseconds() {
+        // 10 (Faster), 30 (Normal), 50 (Saving) are the reader's choices.
+        for response in [10, 30, 50] {
+            assert_eq!(read_interval_ms(response, false), response);
+            assert_eq!(read_interval_ms(response, true), SAVING_READ_MS);
+        }
+        // A slower choice is kept.
+        assert_eq!(read_interval_ms(100, true), 100);
+        // A press of 80 ms is seen at that rate.
+        assert!(SAVING_READ_MS < 80);
     }
 }
