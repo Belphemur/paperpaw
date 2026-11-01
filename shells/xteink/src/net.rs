@@ -243,6 +243,19 @@ impl Net {
         self.address?.broadcast().map(IpAddress::Ipv4)
     }
 
+    /// The name the device answers to in this network while something
+    /// serves (`paperpaw.local` once claimed, else the one with its suffix);
+    /// `None` when it answers to none (nothing serves, or no name).
+    pub fn local_name(&self) -> Option<alloc::string::String> {
+        let names = self.names.as_ref().filter(|names| names.in_group)?;
+        let plain = names
+            .claim
+            .as_ref()
+            .filter(|claim| claim.standing() == paperpaw_x4::mdns::Standing::Owned)
+            .map(|claim| claim.label());
+        paperpaw_x4::mdns::shown_name(&names.responder.name(), plain)
+    }
+
     /// The address DHCP gave, if it did yet.
     pub fn address(&self) -> Option<smoltcp::wire::Ipv4Cidr> {
         self.address
