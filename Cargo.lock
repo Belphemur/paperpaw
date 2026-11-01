@@ -1410,6 +1410,7 @@ dependencies = [
  "paperpaw-plugin-menu",
  "paperpaw-plugin-menu-editor",
  "paperpaw-plugin-news",
+ "paperpaw-plugin-notes-overview",
  "paperpaw-plugin-opds",
  "paperpaw-plugin-plugin-manager",
  "paperpaw-plugin-power",
@@ -2067,6 +2068,18 @@ dependencies = [
  "paperpaw-plugin-home",
  "paperpaw-sdk",
  "proptest",
+]
+
+[[package]]
+name = "paperpaw-plugin-notes-overview"
+version = "1.0.0"
+dependencies = [
+ "paperpaw-core",
+ "paperpaw-i18n",
+ "paperpaw-platform",
+ "paperpaw-plugin-files",
+ "paperpaw-plugin-fonts-default",
+ "paperpaw-sdk",
 ]
 
 [[package]]

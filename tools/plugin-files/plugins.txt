@@ -27,6 +27,7 @@ koreader sync
 kosync sync
 menu-editor look
 news news
+notes-overview notes
 profiles reading
 reading-goal reading
 readwise notes

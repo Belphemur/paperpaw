@@ -8,6 +8,10 @@ change the plugin SDK.
 
 ### Added
 
+- *All notes*, a new plugin (Tools): the books that have bookmarks or highlights with how many, a book's notes
+  (a note opens the book there), and *Export as My Clippings.txt*, all notes in one file in Kindle's form
+  (UTF-8 with a byte order mark, `Exports/My Clippings.txt` beside the library) that notes apps read. A book's
+  notes file is found by the hash of its path, so listing needs no book to be opened. It needs no SDK change.
 - *End of book*, a new plugin: when the last page of a book is reached, a screen offers the next book of its
   series (or the library), a rating of one to five (`4 / 5`, kept as a book field and shown as a badge on the
   book's row and on its information page) and whether the book counts as finished. Two settings in the reading
