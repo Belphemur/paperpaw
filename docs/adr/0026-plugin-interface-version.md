@@ -163,6 +163,16 @@ with that before the betas of 0.5:
   one changed without the file written anew: so every such change shows
   in its commit, which says which of the three it is, and reviewers
   check that.
+- **A crash in shared code is the calling plugin's.** A panic in a
+  shared function, or in any other code of the firmware a plugin's code
+  called, that has the plugin's code below it on the stack is blamed on
+  the innermost such plugin, as its own panic is: safe mode switches that
+  plugin off, not all of them. The firmware's parsers (JSON, INI, XML)
+  are shared and read what plugins hand them, and an allocation that
+  fails in a shared body is the plugin's request: before the families,
+  both happened in the plugin's own copy, and so they still count. A bug
+  of the firmware that only one plugin's calls reach is then also that
+  plugin's to the reader, which is the lesser harm.
 - **Cache revisions can increase without changing the interface.** The
   exact `paperpaw_layout::VERSION: u32` constant identifies the layout
   algorithm in page-index keys. Raising it keeps indexes made by the old

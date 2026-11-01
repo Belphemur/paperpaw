@@ -320,8 +320,11 @@ change the plugin SDK.
   plugin that draws text). The loader fills the families' words of a
   plugin (`Relocator::tables`), refuses a plugin built for a newer or an
   older revision of a family before it places anything, `paperpaw-sign
-  pack` records the families a plugin reads, and a panic in shared code is
-  the firmware's, not the plugin's, in the crash file and for safe mode.
+  pack` records the families a plugin reads, and a panic in shared code
+  (a parser of what the plugin handed it, an allocation that failed
+  there) is blamed on the plugin that called it, so safe mode switches
+  off that plugin alone; the crash file says `[shared code, called from
+  <plugin>]`.
   The X4 Pro and the X4 Classic keep their copies. A library built for a
   computer with `--cfg paperpaw_table_host` calls the same tables; CI job
   `table-compat` checks old plugins against the new firmware once an

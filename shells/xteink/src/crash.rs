@@ -11,11 +11,11 @@
 //! the firmware's symbols. An allocation that failed says so this way
 //! too, with the code that asked for it. A call in a native plugin's code
 //! is followed by the plugin and the offset into its file, e.g.
-//! `4280a1c4 (hello+0x7f30)`, and safe mode learns the plugin
-//! (`safe_mode::crashed_in`), where the plugin panicked itself. A panic in
-//! the firmware's code that the plugin called (a shared function) is the
-//! firmware's: the message says `[shared code, called from <plugin>]`
-//! and the plugin is not blamed.
+//! `4280a1c4 (hello+0x7f30)`, and safe mode learns the innermost plugin
+//! on the stack (`safe_mode::crashed_in`): where it panicked itself, and
+//! where the firmware's code it called panicked (a shared function, an
+//! allocation there), which the message says with `[shared code, called
+//! from <plugin>]` (`paperpaw_x4::blame`).
 
 use core::fmt::Write;
 
@@ -64,14 +64,13 @@ fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
     // addresses inside `core` and `alloc` are named the same way).
     let _ = write!(cut, " @");
     let mut last = 0;
-    // A plugin that panicked itself (through its table's `panic`) is
-    // blamed. So is one that faulted in its own code: esp-hal reports a
-    // CPU fault through this same handler, without the plugin's flag, so
-    // the faulting address (`mepc`) says whose code it was. A panic in the
-    // firmware's code that a plugin called, a shared function, is the
-    // firmware's bug (no panics on bad input): the plugin is named as the
-    // caller, and not blamed, so a boot loop there ends in safe mode for
-    // all plugins.
+    // The innermost plugin on the stack is blamed: one that panicked
+    // itself (through its table's `panic`), one that faulted in its own
+    // code (esp-hal reports a CPU fault through this same handler, without
+    // the plugin's flag, so the faulting address, `mepc`, says whose code
+    // it was), and one whose call into the firmware's code panicked or
+    // faulted (a shared function, an allocation there): safe mode then
+    // switches that plugin off, not all of them (ADR 0026).
     let from_exception = info
         .location()
         .is_some_and(|at| paperpaw_x4::blame::is_exception(at.file()));
@@ -84,7 +83,7 @@ fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
             crate::safe_mode::crashed_in(id);
         });
     }
-    let own = paperpaw_x4::blame::is_plugins_own(
+    let blame = paperpaw_x4::blame::blame(
         crate::native::api::panic_is_a_plugins(),
         from_exception,
         fault_in_plugin,
@@ -108,11 +107,10 @@ fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
             // The innermost plugin is the one it happened in.
             if !in_plugin {
                 in_plugin = true;
-                if own {
-                    crate::safe_mode::crashed_in(id);
-                } else {
+                if blame == paperpaw_x4::blame::Blame::Caller {
                     let _ = write!(cut, " [shared code, called from {id}]");
                 }
+                crate::safe_mode::crashed_in(id);
             }
         });
     }
