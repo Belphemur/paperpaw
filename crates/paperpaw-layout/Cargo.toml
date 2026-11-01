@@ -18,6 +18,14 @@ paperpaw-text.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true
+# Its tests set drop capitals.
+paperpaw-layout = { path = ".", features = ["drop-caps"] }
+
+[features]
+# Drop capitals (`Block::drop_cap`), set only where fonts can be drawn
+# large: the SDK's `outline` turns this on. Without it a block asking for
+# one is laid out as without, as bitmap fonts alone would anyway.
+drop-caps = []
 
 [lints]
 workspace = true

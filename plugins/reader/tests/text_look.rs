@@ -4,7 +4,8 @@
 //! of black and white; sharp letters have no grays; darker steps ink
 //! more; the defaults draw as before. And drop capitals: a book's large
 //! first letter set over its first lines. And where lines are set: hanging
-//! punctuation (`core.hanging-punctuation`) moves marks, never lines.
+//! punctuation (`core.hanging-punctuation`) moves marks, never lines, and
+//! a list item's lines hang after its marker.
 
 #![allow(
     clippy::unwrap_used,
@@ -235,4 +236,30 @@ fn in_a_font_of_fixed_sizes_a_drop_capital_is_left_out() {
     // The packs are no larger than a heading: the page as without it.
     let page = |capital: bool| capital_book(capital, false).snapshot();
     assert_eq!(page(true), page(false));
+}
+
+#[test]
+fn a_list_items_lines_stand_under_its_text_not_its_marker() {
+    let words = "lorem ipsum dolor sit amet ".repeat(8);
+    let body =
+        format!("<ul><li>Bullet {words}</li></ul><ol start=\"7\"><li>Seven {words}</li></ol>");
+    let data = epub(&[("c.xhtml", body)], &[]);
+    let mut reading = Reading::new(MONO, Shared::default(), "books/list.epub", &data, "");
+    reading.open();
+    let lines = reading.lines(3);
+    let first_word = |line: &Line| line.1[0].0;
+    // The bullet's item: its marker, then its text, under which the next
+    // line starts (within a little of a letter: the font's widths are
+    // estimated) and well after the marker.
+    let bullet = lines.iter().position(|l| l.1.len() > 2).unwrap();
+    let (marker, text) = (lines[bullet].1[0].0, lines[bullet].1[1].0);
+    let next = first_word(&lines[bullet + 1]);
+    assert!(next > marker + 5, "{marker} {text} {next}");
+    assert!(next.abs_diff(text) <= 4, "{marker} {text} {next}");
+    // The same for a number.
+    let number = lines.iter().rposition(|l| first_word(l) < next).unwrap();
+    let (marker, text) = (lines[number].1[0].0, lines[number].1[1].0);
+    let next = first_word(&lines[number + 1]);
+    assert!(next > marker + 5, "{marker} {text} {next}");
+    assert!(next.abs_diff(text) <= 4, "{marker} {text} {next}");
 }

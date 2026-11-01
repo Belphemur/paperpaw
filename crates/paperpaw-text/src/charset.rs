@@ -117,6 +117,7 @@ pub fn stand_in(ch: char) -> Option<char> {
         '\u{201b}' => '\u{2018}',                           // reversed single quote
         '\u{201f}' => '\u{201c}',                           // reversed double quote
         '\u{2023}' => '\u{2022}',                           // triangular bullet: bullet
+        '\u{25e6}' | '\u{25aa}' => '\u{2022}',              // white bullet, small square: bullet
         '\u{2024}' => '.',                                  // one dot leader
         '\u{2025}' => '\u{2026}',                           // two dot leader: ellipsis
         '\u{2027}' => '\u{b7}',                             // hyphenation point: middle dot
@@ -173,6 +174,13 @@ mod tests {
         assert_eq!(listed.join(", "), documented);
         assert!(names().all(|n| named(n).is_some()));
         assert_eq!(named("cjk-symbols"), None);
+    }
+
+    #[test]
+    fn list_markers_stand_in_as_bullets() {
+        // `list-style-type: circle` and `square`, in fonts without them.
+        assert_eq!(stand_in('\u{25e6}'), Some('\u{2022}'));
+        assert_eq!(stand_in('\u{25aa}'), Some('\u{2022}'));
     }
 
     #[test]

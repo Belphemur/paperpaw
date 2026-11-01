@@ -58,8 +58,9 @@ kernel = []
 # Makers of what the kernel hands plugins (Bluetooth devices, handles),
 # for a plugin's own tests with made-up events. Adds only functions.
 testing = []
-# Scalable OpenType/TrueType fonts (see paperpaw-text).
-outline = ["paperpaw-text/outline"]
+# Scalable OpenType/TrueType fonts (see paperpaw-text), and the drop
+# capitals only they can draw.
+outline = ["paperpaw-text/outline", "paperpaw-layout/drop-caps"]
 
 [lints]
 workspace = true

@@ -553,7 +553,10 @@ mod tests {
             texts.push(block.text.clone());
             at = Locator::new(0, block.end);
         }
-        assert_eq!(texts, ["Notes", "A first paragraph.", "Part", "• item"]);
+        assert_eq!(
+            texts,
+            ["Notes", "A first paragraph.", "Part", "•\u{a0}item"]
+        );
     }
 
     #[test]

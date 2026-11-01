@@ -90,7 +90,15 @@ change the plugin SDK.
   lines gets a smaller capital. Only where the font can be drawn that large: fonts of fixed sizes (the X4's font
   packs) show the paragraph as before. The layout does what the reserved `Block::drop_cap` names (no SDK change).
   EPUB chapters converted before keep no capitals until they are converted again. The paragraph's own size is no
-  longer taken from such a letter (it was set as large as the letter before).
+  longer taken from such a letter (it was set as large as the letter before). Builds without scalable fonts (the
+  X4 and X4 Pro firmware) leave the drop-capital layout out (`paperpaw-layout` feature `drop-caps`, which the SDK's
+  `outline` turns on); they lay such paragraphs out as before, as they did anyway.
+- Lists in EPUB, HTML and Markdown books: an item's lines hang after its marker (the second line starts under the
+  text, not under the number), and an item that starts with a paragraph has its marker on that paragraph's line.
+  CSS `list-style-type` (and the `list-style` shorthand) and the old `type` and `value` attributes are read: disc,
+  circle, square, decimal, lower and upper alpha (or latin), lower and upper Roman, none; other values keep the
+  list's own markers. The marker is followed by a no-break space. Fonts without the circle or the square (the X4's
+  font packs) show a bullet. Chapters converted before keep their old markers until they are converted again.
 - Line breaking follows Unicode (UAX #14) where the text needs it: Korean breaks between syllables, Chinese and
   Japanese between characters, never before a closing mark (。」) or after an opening one (「), and U+200B (the zero
   width space) is a place to break; it and the word joiner U+2060 are now zero width and not drawn (they took

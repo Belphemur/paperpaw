@@ -66,6 +66,7 @@ use crate::css::{self, Props, Rules};
 
 mod direction;
 mod elements;
+mod lists;
 use crate::package::error;
 pub(crate) use direction::{BookText, dir_from_bits};
 use elements::{element_props, furniture, heading_level, is_block, is_capital, is_void, styled};
@@ -236,8 +237,10 @@ struct Frame {
     /// The book's distance between lines, in percent of the text size,
     /// inherited.
     line_height: Option<u16>,
-    /// The items of a numbered list (`<ol>`) so far.
+    /// The items of a list (`<ol>`, `<ul>`) so far, and the marker style
+    /// of its items, inherited.
     numbered: Option<u32>,
+    list_style: Option<css::ListStyle>,
     /// The margin and padding below the element, taken over by the next
     /// block.
     after: (Option<u16>, Option<u16>),
@@ -350,6 +353,8 @@ struct Converter<'a> {
     /// The lines of the current block's drop capital, and the depth of
     /// the element that asked for it while it is open.
     drop_cap: (u8, Option<usize>),
+    /// A list item's marker, waiting for the item's text.
+    marker: Option<lists::Marker>,
     /// The book's indent of the current block, set by its first character.
     indent: Option<i16>,
     /// The book's text size of the current block, set likewise.
@@ -412,6 +417,9 @@ impl Converter<'_> {
 
     /// Appends text in `style`.
     fn push_styled(&mut self, c: char, style: TextStyle) {
+        if self.text.is_empty() && self.marker.is_some() {
+            self.place_marker();
+        }
         let (_, align) = self.frame();
         let (dir, lang) = self
             .stack
@@ -804,12 +812,8 @@ impl Converter<'_> {
             size,
             margins,
             line_height,
-            numbered: (tag == "ol").then(|| {
-                attrs
-                    .get("start")
-                    .and_then(|s| s.trim().parse::<u32>().ok())
-                    .map_or(0, |s| s.saturating_sub(1))
-            }),
+            numbered: lists::counter(&tag, &attrs),
+            list_style: lists::list_style(&tag, &props, self.stack.last()),
             after: (props.margin_bottom, props.padding_bottom),
             hides,
             closer: controls.map(|(_, close)| close),
@@ -850,22 +854,7 @@ impl Converter<'_> {
                 self.push_str("* * *");
                 self.flush();
             }
-            "li" => {
-                // Numbered in a numbered list, the nearest list's.
-                let list = self
-                    .stack
-                    .iter_mut()
-                    .rev()
-                    .find(|f| matches!(f.tag.as_str(), "ol" | "ul"));
-                match list.and_then(|f| f.numbered.as_mut()) {
-                    Some(number) => {
-                        *number = number.saturating_add(1);
-                        let mark = alloc::format!("{number}. ");
-                        self.push_str(&mark);
-                    }
-                    None => self.push_str("• "),
-                }
-            }
+            "li" => self.list_item(&attrs),
             "td" | "th" => {
                 // A row's cells on its line, set apart.
                 if !self.text.is_empty() {
@@ -908,6 +897,7 @@ impl Converter<'_> {
         let Some(open) = self.stack.iter().rposition(|f| f.tag == tag) else {
             return;
         };
+        self.marker = self.marker.take().filter(|_| tag != "li");
         if self.hidden == 0 {
             if tag == "pre" {
                 self.flush();
@@ -1429,6 +1419,7 @@ pub(crate) fn convert(
         lang: None,
         inline_langs: Vec::new(),
         drop_cap: (0, None),
+        marker: None,
         indent: None,
         size: None,
         margins: (0, 0),

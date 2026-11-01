@@ -64,6 +64,61 @@ pub(crate) struct Props {
     pub float_left: Option<bool>,
     /// The lines of a drop capital (`initial-letter`), 0 for `normal`.
     pub initial_letter: Option<u8>,
+    /// The marker of list items (`list-style-type`).
+    pub list_style: Option<ListStyle>,
+}
+
+/// The marker of list items (`list-style-type`): the ones books use.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ListStyle {
+    None,
+    Disc,
+    Circle,
+    Square,
+    Decimal,
+    LowerAlpha,
+    UpperAlpha,
+    LowerRoman,
+    UpperRoman,
+}
+
+impl ListStyle {
+    /// In the order of their codes in the cache.
+    const ALL: [(ListStyle, &'static str); 9] = [
+        (ListStyle::None, "none"),
+        (ListStyle::Disc, "disc"),
+        (ListStyle::Circle, "circle"),
+        (ListStyle::Square, "square"),
+        (ListStyle::Decimal, "decimal"),
+        (ListStyle::LowerAlpha, "lower-alpha"),
+        (ListStyle::UpperAlpha, "upper-alpha"),
+        (ListStyle::LowerRoman, "lower-roman"),
+        (ListStyle::UpperRoman, "upper-roman"),
+    ];
+
+    /// A `list-style-type` value; `None` for one not known.
+    pub fn parse(value: &str) -> Option<ListStyle> {
+        let value = match value {
+            "lower-latin" => "lower-alpha",
+            "upper-latin" => "upper-alpha",
+            value => value,
+        };
+        Self::ALL
+            .iter()
+            .find(|(_, name)| *name == value)
+            .map(|(style, _)| *style)
+    }
+
+    fn code(self) -> u8 {
+        Self::ALL
+            .iter()
+            .position(|(style, _)| *style == self)
+            .unwrap_or(0) as u8
+    }
+
+    fn from_code(code: u8) -> Option<ListStyle> {
+        Self::ALL.get(usize::from(code)).map(|(style, _)| *style)
+    }
 }
 
 /// Where text sits on its line (`vertical-align`).
@@ -158,6 +213,7 @@ impl Props {
         self.strike = other.strike.or(self.strike);
         self.float_left = other.float_left.or(self.float_left);
         self.initial_letter = other.initial_letter.or(self.initial_letter);
+        self.list_style = other.list_style.or(self.list_style);
     }
 
     /// The margin and padding at the start and the end of the lines, in
@@ -240,6 +296,9 @@ impl Props {
                 "initial-letter" => {
                     props.initial_letter = initial_letter(&value).or(props.initial_letter);
                 }
+                "list-style-type" | "list-style" => {
+                    props.list_style = list_style(&value).or(props.list_style);
+                }
                 "margin-top" => props.margin_top = space(&value).or(props.margin_top),
                 "margin-bottom" => props.margin_bottom = space(&value).or(props.margin_bottom),
                 "padding-top" => props.padding_top = space(&value).or(props.padding_top),
@@ -307,6 +366,7 @@ impl Props {
             ('H', self.line_height),
             ('v', self.vertical.map(|v| u16::from(v.code()))),
             ('I', self.initial_letter.map(u16::from)),
+            ('y', self.list_style.map(|l| u16::from(l.code()))),
         ] {
             if let Some(value) = value {
                 out.push_str(&alloc::format!(" {key}{value}"));
@@ -366,6 +426,7 @@ impl Props {
                 's' => props.strike = Some(flag),
                 'F' => props.float_left = Some(flag),
                 'I' => props.initial_letter = item[1..].parse().ok(),
+                'y' => props.list_style = item[1..].parse().ok().and_then(ListStyle::from_code),
                 'r' => props.size = item[1..].parse().ok().map(FontSize::Relative),
                 'z' => props.size = item[1..].parse().ok().map(FontSize::Absolute),
                 _ => {}
@@ -454,6 +515,12 @@ fn decoration(
         strike = Some(true);
     }
     (underline, strike)
+}
+
+/// The marker type of `list-style-type`, or of the `list-style`
+/// shorthand among its position and picture.
+fn list_style(value: &str) -> Option<ListStyle> {
+    value.split_whitespace().find_map(ListStyle::parse)
 }
 
 /// The lines of a drop capital CSS `initial-letter` asks for (a sink
@@ -1182,6 +1249,22 @@ mod tests {
         );
         let copy = Rules::decode(&r.encode());
         assert_eq!(copy.rules, r.rules);
+    }
+
+    #[test]
+    fn list_styles_are_read_and_survive_the_cache() {
+        let r = rules(
+            ".a { list-style-type: Lower-Roman } .b { list-style: url(x.png) square inside } \
+             .c { list-style-type: hiragana } .d { list-style: none }",
+        );
+        let p = |class| r.props("li", class);
+        assert_eq!(p("a").list_style, Some(ListStyle::LowerRoman));
+        assert_eq!(p("b").list_style, Some(ListStyle::Square));
+        assert_eq!(p("c").list_style, None);
+        assert_eq!(p("d").list_style, Some(ListStyle::None));
+        let copy = Rules::decode(&r.encode());
+        assert_eq!(copy.rules, r.rules);
+        assert_eq!(Props::decode(" y99").list_style, None);
     }
 
     #[test]

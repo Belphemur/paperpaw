@@ -744,8 +744,8 @@ mod tests {
                 "I.",
                 "Als Gregor Samsa eines Morgens aus unruhigen Träumen erwachte — fand er sich\u{a0}verwandelt.",
                 "Zeile eins\nZeile zwei",
-                "• Punkt A",
-                "• Punkt B",
+                "•\u{a0}Punkt A",
+                "•\u{a0}Punkt B",
                 "Später."
             ]
         );
