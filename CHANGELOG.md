@@ -8,6 +8,11 @@ change the plugin SDK.
 
 ### Added
 
+- SDK (document, layout VERSION 11): a run's style can carry the book's letter spacing
+  (`TextStyle::letter_spacing`, in fortieths of an em, `LETTER_SPACING_STEPS`), a line over the text
+  (`TextStyle::OVERLINE`) and how its lines are drawn (`TextStyle::line_style`, `LineStyle`: one, two, dotted,
+  wavy); the reading faces measure, lay out and draw them. A drop capital's line is marked
+  (`LineBidi::DROP_CAP`).
 - Numbers in messages are written with the digits a language's catalog names (`[meta] digits`, e.g. `arabext`
   for Persian, `arab` for Arabic-Indic). SDK: `Translator::digits`, `Translator::number`,
   `Translator::localize_digits` for numbers a plugin writes itself.

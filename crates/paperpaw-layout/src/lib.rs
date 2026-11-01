@@ -505,7 +505,8 @@ pub struct LineBidi {
     /// The direction of its paragraph: 0 left to right, 1 right to left.
     pub paragraph: u8,
     /// [`LineBidi::REORDER`], [`LineBidi::VERTICAL`],
-    /// [`LineBidi::PARAGRAPH_START`]; the other bits are zero.
+    /// [`LineBidi::PARAGRAPH_START`], [`LineBidi::DROP_CAP`]; the other
+    /// bits are zero.
     pub flags: u8,
 }
 
@@ -517,6 +518,11 @@ impl LineBidi {
     pub const VERTICAL: u8 = 2;
     /// The line starts its paragraph.
     pub const PARAGRAPH_START: u8 = 4;
+    /// The line is a drop capital ([`Block::drop_cap`]): its letters set
+    /// as high as the lines beside it, its baseline that of the last of
+    /// them. Readers and page layers tell it from the paragraph's lines
+    /// by this, not by its size.
+    pub const DROP_CAP: u8 = 8;
 
     /// A line of a paragraph of `paragraph`'s direction (0 or 1) with
     /// `flags`.
