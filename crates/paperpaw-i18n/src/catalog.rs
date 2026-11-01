@@ -8,6 +8,7 @@ use core::fmt;
 
 use paperpaw_config::ParseError;
 
+use crate::built::{Built, BuiltCatalogs};
 use crate::card::{self, Card, CatalogFile};
 use crate::plural::PluralRule;
 
@@ -58,9 +59,82 @@ pub struct Catalog {
     /// When it was added to a translator, of those added: later ones win.
     pub(crate) added: u32,
     /// Where its messages are a compiled catalog on the card, read as
-    /// needed (ADR 0033): its file and block table. Its source is then
-    /// the meta text alone.
-    card: Option<Box<Card>>,
+    /// needed (ADR 0033): its file and block table; or the English
+    /// catalogs built in, indexed together ([`BuiltCatalogs`]). Its
+    /// source is then the meta text alone.
+    card: Option<Box<Elsewhere>>,
+}
+
+/// Where a catalog's messages are, other than in its source.
+#[derive(Debug)]
+enum Elsewhere {
+    Card(Card),
+    Built(Built),
+}
+
+impl Clone for Elsewhere {
+    fn clone(&self) -> Self {
+        match self {
+            Elsewhere::Card(card) => Elsewhere::Card(card.clone()),
+            Elsewhere::Built(built) => Elsewhere::Built(built.clone()),
+        }
+    }
+}
+
+impl Elsewhere {
+    fn unload(&mut self) {
+        if let Elsewhere::Card(card) = self {
+            card.unload();
+        }
+    }
+
+    fn load(&mut self) -> Result<(), CatalogError> {
+        match self {
+            Elsewhere::Card(card) => card.load(),
+            Elsewhere::Built(_) => Ok(()),
+        }
+    }
+
+    fn is_loaded(&self) -> bool {
+        match self {
+            Elsewhere::Card(card) => card.is_loaded(),
+            Elsewhere::Built(_) => true,
+        }
+    }
+
+    fn read_bytes(&self) -> usize {
+        match self {
+            Elsewhere::Card(card) => card.read_bytes(),
+            Elsewhere::Built(_) => 0,
+        }
+    }
+
+    fn forget(&mut self) {
+        if let Elsewhere::Card(card) = self {
+            card.forget();
+        }
+    }
+
+    fn get(&self, key: &str) -> Option<&str> {
+        match self {
+            Elsewhere::Card(card) => card.get(key),
+            Elsewhere::Built(built) => built.get(key),
+        }
+    }
+
+    fn len(&self) -> usize {
+        match self {
+            Elsewhere::Card(card) => card.len(),
+            Elsewhere::Built(built) => built.len(),
+        }
+    }
+
+    fn index_on_heap(&self) -> usize {
+        match self {
+            Elsewhere::Card(card) => card.index_on_heap(),
+            Elsewhere::Built(built) => built.index_on_heap(),
+        }
+    }
 }
 
 /// The numbering systems a catalog can name (`[meta] digits`), as the
@@ -385,7 +459,7 @@ fn plain_key(source: &str, start: u32) -> &str {
 /// How the key of the plain message line starting at `start` compares
 /// with `key`, as `plain_key(source, start).cmp(key)` does. It reads the
 /// line only up to where the two differ.
-fn cmp_plain_key(source: &str, start: u32, key: &str) -> Ordering {
+pub(crate) fn cmp_plain_key(source: &str, start: u32, key: &str) -> Ordering {
     let line = source.get(start as usize..).unwrap_or_default();
     let mut theirs = line.bytes().take_while(|b| is_key_byte(*b));
     let mut ours = key.bytes();
@@ -398,7 +472,7 @@ fn cmp_plain_key(source: &str, start: u32, key: &str) -> Ordering {
 }
 
 /// The value of the plain message line starting at `start`.
-fn plain_value(source: &str, start: u32) -> Option<&str> {
+pub(crate) fn plain_value(source: &str, start: u32) -> Option<&str> {
     let after = start as usize + plain_key(source, start).len();
     let rest = source.get(after..)?;
     let rest = &rest[..rest.find('\n').unwrap_or(rest.len())];
@@ -660,7 +734,7 @@ impl Catalog {
     pub fn open(file: Rc<dyn CatalogFile>) -> Result<Catalog, CatalogError> {
         let (meta, messages) = card::open(&*file)?;
         let mut catalog = Catalog::parse(meta)?;
-        catalog.card = Some(Box::new(Card::new(file, messages)?));
+        catalog.card = Some(Box::new(Elsewhere::Card(Card::new(file, messages)?)));
         Ok(catalog)
     }
 
@@ -678,7 +752,48 @@ impl Catalog {
 
     /// Whether its messages are read from a card as needed.
     pub fn is_on_card(&self) -> bool {
-        self.card.is_some()
+        matches!(self.card.as_deref(), Some(Elsewhere::Card(_)))
+    }
+
+    /// The English catalogs built in, indexed together: one catalog for
+    /// all of them, whose sources fill it as they are added
+    /// ([`Translator::built_catalogs`](crate::Translator::built_catalogs)).
+    pub(crate) fn built(table: &'static BuiltCatalogs) -> Option<Catalog> {
+        let meta = "[meta]\nlanguage = en\nname = English\nplural = one-other\n";
+        let mut catalog = Catalog::parse(meta).ok()?;
+        catalog.card = Some(Box::new(Elsewhere::Built(Built::new(table))));
+        Some(catalog)
+    }
+
+    /// Whether it is the English catalogs built in, indexed together.
+    pub(crate) fn is_built(&self) -> bool {
+        matches!(self.card.as_deref(), Some(Elsewhere::Built(_)))
+    }
+
+    /// Takes `source` into the built catalogs' slot for it, where this is
+    /// that catalog and holds it.
+    pub(crate) fn take_built(&mut self, source: &'static str) -> bool {
+        match self.card.as_deref_mut() {
+            Some(Elsewhere::Built(built)) => built.take(source),
+            _ => false,
+        }
+    }
+
+    /// Its source, where it is kept in the program.
+    pub(crate) fn static_source(&self) -> Option<&'static str> {
+        match &self.source {
+            Cow::Borrowed(source) => Some(source),
+            Cow::Owned(_) => None,
+        }
+    }
+
+    /// Where the plain message line of `key` starts in the source; `None`
+    /// for a message not given plainly or not here.
+    pub(crate) fn plain_entry(&self, key: &str) -> Option<u32> {
+        let len = self.index.len(self.wide);
+        (0..len)
+            .map(|i| self.index.at(i, self.wide))
+            .find(|&at| at & OTHER == 0 && cmp_plain_key(&self.source, at, key).is_eq())
     }
 
     /// The bytes the messages read from the card take, until

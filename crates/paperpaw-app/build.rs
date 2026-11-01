@@ -13,7 +13,8 @@
 //! It also makes the indexes of the translation catalogs of those plugins,
 //! the kernel's and the app's, kept in the program
 //! (`paperpaw_i18n::FixedIndexes`): their catalogs then keep none on the
-//! heap.
+//! heap; and indexes their English catalogs together
+//! (`paperpaw_i18n::BuiltCatalogs`): one catalog for all of them.
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -85,10 +86,16 @@ fn catalog_indexes(crates: &[String]) {
     files.sort();
     let mut out = String::from("&[\n");
     let mut seen = Vec::new();
+    let mut english = paperpaw_i18n::BuiltTable::new();
     for file in files {
         println!("cargo::rerun-if-changed={}", file.display());
         let source = std::fs::read_to_string(&file).expect("a catalog");
         let print = paperpaw_i18n::fingerprint(&source);
+        // English catalogs together; one that cannot be (a key another
+        // has) stays a catalog of its own, with its index here.
+        if file.file_name().is_some_and(|name| name == "en.ini") {
+            let _ = english.add(&source);
+        }
         let Ok(catalog) = paperpaw_i18n::Catalog::parse(source) else {
             continue;
         };
@@ -102,8 +109,11 @@ fn catalog_indexes(crates: &[String]) {
         let _ = writeln!(out, "    ({print:#x}, &{index:?}),");
     }
     out.push(']');
-    let target = Path::new(&std::env::var("OUT_DIR").expect("OUT_DIR")).join("catalog_indexes.rs");
-    std::fs::write(target, out).expect("catalog_indexes.rs written");
+    let dir = std::env::var("OUT_DIR").expect("OUT_DIR");
+    std::fs::write(Path::new(&dir).join("catalog_indexes.rs"), out)
+        .expect("catalog_indexes.rs written");
+    std::fs::write(Path::new(&dir).join("built_catalogs.rs"), english.to_rust())
+        .expect("built_catalogs.rs written");
 }
 
 /// The `.ini` files in `folder` and the folders in it.

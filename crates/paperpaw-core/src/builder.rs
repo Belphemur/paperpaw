@@ -51,6 +51,7 @@ struct BuilderParts {
     /// Network settings kept in the program, by plugin.
     network_settings: &'static [crate::NetworkSettings],
     catalog_indexes: paperpaw_i18n::FixedIndexes,
+    built_catalogs: &'static paperpaw_i18n::BuiltCatalogs,
     /// The most Bluetooth links the shell keeps; none without a radio.
     bluetooth_links: u8,
 }
@@ -100,6 +101,14 @@ impl KernelBuilder {
     /// [`FixedIndexes`](paperpaw_i18n::FixedIndexes)).
     pub fn catalog_indexes(mut self, indexes: paperpaw_i18n::FixedIndexes) -> Self {
         self.0.catalog_indexes = indexes;
+        self
+    }
+
+    /// The English catalogs built in, indexed together when the program
+    /// was built: the translator keeps one catalog for all of them (see
+    /// [`BuiltCatalogs`](paperpaw_i18n::BuiltCatalogs)).
+    pub fn built_catalogs(mut self, table: &'static paperpaw_i18n::BuiltCatalogs) -> Self {
+        self.0.built_catalogs = table;
         self
     }
 
@@ -548,6 +557,7 @@ impl BuilderParts {
         let links = self.bluetooth_links;
         let mut translator = Translator::new();
         translator.fixed_indexes(self.catalog_indexes);
+        translator.built_catalogs(self.built_catalogs);
         Kernel {
             shared: Shared {
                 registry: Registry::default(),
@@ -1166,6 +1176,7 @@ impl Kernel {
             ),
             network_settings: &[],
             catalog_indexes: &[],
+            built_catalogs: &paperpaw_i18n::BuiltCatalogs::NONE,
             bluetooth_links: 0,
         }))
     }

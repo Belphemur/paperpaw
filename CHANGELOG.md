@@ -59,6 +59,9 @@ change the plugin SDK.
   such as a table's borders). Formats and the layout do not fill them yet: rows are still set as one line.
 - The start asks for the plugin list and the translations' list once at their size (SDK, kernel feature:
   `Plugins::reserve`, `Translator::reserve`), so they do not double while plugins register.
+- The English catalogs of the plugins built in are one catalog, indexed together when PaperPaw is built: the
+  translator keeps a table of their sources rather than a catalog for each. SDK: `BuiltCatalogs`, `BuiltTable`,
+  `Translator::built_catalogs`; kernel: `KernelBuilder::built_catalogs`; `paperpaw_app::BUILT_CATALOGS`.
 - *All notes*, a new plugin (Tools): the books that have bookmarks or highlights with how many, a book's notes
   (a note opens the book there), and *Export as My Clippings.txt*, all notes in one file in Kindle's form
   (UTF-8 with a byte order mark, `Exports/My Clippings.txt` beside the library) that notes apps read. A book's

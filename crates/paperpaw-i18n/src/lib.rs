@@ -28,12 +28,14 @@
 
 extern crate alloc;
 
+mod built;
 mod card;
 mod catalog;
 pub mod check;
 mod format;
 mod plural;
 
+pub use built::{BuiltCatalogs, BuiltTable};
 pub use card::{CatalogFile, MAX_MESSAGE, MAX_READ};
 pub use catalog::{Catalog, CatalogError, FixedIndexes, fingerprint};
 pub use catalog::{calendars, digit_systems};
@@ -92,6 +94,14 @@ impl Translator {
     /// Adds a catalog. For the same language, catalogs added later take
     /// precedence, so user overrides can be loaded last.
     pub fn add(&mut self, mut catalog: Catalog) {
+        // An English catalog built in, indexed with the others: its source
+        // fills its slot of their one catalog.
+        if let Some(source) = catalog.static_source()
+            && catalog.language() == FALLBACK_LANGUAGE
+            && self.catalogs.iter_mut().any(|c| c.take_built(source))
+        {
+            return;
+        }
         catalog.added = self.added;
         self.added = self.added.wrapping_add(1);
         if self.chain().contains(&catalog.language()) {
@@ -107,6 +117,20 @@ impl Translator {
                 catalog.unload();
                 self.catalogs.push(catalog);
             }
+        }
+    }
+
+    /// The English catalogs built into the program, indexed together by
+    /// its build script: one catalog for all of them, taken before any is
+    /// added; each added later fills its slot rather than being kept as a
+    /// catalog of its own (some hundred bytes each). Catalogs added after
+    /// take precedence over them, as any added later.
+    pub fn built_catalogs(&mut self, table: &'static BuiltCatalogs) {
+        if table.prints.is_empty() {
+            return;
+        }
+        if let Some(catalog) = Catalog::built(table) {
+            self.add(catalog);
         }
     }
 
@@ -313,10 +337,12 @@ impl Translator {
             .iter()
             .map(|catalog| {
                 // Catalogs on the card neither list their keys nor are
-                // asked for all of English's (ADR 0033).
+                // asked for all of English's (ADR 0033); nor do the
+                // English ones built in, indexed together.
                 english(catalog.language())
                     && catalog.is_loaded()
                     && !catalog.is_on_card()
+                    && !catalog.is_built()
                     && catalog.keys().all(|key| {
                         self.ordered()
                             .filter(|other| !english(other.language()) && !other.is_on_card())
