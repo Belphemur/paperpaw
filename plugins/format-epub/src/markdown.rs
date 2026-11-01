@@ -26,11 +26,7 @@ pub struct MarkdownDocument {
 
 impl MarkdownDocument {
     pub fn open(storage: &dyn Storage, path: &str, styles: bool) -> Result<Self, DocumentError> {
-        let dir = format!(
-            "{}/md-{}",
-            Env::plugin_dir(PLUGIN.as_str()),
-            paperpaw_sdk::library::key(path)
-        );
+        let dir = paperpaw_sdk::library::kept_path(&Env::plugin_dir(PLUGIN.as_str()), "md-", path);
         let html_path = format!("{dir}/book.html");
         let stamp = format!("{MD_VERSION} {}\n", crate::fingerprint(storage, path)?);
         let stamp_path = format!("{dir}/source");

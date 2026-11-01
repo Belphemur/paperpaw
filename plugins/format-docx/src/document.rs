@@ -56,11 +56,7 @@ impl DocxDocument {
         path: &str,
         options: &OpenOptions,
     ) -> Result<Self, DocumentError> {
-        let dir = format!(
-            "{}/{}",
-            Env::plugin_dir(PLUGIN.as_str()),
-            paperpaw_sdk::library::key(path)
-        );
+        let dir = paperpaw_sdk::library::kept_path(&Env::plugin_dir(PLUGIN.as_str()), "", path);
         let stamp = format!("{VERSION}\n{}\n", fingerprint(storage, path)?);
         let done = format!("{dir}/{}", cache::DONE);
         if read_file(storage, &done, 256).ok().as_deref() != Some(stamp.as_bytes()) {

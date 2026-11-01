@@ -50,11 +50,7 @@ impl ImagesDocument {
         }
         let first = (name.to_string(), storage.size(path)?);
         let pages = pages_from(storage, dir, &first);
-        let cache = format!(
-            "{}/{}",
-            Env::plugin_dir(PLUGIN.as_str()),
-            paperpaw_sdk::library::key(path)
-        );
+        let cache = paperpaw_sdk::library::kept_path(&Env::plugin_dir(PLUGIN.as_str()), "", path);
         let stem = name.rsplit_once('.').map_or(name, |(stem, _)| stem);
         let metadata = Metadata::default().title(stem.to_string());
         Ok(Self {

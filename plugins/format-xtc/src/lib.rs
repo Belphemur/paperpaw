@@ -252,11 +252,7 @@ impl XtcDocument {
             let name = path.rsplit('/').next().unwrap_or(path);
             metadata.title = Some(name.rsplit_once('.').map_or(name, |(s, _)| s).to_string());
         }
-        let cache = format!(
-            "{}/{}",
-            Env::plugin_dir(PLUGIN.as_str()),
-            paperpaw_sdk::library::key(path)
-        );
+        let cache = paperpaw_sdk::library::kept_path(&Env::plugin_dir(PLUGIN.as_str()), "", path);
         // Pages decoded from another file of the same name go.
         let stamp = format!("{} {pages}\n", fingerprint(storage, path, size)?);
         let stamp_path = format!("{cache}/source");

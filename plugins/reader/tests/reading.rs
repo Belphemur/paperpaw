@@ -990,10 +990,7 @@ fn search_and_contents_read_the_book_as_the_page_shows_it() {
         Some("reader.search-results")
     );
     // No chapter converted with the styles as well.
-    let cache = format!(
-        ".paperpaw/plugins/format-epub/{}",
-        paperpaw_sdk::library::key(EPUB)
-    );
+    let cache = paperpaw_sdk::library::kept_path(".paperpaw/plugins/format-epub", "", EPUB);
     let mut styled = Vec::new();
     storage
         .list(&cache, &mut |entry| {

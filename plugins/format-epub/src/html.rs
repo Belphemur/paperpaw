@@ -169,11 +169,8 @@ fn load_scan(storage: &dyn Storage, path: &str) -> Option<Scan> {
 impl HtmlDocument {
     /// Opens an HTML file; without `styles` its CSS is ignored.
     pub fn open(storage: &dyn Storage, path: &str, styles: bool) -> Result<Self, DocumentError> {
-        let cache = format!(
-            "{}/html-{}",
-            Env::plugin_dir(PLUGIN.as_str()),
-            paperpaw_sdk::library::key(path)
-        );
+        let cache =
+            paperpaw_sdk::library::kept_path(&Env::plugin_dir(PLUGIN.as_str()), "html-", path);
         Self::open_as(storage, path, styles, false, cache)
     }
 

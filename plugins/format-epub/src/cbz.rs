@@ -110,11 +110,8 @@ impl CbzDocument {
         options: &paperpaw_sdk::OpenOptions,
     ) -> Result<Self, DocumentError> {
         let archive = ZipArchive::open(storage, path).map_err(error)?;
-        let cache = format!(
-            "{}/cbz-{}",
-            Env::plugin_dir(PLUGIN.as_str()),
-            paperpaw_sdk::library::key(path)
-        );
+        let cache =
+            paperpaw_sdk::library::kept_path(&Env::plugin_dir(PLUGIN.as_str()), "cbz-", path);
         // Pictures decoded from another file of the same name go.
         let stamp = format!("{}\n", crate::fingerprint(storage, path)?);
         let stamp_path = format!("{cache}/source");
