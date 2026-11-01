@@ -499,6 +499,25 @@ pub(super) fn draw_label_on_out(
     put_run(canvas, font, look, size, x, baseline, clip, &shown, color)
 }
 
+/// `text` on `baseline`, laid out left to right from `x` in a block whose
+/// whole width is `outer`, as it stands where the UI runs right to left:
+/// as far from the right edge as it was from the left one.
+#[allow(clippy::too_many_arguments, reason = "font.draw's, and the block")]
+pub(super) fn draw_run_out(
+    canvas: &mut Canvas<'_>,
+    font: &FontHandle<'_>,
+    style: &UiStyle,
+    outer: Rect,
+    size: f32,
+    x: f32,
+    baseline: i32,
+    text: &str,
+    color: Color,
+) -> f32 {
+    let x = style.flip_x(outer, x, font.measure(size, text));
+    font.draw(canvas, size, x, baseline, text, color)
+}
+
 paperpaw_table::shared! {
 /// [`draw_label`] without telling what it draws (icons say nothing), and
 /// by the look's text painter where it has `look` (style and role).

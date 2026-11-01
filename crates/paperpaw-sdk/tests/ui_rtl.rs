@@ -231,3 +231,157 @@ fn the_headers_title_and_note_swap_sides() {
     // The title's room starts at the right margin, as it did at the left one.
     assert_eq!(r_title, mirrored(title));
 }
+
+#[test]
+fn a_ticked_rows_box_and_text_start_at_the_right() {
+    let h = Harness::new(Device::TOUCH);
+    let env = h.env();
+    let ltr = UiStyle::new(&env);
+    let rtl = ltr.with_rtl(true);
+    let row = Rect::new(0, 100, WIDTH, 120);
+    assert_eq!(
+        ui::check_rect(&rtl, row),
+        mirrored(ui::check_rect(&ltr, row))
+    );
+    let places = |style: &UiStyle| {
+        let (described, mut frame) = describe(WIDTH, 800, |c| {
+            ui::draw_check_row(c, &env, style, row, false, "Lines", "A note", true);
+        });
+        assert_eq!(drawn_outside(&mut frame, row), None);
+        let find = |role: Role, label: &str| {
+            described
+                .iter()
+                .find(|d| d.role == role && (label.is_empty() || d.label == label))
+                .map(|d| d.area)
+                .expect(label)
+        };
+        (
+            find(Role::Check, ""),
+            find(Role::Text, "Lines"),
+            find(Role::Text, "A note"),
+        )
+    };
+    let (ltr_places, rtl_places) = (places(&ltr), places(&rtl));
+    assert_eq!(rtl_places.0, mirrored(ltr_places.0));
+    assert_eq!(rtl_places.1, mirrored(ltr_places.1));
+    assert_eq!(rtl_places.2, mirrored(ltr_places.2));
+}
+
+#[test]
+fn a_numbers_buttons_are_at_the_left_the_plus_before_the_minus() {
+    let h = Harness::new(Device::TOUCH);
+    let env = h.env();
+    let ltr = UiStyle::new(&env);
+    let rtl = ltr.with_rtl(true);
+    let row = Rect::new(0, 100, WIDTH, ltr.row());
+    let (minus, plus) = ui::value_stepper(&env, &ltr, row, "000 %", "40 %").unwrap();
+    let (r_minus, r_plus) = ui::value_stepper(&env, &rtl, row, "000 %", "40 %").unwrap();
+    assert_eq!((r_minus, r_plus), (mirrored(minus), mirrored(plus)));
+    assert!(r_plus.x < r_minus.x, "{r_plus:?} {r_minus:?}");
+    // Drawn within the row, and a tap on each is on it.
+    let (_, mut frame) = describe(WIDTH, 800, |c| {
+        ui::Row::number("Light", "40 %", "000 %").draw(&mut ui::Ui::new(c, &env, &rtl), row);
+    });
+    assert_eq!(drawn_outside(&mut frame, row), None);
+    let number = ui::Row::number("Light", "40 %", "000 %");
+    let middle = |r: Rect| {
+        Point::new(
+            i32::from(r.x) + i32::from(r.width) / 2,
+            i32::from(r.y) + i32::from(r.height) / 2,
+        )
+    };
+    assert_eq!(
+        number.hit(&env, &rtl, row, middle(r_plus)),
+        Some(ui::RowPart::Plus)
+    );
+    assert_eq!(
+        number.hit(&env, &rtl, row, middle(r_minus)),
+        Some(ui::RowPart::Minus)
+    );
+    // The title is at the right, clear of the buttons.
+    let (described, _) = describe(WIDTH, 800, |c| {
+        number.draw(&mut ui::Ui::new(c, &env, &rtl), row);
+    });
+    let title = described
+        .iter()
+        .find(|d| d.role == Role::Text && d.label == "Light")
+        .map(|d| d.area)
+        .unwrap();
+    assert_eq!(title.right(), row.right() - u32::from(rtl.margin()));
+}
+
+#[test]
+fn a_text_field_and_its_title_are_the_mirror_image() {
+    let h = Harness::new(Device::TOUCH);
+    let env = h.env();
+    let ltr = UiStyle::new(&env);
+    let rtl = ltr.with_rtl(true);
+    let row = Rect::new(0, 100, WIDTH, ltr.row() * 2);
+    let (title, field, below) = ui::text_field_layout(&ltr, row, 120.0, 1, 30);
+    let (r_title, r_field, r_below) = ui::text_field_layout(&rtl, row, 120.0, 1, 30);
+    assert_eq!(
+        (r_title, r_field, r_below),
+        (mirrored(title), mirrored(field), below)
+    );
+    let drawn = |style: &UiStyle| {
+        let (described, mut frame) = describe(WIDTH, 800, |c| {
+            ui::Ui::new(c, &env, style).text_field(row, false, "Name", "value", "");
+        });
+        assert_eq!(drawn_outside(&mut frame, row), None);
+        described
+            .iter()
+            .find(|d| d.role == Role::Field)
+            .map(|d| d.area)
+            .unwrap()
+    };
+    assert_eq!(drawn(&rtl), mirrored(drawn(&ltr)));
+}
+
+#[test]
+fn a_dialogs_buttons_go_from_the_right_and_left_moves_on() {
+    let h = Harness::new(Device::TOUCH);
+    let env = h.env();
+    let ltr = UiStyle::new(&env);
+    let rtl = ltr.with_rtl(true);
+    let make = |style: &UiStyle| ui::Dialog::new(&env, style, "Title", &["Text"], &["Yes", "No"]);
+    let (d, r) = (make(&ltr), make(&rtl));
+    let (first, second) = (d.button(0).unwrap(), d.button(1).unwrap());
+    let (r_first, r_second) = (r.button(0).unwrap(), r.button(1).unwrap());
+    assert!(first.x < second.x);
+    assert!(r_first.x > r_second.x, "the first is at the right");
+    assert_eq!(r.button(0).unwrap().y, first.y);
+    // Left and right are where the buttons are.
+    assert_eq!(d.step(0, &actions::RIGHT), Some(1));
+    assert_eq!(r.step(0, &actions::LEFT), Some(1));
+    assert_eq!(r.step(1, &actions::RIGHT), Some(0));
+    assert_eq!(r.step(0, &actions::RIGHT), Some(0));
+    // A tap is taken where a button is drawn.
+    let at = Point::new(i32::from(r_first.x) + 2, i32::from(r_first.y) + 2);
+    assert_eq!(r.hit(at), Some(0));
+}
+
+#[test]
+fn a_notes_lines_start_at_the_right_margin() {
+    let h = Harness::new(Device::TOUCH);
+    let env = h.env();
+    let ltr = UiStyle::new(&env);
+    let rtl = ltr.with_rtl(true);
+    let row = Rect::new(0, 100, WIDTH, ltr.noted_row() as u16);
+    let rows = row.y + row.height / 2..row.bottom() as u16;
+    let ink = |style: &UiStyle| {
+        let mut frame = support::frame(WIDTH, 800);
+        ui::Row::value("Title", "On")
+            .note("A short note")
+            .draw(&mut ui::Ui::new(&mut frame.canvas(), &env, style), row);
+        ink_columns(&frame, rows.clone())
+    };
+    let ((first, last), (r_first, r_last)) = (ink(&ltr), ink(&rtl));
+    let (margin, bearing) = (ltr.margin(), 6);
+    assert!(first >= margin && first <= margin + bearing, "{first}");
+    assert!(
+        r_last + margin + bearing >= WIDTH && r_last < WIDTH - margin + 1,
+        "{r_last}"
+    );
+    assert!(last < r_last || last <= r_last + 300, "{last} {r_last}");
+    let _ = r_first;
+}

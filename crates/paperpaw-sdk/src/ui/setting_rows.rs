@@ -356,14 +356,10 @@ pub(crate) fn draw_note_below(
         }
         shown.push_str(text.trim());
         let baseline = top + line * n as f32 + ascent;
-        font.draw(
-            canvas,
-            style.small,
-            f32::from(rect.x) + margin,
-            baseline as i32,
-            &text,
-            color,
-        );
+        let x = f32::from(rect.x) + margin;
+        let small = style.small;
+        let x = style.flip_x(rect, x, font.measure(small, &text));
+        font.draw(canvas, small, x, baseline as i32, &text, color);
     }
     let said = if lines.len() > most {
         shown.as_str()
@@ -710,7 +706,7 @@ fn fits_beside(env: &Env<'_>, style: &UiStyle, spec: &SettingSpec, line: Rect, r
             // while it changes.
             let own = number_room(env, style, core::iter::once(spec));
             let room = wider(&font, style.text, room, &own);
-            let Some((minus, _)) = stepper(env, style, line, room) else {
+            let Some((minus, _)) = stepper_ltr(env, style, line, room) else {
                 return true;
             };
             f32::from(minus.x) - f32::from(line.x) - 2.0 * margin
@@ -765,10 +761,11 @@ fn draw_own_title(
     let left = f32::from(line.x) + margin;
     // One line, as most are: nothing to wrap.
     if font.measure(style.text, title) <= room + 1.0 {
-        draw_label_in(
+        draw_label_out(
             canvas,
             font,
             style,
+            line,
             TextRole::BODY,
             style.text,
             left,
@@ -792,7 +789,18 @@ fn draw_own_title(
             String::from(title[range.clone()].trim_end())
         };
         let baseline = top + metrics.line_height * n as f32 + metrics.ascent;
-        font.draw(canvas, style.text, left, baseline as i32, &text, ink);
+        let size = style.text;
+        draw_run_out(
+            canvas,
+            font,
+            style,
+            line,
+            size,
+            left,
+            baseline as i32,
+            &text,
+            ink,
+        );
     }
 }
 
@@ -973,6 +981,19 @@ pub fn value_stepper(
 /// numbers in rows above each other (see [`number_room`]), so their
 /// buttons line up.
 pub fn stepper(env: &Env<'_>, style: &UiStyle, rect: Rect, room: &str) -> Option<(Rect, Rect)> {
+    let (minus, plus) = stepper_ltr(env, style, rect, room)?;
+    Some((style.flip(rect, minus), style.flip(rect, plus)))
+}
+
+/// [`stepper`] left to right: the block is at the row's end, its `−` left
+/// of its `+`; where the UI runs right to left it is the mirror image of
+/// this.
+pub(super) fn stepper_ltr(
+    env: &Env<'_>,
+    style: &UiStyle,
+    rect: Rect,
+    room: &str,
+) -> Option<(Rect, Rect)> {
     let font = style.font(env)?;
     let size = button_height(style, rect);
     let y = rect.y + (rect.height - size) / 2;
@@ -1049,7 +1070,8 @@ pub fn draw_number_lines(
         return;
     };
     let ink = Color::BLACK;
-    draw_number_title(canvas, style, &font, lines, minus, title, ink);
+    let start = stepper_ltr(env, style, lines.control, room).map_or(minus, |(minus, _)| minus);
+    draw_number_title(canvas, style, &font, lines, start, title, ink);
     let value_x = centred(&font, style.text, value, minus, plus);
     let row = lines.control;
     draw_label_in(
@@ -1092,8 +1114,15 @@ pub(super) fn centred(
     minus: Rect,
     plus: Rect,
 ) -> f32 {
-    let left = f32::from(minus.x + minus.width);
-    let room = f32::from(plus.x) - left;
+    // Whichever of them is at the left (the `+` where the UI runs right to
+    // left).
+    let (first, second) = if minus.x <= plus.x {
+        (minus, plus)
+    } else {
+        (plus, minus)
+    };
+    let left = f32::from(first.x + first.width);
+    let room = f32::from(second.x) - left;
     left + (room - font.measure(size, value)) / 2.0
 }
 
@@ -1138,7 +1167,7 @@ pub fn stepper_lines(
         return RowLines::one(line);
     };
     let room = wider(&font, style.text, room, room);
-    let beside = stepper(env, style, line, room).is_some_and(|(minus, _)| {
+    let beside = stepper_ltr(env, style, line, room).is_some_and(|(minus, _)| {
         let margin = style.margin as f32;
         font.measure(style.text, title) <= f32::from(minus.x) - 2.0 * margin + 1.0
     });
@@ -1177,7 +1206,8 @@ pub fn draw_stepper_lines(
         return;
     };
     let ink = style.focus_ink(true);
-    draw_number_title(canvas, style, &font, lines, minus, title, ink);
+    let start = stepper_ltr(env, style, lines.control, room).map_or(minus, |(minus, _)| minus);
+    draw_number_title(canvas, style, &font, lines, start, title, ink);
     let value_x = centred(&font, style.text, value, minus, plus);
     draw_label_in(
         canvas,
@@ -1194,7 +1224,8 @@ pub fn draw_stepper_lines(
     draw_focused_steps(canvas, style, &font, lines.control, steps, editing);
 }
 
-/// A number's title on its line: left of its `−` (`minus`), or the
+/// A number's title on its line: before its `−` (`minus`, as it stands
+/// left to right), or the
 /// line's whole width where the buttons are below it.
 fn draw_number_title(
     canvas: &mut Canvas<'_>,
@@ -1213,10 +1244,11 @@ fn draw_number_title(
     // From the row's own start, e.g. right of an icon.
     let left = f32::from(line.x) + margin;
     let title = fit(font, style.text, title, f32::from(minus.x) - margin - left);
-    draw_label_in(
+    draw_label_out(
         canvas,
         font,
         style,
+        line,
         TextRole::BODY,
         style.text,
         left,
