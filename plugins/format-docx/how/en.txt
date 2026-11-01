@@ -1,0 +1,3 @@
+Opens Word documents (.docx) as books: headings with a table of contents, lists, tables, bold and italic, links and pictures (JPEG, PNG, GIF).
+
+Put the files into the library folder and open them from the library. The title and author come from the document's properties. Footnotes, headers and footers, and comments are not shown.

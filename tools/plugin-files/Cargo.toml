@@ -101,6 +101,12 @@ test = false
 bench = false
 
 [[bin]]
+name = "format-docx"
+path = "src/bin/format-docx.rs"
+test = false
+bench = false
+
+[[bin]]
 name = "reading-goal"
 path = "src/bin/reading-goal.rs"
 test = false
@@ -226,6 +232,7 @@ paperpaw-plugin-aids = { path = "../../plugins/aids" }
 paperpaw-plugin-battery = { path = "../../plugins/battery" }
 paperpaw-plugin-reading-goal = { path = "../../plugins/reading-goal" }
 paperpaw-plugin-end-of-book = { path = "../../plugins/end-of-book" }
+paperpaw-plugin-format-docx = { path = "../../plugins/format-docx" }
 paperpaw-plugin-browser = { path = "../../plugins/browser" }
 paperpaw-plugin-calibre = { path = "../../plugins/calibre" }
 paperpaw-plugin-diagnostics = { path = "../../plugins/diagnostics" }

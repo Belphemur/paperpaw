@@ -108,6 +108,7 @@ differently; a plugin must keep that mapping.
 | Files | Owner | Stamp |
 |-------|-------|-------|
 | `.paperpaw/plugins/format-epub/<hash>/` | format-epub | `CACHE_VERSION` and the book's size and start; HTML, Markdown, FB2 and CBZ in folders of their own, `html-<hash>/`, `md-<hash>/`, `fb2-<hash>/` and `cbz-<hash>/` |
+| `.paperpaw/plugins/format-docx/<hash>/` | format-docx | `done`: the converter's version and the document's size and a hash of its first and last 4 KiB; `blocks.bin`, `index.bin`, `links.bin`, `toc.idx`, `toc.bin`, `urls.idx`, `urls.bin`, `marks.bin`, `pictures.txt`, `info.txt`, and the pictures taken out and decoded (`media-<n>`, `img-<n>.gray`) |
 | `.paperpaw/plugins/format-xtc/<hash>/` | format-xtc | the book's size and start |
 | `.paperpaw/plugins/format-txt/<hash>.txt` | format-txt | a UTF-16 book as UTF-8; `<hash>.source`: the book's size and a hash of its first and last 4 KiB |
 | `.paperpaw/plugins/widgets/picture.pixels` | widgets | `picture.stamp`: the picture's path and size, the screen's size and colour |
