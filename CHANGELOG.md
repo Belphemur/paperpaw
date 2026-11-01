@@ -34,7 +34,8 @@ change the plugin SDK.
 - A Greek letters pack, `script-greek` (#60): Literata's Greek, modern and with the older accents (Greek
   Extended), for books whose Greek shows as `?` on a device whose fonts hold Latin only. It is a data plugin
   that `tools/script-pack.py greek` builds, with no code and no interface change. Its entry in
-  `tools/plugin-files/data.toml` is commented out until the owner decides to offer it in the store.
+  `tools/plugin-files/data.toml` is live, so the release builds it for the store (off until chosen), with the Arabic and
+  Hebrew packs (`script-arabic`, `script-hebrew`): letters for books whose scripts the built-in fonts lack.
 - A fix to one of PaperPaw's own data plugins (Literata's sizes, the
   hyphenation data; `tools/plugin-files/data.toml`) reaches readers alone
   between releases, as for the plugins with code: tagged `<id>-v<version>`,
