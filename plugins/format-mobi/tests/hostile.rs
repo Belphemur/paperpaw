@@ -200,6 +200,20 @@ proptest! {
     }
 }
 
+/// A header that claims less text than the text records hold: the last
+/// record's share is nothing, not a negative length.
+#[test]
+fn a_text_length_shorter_than_the_records_does_no_harm() {
+    let mut bytes = valid();
+    // The first record, from the first entry of the record list; the text
+    // length is the second word of the PalmDOC header there.
+    let first = u32::from_be_bytes(bytes[78..82].try_into().unwrap()) as usize;
+    for length in [0u32, 1, 100, 5000] {
+        bytes[first + 4..first + 8].copy_from_slice(&length.to_be_bytes());
+        read_all(&memory(bytes.clone()));
+    }
+}
+
 #[test]
 fn a_long_book_is_converted_in_little_memory() {
     let html = "<h2>Chapter</h2><p>The <b>wind</b> came <i>over</i> the &amp; hills and over the sea, <a filepos=77>again</a>.</p>"
