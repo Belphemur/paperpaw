@@ -22,7 +22,10 @@ use core::fmt::Write;
 /// The last panic's message (zero-terminated), kept through the reset.
 #[esp_hal::ram(unstable(rtc_fast, persistent))]
 static mut LAST: [u8; 400] = [0; 400];
-/// The calls kept with a panic, at most.
+/// The calls kept with a panic, at most. The plugin to blame is looked
+/// for in all calls captured (`ESP_BACKTRACE_CONFIG_BACKTRACE_FRAMES` in
+/// `.cargo/config.toml`, 64): a panic deep in a shared body, a recursive
+/// parser's or an allocation's, has the plugin's call further down.
 const CALLS: usize = 16;
 
 /// Writes into a fixed buffer, cutting what does not fit between two
@@ -90,10 +93,10 @@ fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
     );
     // The faulting plugin is named already.
     let mut in_plugin = fault_in_plugin;
-    for frame in esp_backtrace::Backtrace::capture()
+    for (n, frame) in esp_backtrace::Backtrace::capture()
         .frames()
         .iter()
-        .take(CALLS)
+        .enumerate()
     {
         // The start's frame repeats to the end.
         let pc = frame.program_counter();
@@ -101,9 +104,17 @@ fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
             break;
         }
         last = pc;
-        let _ = write!(cut, " {pc:x}");
+        let printed = n < CALLS;
+        if !printed && in_plugin {
+            break;
+        }
+        if printed {
+            let _ = write!(cut, " {pc:x}");
+        }
         crate::native::attribute(pc as u32, &mut |id, offset| {
-            let _ = write!(cut, " ({id}+{offset:#x})");
+            if printed {
+                let _ = write!(cut, " ({id}+{offset:#x})");
+            }
             // The innermost plugin is the one it happened in.
             if !in_plugin {
                 in_plugin = true;
