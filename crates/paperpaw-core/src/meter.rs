@@ -119,8 +119,12 @@ impl Meter {
     fn io(&self, read: usize, written: usize) {
         let index = self.running.borrow().last().map_or(0, |&(i, _)| i);
         if let Some(p) = self.table.borrow_mut().get_mut(index) {
-            p.read = p.read.saturating_add(read as u64);
-            p.written = p.written.saturating_add(written as u64);
+            p.read = p
+                .read
+                .saturating_add(u32::try_from(read).unwrap_or(u32::MAX));
+            p.written = p
+                .written
+                .saturating_add(u32::try_from(written).unwrap_or(u32::MAX));
         }
     }
 
@@ -146,6 +150,7 @@ impl Meter {
     ) {
         let index = self.index(plugin);
         let mut table = self.table.borrow_mut();
+        let millis = u32::try_from(millis).unwrap_or(u32::MAX);
         table[index].awake_ms = table[index].awake_ms.saturating_add(millis);
         table[index].awake_reason = reason;
     }
@@ -154,6 +159,7 @@ impl Meter {
     pub(crate) fn shown(&self, plugin: &str, millis: u64) {
         let index = self.index(plugin);
         let mut table = self.table.borrow_mut();
+        let millis = u32::try_from(millis).unwrap_or(u32::MAX);
         table[index].shown_ms = table[index].shown_ms.saturating_add(millis);
     }
 
@@ -310,5 +316,21 @@ mod tests {
         );
         assert_eq!((row("reader").pixels, row("reader").shown_ms), (200, 1500));
         assert_eq!((row("reader").calls, row("stats").calls), (1, 1));
+    }
+
+    /// Narrow counts stop at their largest value, never wrap.
+    #[test]
+    fn counts_stop_at_their_largest_value() {
+        let meter = Meter::new(None);
+        meter.shown("reader", u64::MAX);
+        meter.shown("reader", 5);
+        meter.awake("reader", u64::from(u32::MAX) + 9, "clock".into());
+        meter.io(usize::MAX, 3);
+        meter.io(2, 0);
+        let table = meter.table.borrow();
+        let row = |id: &str| table.iter().find(|p| p.plugin.as_str() == id).unwrap();
+        assert_eq!(row("reader").shown_ms, u32::MAX);
+        assert_eq!(row("reader").awake_ms, u32::MAX);
+        assert_eq!((row("core").read, row("core").written), (u32::MAX, 3));
     }
 }

@@ -28,6 +28,8 @@ change the plugin SDK.
 - *Automatic* power wears *Saving* while the system's own battery saver is on (where the shell reports it). SDK:
   `Capabilities::power` (`PowerControls`: what the shell changes by the level, so settings show only what
   applies), `KernelBuilder::power`, `Battery::saver`.
+- SDK: `PluginUsage::shown_ms`, `read`, `written` and `awake_ms` are `u32` (they stop at their largest value):
+  a row is kept for every plugin, about 1.3 KiB less on the X4.
 - *All notes*, a new plugin (Tools): the books that have bookmarks or highlights with how many, a book's notes
   (a note opens the book there), and *Export as My Clippings.txt*, all notes in one file in Kindle's form
   (UTF-8 with a byte order mark, `Exports/My Clippings.txt` beside the library) that notes apps read. A book's
