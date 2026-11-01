@@ -122,11 +122,11 @@ macro_rules! panic {
 macro_rules! trace {
     ($s:literal $(, $x:expr)* $(,)?) => {
         {
-            #[cfg(feature = "log")]
+            #[cfg(all(feature = "log", not(feature = "log-quiet")))]
             ::log::trace!($s $(, $x)*);
             #[cfg(feature = "defmt")]
             ::defmt::trace!($s $(, $x)*);
-            #[cfg(not(any(feature = "log", feature="defmt")))]
+            #[cfg(not(any(all(feature = "log", not(feature = "log-quiet")), feature="defmt")))]
             let _ = ($( & $x ),*);
         }
     };
@@ -136,11 +136,11 @@ macro_rules! trace {
 macro_rules! debug {
     ($s:literal $(, $x:expr)* $(,)?) => {
         {
-            #[cfg(feature = "log")]
+            #[cfg(all(feature = "log", not(feature = "log-quiet")))]
             ::log::debug!($s $(, $x)*);
             #[cfg(feature = "defmt")]
             ::defmt::debug!($s $(, $x)*);
-            #[cfg(not(any(feature = "log", feature="defmt")))]
+            #[cfg(not(any(all(feature = "log", not(feature = "log-quiet")), feature="defmt")))]
             let _ = ($( & $x ),*);
         }
     };
