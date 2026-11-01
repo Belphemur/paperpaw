@@ -2083,8 +2083,9 @@ Packs for other scripts are read a glyph at a time, so devices with
 little memory can use them ([ADR 0018](adr/0018-font-packs-for-other-scripts.md)).
 `tools/script-pack.py` builds Cyrillic and Greek for Literata (`greek`
 is ready as the data plugin `script-greek`, not offered yet), and
-Arabic and Hebrew (with where their marks sit) from the fonts in
-`tools/fonts`. A pack that extends a face with sizes larger than its own,
+Arabic and Hebrew (with where their marks sit) and Korean (the Hangul
+of KS X 1001, ready as `script-korean`, not offered yet) from the fonts
+in `tools/fonts`. A pack that extends a face with sizes larger than its own,
 and has its letters (at least those of `aenoAEO0` the face has), draws
 text asked that large, and the font size goes as far; a pack of another
 script's letters adds those letters only, in whatever sizes: the X4's firmware has

@@ -21,6 +21,12 @@ change the plugin SDK.
   Extended), for books whose Greek shows as `?` on a device whose fonts hold Latin only. It is a data plugin
   that `tools/script-pack.py greek` builds, with no code and no interface change. Its entry in
   `tools/plugin-files/data.toml` is commented out until the owner decides to offer it in the store.
+- A Korean letters pack, `script-korean` (#61): the 2,350 Hangul syllables of KS X 1001, which ordinary modern
+  text keeps to, with CJK punctuation, compatibility jamo and full-width forms, drawn from Nanum Myeongjo (SIL OFL
+  1.1; the pack is not named after it, as its licence reserves the name). One face in seven sizes, 8.2 MiB on the
+  card, for books whose Korean shows as `?` on a device whose fonts hold Latin only. It is a data plugin that
+  `tools/script-pack.py korean` builds from the repository, with no code and no interface change. Its entry in
+  `tools/plugin-files/data.toml` is commented out until the owner decides to offer it in the store.
 
 ### Changed
 

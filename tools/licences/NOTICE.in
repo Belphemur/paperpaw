@@ -25,16 +25,26 @@ licensed under the MIT License (fonts/TablerIcons-MIT.txt).
 The fonts of the plugins with the letters of other scripts (tools/fonts,
 which tools/script-pack.py makes their packs from; plugins of the store,
 built into no product) are licensed under the SIL Open Font License,
-Version 1.1, without Reserved Font Names:
+Version 1.1:
 
 - Noto Naskh Arabic, Copyright 2022 The Noto Project Authors
-  (https://github.com/notofonts/arabic)
+  (https://github.com/notofonts/arabic), without Reserved Font Name
 - Noto Serif Hebrew, Copyright 2022 The Noto Project Authors
-  (https://github.com/notofonts/hebrew)
+  (https://github.com/notofonts/hebrew), without Reserved Font Name
+- Nanum Myeongjo, Copyright 2010 NHN Corporation (http://www.nhncorp.com),
+  with Reserved Font Names 'Nanum', 'Naver Nanum', 'NanumMyeongjo',
+  'Naver NanumMyeongjo' and the others of its family the licence names,
+  kept unmodified as tools/fonts/NanumMyeongjo-Regular.ttf. The Korean
+  letters plugin (script-korean) draws from a bitmap pack made from it
+  (the Hangul syllables of KS X 1001, rasterised): a Modified Version
+  under the licence, so it is named Korean letters (korean.ppfp), not
+  with a Reserved Font Name, and is licensed under the SIL Open Font
+  License, Version 1.1, as the font it is derived from.
 
 Each of those plugins carries the licence's text with its packs
-(tools/fonts/NotoNaskhArabic-OFL.txt, NotoSerifHebrew-OFL.txt); it is the
-text given for Literata.
+(tools/fonts/NotoNaskhArabic-OFL.txt, NotoSerifHebrew-OFL.txt, the text
+given for Literata; NanumMyeongjo-OFL.txt, the same licence under its
+own copyright and Reserved Font Names).
 
 Hyphenation patterns (plugins/hyphenation/patterns, built in, and
 plugins/hyphenation-de/patterns, a plugin of the store) come from the

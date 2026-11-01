@@ -4,6 +4,10 @@ read from the card a glyph at a time and asked for what the built-in
 fonts lack. Cyrillic and Greek come from Literata's faces; Arabic from
 Noto Naskh Arabic and Hebrew from Noto Serif Hebrew (tools/fonts), one
 pack for each built-in face they extend, the interface's font too.
+Korean (the 2,350 Hangul syllables of KS X 1001, CJK punctuation,
+compatibility jamo, full-width forms) comes from Nanum Myeongjo, one
+pack for Literata's regular face: the fonts lacking Hangul (bold,
+italic, the interface's) fall back to it.
 
 Usage:
     python tools/script-pack.py OUT_DIR [SET ...]
@@ -51,30 +55,40 @@ def upright(name, file):
     ]
 
 
-# Per set: its name, the faces it is drawn in, the font's licence, and
-# the font named in the plugin's description.
+# Korean: one static face (no weight axis); its pack is not named after
+# the font, whose licence reserves its name for the font itself (NOTICE).
+KOREAN = [("korean", OTHER_FONTS / "NanumMyeongjo-Regular.ttf", None, "fonts-default.literata")]
+
+# Per set: its name, the faces it is drawn in, the font's licence, the
+# font named in the plugin's description, and the characters
+# (paperpaw-fontgen's --chars) where they are not the set of that name.
 SETS = {
-    "cyrillic": ("Cyrillic", LITERATA, FONTS / "Literata-OFL.txt", "Literata"),
-    "greek": ("Greek", LITERATA, FONTS / "Literata-OFL.txt", "Literata"),
+    "cyrillic": ("Cyrillic", LITERATA, FONTS / "Literata-OFL.txt", "Literata", None),
+    "greek": ("Greek", LITERATA, FONTS / "Literata-OFL.txt", "Literata", None),
     "arabic": ("Arabic", upright("naskh", OTHER_FONTS / "NotoNaskhArabic.ttf"),
-               OTHER_FONTS / "NotoNaskhArabic-OFL.txt", "Noto Naskh Arabic"),
+               OTHER_FONTS / "NotoNaskhArabic-OFL.txt", "Noto Naskh Arabic", None),
     "hebrew": ("Hebrew", upright("hebrew", OTHER_FONTS / "NotoSerifHebrew.ttf"),
-               OTHER_FONTS / "NotoSerifHebrew-OFL.txt", "Noto Serif Hebrew"),
+               OTHER_FONTS / "NotoSerifHebrew-OFL.txt", "Noto Serif Hebrew", None),
+    "korean": ("Korean", KOREAN, OTHER_FONTS / "NanumMyeongjo-OFL.txt", "a Korean book face",
+               [f"@{ROOT / 'tools/fontgen/sets/hangul-ks.txt'}",
+                "cjk-punctuation", "hangul-jamo", "fullwidth"]),
 }
 
 
 def build(base, sets):
     """Writes the plugin of `sets` to `base`/script-<sets>."""
-    faces, licence, font = SETS[sets[0]][1:]
+    faces, licence, font, _ = SETS[sets[0]][1:]
     if any(SETS[s][1] != faces for s in sets):
         sys.exit("sets drawn from other fonts go in plugins of their own")
+    chars = ",".join(c for s in sets for c in (SETS[s][4] or [s]))
     id = "script-" + "-".join(sets)
     out = base / id
     shutil.rmtree(out, ignore_errors=True)
     (out / "fonts").mkdir(parents=True)
     for name, file, weight, _ in faces:
+        axis = ["--axis", f"wght={weight}"] if weight else []
         subprocess.run([str(FONTGEN), str(file), str(out / "fonts" / f"{name}.ppfp"),
-                        "--chars", ",".join(sets), "--axis", f"wght={weight}"], check=True)
+                        "--chars", chars, *axis], check=True)
     extends = "\n".join(f"{name}.ppfp = {extended}" for name, _, _, extended in faces)
     listed = data.plugins().get(id)
     if listed:

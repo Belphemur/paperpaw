@@ -26,7 +26,7 @@ def ready():
 
 class Ready(unittest.TestCase):
     def test_none_of_them_is_offered(self):
-        self.assertFalse({"script-greek"} & set(data.plugins()))
+        self.assertFalse({"script-greek", "script-korean"} & set(data.plugins()))
 
     def test_the_greek_pack_is_ready(self):
         fields = ready()["script-greek"]
@@ -41,6 +41,22 @@ class Ready(unittest.TestCase):
             self.assertTrue((data.ROOT / path).exists(), path)
         # What the pack builder writes for it.
         self.assertIn("id = script-greek\n", data.plugin_ini("script-greek", fields))
+
+    def test_the_korean_pack_is_ready(self):
+        fields = ready()["script-korean"]
+        self.assertEqual(fields["version"], "1.0.0")
+        self.assertEqual(fields["build"], "tools/script-pack.py")
+        self.assertTrue(fields["off_by_default"])
+        self.assertEqual(fields["licence"], "OFL-1.1")
+        for key in ["name", "description"]:
+            self.assertTrue(fields[key] and fields["de"][key])
+        for path in [fields["build"], *fields["inputs"]]:
+            self.assertTrue((data.ROOT / path).exists(), path)
+        self.assertIn("id = script-korean\n", data.plugin_ini("script-korean", fields))
+        # The font's licence reserves its name: the store's texts do not
+        # use it (NOTICE).
+        texts = [fields["name"], fields["description"], *fields["de"].values()]
+        self.assertFalse([t for t in texts if "Nanum" in t])
 
 
 if __name__ == "__main__":
