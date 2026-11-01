@@ -855,12 +855,18 @@ impl Device {
         let now = self.now();
         let effects = budget::track(|| self.kernel.resize(now, width, height));
         let (kept_width, kept_height) = self.kernel.frame_size();
-        if (kept_width, kept_height) != (width, height)
-            && let Ok(controller) = Framebuffer::new(kept_width, kept_height, display.format)
-        {
-            self.controller = controller;
-            self.panel = Panel::new(kept_width, kept_height, display.color);
-            self.size = None;
+        if (kept_width, kept_height) != (width, height) {
+            // The kernel kept the old size: so does the panel. Where the
+            // old controller cannot be made again, the panel keeps the new
+            // size it has, and says so.
+            match Framebuffer::new(kept_width, kept_height, display.format) {
+                Ok(controller) => {
+                    self.controller = controller;
+                    self.panel = Panel::new(kept_width, kept_height, display.color);
+                    self.size = None;
+                }
+                Err(e) => eprintln!("resize: no memory for {kept_width}x{kept_height}: {e:?}"),
+            }
         }
         self.execute(effects);
     }

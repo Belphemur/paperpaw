@@ -616,7 +616,8 @@ impl Kernel {
 
     /// The size of the whole screen (the frame's), in pixels: what
     /// [`Kernel::resize`] left, which is the old one where there was no
-    /// memory for the new one.
+    /// memory for the new one. Where not even the old one could be made
+    /// again it is 1×1: shells that follow it get a screen of one pixel.
     #[must_use]
     pub fn frame_size(&self) -> (u16, u16) {
         let bounds = self.framebuffer.bounds();

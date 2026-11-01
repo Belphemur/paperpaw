@@ -56,17 +56,19 @@ pub fn tint(colors: [[u8; 3]; 2]) -> [[u8; 4]; 256] {
 /// Converts the `rows` of `frame` to RGBA_8888 for a window of `stride`
 /// pixels per row, each gray as `tint` shows it and each colour (of
 /// pictures) as it is: `put(byte offset, rgba)` writes one pixel. Pixels
-/// wider than the window and rows below the frame are skipped.
+/// beyond `columns` (what the window has right of the frame's corner) and
+/// rows below the frame are skipped.
 pub fn to_rgba(
     frame: &FrameView<'_>,
     rows: Range<usize>,
     stride: usize,
+    columns: usize,
     tint: &[[u8; 4]; 256],
     mut put: impl FnMut(usize, [u8; 4]),
 ) {
     for y in rows.start..rows.end.min(usize::from(frame.height)) {
         let row = y * stride * 4;
-        for x in 0..usize::from(frame.width).min(stride) {
+        for x in 0..usize::from(frame.width).min(columns) {
             let color = frame.pixel(x as u16, y as u16);
             let rgba = if color.r == color.g && color.g == color.b {
                 tint[usize::from(color.r)]
@@ -94,7 +96,7 @@ mod tests {
         // A window three pixels wide, of which rows 1 and 2 changed (and
         // a row below the frame is asked for).
         let mut buffer = [7u8; 3 * 4 * 4];
-        to_rgba(&frame, 1..4, 3, &tint(BLACK_ON_WHITE), |at, rgba| {
+        to_rgba(&frame, 1..4, 3, 3, &tint(BLACK_ON_WHITE), |at, rgba| {
             buffer[at..at + 4].copy_from_slice(&rgba)
         });
         assert_eq!(&buffer[12..20], &[0, 0, 0, 255, 255, 255, 255, 255]);
@@ -107,13 +109,30 @@ mod tests {
     }
 
     #[test]
+    fn a_frame_wider_than_the_window_leaves_is_cut_not_wrapped() {
+        // Two pixels a row, a window of four pixels of which the frame's
+        // corner has one column: the second pixel of each row is not
+        // written, and the next row of the window stays as it was.
+        let data = [255u8, 0, 0, 255];
+        let frame = FrameView::new(2, 2, PixelFormat::Gray8, 2, &data);
+        let mut buffer = [7u8; 4 * 4 * 2];
+        to_rgba(&frame, 0..2, 4, 1, &tint(BLACK_ON_WHITE), |at, rgba| {
+            buffer[at..at + 4].copy_from_slice(&rgba)
+        });
+        assert_eq!(&buffer[0..4], &[255, 255, 255, 255]);
+        assert!(buffer[4..16].iter().all(|&b| b == 7));
+        assert_eq!(&buffer[16..20], &[0, 0, 0, 255]);
+        assert!(buffer[20..].iter().all(|&b| b == 7));
+    }
+
+    #[test]
     fn colours_of_pictures_stay_as_they_are() {
         // One Rgb888 row: red, then a gray.
         let data = [255u8, 0, 0, 128, 128, 128];
         let frame = FrameView::new(2, 1, PixelFormat::Rgb888, 6, &data);
         let mut buffer = [0u8; 8];
         let sepia = tint([[91, 70, 54], [244, 236, 216]]);
-        to_rgba(&frame, 0..1, 2, &sepia, |at, rgba| {
+        to_rgba(&frame, 0..1, 2, 2, &sepia, |at, rgba| {
             buffer[at..at + 4].copy_from_slice(&rgba)
         });
         assert_eq!(&buffer[..4], &[255, 0, 0, 255]);

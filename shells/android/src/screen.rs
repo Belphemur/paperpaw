@@ -19,6 +19,8 @@
 
 use core::ops::Range;
 
+use paperpaw_platform::PointerPhase;
+
 /// What the system covers on each side of the window, in pixels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Insets {
@@ -52,6 +54,19 @@ impl Content {
             y: top,
             width: width - left - right,
             height: height - top - bottom,
+        }
+    }
+
+    /// Where the kernel kept another size than it was asked for (no
+    /// memory for the new frame): the screen is the one it kept, from the
+    /// same corner. The part of it that falls outside the window is not
+    /// shown ([`pixels::to_rgba`](crate::pixels::to_rgba) cuts it).
+    #[must_use]
+    pub fn kept(self, size: (u32, u32)) -> Self {
+        Self {
+            width: size.0,
+            height: size.1,
+            ..self
         }
     }
 
@@ -99,6 +114,48 @@ impl Content {
         let (x, y) = (self.x as usize, self.y as usize);
         let rows = y + usize::from(frame_rows.start)..y + usize::from(frame_rows.end);
         (rows, (y * stride + x) * 4)
+    }
+}
+
+/// The pointers that went down on the screen: a finger that began on a
+/// system bar (the gesture bar) is the system's for as long as it lasts,
+/// also where it moves onto the screen, and reaches the kernel never. 256
+/// ids, as an event's pointer id is clamped to a byte.
+#[derive(Debug, Clone, Default)]
+pub struct Touches([u64; 4]);
+
+impl Touches {
+    /// Whether the kernel is told of pointer `id` in `phase`, `inside` being
+    /// whether it is on the screen (it only counts for `Down`; a pointer
+    /// that moves is held to the screen). Moves, ups and cancels pass only
+    /// for a pointer that went down on the screen, and an up or a cancel
+    /// ends it.
+    pub fn passes(&mut self, phase: PointerPhase, id: u8, inside: bool) -> bool {
+        let (word, bit) = (usize::from(id / 64), 1u64 << (id % 64));
+        let down = self.0[word] & bit != 0;
+        match phase {
+            PointerPhase::Down => {
+                // A down for an id that is down already (a lost up) starts
+                // it anew.
+                if inside {
+                    self.0[word] |= bit;
+                } else {
+                    self.0[word] &= !bit;
+                }
+                inside
+            }
+            PointerPhase::Move => down,
+            PointerPhase::Up | PointerPhase::Cancel => {
+                self.0[word] &= !bit;
+                down
+            }
+            _ => false,
+        }
+    }
+
+    /// No pointer is down (the screen was made anew).
+    pub fn clear(&mut self) {
+        self.0 = [0; 4];
     }
 }
 
@@ -221,6 +278,62 @@ mod tests {
         assert_eq!(ui_size(1600, 2560, 280), 9);
         assert_eq!(ui_size(1600, 2560, 240), 10);
         assert_eq!(ui_size(2000, 3000, 250), 11);
+    }
+
+    #[test]
+    fn a_refused_resize_keeps_the_screen_the_kernel_kept() {
+        let wanted = Content::of((1080, 2400), insets(0, 100, 0, 100));
+        let kept = wanted.kept((1080, 2000));
+        assert_eq!(
+            kept,
+            Content {
+                x: 0,
+                y: 100,
+                width: 1080,
+                height: 2000
+            }
+        );
+        // Touches below the kept screen are not on it, and a finger that
+        // began on it is held at its last row, not mapped past it.
+        assert_eq!(kept.point(500.0, 2150.0), None);
+        assert_eq!(kept.point_held(500.0, 2250.0), (500, 1999));
+        // The frame is the kept size, so is the buffer's range.
+        assert_eq!(kept.in_buffer(&(0..2000), 1080).0, 100..2100);
+    }
+
+    #[test]
+    fn a_finger_that_began_on_a_bar_is_never_the_kernels() {
+        let mut touches = Touches::default();
+        // Down on the gesture bar, then moved onto the screen and lifted.
+        assert!(!touches.passes(PointerPhase::Down, 0, false));
+        assert!(!touches.passes(PointerPhase::Move, 0, true));
+        assert!(!touches.passes(PointerPhase::Up, 0, true));
+        // Down on the screen, moved past its edge, lifted: all three.
+        assert!(touches.passes(PointerPhase::Down, 0, true));
+        assert!(touches.passes(PointerPhase::Move, 0, true));
+        assert!(touches.passes(PointerPhase::Up, 0, true));
+        // And then it is over.
+        assert!(!touches.passes(PointerPhase::Move, 0, true));
+    }
+
+    #[test]
+    fn touches_are_told_apart_by_pointer_and_end_with_a_cancel() {
+        let mut touches = Touches::default();
+        assert!(touches.passes(PointerPhase::Down, 3, true));
+        // A second finger that began on the bar.
+        assert!(!touches.passes(PointerPhase::Down, 200, false));
+        assert!(!touches.passes(PointerPhase::Move, 200, true));
+        assert!(touches.passes(PointerPhase::Move, 3, true));
+        assert!(touches.passes(PointerPhase::Cancel, 3, true));
+        assert!(!touches.passes(PointerPhase::Up, 3, true));
+        // A down that follows a lost up starts anew, on the bar or not.
+        assert!(touches.passes(PointerPhase::Down, 9, true));
+        assert!(!touches.passes(PointerPhase::Down, 9, false));
+        assert!(!touches.passes(PointerPhase::Move, 9, true));
+        // Cleared when the screen was made anew.
+        assert!(touches.passes(PointerPhase::Down, 255, true));
+        touches.clear();
+        assert!(!touches.passes(PointerPhase::Move, 255, true));
     }
 
     #[test]

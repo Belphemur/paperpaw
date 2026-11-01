@@ -25,7 +25,7 @@ use crate::epd::Epd;
 use crate::lights::Lights;
 use crate::plugin::{AndroidPlugin, Frontlight};
 use crate::private::Private;
-use crate::screen::Content;
+use crate::screen::{Content, Touches};
 use crate::{access, insets, keys, pixels, status};
 
 /// Where the device's shared storage appears in PaperPaw's storage.
@@ -53,6 +53,8 @@ struct Running {
     /// Where the screen lies in the window, the system's insets off (see
     /// `screen`): the window's whole size where it has none.
     content: Content,
+    /// The fingers that went down on the screen, not on a system bar.
+    touches: Touches,
     wake_at: Option<Instant>,
     /// The kernel asked to be built again (e.g. plugins were switched).
     restart: bool,
@@ -151,11 +153,15 @@ fn android_main(app: AndroidApp) {
                 }
                 MainEvent::RedrawNeeded { .. }
                 | MainEvent::WindowResized { .. }
+                | MainEvent::ContentRectChanged { .. }
+                | MainEvent::InsetsChanged { .. }
                 | MainEvent::ConfigChanged { .. } => {
                     if let (Some(window), Some(running)) = (&window, running.as_mut()) {
                         // Turned, or another window (a split screen) or other
                         // insets: the same screens, made anew for the size the
-                        // system leaves.
+                        // system leaves. The insets are read again whenever
+                        // the system says they changed: right after a turn
+                        // the window may still report the old ones.
                         let window_size = (
                             u32::try_from(window.width()).unwrap_or(0),
                             u32::try_from(window.height()).unwrap_or(0),
@@ -173,7 +179,23 @@ fn android_main(app: AndroidApp) {
                         {
                             running.frame = new;
                             running.content = content;
+                            running.touches.clear();
                             let effects = running.kernel.resize(now(), width, height);
+                            // Short of memory the kernel keeps the frame it
+                            // had: the screen is that one, not the one asked
+                            // for, or it would be drawn past its rows.
+                            let (kept_width, kept_height) = running.kernel.frame_size();
+                            if (kept_width, kept_height) != (width, height)
+                                && let Ok(kept) = Framebuffer::new(
+                                    kept_width,
+                                    kept_height,
+                                    running.frame.format(),
+                                )
+                            {
+                                running.frame = kept;
+                                running.content =
+                                    content.kept((kept_width.into(), kept_height.into()));
+                            }
                             apply(running, effects);
                             running.changed_rows = None;
                             if let Some(epd) = epd.as_mut() {
@@ -247,7 +269,7 @@ fn android_main(app: AndroidApp) {
                 // What PaperPaw takes is handled, also when it brings no
                 // event (a held key's repeats): Android would otherwise act
                 // on it too, e.g. change the volume.
-                let Some(events) = input(event, &state.content) else {
+                let Some(events) = input(event, &state.content, &mut state.touches) else {
                     return InputStatus::Unhandled;
                 };
                 for event in events {
@@ -600,6 +622,7 @@ fn start_kernel(
         kernel,
         frame,
         content,
+        touches: Touches::default(),
         wake_at: None,
         restart: false,
         shared_storage,
@@ -804,7 +827,12 @@ fn present(
     };
     if whole && !content.is_window((width as u32, height as u32)) {
         // Around the screen: black.
-        for pixel in bytes.chunks_exact_mut(4).take(stride * asked.end) {
+        for pixel in bytes
+            .as_chunks_mut::<4>()
+            .0
+            .iter_mut()
+            .take(stride * asked.end)
+        {
             for (slot, value) in pixel.iter_mut().zip([0, 0, 0, 0xff]) {
                 slot.write(value);
             }
@@ -812,17 +840,29 @@ fn present(
     }
     let (_, shift) = content.in_buffer(&(0..0), stride);
     let tint = pixels::tint(colors);
-    pixels::to_rgba(&frame.view(), frame_rows, stride, &tint, |at, rgba| {
-        if let Some(pixel) = bytes.get_mut(at + shift..at + shift + 4) {
-            for (slot, value) in pixel.iter_mut().zip(rgba) {
-                slot.write(value);
+    let columns = stride.saturating_sub(content.x as usize);
+    pixels::to_rgba(
+        &frame.view(),
+        frame_rows,
+        stride,
+        columns,
+        &tint,
+        |at, rgba| {
+            if let Some(pixel) = bytes.get_mut(at + shift..at + shift + 4) {
+                for (slot, value) in pixel.iter_mut().zip(rgba) {
+                    slot.write(value);
+                }
             }
-        }
-    });
+        },
+    );
 }
 
 /// Translates an Android input event; `None` leaves it to Android.
-fn input(event: &AndroidInput<'_>, content: &Content) -> Option<Vec<InputEvent>> {
+fn input(
+    event: &AndroidInput<'_>,
+    content: &Content,
+    touches: &mut Touches,
+) -> Option<Vec<InputEvent>> {
     match event {
         AndroidInput::KeyEvent(key) => {
             let name = keys::button(u32::from(key.key_code()))?;
@@ -843,9 +883,10 @@ fn input(event: &AndroidInput<'_>, content: &Content) -> Option<Vec<InputEvent>>
                 MotionAction::Cancel => PointerPhase::Cancel,
                 _ => return Some(Vec::new()),
             };
-            // Down and up concern one pointer; moves report all of them.
+            // Down and up concern one pointer; moves and a cancel report all
+            // of them.
             let pointers: Vec<_> = match phase {
-                PointerPhase::Move => motion.pointers().collect(),
+                PointerPhase::Move | PointerPhase::Cancel => motion.pointers().collect(),
                 _ => vec![motion.pointer_at_index(motion.pointer_index())],
             };
             Some(
@@ -855,12 +896,22 @@ fn input(event: &AndroidInput<'_>, content: &Content) -> Option<Vec<InputEvent>>
                         // A finger down where the system's bars are is
                         // theirs; one that began on the screen and goes
                         // past its edge ends there.
-                        let (x, y) = match phase {
-                            PointerPhase::Down => content.point(pointer.x(), pointer.y())?,
-                            _ => content.point_held(pointer.x(), pointer.y()),
+                        let id = pointer.pointer_id().clamp(0, 255) as u8;
+                        let (x, y, inside) = match phase {
+                            PointerPhase::Down => content
+                                .point(pointer.x(), pointer.y())
+                                .map_or((0, 0, false), |(x, y)| (x, y, true)),
+                            _ => {
+                                let (x, y) = content.point_held(pointer.x(), pointer.y());
+                                (x, y, true)
+                            }
                         };
+                        // And its moves, up and cancel are the system's too.
+                        if !touches.passes(phase, id, inside) {
+                            return None;
+                        }
                         Some(InputEvent::Pointer(PointerEvent::new(
-                            pointer.pointer_id().clamp(0, 255) as u8,
+                            id,
                             phase,
                             Point::new(x, y),
                             match pointer.tool_type() {
