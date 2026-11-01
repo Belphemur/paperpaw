@@ -646,7 +646,11 @@ fn read_list(
         Event::Close([list, at])
             if list == "revoked_keys" && at == "[]" && format == Some(FORMAT) =>
         {
-            revoked.entry_done(storage);
+            revoked.entry_done(storage, &|id| {
+                device
+                    .plugins
+                    .is_none_or(|plugins| plugins.get(id).is_some())
+            });
         }
         Event::Open([key, ..]) if key == "sections" => picks.fair = true,
         Event::Value([key, section, at], value) if key == "sections" && at == "[]" => {
