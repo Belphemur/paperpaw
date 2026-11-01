@@ -87,9 +87,14 @@ fn a_plugin_not_added_answers_nothing_and_later_catalogs_win() {
     let mut t = Translator::new();
     t.built_catalogs(table());
     t.add(Catalog::parse(NOTES).unwrap());
-    // The clock plugin is not here: its keys are not either.
+    // The clock plugin is not here: its keys are not either, plain or
+    // decoded (quoted, escaped), and none is listed.
     assert_eq!(t.get("clock.title"), None);
+    assert_eq!(t.get("clock.quoted"), None);
+    assert_eq!(t.get("clock.tab"), None);
     assert_eq!(t.get("notes.title"), Some("Notes"));
+    let keys: Vec<String> = t.catalogs()[0].keys().map(String::from).collect();
+    assert_eq!(keys, ["notes.hello", "notes.title"]);
     // A catalog added after (a data plugin's) takes precedence.
     t.add(Catalog::parse(CLASH).unwrap());
     t.add(Catalog::parse(CLOCK).unwrap());

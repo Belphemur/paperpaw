@@ -76,6 +76,13 @@ A catalog can stay on the card and be read as needed.
 
 ## The batch it landed in
 
+**Build from `ba270129` or later.** The bless (`26bdc02c`) changed the plugin
+fingerprint; shared bodies changed after it (digits, the right-to-left
+mirroring of the shared UI, Hangul composition), which a fingerprint of
+layouts and constants does not see. The table-compat baseline is
+`ba270129`: every store, test-card and Workshop build of this release comes
+from it or later, and builds of the commits between are thrown away.
+
 The owner put every queued interface change into the same re-bless of
 interface 5 (2026-11-01, branch `kernel/iface5-catalog-ondemand`): one
 commit each, with host tests, CHANGELOG lines and, in the commit

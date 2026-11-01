@@ -55,7 +55,9 @@ pub(crate) fn syllable(lead: char, vowel: char, last: Option<char>) -> Option<ch
 /// Sets the jamo among `keys` (one per character) as their syllables
 /// where `has` says the font holds them: the syllable takes the leading
 /// consonant's key, the vowel and the final draw nothing (`none`), so
-/// every character keeps one key.
+/// every character keeps one key. Where the font lacks the syllable with
+/// its final consonant, the one without it is set and the final stays a
+/// jamo of its own.
 pub(crate) fn compose(keys: &mut [char], none: char, has: impl Fn(char) -> bool) {
     let mut i = 0;
     while i + 1 < keys.len() {
@@ -64,21 +66,27 @@ pub(crate) fn compose(keys: &mut [char], none: char, has: impl Fn(char) -> bool)
             .get(i + 2)
             .copied()
             .filter(|&t| FINALS.contains(&u32::from(t)));
-        let whole = syllable(lead, vowel, last).filter(|&s| has(s));
-        let Some(whole) = whole else {
+        let found = syllable(lead, vowel, last)
+            .filter(|&s| has(s))
+            .map(|s| (s, last.is_some()))
+            .or_else(|| {
+                last?;
+                syllable(lead, vowel, None)
+                    .filter(|&s| has(s))
+                    .map(|s| (s, false))
+            });
+        let Some((whole, with_last)) = found else {
             i += 1;
             continue;
         };
         keys[i] = whole;
         keys[i + 1] = none;
-        let taken = match last {
-            Some(_) => {
-                keys[i + 2] = none;
-                3
-            }
-            None => 2,
-        };
-        i += taken;
+        if with_last {
+            keys[i + 2] = none;
+            i += 3;
+        } else {
+            i += 2;
+        }
     }
 }
 
@@ -97,6 +105,18 @@ mod tests {
         let mut keys: Vec<char> = text.chars().collect();
         compose(&mut keys, '\0', |_| true);
         keys.into_iter().filter(|&c| c != '\0').collect()
+    }
+
+    /// A font without 한 but with 하: 하 and the final ᆫ as a jamo.
+    #[test]
+    fn a_missing_syllable_with_a_final_falls_back_to_the_one_without() {
+        let mut keys: Vec<char> = "\u{1112}\u{1161}\u{11AB}".chars().collect();
+        compose(&mut keys, '\0', |s| s != '한');
+        assert_eq!(keys, ['하', '\0', '\u{11AB}']);
+        // Neither: the jamo stay as they are.
+        let mut keys: Vec<char> = "\u{1112}\u{1161}\u{11AB}".chars().collect();
+        compose(&mut keys, '\0', |_| false);
+        assert_eq!(keys, ['\u{1112}', '\u{1161}', '\u{11AB}']);
     }
 
     #[test]
