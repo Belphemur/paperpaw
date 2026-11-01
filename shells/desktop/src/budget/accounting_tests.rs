@@ -188,7 +188,7 @@ fn the_profile_records_live_allocations_by_site_until_freed() {
     let _alone = alone();
     PROFILE.store(true, Ordering::Relaxed);
     let buffer = track(|| Vec::<u8>::with_capacity(4321));
-    let recorded = |sites: &Mutex<Option<HashMap<usize, (usize, Backtrace)>>>| {
+    let recorded = |sites: &Mutex<Option<HashMap<usize, Site>>>| {
         sites
             .lock()
             .unwrap()
@@ -211,11 +211,54 @@ fn the_profile_records_live_allocations_by_site_until_freed() {
 }
 
 #[test]
+fn the_profile_keeps_what_was_live_at_the_peak_after_it_is_freed() {
+    let _alone = alone();
+    reset_peak();
+    PROFILE.store(true, Ordering::Relaxed);
+    let peak = track(|| Vec::<u8>::with_capacity(PEAK_STEP * 3));
+    drop(peak);
+    let later = track(|| Vec::<u8>::with_capacity(100));
+    PROFILE.store(false, Ordering::Relaxed);
+    let sizes: Vec<usize> = AT_PEAK
+        .lock()
+        .unwrap()
+        .as_ref()
+        .map(|(_, sites)| sites.iter().map(|(size, _)| *size).collect())
+        .unwrap_or_default();
+    assert!(sizes.contains(&(PEAK_STEP * 3)), "{sizes:?}");
+    assert!(!sizes.contains(&100), "{sizes:?}");
+    // A new peak starts it anew; the report takes it.
+    drop(later);
+    reset_peak();
+    assert!(AT_PEAK.lock().unwrap().is_none());
+    report(2);
+}
+
+#[test]
 fn a_site_leaves_out_the_budgets_own_frames() {
     // Only this module's frames are PaperPaw's here, and the budget's
     // bookkeeping is never where memory is used.
     let backtrace = Backtrace::force_capture();
     assert_eq!(site_of(&backtrace, 2), "(outside PaperPaw code)");
+}
+
+#[test]
+fn a_site_names_methods_of_paperpaw_types() {
+    let text =
+        "   0: <paperpaw_emulator::budget::Budget as core::alloc::global::GlobalAlloc>::alloc
+             at ./shells/desktop/src/budget.rs:95:20
+   1: <alloc::vec::Vec<u8>>::with_capacity
+             at /rustc/library/alloc/src/vec/mod.rs:480:9
+   2: <paperpaw_core::Kernel>::start::h0123456789abcdef
+             at ./crates/paperpaw-core/src/lib.rs:120:5
+   3: paperpaw_emulator::device::build_kernel
+             at ./shells/desktop/src/device.rs:1022:9
+   4: paperpaw_emu::main
+             at ./shells/desktop/src/main.rs:99:5";
+    assert_eq!(
+        site_in(text, 2),
+        "<paperpaw_core::Kernel>::start (lib.rs:120)\n      <- paperpaw_emulator::device::build_kernel (device.rs:1022)"
+    );
 }
 
 #[test]

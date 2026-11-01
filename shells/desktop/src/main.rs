@@ -44,7 +44,8 @@ OPTIONS:
                           as a flow's steps, for `paperpaw-dev flows`
     --heap-budget <KiB>   Override the profile's heap budget (`none` = unlimited)
     --trace-alloc <bytes> Print every kernel allocation of at least this size, with where
-    --heap-report         After a headless run, list the live heap by call site
+    --heap-report         After a headless run, list the live heap by call site,
+                          then the heap at the peak (since `reset-peak`)
     --network <how>       Where plugins' requests go: `real` (the default), or
                           `fixtures`, answered offline from the emulator's own
                           (a small plugin library and the servers PaperPaw's

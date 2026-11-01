@@ -18,8 +18,8 @@ use std::alloc::{GlobalAlloc, Layout, System};
 use std::backtrace::Backtrace;
 use std::cell::Cell;
 use std::collections::HashMap;
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 
 /// Per-allocation bookkeeping overhead of typical embedded allocators.
 const HEADER: usize = 8;
@@ -36,7 +36,17 @@ static PROFILE: AtomicBool = AtomicBool::new(false);
 /// [`clear_last_refused`] (see [`last_refused`]).
 static LAST_REFUSED: AtomicUsize = AtomicUsize::new(0);
 /// Live tracked allocations: address → (size, where it was made).
-static SITES: Mutex<Option<HashMap<usize, (usize, Backtrace)>>> = Mutex::new(None);
+static SITES: Mutex<Option<HashMap<usize, Site>>> = Mutex::new(None);
+/// What was live at the peak (within [`PEAK_STEP`] of it), while
+/// profiling: the heap then and its allocations.
+static AT_PEAK: Mutex<Option<(usize, Vec<Site>)>> = Mutex::new(None);
+/// How far the heap must pass the last look at the peak before it is
+/// looked at again: often enough to be near the peak, rarely enough to
+/// stay fast.
+const PEAK_STEP: usize = 1024;
+
+/// An allocation's size and where it was made.
+type Site = (usize, Arc<Backtrace>);
 
 thread_local! {
     static TRACKING: Cell<bool> = const { Cell::new(false) };
@@ -117,11 +127,17 @@ unsafe impl GlobalAlloc for BudgetAllocator {
             if PROFILE.load(Ordering::Relaxed) {
                 // Untracked: the bookkeeping is not part of the budget.
                 let tracking = TRACKING.with(|t| t.replace(false));
-                let site = Backtrace::force_capture();
+                let site = Arc::new(Backtrace::force_capture());
                 if let Ok(mut sites) = SITES.lock() {
-                    sites
-                        .get_or_insert_with(HashMap::new)
-                        .insert(ptr as usize, (layout.size(), site));
+                    let sites = sites.get_or_insert_with(HashMap::new);
+                    sites.insert(ptr as usize, (layout.size(), site));
+                    if let Ok(mut at_peak) = AT_PEAK.lock()
+                        && at_peak
+                            .as_ref()
+                            .is_none_or(|(at, _)| live >= at + PEAK_STEP)
+                    {
+                        *at_peak = Some((live, sites.values().cloned().collect()));
+                    }
                 }
                 TRACKING.with(|t| t.set(tracking));
             }
@@ -238,7 +254,13 @@ pub fn profile() {
 /// The first frames in PaperPaw code below the allocator, e.g.
 /// `paperpaw_text::cache::GlyphCache::insert (cache.rs:120)`.
 fn site_of(backtrace: &Backtrace, depth: usize) -> String {
-    let text = backtrace.to_string();
+    site_in(&backtrace.to_string(), depth)
+}
+
+/// [`site_of`] a backtrace's text. A method of a type is named as the
+/// type in angle brackets (`<paperpaw_core::Kernel>::start`), and counts
+/// as PaperPaw's as a function does.
+fn site_in(text: &str, depth: usize) -> String {
     let mut frames = Vec::new();
     let mut lines = text.lines().peekable();
     while let Some(line) = lines.next() {
@@ -254,7 +276,10 @@ fn site_of(backtrace: &Backtrace, depth: usize) -> String {
             })
             .unwrap_or_default();
         let name = name.rsplit_once("::h").map_or(name, |(n, _)| n);
-        if name.starts_with("paperpaw") && !name.contains("budget") && !name.contains("__rust_") {
+        if name.trim_start_matches('<').starts_with("paperpaw")
+            && !name.contains("budget")
+            && !name.contains("__rust_")
+        {
             frames.push(format!("{name} ({location})"));
             if frames.len() == depth {
                 break;
@@ -281,8 +306,17 @@ pub fn report(depth: usize) {
         .ok()
         .and_then(|mut s| s.take())
         .unwrap_or_default();
+    print_groups("live heap by call site", sites.values(), depth);
+    if let Some((_, at_peak)) = AT_PEAK.lock().ok().and_then(|mut s| s.take()) {
+        print_groups("heap at the peak by call site", at_peak.iter(), depth);
+    }
+    TRACKING.with(|t| t.set(tracking));
+}
+
+/// Prints `sites` grouped by call site, largest first, under `title`.
+fn print_groups<'a>(title: &str, sites: impl Iterator<Item = &'a Site>, depth: usize) {
     let mut groups: HashMap<String, (usize, usize)> = HashMap::new();
-    for (size, backtrace) in sites.values() {
+    for (size, backtrace) in sites {
         let group = groups.entry(site_of(backtrace, depth)).or_default();
         group.0 += size + HEADER;
         group.1 += 1;
@@ -290,17 +324,19 @@ pub fn report(depth: usize) {
     let mut groups: Vec<_> = groups.into_iter().collect();
     groups.sort_by_key(|(_, (bytes, _))| std::cmp::Reverse(*bytes));
     let total: usize = groups.iter().map(|(_, (bytes, _))| bytes).sum();
-    println!("live heap by call site ({:.1} KiB):", total as f64 / 1024.0);
+    println!("{title} ({:.1} KiB):", total as f64 / 1024.0);
     for (site, (bytes, count)) in groups {
         println!("{:>8.1} KiB {count:>6}x  {site}", bytes as f64 / 1024.0);
     }
-    TRACKING.with(|t| t.set(tracking));
 }
 
 /// Starts the peak anew from what is live now, e.g. to measure the peak
 /// of one screen.
 pub fn reset_peak() {
     PEAK.store(LIVE.load(Ordering::Relaxed), Ordering::Relaxed);
+    if let Ok(mut at_peak) = AT_PEAK.lock() {
+        *at_peak = None;
+    }
 }
 
 /// Live tracked allocations grouped by call site (`depth` frames of

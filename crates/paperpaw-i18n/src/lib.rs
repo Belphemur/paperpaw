@@ -269,8 +269,9 @@ impl Translator {
     }
 
     /// Where the language is not English: English catalogs whose every
-    /// message the chain's other languages have drop their index, never
-    /// looked in.
+    /// message the chain's other languages have, never looked in, are
+    /// parked (those that cannot be drop their index), and come back
+    /// with English.
     fn drop_covered(&mut self) {
         let english = |language: &str| language == FALLBACK_LANGUAGE;
         if english(self.language.split('-').next().unwrap_or_default()) {
@@ -289,10 +290,24 @@ impl Translator {
                     })
             })
             .collect();
-        for (catalog, covered) in self.catalogs.iter_mut().zip(covered) {
-            if covered {
+        let parking = covered.iter().filter(|&&c| c).count();
+        if parking > 0 {
+            let mut kept = Vec::with_capacity(self.catalogs.len() - parking);
+            for (mut catalog, covered) in
+                core::mem::take(&mut self.catalogs).into_iter().zip(covered)
+            {
+                if !covered {
+                    kept.push(catalog);
+                    continue;
+                }
                 catalog.unload();
+                match catalog.park() {
+                    Ok(parked) => self.parked.push(parked),
+                    Err(catalog) => kept.push(catalog),
+                }
             }
+            self.catalogs = kept;
+            self.parked.shrink_to_fit();
         }
         self.rebuild_order();
     }
@@ -463,8 +478,8 @@ mod tests {
     }
 
     /// Languages not in use are parked and come back when chosen; an
-    /// English catalog the language chosen covers drops its index, one
-    /// it does not cover keeps it.
+    /// English catalog the language chosen covers is parked too, one it
+    /// does not cover stays.
     #[test]
     fn only_the_languages_in_use_are_kept() {
         const EN_ALL: &str = "[meta]\nlanguage = en\n[messages]\nall = All\n";
@@ -473,16 +488,14 @@ mod tests {
         t.add(Catalog::parse(EN_ALL).unwrap());
         t.add(Catalog::parse(DE_ALL).unwrap());
         t.shrink_to_fit();
-        assert_eq!(t.parked.len(), 1, "de-AT");
+        let parked: Vec<&str> = t.parked.iter().map(Parked::language).collect();
+        assert_eq!(parked, ["de-AT", "en"], "the English one German covers");
         let loaded: Vec<(&str, bool)> = t
             .catalogs
             .iter()
             .map(|c| (c.language(), c.is_loaded()))
             .collect();
-        assert_eq!(
-            loaded,
-            [("en", true), ("de", true), ("en", false), ("de", true)]
-        );
+        assert_eq!(loaded, [("en", true), ("de", true), ("de", true)]);
         assert_eq!(t.tr("only-en"), "English only");
         assert_eq!(t.tr("all"), "Alle");
         t.set_language("de-AT");

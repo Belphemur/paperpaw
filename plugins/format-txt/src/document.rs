@@ -129,20 +129,38 @@ impl TxtDocument {
             document.read_header(&head[..marker]);
             document.start = line_after(&head, marker) as u32;
         }
+        // The text's look from the head, which is let go before the end is
+        // looked for: the two reads are not held at once.
+        let sampled = head.len() as u32;
+        document.sample(head.get(document.start as usize..).unwrap_or_default());
+        drop(head);
         if let Some(end) = find_end_marker(storage, &document.path, document.start, size)? {
             document.end = end;
         }
+        if document.end < sampled {
+            // The text ends inside the head: its look from the text alone.
+            let text = read(
+                storage,
+                &document.path,
+                document.start,
+                document.end.max(document.start),
+            )?;
+            document.sample(&text);
+        }
 
-        let sample_end = (document.end.min(head.len() as u32)).max(document.start) as usize;
-        let sample = &head[document.start as usize..sample_end];
-        document.breaks = detect_breaks(sample);
-        document.wrap_width = typical_line_length(sample);
         if document.metadata.title.is_none() {
             let name = path.rsplit('/').next().unwrap_or(path);
             let stem = name.rsplit_once('.').map_or(name, |(stem, _)| stem);
             document.metadata.title = Some(String::from(stem));
         }
         Ok(document)
+    }
+
+    /// How paragraphs break and how long lines are, from `sample` of the
+    /// text.
+    fn sample(&mut self, sample: &[u8]) {
+        self.breaks = detect_breaks(sample);
+        self.wrap_width = typical_line_length(sample);
     }
 
     fn read_header(&mut self, header: &[u8]) {
@@ -814,6 +832,22 @@ mod tests {
         assert_eq!(&source[offset..offset + 2], b"of");
         assert_eq!(b.text_index(offset as u32), of);
         assert_eq!(b.end, blocks[2].start);
+    }
+
+    #[test]
+    fn the_look_of_a_short_text_is_taken_from_the_text_not_its_licence() {
+        // A line a paragraph, then a licence of blank-line paragraphs: read
+        // as one with the text, the licence would make single line breaks
+        // hard wraps.
+        let licence = "Licence line.\r\n\r\n".repeat(40);
+        let text = format!(
+            "*** START OF THE PROJECT GUTENBERG EBOOK ***\r\nOne.\r\nTwo.\r\nThree.\r\n\
+             Four.\r\n*** END OF THE PROJECT GUTENBERG EBOOK ***\r\n{licence}"
+        );
+        let (storage, document) = open(text);
+        assert_eq!(document.breaks, Breaks::Lines);
+        let blocks = blocks(&storage, &document);
+        assert_eq!(texts(&blocks), ["One.", "Two.", "Three.", "Four."]);
     }
 
     #[test]
