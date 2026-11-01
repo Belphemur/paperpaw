@@ -7,6 +7,12 @@
 # literata-large, literata-bold-italic: tools/literata-packs.py run at
 # v0.5.0-beta.12 and at the interface-5 head (68fa1f43) writes the same 12
 # files, with the same SHA-256 each (2026-10-31).
+#
+# literata-large, literata-bold-italic, the two fontgen commits below (`--family`,
+# rustfmt): the same tools/literata-packs.py run at origin/iface5 (60752ff6) and
+# with them writes the same 12 files, with the same SHA-256 each (2026-11-01).
 8a3084724bdb639dd88ed84bb47e1845fe276ecb literata-large, literata-bold-italic  # fonts: Arabic and Hebrew packs for the card (#33)
 a94233faf735d163900faed459cf73decda595e0 literata-large, literata-bold-italic  # text: character sets out of the interface (#60, #61, D2)
 7c007eab75aef80723fc6a69177a032fc68ef199 literata-large, literata-bold-italic  # text: character sets after design review #93 (D2 N1-N3)
+2ba37332 literata-large, literata-bold-italic  # fonts: Your own fonts, and paperpaw-fontgen --family (#59)
+2796ca5e literata-large, literata-bold-italic  # fontgen: rustfmt
