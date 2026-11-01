@@ -385,7 +385,10 @@ fn built_in_ones_are_switched_on() {
         shown.iter().any(|l| l.starts_with("Reading statistics")),
         "{shown:?}"
     );
-    assert!(!shown.iter().any(|l| l.starts_with("Wireless")), "{shown:?}");
+    assert!(
+        !shown.iter().any(|l| l.starts_with("Wireless")),
+        "{shown:?}"
+    );
     // Chosen, then *Done*.
     kernel.run_action(Instant(200), actions::CONFIRM);
     kernel.run_action(Instant(300), actions::DOWN);
