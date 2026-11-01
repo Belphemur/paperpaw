@@ -59,6 +59,8 @@ pub(crate) fn state(
         State::Busy(env.i18n().tr("store.state.restart").to_string())
     } else if plugin.switched_off(env) {
         State::Offered(env.i18n().tr("store.state.off").to_string())
+    } else if plugin.needs_newer && plugin.installed(env).is_none() {
+        State::Offered(env.i18n().tr("store.needs-newer").to_string())
     } else if plugin.newer_in(env, origins) {
         State::Update
     } else if plugin.installed(env).is_some() {

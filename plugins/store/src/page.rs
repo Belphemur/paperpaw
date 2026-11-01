@@ -68,6 +68,8 @@ enum Row {
     SwitchOn,
     /// Not installed: there is no room for it.
     NoRoom,
+    /// Its newest build is made for a newer PaperPaw than this one.
+    NeedsNewer,
     /// Its screenshots, one after another.
     Shots,
     /// Where its source is, as a QR code.
@@ -206,6 +208,9 @@ impl PageScreen {
             return alloc::vec![Row::Stop];
         }
         let Some(info) = env.plugins().get(&plugin.id) else {
+            if plugin.needs_newer {
+                return alloc::vec![Row::NeedsNewer];
+            }
             if !self.room.fits(plugin, self.image_len()) {
                 return alloc::vec![Row::NoRoom];
             }
@@ -233,7 +238,9 @@ impl PageScreen {
             rows.push(Row::Restart);
         }
         if info.enabled {
-            if plugin.newer(env) {
+            if plugin.needs_newer {
+                rows.push(Row::NeedsNewer);
+            } else if plugin.newer(env) {
                 rows.push(Row::Update);
             } else if plugin.local(env) {
                 rows.push(Row::UseStore);
@@ -371,6 +378,11 @@ impl PageScreen {
                 }
                 self.redraw(cx);
             }
+            Some(Row::NeedsNewer) => {
+                cx.command(Command::Notify(
+                    env.i18n().tr("store.needs-newer.help").to_string(),
+                ));
+            }
             Some(Row::NoRoom) => {
                 if let Some(text) = self.room.needs(&env, plugin, self.image_len()) {
                     cx.command(Command::Notify(text));
@@ -466,6 +478,7 @@ impl PageScreen {
             Row::Understood => (tr("store.code.understood"), String::new()),
             Row::Cancel => (tr("store.not-now"), String::new()),
             Row::NoRoom => (tr("store.no-room"), files::shown_size(env, plugin.size)),
+            Row::NeedsNewer => (tr("store.needs-newer"), String::new()),
             Row::Shots => {
                 let count = match &self.details {
                     Details::Here(details) => details.more.shots.len(),

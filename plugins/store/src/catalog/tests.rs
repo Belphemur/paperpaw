@@ -13,6 +13,7 @@ const X4: Device<'static> = Device {
     plugins: None,
     sdk: paperpaw_sdk::SDK_VERSION,
     official: true,
+    provides: None,
 };
 
 fn plugin(id: &str, group: &str, extra: &str) -> String {
@@ -196,12 +197,17 @@ fn page(files: &str) -> MemoryStorage {
 }
 
 fn page_of(files: &str, kind: &str, more: &str) -> MemoryStorage {
+    page_with(files, kind, more, &build_of("x4", "0123456789abcdef"))
+}
+
+/// A page whose code plugin has the build `build`.
+fn page_with(files: &str, kind: &str, more: &str, build: &str) -> MemoryStorage {
     let text = format!(
         r#"{{"format": 2, "plugin": {{"id": "airy", "name": "Airy", "summary": "Roomy.",
   "group": "look", "kind": "{kind}", "author": "A", "licence": "MIT", {more}
   "latest": {{"version": "1.0.0", "sdk": "0.4", "formats": 1, "size": 20, "files": [{files}]{}}}}}}}"#,
         if kind == "code" {
-            format!(r#", "builds": [{}]"#, build_of("x4", "0123456789abcdef"))
+            format!(r#", "builds": [{build}]"#)
         } else {
             String::new()
         }
@@ -589,4 +595,113 @@ fn a_built_in_plugin_switched_off_is_listed_to_be_switched_on() {
     assert!(switched_off(&plugins, "off-data"));
     assert!(!switched_off(&plugins, "on"));
     assert!(!switched_off(&plugins, "new"));
+}
+
+/// A build with what it says it needs of the firmware.
+fn needing(abi: &str, needs: &str) -> String {
+    build_of("x4", abi).replace(r#""size": 70000"#, &format!(r#""size": 70000, {needs}"#))
+}
+
+/// The X4 with a firmware whose table is 400 bytes, with families 3 and 2.
+fn with_table() -> Device<'static> {
+    Device {
+        provides: Some(Provides {
+            api: 400,
+            families: [3, 2, 0, 0, 0, 0, 0, 0],
+            oldest: [2, 1, 0, 0, 0, 0, 0, 0],
+        }),
+        ..X4
+    }
+}
+
+#[test]
+fn a_build_that_needs_a_newer_paperpaw_is_listed_as_such_and_not_installed() {
+    let abi = "0123456789abcdef";
+    let storage = list(&[
+        code(
+            "plain",
+            &[needing(
+                abi,
+                r#""interface": 5, "needs_api": 400, "families": [3, 2, 0, 0, 0, 0, 0, 0]"#,
+            )],
+        ),
+        code(
+            "too-new-family",
+            &[needing(abi, r#""families": [4, 0, 0, 0, 0, 0, 0, 0]"#)],
+        ),
+        code("too-new-table", &[needing(abi, r#""needs_api": 404"#)]),
+        code(
+            "too-old",
+            &[needing(abi, r#""families": [1, 0, 0, 0, 0, 0, 0, 0]"#)],
+        ),
+        // An older library says none of it: as before.
+        code("unsaid", &[build_of("x4", abi)]),
+        // Odd: not eight numbers, or not numbers; the rest is still read.
+        code("odd-short", &[needing(abi, r#""families": [9, 9]"#)]),
+        code(
+            "odd-words",
+            &[needing(
+                abi,
+                r#""families": [9, "x", 0, 0, 0, 0, 0, 0], "interface": "five""#,
+            )],
+        ),
+        code(
+            "odd-long",
+            &[needing(abi, r#""families": [9, 0, 0, 0, 0, 0, 0, 0, 0]"#)],
+        ),
+    ]);
+    let (entries, _) = entries_for(&storage, &with_table());
+    assert_eq!(
+        ids(&entries),
+        [
+            "plain",
+            "too-new-family",
+            "too-new-table",
+            "unsaid",
+            "odd-short",
+            "odd-words",
+            "odd-long"
+        ],
+        "an older build is no build for this PaperPaw, as another fingerprint is"
+    );
+    let by = |id: &str| entries.iter().find(|e| e.id == id).unwrap();
+    for id in ["too-new-family", "too-new-table"] {
+        let e = by(id);
+        assert!(e.needs_newer && e.code && e.size == 30, "{id}: {e:?}");
+    }
+    for id in ["plain", "unsaid", "odd-long", "odd-short", "odd-words"] {
+        let e = by(id);
+        assert!(!e.needs_newer && e.size == 70_030, "{id}: {e:?}");
+    }
+    // The index keeps the mark, and reads an index without it as before.
+    let line = by("too-new-table").line();
+    assert!(Entry::parse(&line).unwrap().needs_newer);
+    let mut old = by("plain").clone();
+    old.needs_newer = false;
+    assert!(!Entry::parse(&old.line()).unwrap().needs_newer);
+    // Without a table to compare with, every build fits.
+    let (all, _) = entries_for(&storage, &X4);
+    assert!(all.iter().all(|e| !e.needs_newer));
+}
+
+#[test]
+fn a_page_of_a_plugin_made_for_a_newer_paperpaw_has_no_code_to_install() {
+    let author = format!(r#""author_key": "{KEY}","#);
+    let build = needing("0123456789abcdef", r#""needs_api": 500"#);
+    let storage = page_with(&file("plugin.ini"), "code", &author, &build);
+    let plugin = read_plugin(&storage, "a.json", &with_table(), BASE).unwrap();
+    assert!(plugin.entry.needs_newer && plugin.entry.code);
+    assert!(plugin.package.files.iter().all(|f| f.path != "code.ppn"));
+    // The same build for a firmware with the room: code to install.
+    let roomy = Device {
+        provides: Some(Provides {
+            api: 500,
+            families: [3, 2, 0, 0, 0, 0, 0, 0],
+            oldest: [2, 1, 0, 0, 0, 0, 0, 0],
+        }),
+        ..X4
+    };
+    let plugin = read_plugin(&storage, "a.json", &roomy, BASE).unwrap();
+    assert!(!plugin.entry.needs_newer);
+    assert!(plugin.package.files.iter().any(|f| f.path == "code.ppn"));
 }

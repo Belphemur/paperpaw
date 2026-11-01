@@ -294,6 +294,8 @@ pub(crate) fn fetched(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
             plugin.entry.id == id
                 // A built-in plugin is switched on, never downloaded.
                 && !plugin.entry.switched_off(env)
+                // Made for a newer PaperPaw: nothing to install.
+                && !plugin.entry.needs_newer
                 && (plugin.entry.installed(env).is_none() || plugin.entry.newer(env))
         });
     let _ = env.storage().remove(&fetched);

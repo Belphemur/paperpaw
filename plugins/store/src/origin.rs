@@ -19,6 +19,11 @@ impl Entry {
 
     /// The same, the origins read once for many (a list).
     pub(crate) fn newer_in(&self, env: &Env<'_>, origins: &Origins) -> bool {
+        // Its newer version is made for a newer PaperPaw: what is
+        // installed stays.
+        if self.needs_newer {
+            return false;
+        }
         let Some(installed) = self.installed(env) else {
             return false;
         };
@@ -35,8 +40,10 @@ impl Entry {
     /// transfer, a memory card, one's own build): its version here may be
     /// used in its place, when the reader says so, never as an update.
     pub(crate) fn local(&self, env: &Env<'_>) -> bool {
-        self.installed(env)
-            .is_some_and(|installed| self.origin(env, installed) == Origin::Local)
+        !self.needs_newer
+            && self
+                .installed(env)
+                .is_some_and(|installed| self.origin(env, installed) == Origin::Local)
     }
 
     fn origin(&self, env: &Env<'_>, installed: Version) -> Origin {

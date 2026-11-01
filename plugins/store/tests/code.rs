@@ -922,3 +922,86 @@ fn a_community_plugin_is_marked_and_its_key_may_not_change() {
     assert_eq!(known_author(storage, "clock"), Some(public_key(&AUTHOR)));
     assert!(!storage.exists("plugins/.clock.part/code.ppn"));
 }
+
+/// This PaperPaw's firmware: families 3 and 2 of the shared functions, and
+/// a table of 400 bytes.
+fn native_with_families() -> Native {
+    let mut native = native();
+    native.api_size = 400;
+    native.family_revs = [3, 2, 0, 0, 0, 0, 0, 0];
+    native.family_min = [1, 1, 0, 0, 0, 0, 0, 0];
+    native
+}
+
+/// A library text whose builds say they need `needs` of the firmware.
+fn needing(text: &str, needs: &str) -> String {
+    let abi = format!("\"abi\": \"{BUILD}\"");
+    assert!(text.contains(&abi));
+    text.replace(&abi, &format!("{abi}, {needs}"))
+}
+
+#[test]
+fn a_plugin_made_for_a_newer_paperpaw_is_not_offered_to_install() {
+    let needs = "\"interface\": 5, \"needs_api\": 400, \"families\": [4, 0, 0, 0, 0, 0, 0, 0]";
+    let mut shopping = Shopping::on(
+        Some("x4"),
+        Some(native_with_families()),
+        &needing(&list("1.0.0"), needs),
+    );
+    let code = ppn(BUILD, Some(&AUTHOR));
+    shopping.choose("Reading");
+    shopping.choose("Clock");
+    shopping.serve(PAGE, needing(&page("1.0.0", &code), needs).as_bytes());
+    let shown = shopping.shown();
+    assert!(shown.contains("Needs a newer PaperPaw"), "{shown}");
+    assert!(!shown.contains("Install"), "{shown}");
+    // Chosen: said why, nothing downloaded.
+    shopping.run(actions::DOWN);
+    shopping.run(actions::CONFIRM);
+    assert!(installed(&shopping).is_none());
+    assert!(shopping.requests().is_empty());
+}
+
+#[test]
+fn an_update_made_for_a_newer_paperpaw_is_not_offered_and_the_old_version_stays() {
+    let mut shopping = Shopping::on(
+        Some("x4"),
+        Some(native_with_families()),
+        &needing(&list("1.0.0"), "\"families\": [3, 2, 0, 0, 0, 0, 0, 0]"),
+    );
+    let first = ppn(BUILD, Some(&AUTHOR));
+    first_install(&mut shopping, "1.0.0", &first);
+    assert_eq!(installed(&shopping), Some(Version::new(1, 0, 0)));
+    // The library has 1.1.0, rebuilt after the shared functions grew.
+    let needs = "\"families\": [4, 0, 0, 0, 0, 0, 0, 0]";
+    let newer = ppn(BUILD, Some(&AUTHOR));
+    shopping.run(actions::BACK);
+    shopping.run(actions::BACK);
+    shopping.run(OPEN);
+    shopping.serve(LIST, needing(&list("1.1.0"), needs).as_bytes());
+    shopping.choose("Reading");
+    shopping.choose("Clock");
+    shopping.serve(PAGE, needing(&page("1.1.0", &newer), needs).as_bytes());
+    let shown = shopping.shown();
+    assert!(shown.contains("Needs a newer PaperPaw"), "{shown}");
+    assert!(!shown.contains("Update"), "{shown}");
+    assert!(shown.contains("Remove"), "{shown}");
+    assert_eq!(installed(&shopping), Some(Version::new(1, 0, 0)));
+    // The same update for a firmware that has the family: offered.
+    let mut roomy = native_with_families();
+    roomy.family_revs[0] = 4;
+    let mut shopping = Shopping::on(Some("x4"), Some(roomy), &needing(&list("1.0.0"), needs));
+    first_install(&mut shopping, "1.0.0", &first);
+    shopping.run(actions::BACK);
+    shopping.run(actions::BACK);
+    shopping.run(OPEN);
+    shopping.serve(LIST, needing(&list("1.1.0"), needs).as_bytes());
+    shopping.choose("Reading");
+    shopping.choose("Clock");
+    shopping.serve(PAGE, needing(&page("1.1.0", &newer), needs).as_bytes());
+    let shown = shopping.shown();
+    assert!(
+        shown.contains("Update") && !shown.contains("Needs a newer"),
+        "{shown}"
+    );
+}
