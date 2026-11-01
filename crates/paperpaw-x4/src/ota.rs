@@ -172,6 +172,8 @@ impl Entry {
     /// above the one in force that chooses the slot, which is the number
     /// an update just after the way back has: an entry put on trial is
     /// raised above that, so the number the installer gives is not its.
+    /// The seals depend on the number alone: the safety rests on this
+    /// raise, which `SLOTS` ties to the partition tables.
     fn raise_sequence(&mut self) {
         if let Some(raised) = self
             .sequence()
@@ -1027,6 +1029,23 @@ mod tests {
         let mut damaged = Entry::new(4, State::PendingVerify, 0);
         damaged.0[28] ^= 1;
         assert!(!damaged.armed());
+    }
+
+    /// `SLOTS` is the app partitions of the tables: the raise of a
+    /// sequence number keeps the slot only for that count.
+    #[test]
+    fn the_slots_are_the_partition_tables() {
+        for table in [
+            include_str!("../../../shells/xteink/partitions.csv"),
+            include_str!("../../../shells/xteink/partitions-classic.csv"),
+        ] {
+            let apps = table
+                .lines()
+                .filter(|l| !l.trim_start().starts_with('#'))
+                .filter(|l| l.split(',').nth(1).is_some_and(|t| t.trim() == "app"))
+                .count();
+            assert_eq!(apps, SLOTS as usize);
+        }
     }
 
     #[test]
