@@ -447,7 +447,7 @@ fn is_key_byte(b: u8) -> bool {
 /// The key of the plain message line starting at `start`. Only the key
 /// is read, as looking a message up compares many keys and reads one
 /// value: the catalog may lie in flash, where every byte read costs.
-fn plain_key(source: &str, start: u32) -> &str {
+pub(crate) fn plain_key(source: &str, start: u32) -> &str {
     let line = source.get(start as usize..).unwrap_or_default();
     let len = line
         .bytes()
@@ -929,9 +929,17 @@ impl Catalog {
     }
 
     /// All message keys, sorted; none of a catalog on the card (that
-    /// would read it whole).
+    /// would read it whole). The English catalogs built in
+    /// ([`BuiltCatalogs`](crate::BuiltCatalogs)) give those of the plugins
+    /// added.
     pub fn keys(&self) -> impl Iterator<Item = &str> {
-        (0..self.index.len(self.wide)).map(|i| self.key(self.index.at(i, self.wide)))
+        let built = match self.card.as_deref() {
+            Some(Elsewhere::Built(built)) => Some(built.keys()),
+            _ => None,
+        };
+        (0..self.index.len(self.wide))
+            .map(|i| self.key(self.index.at(i, self.wide)))
+            .chain(built.into_iter().flatten())
     }
 
     pub fn len(&self) -> usize {

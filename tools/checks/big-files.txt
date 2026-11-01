@@ -1,7 +1,6 @@
 # Rust files longer than the limit (1500 lines, tests/sources.rs) from
 # before it was set, each with the most lines it may have: none may grow,
 # and one split below the limit leaves this list.
-1869 crates/paperpaw-sdk/src/icon_table.rs
 3307 crates/paperpaw-core/src/tests.rs
 1948 crates/paperpaw-core/src/core_plugin.rs
 1891 plugins/format-epub/src/convert.rs

@@ -40,7 +40,7 @@ pub fn paperpaw_document::DocumentError::from(paperpaw_platform::storage::Storag
 impl core::error::Error for paperpaw_document::DocumentError
 impl core::fmt::Display for paperpaw_document::DocumentError
 pub fn paperpaw_document::DocumentError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub enum paperpaw_document::LineStyle
+#[non_exhaustive] pub enum paperpaw_document::LineStyle
 pub paperpaw_document::LineStyle::Dotted
 pub paperpaw_document::LineStyle::Double
 pub paperpaw_document::LineStyle::Solid
@@ -53,7 +53,7 @@ pub paperpaw_document::LinkKind::Plain
 #[non_exhaustive] pub enum paperpaw_document::PageProgression
 pub paperpaw_document::PageProgression::LeftToRight
 pub paperpaw_document::PageProgression::RightToLeft
-pub enum paperpaw_document::VerticalAlign
+#[non_exhaustive] pub enum paperpaw_document::VerticalAlign
 pub paperpaw_document::VerticalAlign::Bottom
 pub paperpaw_document::VerticalAlign::Middle
 pub paperpaw_document::VerticalAlign::Top

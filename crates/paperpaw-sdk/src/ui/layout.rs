@@ -33,8 +33,8 @@ use super::{Ink, UiStyle};
 /// `count` columns of `area` side by side, `gap` apart, as wide as each
 /// other to a pixel (what dividing leaves goes a pixel each to the last
 /// ones), so the last ends where `area` does. None for no columns. They
-/// run left to right: in a right-to-left interface ([`UiStyle::is_rtl`])
-/// the first item goes in the last column.
+/// run left to right in every language: in a right-to-left interface
+/// ([`UiStyle::is_rtl`]) the caller puts its first item in the last one.
 pub fn columns(area: Rect, count: usize, gap: u16) -> Vec<Rect> {
     let Ok(n) = u16::try_from(count) else {
         return Vec::new();

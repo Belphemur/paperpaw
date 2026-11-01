@@ -46,10 +46,12 @@ pub(crate) fn draw_header(
     let band = style.header_band(area);
     if let Some(note) = note.as_deref() {
         let (x, baseline) = (right + margin, cap_baseline(&font, band, style.small));
-        draw_label_on(
+        draw_label_on_out(
             &mut canvas,
             &font,
-            Some((style, TextRole::SMALL)),
+            style,
+            area,
+            TextRole::SMALL,
             style.small,
             x,
             area,
@@ -93,10 +95,12 @@ fn draw_title(
             if count < 2 {
                 // On one line in this size.
                 let baseline = cap_baseline(font, band, size);
-                draw_label_on(
+                draw_label_on_out(
                     canvas,
                     font,
-                    Some((style, TextRole::HEAD)),
+                    style,
+                    area,
+                    TextRole::HEAD,
                     size,
                     x,
                     area,
@@ -116,10 +120,12 @@ fn draw_title(
             for (i, range) in lines.into_iter().enumerate() {
                 let at = Rect::new(area.x, top + i as u16 * apart, area.width, line);
                 let baseline = cap_baseline(font, at, size);
-                draw_label_on(
+                draw_label_on_out(
                     canvas,
                     font,
-                    Some((style, TextRole::HEAD)),
+                    style,
+                    area,
+                    TextRole::HEAD,
                     size,
                     x,
                     area,
@@ -133,10 +139,12 @@ fn draw_title(
     }
     let (size, title) = title_fitting(font, style, title, room);
     let baseline = cap_baseline(font, band, size);
-    draw_label_on(
+    draw_label_on_out(
         canvas,
         font,
-        Some((style, TextRole::HEAD)),
+        style,
+        area,
+        TextRole::HEAD,
         size,
         x,
         area,
@@ -198,6 +206,29 @@ pub(super) struct HeaderParts {
     /// the back arrow's ink starts at the margin, the next arrow's ends
     /// there, as the content of the screen does.
     arrows: (i32, i32, i32),
+}
+
+impl HeaderParts {
+    /// The parts as they stand where the UI runs right to left: the
+    /// mirror image of the layout left to right in `area`.
+    fn flipped(self, style: &UiStyle, area: Rect) -> Self {
+        if !style.is_rtl() {
+            return self;
+        }
+        let x = |x: i32| style.flip_x(area, x as f32, 1.0) as i32;
+        Self {
+            back: self.back.map(|r| style.flip(area, r)),
+            pager: self.pager.map(|(prev, label, next)| {
+                (
+                    style.flip(area, prev),
+                    style.flip(area, label),
+                    style.flip(area, next),
+                )
+            }),
+            title: style.flip(area, self.title),
+            arrows: (x(self.arrows.0), x(self.arrows.1), x(self.arrows.2)),
+        }
+    }
 }
 
 impl Header {
@@ -292,12 +323,13 @@ impl Header {
         if self.back {
             left = left.min(right);
         }
-        HeaderParts {
+        let parts = HeaderParts {
             back,
             pager,
             title: Rect::new(left, a.y, right.saturating_sub(left), a.height),
             arrows,
-        }
+        };
+        parts.flipped(style, a)
     }
 
     /// Whether `title` is whole beside the page number of `page`.
@@ -359,8 +391,13 @@ impl Header {
         // Everything centred in the band by its ink: the arrows by their
         // drawing, each text by its capitals.
         let band = style.header_band(self.area);
+        // Where the UI runs right to left the arrows point the other way.
         let arrow = |canvas: &mut Canvas<'_>, x: i32, icon: &str, left: bool, color: Color| {
             let (_, y) = center(band);
+            let (icon, left) = match style.is_rtl() {
+                true => (crate::icons::turned(icon), !left),
+                false => (icon, left),
+            };
             draw_arrow(canvas, env, style, (x, y), icon, left, color);
         };
         let t = parts.title;
@@ -403,10 +440,12 @@ impl Header {
             }
             let x = f32::from(at.x);
             let y = baseline(style.small);
-            draw_label_on(
+            draw_label_on_out(
                 canvas,
                 &font,
-                Some((style, TextRole::SMALL)),
+                style,
+                at,
+                TextRole::SMALL,
                 style.small,
                 x,
                 at,
@@ -420,11 +459,14 @@ impl Header {
             let width = font.measure(style.small, note);
             // Focused: white on black, a little room around it.
             let high = font.line_metrics(style.small).line_height as u16 + style.gap as u16;
-            let around = Rect::new(
-                (x - pad) as u16,
-                band.y + band.height.saturating_sub(high) / 2,
-                (width + 2.0 * pad) as u16,
-                high,
+            let around = style.flip(
+                t,
+                Rect::new(
+                    (x - pad) as u16,
+                    band.y + band.height.saturating_sub(high) / 2,
+                    (width + 2.0 * pad) as u16,
+                    high,
+                ),
             );
             if self.note_button || self.note_focused {
                 // As high as the bar, where a tap on it is taken.
@@ -440,10 +482,12 @@ impl Header {
                 ink
             };
             let y = baseline(style.small);
-            draw_label_on(
+            draw_label_on_out(
                 &mut canvas,
                 &font,
-                Some((style, TextRole::SMALL)),
+                style,
+                t,
+                TextRole::SMALL,
                 style.small,
                 x,
                 t,
@@ -484,7 +528,10 @@ impl Header {
             return Some(actions::BACK);
         }
         let (prev, label, next) = parts.pager.filter(|_| self.arrows)?;
-        if prev.contains(point) || (label.contains(point) && point.x < label_mid(label)) {
+        // The label's first half takes back a page: its left half, its right
+        // one where the UI runs right to left.
+        let before = (point.x < label_mid(label)) != style.is_rtl();
+        if prev.contains(point) || (label.contains(point) && before) {
             Some(actions::PREV_PAGE)
         } else if next.contains(point) || label.contains(point) {
             Some(actions::NEXT_PAGE)

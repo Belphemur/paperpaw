@@ -177,6 +177,22 @@ pub(crate) fn draw_heading(
         area.height,
     );
     let x = f32::from(rect.x) + style.margin as f32;
+    if style.is_rtl() {
+        // Starting at the right margin.
+        draw_label_out(
+            canvas,
+            &font,
+            style,
+            rect,
+            TextRole::SMALL,
+            style.small,
+            x,
+            text_area,
+            text,
+            style.ink(Ink::MUTED),
+        );
+        return;
+    }
     draw_label(
         canvas,
         &font,
@@ -189,8 +205,14 @@ pub(crate) fn draw_heading(
 } @ ui::TEXT_DRAW_HEADING
 }
 
-/// The switch of an on/off setting at the right end of `row`.
+/// The switch of an on/off setting at the end of `row`: its right one,
+/// its left one where the UI runs right to left.
 pub fn switch_rect(style: &UiStyle, row: Rect) -> Rect {
+    style.flip(row, switch_rect_ltr(style, row))
+}
+
+/// [`switch_rect`] left to right.
+fn switch_rect_ltr(style: &UiStyle, row: Rect) -> Rect {
     // A switch is tapped with its whole row: drawn as large as in a
     // plain row, also in one a long title makes higher.
     let plain = row.height.min(style.control_row as u16);
@@ -239,7 +261,8 @@ pub(crate) fn draw_switch(
     }
     let pad = (border as u16 * 2).max(3);
     let knob = r.height.saturating_sub(2 * pad);
-    let x = if on {
+    // On: the knob at the end the switch stands at; off: at the other.
+    let x = if on != style.is_rtl() {
         r.x + r.width - pad - knob
     } else {
         r.x + pad
@@ -291,14 +314,17 @@ pub(crate) fn draw_row_icon(
         let text = ch.encode_utf8(&mut text);
         // Centred by its ink in a column as wide as the icons are high:
         // icons drawn with more room on one side line up with the others.
-        let column = f32::from(rect.x) + style.margin as f32;
+        // At the start of the row: its right end where the UI runs right
+        // to left.
+        let column = style.flip_x(rect, f32::from(rect.x) + style.margin as f32, size);
         let x = font.ink_across(size, text).map_or(column, |(left, right)| {
             column + (size - (right - left) as f32) / 2.0 - left as f32
         });
         draw_text(canvas, &font, None, size, x, rect, text, ink);
     }
+    let start = if style.is_rtl() { 0 } else { room };
     Rect::new(
-        rect.x + room,
+        rect.x + start,
         rect.y,
         rect.width.saturating_sub(room),
         rect.height,
@@ -328,17 +354,17 @@ pub(crate) fn draw_switch_row(
         rect.width,
         (style.control_row as u16).min(rect.height),
     );
-    let beside = f32::from(switch_rect(style, plain).width);
+    let beside = f32::from(switch_rect_ltr(style, plain).width);
     let band = if note.is_empty() {
         rect
     } else {
         // As high as the title takes beside the switch.
         super::setting_rows::titled_band(env, style, rect, beside, title)
     };
-    let switch = switch_rect(style, band);
+    let switch = switch_rect_ltr(style, band);
     // The title ends a gap before the switch.
     let room = (switch.x + style.margin as u16).saturating_sub(band.x + style.gap as u16);
-    let title_rect = Rect::new(band.x, band.y, room, band.height);
+    let title_rect = style.flip(band, Rect::new(band.x, band.y, room, band.height));
     draw_value_row(canvas, env, style, title_rect, focused, title, "");
     if !note.is_empty() {
         let below = band.bottom() as u16;
@@ -426,6 +452,89 @@ pub fn draw_label_in(
         color,
     )
 } @ ui::TEXT_DRAW_LABEL_IN
+}
+
+/// [`draw_label_in`] for a label laid out left to right (from `x`, its room
+/// the rest of `area`) in a block whose whole width is `outer`: where the
+/// UI runs right to left, the label stands as far from the right edge of
+/// `outer` as it would from its left one, its text still starting at its
+/// start side (the right one), and `area` as told to the describer is
+/// mirrored too. Left to right it is [`draw_label_in`].
+#[allow(clippy::too_many_arguments, reason = "draw_label_in's, and the block")]
+pub(crate) fn draw_label_out(
+    canvas: &mut Canvas<'_>,
+    font: &FontHandle<'_>,
+    style: &UiStyle,
+    outer: Rect,
+    role: TextRole,
+    size: f32,
+    x: f32,
+    area: Rect,
+    text: &str,
+    color: Color,
+) -> f32 {
+    if !style.is_rtl() {
+        return draw_label_in(canvas, font, style, role, size, x, area, text, color);
+    }
+    let metrics = font.line_metrics(size);
+    let baseline = i32::from(area.y)
+        + ((f32::from(area.height) + metrics.ascent - metrics.descent) / 2.0) as i32;
+    draw_label_on_out(
+        canvas, font, style, outer, role, size, x, area, baseline, text, color,
+    )
+}
+
+/// [`draw_label_out`] on `baseline` rather than centred in `area` (as
+/// [`draw_label_on`] is to [`draw_label`]).
+#[allow(clippy::too_many_arguments, reason = "draw_label_on's, and the block")]
+pub(super) fn draw_label_on_out(
+    canvas: &mut Canvas<'_>,
+    font: &FontHandle<'_>,
+    style: &UiStyle,
+    outer: Rect,
+    role: TextRole,
+    size: f32,
+    x: f32,
+    area: Rect,
+    baseline: i32,
+    text: &str,
+    color: Color,
+) -> f32 {
+    if !style.is_rtl() {
+        let look = Some((style, role));
+        return draw_label_on(canvas, font, look, size, x, area, baseline, text, color);
+    }
+    let room = f32::from(area.x) + f32::from(area.width) - x;
+    let at = Rect::new(x.max(0.0) as u16, area.y, room.max(0.0) as u16, area.height);
+    canvas.describe(Role::Text, text, style.flip(outer, at));
+    let shown = if room > 0.0 && font.measure(size, text) > room + 1.0 {
+        fit(font, size, text, room)
+    } else {
+        String::from(text)
+    };
+    let x = style.flip_x(outer, x, font.measure(size, &shown));
+    let clip = style.flip(outer, area);
+    let look = Some((style, role));
+    put_run(canvas, font, look, size, x, baseline, clip, &shown, color)
+}
+
+/// `text` on `baseline`, laid out left to right from `x` in a block whose
+/// whole width is `outer`, as it stands where the UI runs right to left:
+/// as far from the right edge as it was from the left one.
+#[allow(clippy::too_many_arguments, reason = "font.draw's, and the block")]
+pub(super) fn draw_run_out(
+    canvas: &mut Canvas<'_>,
+    font: &FontHandle<'_>,
+    style: &UiStyle,
+    outer: Rect,
+    size: f32,
+    x: f32,
+    baseline: i32,
+    text: &str,
+    color: Color,
+) -> f32 {
+    let x = style.flip_x(outer, x, font.measure(size, text));
+    font.draw(canvas, size, x, baseline, text, color)
 }
 
 paperpaw_table::shared! {

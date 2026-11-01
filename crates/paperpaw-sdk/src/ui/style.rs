@@ -205,6 +205,35 @@ impl UiStyle {
         self
     }
 
+    /// Where a span `width` wide, laid out left to right from `x` in
+    /// `outer`, stands where the UI runs right to left: as far from the
+    /// right edge of `outer` as it was from its left one. Not moved
+    /// otherwise.
+    pub(crate) fn flip_x(&self, outer: Rect, x: f32, width: f32) -> f32 {
+        if self.is_rtl() {
+            2.0 * f32::from(outer.x) + f32::from(outer.width) - x - width
+        } else {
+            x
+        }
+    }
+
+    /// `rect`, laid out left to right in `outer`, as it stands where the
+    /// UI runs right to left (see [`UiStyle::flip_x`]).
+    pub(crate) fn flip(&self, outer: Rect, rect: Rect) -> Rect {
+        if !self.is_rtl() {
+            return rect;
+        }
+        let x = 2 * i32::from(outer.x) + i32::from(outer.width)
+            - i32::from(rect.x)
+            - i32::from(rect.width);
+        Rect::new(
+            x.clamp(0, i32::from(u16::MAX)) as u16,
+            rect.y,
+            rect.width,
+            rect.height,
+        )
+    }
+
     /// The panel shows black and white alone (no grays between).
     pub fn black_and_white(&self) -> bool {
         self.grays <= 2
@@ -568,7 +597,7 @@ impl Default for Palette {
 /// script of the interface's `language` (a code as a catalog names it,
 /// `ar`); the stock ink where it is empty or says nothing usable. The
 /// kernel makes it once, when the setting or the language changes
-/// ([`Fonts::set_ui_ink`](crate::Fonts::set_ui_ink)); the UI font's
+/// (`Fonts::set_ui_ink`, kernel only); the UI font's
 /// handles carry it, so plugins do not parse the setting.
 pub fn text_ink(value: &str, language: &str) -> TextInk {
     if value.is_empty() {

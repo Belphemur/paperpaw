@@ -32,6 +32,18 @@ pub fn text_field_layout(
     title_lines: u16,
     line: u16,
 ) -> (Rect, Rect, bool) {
+    let (title, field, below) = text_field_layout_ltr(style, row, title_width, title_lines, line);
+    (style.flip(row, title), style.flip(row, field), below)
+}
+
+/// [`text_field_layout`] left to right.
+fn text_field_layout_ltr(
+    style: &UiStyle,
+    row: Rect,
+    title_width: f32,
+    title_lines: u16,
+    line: u16,
+) -> (Rect, Rect, bool) {
     let margin = style.margin as u16;
     let button = super::Segments::height(style);
     // Rounded up, so the title keeps all its room.
@@ -128,18 +140,28 @@ pub(crate) fn draw_text_field(
         return;
     };
     let (lines, widest, line) = title_lines(&font, style, title, row.width);
-    let (title_area, field, below) = text_field_layout(style, row, widest, lines, line);
+    // Laid out left to right; drawn mirrored where the UI runs right to left.
+    let (title_area, field_ltr, below) = text_field_layout_ltr(style, row, widest, lines, line);
+    let field = style.flip(row, field_ltr);
     canvas.describe(Role::Field, value, field).focused(focused);
     let ink = style.focus_ink(focused);
     if below {
         draw_lines(
-            canvas, &font, style, style.text, title_area, line, title, ink,
+            canvas,
+            &font,
+            (style, row),
+            style.text,
+            title_area,
+            line,
+            title,
+            ink,
         );
     } else {
-        super::draw_label_in(
+        super::draw_label_out(
             canvas,
             &font,
             style,
+            row,
             super::TextRole::BODY,
             style.text,
             f32::from(title_area.x),
@@ -158,10 +180,10 @@ pub(crate) fn draw_text_field(
     canvas.fill_round(field, radius, paper);
     canvas.stroke_round(field, super::button_border(style), radius, ink);
     let inside = Rect::new(
-        field.x + margin / 2,
-        field.y,
-        field.width.saturating_sub(margin),
-        field.height,
+        field_ltr.x + margin / 2,
+        field_ltr.y,
+        field_ltr.width.saturating_sub(margin),
+        field_ltr.height,
     );
     let (text, color) = if value.is_empty() {
         let muted = if focused && style.dark_focus() {
@@ -174,10 +196,11 @@ pub(crate) fn draw_text_field(
         (value, ink)
     };
     let shown = super::fit(&font, style.text, text, f32::from(inside.width));
-    super::draw_label_in(
+    super::draw_label_out(
         canvas,
         &font,
         style,
+        row,
         super::TextRole::BODY,
         style.text,
         f32::from(inside.x),
@@ -196,7 +219,7 @@ pub(crate) fn draw_text_field(
 fn draw_lines(
     canvas: &mut Canvas<'_>,
     font: &crate::fonts::FontHandle<'_>,
-    style: &UiStyle,
+    (style, outer): (&UiStyle, Rect),
     size: f32,
     area: Rect,
     line: u16,
@@ -209,10 +232,11 @@ fn draw_lines(
         .enumerate()
     {
         let at = Rect::new(area.x, area.y + i as u16 * line, area.width, line);
-        super::draw_label_in(
+        super::draw_label_out(
             canvas,
             font,
             style,
+            outer,
             super::TextRole::BODY,
             size,
             f32::from(at.x),
@@ -229,9 +253,15 @@ pub fn edit_text(title: &str, value: &str, reply: &Event<Typed>) -> Command {
     crate::ask::text(title, reply).initial(value).command()
 }
 
-/// Where the box of a ticked row goes: at the row's left, a margin in,
-/// as a switch in a plain row is tall, beside the row's first line.
+/// Where the box of a ticked row goes: at the row's start (its left, its
+/// right where the UI runs right to left), a margin in, as a switch in a
+/// plain row is tall, beside the row's first line.
 pub fn check_rect(style: &UiStyle, row: Rect) -> Rect {
+    style.flip(row, check_rect_ltr(style, row))
+}
+
+/// [`check_rect`] left to right.
+fn check_rect_ltr(style: &UiStyle, row: Rect) -> Rect {
     let plain = (style.control_row as u16).min(row.height);
     let side = (plain * 7 / 10 * 3 / 4).max(8);
     Rect::new(
@@ -271,7 +301,7 @@ pub fn check_row_height(
 
 /// The width a ticked row's text has beside its box.
 fn check_text_width(style: &UiStyle, row: Rect) -> u16 {
-    let check = check_rect(style, row);
+    let check = check_rect_ltr(style, row);
     let x = check.x + check.width + style.margin as u16;
     (row.x + row.width).saturating_sub(x + style.margin as u16)
 }
@@ -331,6 +361,7 @@ pub fn draw_check_row(
 ) {
     let check = check_rect(style, row);
     draw_check(canvas, style, check, on, focused && style.dark_focus());
+    let check = check_rect_ltr(style, row);
     let Some(font) = style.font(env) else {
         return;
     };
@@ -350,10 +381,11 @@ pub fn draw_check_row(
     let mut y = row.y + row.height.saturating_sub(height) / 2;
     for range in titles {
         let at = Rect::new(x, y, width, line);
-        super::draw_label_in(
+        super::draw_label_out(
             canvas,
             &font,
             style,
+            row,
             super::TextRole::BODY,
             style.text,
             f32::from(x),
@@ -370,10 +402,11 @@ pub fn draw_check_row(
     };
     for range in notes {
         let at = Rect::new(x, y, width, small);
-        super::draw_label_in(
+        super::draw_label_out(
             canvas,
             &font,
             style,
+            row,
             super::TextRole::SMALL,
             style.small,
             f32::from(x),
@@ -514,10 +547,11 @@ impl TextView {
             let part = text
                 .get(range.start as usize..range.end as usize)
                 .unwrap_or_default();
-            super::draw_label_in(
+            super::draw_label_out(
                 canvas,
                 &font,
                 style,
+                self.area,
                 super::TextRole::BODY,
                 style.text,
                 f32::from(at.x),
@@ -533,10 +567,8 @@ impl TextView {
             let all = self.lines.len() as u32;
             let length = (whole * self.rows() as u32 / all).max(u32::from(bar) * 4) as u16;
             let y = self.area.y + (whole * self.top as u32 / all) as u16;
-            canvas.fill(
-                Rect::new(x, y, bar, length.min(self.area.height)),
-                style.ink(Ink::MUTED),
-            );
+            let place = Rect::new(x, y, bar, length.min(self.area.height));
+            canvas.fill(style.flip(self.area, place), style.ink(Ink::MUTED));
         }
     }
 }

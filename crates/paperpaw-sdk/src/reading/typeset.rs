@@ -896,7 +896,6 @@ fn decoration(
 ) {
     use paperpaw_document::LineStyle;
     match line {
-        LineStyle::Solid => canvas.fill_rect(left, y, length, thick, ink),
         LineStyle::Double => {
             canvas.fill_rect(left, y, length, thick, ink);
             canvas.fill_rect(left, y + 2 * thick as i32, length, thick, ink);
@@ -915,6 +914,8 @@ fn decoration(
                 canvas.fill_rect(left + at as i32, y - up, piece, thick, ink);
             }
         }
+        // Solid, and a style of a later build: one line.
+        _ => canvas.fill_rect(left, y, length, thick, ink),
     }
 }
 
