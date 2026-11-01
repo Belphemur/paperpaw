@@ -60,5 +60,35 @@ class Rules(unittest.TestCase):
         self.assertEqual(len(entries), 2)
 
 
+
+class BodyHashes(unittest.TestCase):
+    def test_comments_and_spaces_are_no_change(self):
+        self.assertEqual(shared.normal("{ a(1); // why\n  b( 2 ) }"),
+                         shared.normal("{\n    a(1);\n    /* how */ b( 2 )\n}"))
+        self.assertNotEqual(shared.normal("{ a(1) }"), shared.normal("{ a(2) }"))
+
+    def test_calls_are_found_and_standard_methods_left(self):
+        found = shared.called("{ let x = helper(a).height(); Self::sized::<u8>(x); v.iter().map(f) }")
+        self.assertEqual(found, {"helper", "height", "sized"})
+
+    def test_a_block_ends_past_braces_in_strings_and_comments(self):
+        text = 'fn f() { let s = "}"; let c = \'}\'; // }\n g(); } tail'
+        start = text.index("{")
+        self.assertEqual(text[shared.block_end(text, start):], " tail")
+
+    def test_reach_follows_the_files_own_functions_first(self):
+        a, b = pathlib.Path("a.rs"), pathlib.Path("b.rs")
+        functions = {
+            "layout": [(a, "{ inner() }"), (b, "{ other }"), (b, "{ more }")],
+            "inner": [(a, "{ 1 }")],
+            "common": [(a, "{ x }"), (b, "{ y }"), (b, "{ z }")],
+        }
+        # `layout` is defined three times, but once in the caller's file.
+        self.assertEqual(shared.reach(functions, a, "{ self.layout() }"),
+                         {"{ inner() }", "{ 1 }"})
+        # From another file, a name defined more than twice is not followed.
+        self.assertEqual(shared.reach(functions, pathlib.Path("c.rs"), "{ common() }"), set())
+
+
 if __name__ == "__main__":
     unittest.main()
