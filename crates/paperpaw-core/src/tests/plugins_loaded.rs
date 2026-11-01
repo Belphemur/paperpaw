@@ -355,9 +355,11 @@ fn data_plugins_bring_actions_menus_icons_points_and_steps() {
     assert_eq!(*log.borrow(), ["a:cosy.night", "a:core.confirm"]);
 }
 
-/// What the store hears of plugins asked for by id.
+/// What the store hears of plugins asked for by id (where it `installs`
+/// plugins), and the answers anyone hears.
 struct Store {
     log: Log,
+    installs: bool,
 }
 
 impl Plugin for Store {
@@ -366,16 +368,68 @@ impl Plugin for Store {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        use paperpaw_sdk::builtin::events;
         let log = self.log.clone();
-        r.on(
-            paperpaw_sdk::builtin::events::PLUGINS_REQUESTED,
-            move |_, asked, _| {
-                let ids: Vec<String> = asked.ids().map(|id| id.to_string()).collect();
-                log.borrow_mut()
-                    .push(alloc::format!("{} asks {}", asked.by, ids.join(",")));
-            },
-        )
+        r.on(events::PLUGINS_ANSWERED, move |_, answer, _| {
+            let ids = |list: Vec<Id>| list.iter().map(Id::as_str).collect::<Vec<_>>().join(",");
+            log.borrow_mut().push(alloc::format!(
+                "{} got [{}] not [{}] declined {} error {:?}",
+                answer.by,
+                ids(answer.installed_ids().collect()),
+                ids(answer.missing_ids().collect()),
+                answer.declined,
+                answer.error
+            ));
+        })?;
+        if !self.installs {
+            return Ok(());
+        }
+        let log = self.log.clone();
+        r.on(events::PLUGINS_REQUESTED, move |_, asked, _| {
+            let ids: Vec<String> = asked.ids().map(|id| id.to_string()).collect();
+            log.borrow_mut()
+                .push(alloc::format!("{} asks {}", asked.by, ids.join(",")));
+        })
     }
+}
+
+/// Where all asked for are on the device, or no plugin installs
+/// plugins, the kernel answers the plugin that asked itself; else the
+/// store does, and the kernel says nothing.
+#[test]
+fn the_kernel_answers_requests_no_store_can() {
+    let log = log();
+    let storage = MemoryStorage::new().with("plugins/dictionary/plugin.ini", "[plugin]\n");
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(Store {
+            log: log.clone(),
+            installs: false,
+        })
+        .storage(storage)
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    let id = Id::new_static;
+    kernel.apply(Command::request_plugins(id("reader"), [id("dictionary")]));
+    kernel.apply(Command::request_plugins(
+        id("reader"),
+        [id("script-arabic"), id("dictionary"), id("script-hebrew")],
+    ));
+    kernel.run_commands();
+    let error = kernel
+        .translator()
+        .tr("core.plugins.no-installer")
+        .to_string();
+    assert!(!error.is_empty() && error != "core.plugins.no-installer");
+    assert_eq!(
+        *log.borrow(),
+        [
+            String::from("reader got [] not [] declined false error \"\""),
+            alloc::format!(
+                "reader got [] not [script-arabic,script-hebrew] declined false error {error:?}"
+            ),
+        ]
+    );
 }
 
 /// A plugin asks for plugins by id: the store hears those not on the
@@ -387,7 +441,10 @@ fn plugins_asked_for_by_id_go_to_the_store_if_not_on_the_device() {
         .with("plugins/dictionary/plugin.ini", "[plugin]\n")
         .with("plugins/aids/plugin.ini", "[plugin]\n");
     let mut kernel = Kernel::builder(DEVICE)
-        .plugin(Store { log: log.clone() })
+        .plugin(Store {
+            log: log.clone(),
+            installs: true,
+        })
         .storage(storage)
         .user_config("[plugins]\naids = off\n")
         .build()
@@ -413,7 +470,10 @@ fn plugins_asked_for_by_id_go_to_the_store_if_not_on_the_device() {
     kernel.apply(Command::request_plugins(id("x"), [id("dictionary")]));
     kernel.apply(Command::request_plugins(id("x"), []));
     kernel.run_commands();
-    assert!(log.borrow().is_empty());
+    // All there: answered at once, nothing for the store.
+    let none = "x got [] not [] declined false error \"\"";
+    assert_eq!(*log.borrow(), [none, none]);
+    log.borrow_mut().clear();
     // More than one request takes: the rest left out, with a warning.
     let many = (0..40).map(|i| Id::parse(&alloc::format!("p{i}")).unwrap());
     kernel.apply(Command::request_plugins(id("x"), many));

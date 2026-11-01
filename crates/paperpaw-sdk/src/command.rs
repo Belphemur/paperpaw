@@ -767,6 +767,8 @@ pub enum Command {
     /// or not) go to the plugin that installs plugins as
     /// [`PLUGINS_REQUESTED`](crate::builtin::events::PLUGINS_REQUESTED),
     /// which asks the reader first; nothing is installed without them.
+    /// What came of it comes back as
+    /// [`PLUGINS_ANSWERED`](crate::builtin::events::PLUGINS_ANSWERED).
     /// `by` is the plugin that asks, as the reader is told. At most
     /// [`MAX_REQUESTED_PLUGINS`](crate::MAX_REQUESTED_PLUGINS)
     /// ids are taken. Made with [`Command::request_plugins`].

@@ -13,7 +13,10 @@ change the plugin SDK.
   for format plugins.
 - SDK: `Command::RequestPlugins` (`Command::request_plugins`): any plugin can ask for plugins by id (e.g. those
   a template names); those not on the device go to the store as `events::PLUGINS_REQUESTED`
-  (`PluginsRequested`, at most `MAX_REQUESTED_PLUGINS`), which asks the reader before it downloads any.
+  (`PluginsRequested`, at most `MAX_REQUESTED_PLUGINS`), which asks the reader before it downloads any. What
+  came of it reaches the plugin that asked as `events::PLUGINS_ANSWERED` (`PluginsAnswered`: installed,
+  missing, declined, an error to show), from the store, or from the kernel where all were there already or
+  no plugin installs plugins.
 - SDK: `Settings::default_from` names the plugin whose default a setting has in place of its own (a template's
   `settings.ini`, a theme's), so a settings page can say where a value comes from.
 - Font packs (`.ppfp`) can lie loose in a shell's font folder, without a `plugin.ini`: each is a face of the

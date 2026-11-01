@@ -165,7 +165,48 @@ crate::event_data! {
 impl PluginsRequested {
     /// The ids asked for, in their order.
     pub fn ids(&self) -> impl Iterator<Item = Id> + '_ {
-        self.plugins.split(' ').filter_map(|id| Id::parse(id).ok())
+        ids_in(&self.plugins)
+    }
+}
+
+/// The ids in `list`, separated by spaces.
+fn ids_in(list: &str) -> impl Iterator<Item = Id> + '_ {
+    list.split(' ').filter_map(|id| Id::parse(id).ok())
+}
+
+crate::event_data! {
+    /// What came of plugins asked for ([`PLUGINS_ANSWERED`]), for the
+    /// plugin that asked ([`PluginsAnswered::by`]): e.g. a reader lays
+    /// its book out anew once a pack of letters is installed, or says
+    /// what went wrong.
+    pub struct PluginsAnswered {
+        /// The plugin that asked.
+        pub by: Id,
+        /// The ids installed now, separated by spaces (see
+        /// [`PluginsAnswered::installed_ids`]).
+        pub installed: String,
+        /// The ids not installed, separated by spaces (see
+        /// [`PluginsAnswered::missing_ids`]): the reader said not now
+        /// ([`PluginsAnswered::declined`]), or they could not be
+        /// ([`PluginsAnswered::error`]).
+        pub missing: String,
+        /// The reader chose not to install them now: nothing to report.
+        pub declined: bool,
+        /// What went wrong, already translated, to be shown as it is;
+        /// empty where nothing did.
+        pub error: String,
+    }
+}
+
+impl PluginsAnswered {
+    /// The ids installed now, in their order.
+    pub fn installed_ids(&self) -> impl Iterator<Item = Id> + '_ {
+        ids_in(&self.installed)
+    }
+
+    /// The ids not installed, in their order.
+    pub fn missing_ids(&self) -> impl Iterator<Item = Id> + '_ {
+        ids_in(&self.missing)
     }
 }
 
@@ -617,8 +658,15 @@ pub const PLUGINS_CHANGED: Event<()> = Event::new("core.plugins-changed");
 /// A plugin asked for plugins by id that are not on the device
 /// ([`Command::RequestPlugins`](crate::Command::RequestPlugins)): for the
 /// plugin that installs plugins (the store), which asks the reader
-/// before it downloads any.
+/// before it downloads any, and answers each request with
+/// [`PLUGINS_ANSWERED`] once it is done: installed, declined or failed.
 pub const PLUGINS_REQUESTED: Event<PluginsRequested> = Event::new("core.plugins-requested");
+/// What came of plugins asked for ([`PluginsAnswered`]): sent by the
+/// plugin that installs plugins, or by the kernel where none is there
+/// (all missing, with an error) or where all were on the device already
+/// (none installed, none missing). The plugin that asked compares
+/// [`PluginsAnswered::by`] with itself.
+pub const PLUGINS_ANSWERED: Event<PluginsAnswered> = Event::new("core.plugins-answered");
 /// Another screen is shown on top ([`ScreenShown`]): one opened, or
 /// the one below a screen closed. The whole stack is in
 /// [`Env::stack`](crate::Env::stack). For plugins that subscribe:

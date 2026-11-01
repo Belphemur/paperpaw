@@ -699,9 +699,12 @@ impl Kernel {
     /// those not on the device, each once and at most
     /// [`MAX_REQUESTED_PLUGINS`](paperpaw_sdk::MAX_REQUESTED_PLUGINS),
     /// go to the store as
-    /// [`PLUGINS_REQUESTED`](paperpaw_sdk::builtin::events::PLUGINS_REQUESTED);
-    /// none, no event.
+    /// [`PLUGINS_REQUESTED`](paperpaw_sdk::builtin::events::PLUGINS_REQUESTED),
+    /// which answers. Where none is missing, or no plugin installs
+    /// plugins, the kernel answers itself
+    /// ([`PLUGINS_ANSWERED`](paperpaw_sdk::builtin::events::PLUGINS_ANSWERED)).
     pub(crate) fn request_plugins(&mut self, by: Id, plugins: Vec<Id>) {
+        use paperpaw_sdk::builtin::events::{self, PluginsAnswered};
         let mut wanted: Vec<Id> = Vec::new();
         for id in plugins {
             if wanted.len() == paperpaw_sdk::MAX_REQUESTED_PLUGINS {
@@ -717,9 +720,6 @@ impl Kernel {
                 wanted.push(id);
             }
         }
-        if wanted.is_empty() {
-            return;
-        }
         let mut list = String::new();
         for id in &wanted {
             if !list.is_empty() {
@@ -727,12 +727,24 @@ impl Kernel {
             }
             list.push_str(id.as_str());
         }
-        let request = paperpaw_sdk::builtin::events::PluginsRequested::new(by, list);
-        let event = paperpaw_sdk::builtin::events::PLUGINS_REQUESTED;
-        self.emit(
-            &Id::from(&event),
-            &paperpaw_sdk::event::EventData::to_params(&request),
-        );
+        let requested = Id::from(&events::PLUGINS_REQUESTED);
+        let installer = self.subscriptions.iter().any(|(id, ..)| *id == requested);
+        let answer = if wanted.is_empty() {
+            PluginsAnswered::new(by, String::new(), String::new(), false, String::new())
+        } else if !installer {
+            let error = self
+                .shared
+                .translator
+                .tr("core.plugins.no-installer")
+                .to_string();
+            PluginsAnswered::new(by, String::new(), list, false, error)
+        } else {
+            let request = events::PluginsRequested::new(by, list);
+            let params = paperpaw_sdk::event::EventData::to_params(&request);
+            return self.emit(&requested, &params);
+        };
+        let params = paperpaw_sdk::event::EventData::to_params(&answer);
+        self.emit(&Id::from(&events::PLUGINS_ANSWERED), &params);
     }
 
     /// Loads the data plugin in `folder` while running (see
