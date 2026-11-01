@@ -27,7 +27,8 @@ use paperpaw_sdk::{
 const DEVICE: DeviceInfo = DeviceInfo::new(
     "test-x4",
     "Test X4",
-    DisplayInfo::new(480, 800, 220, PixelFormat::Mono1, Rotation::Deg0, None),
+    // Tall, so that the tools' menu is one page however many plugins add to it.
+    DisplayInfo::new(480, 1200, 220, PixelFormat::Mono1, Rotation::Deg0, None),
     InputCaps::new(
         true,
         false,

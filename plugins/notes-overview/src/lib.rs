@@ -6,12 +6,12 @@
 //! many; a book opens its notes, a note opens the book there. At the end
 //! of the list, *Export as My Clippings.txt* writes the notes of every book
 //! to `Exports/My Clippings.txt` beside the library folder (see
-//! [`clippings`]).
+//! `clippings`).
 //!
 //! It reads what [`paperpaw_sdk::annotations`] keeps, and the library's
 //! books through the library service: the folder of notes files is listed
 //! once, then the books pass one at a time, so a large library costs time,
-//! not memory (see [`scan`]). No SDK change is needed.
+//! not memory (see `scan`). No SDK change is needed.
 
 #![no_std]
 
