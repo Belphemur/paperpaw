@@ -126,6 +126,9 @@ pub struct State {
     unsynced: Option<u64>,
     /// When the panel's power goes off, after the last refresh.
     panel_idle_at: Option<u64>,
+    /// When the X4 Pro's front light goes off for want of input.
+    #[cfg(feature = "x4-pro")]
+    light_timer: paperpaw_x4::light_timer::LightTimer,
     /// How long fast, half and full refreshes take, in milliseconds (the
     /// shortest seen, see [`Firmware::refresh`]): the processor sleeps
     /// about that long while the next one goes (on battery).
@@ -315,16 +318,35 @@ impl Firmware {
         }
     }
 
-    /// Shows the front light as its settings say; whether it is on.
+    /// Shows the front light as its settings say, off once no input came
+    /// for the time chosen (`paperpaw_x4::light_timer`); whether it is on.
     #[cfg(feature = "x4-pro")]
     fn light(&mut self) -> bool {
         let settings = self.kernel.settings();
         let level = settings.read(&device::FRONTLIGHT);
         let warmth = settings.read(&device::WARMTH);
+        let after = paperpaw_x4::light_timer::delay_ms(&settings.read(&device::LIGHT_OFF_AFTER));
+        let dark = self.state.light_timer.dark(now().0, after);
         if let Some(light) = self.light.as_mut() {
-            light.show(level, warmth);
+            if dark {
+                light.off();
+            } else {
+                light.show(level, warmth);
+            }
         }
-        level > 0 && self.light.is_some()
+        level > 0 && !dark && self.light.is_some()
+    }
+
+    /// Whether the kernel hears `event`: not the press (and touch) that
+    /// brought the front light back from its timer.
+    #[cfg(feature = "x4-pro")]
+    fn light_passes(&mut self, event: &InputEvent) -> bool {
+        self.state.light_timer.pass(now().0, event)
+    }
+
+    #[cfg(not(feature = "x4-pro"))]
+    fn light_passes(&mut self, _: &InputEvent) -> bool {
+        true
     }
 
     /// The X4 and the X4 Classic have no light.
@@ -490,6 +512,10 @@ impl Firmware {
                 }
                 input::Change::Touch(touch, at) => (self.pointer(touch), at),
             };
+            // The press that brings the front light back only does that.
+            if !self.light_passes(&event) {
+                continue;
+            }
             self.state.kernel_time = at.max(self.state.kernel_time);
             let started = now();
             power::mark(power::at::INPUT);
