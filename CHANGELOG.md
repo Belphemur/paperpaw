@@ -71,9 +71,11 @@ change the plugin SDK.
   `Command::GoOnlineFor` (the network for a while, at most `power::MAX_ONLINE_FOR`, ten minutes; held work runs
   as in Saving), taken only from the reader's input.
 - Author keys: a recovery key chosen in advance moves a plugin to a new key by a statement the device checks
-  itself (`paperpaw-sign rotation`; SDK `native::keys`: `remember_recovery`, `rotation_message`,
-  `accept_rotation`), and the code of an author whose key the store revoked does not run
-  (`PluginProblem::Revoked`, `keys::keep_revoked`). The store does not offer either yet.
+  itself (`paperpaw-sign rotation`; SDK `native::keys`: `remember_first_install`, `rotation_message`,
+  `accept_rotation`; `install::Marks::recovery`), and the code of an author whose key the store revoked does not
+  run (`PluginProblem::Revoked`, `keys::keep_revoked`, which only adds). The recovery key is pinned only with the
+  first install, and code installed before a rotation does not run until an update by the new key. The store
+  does not offer either yet.
 - Layout `VERSION` 11: books cached before are laid out anew once, so drop capitals and the new list markers show
   in them too. SDK, for real tables: `BlockKind::TableRow`, `Block::table` (`TableRow`, `TableCell`, `MAX_COLUMNS`:
   a row's cells, the table's column weights, header, first and last row) and `Page::rules` (`PageRule`: thin lines

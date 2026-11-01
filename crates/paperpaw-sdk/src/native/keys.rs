@@ -4,15 +4,20 @@
 //! revoked, whose code the kernel does not load.
 //!
 //! A **recovery key** is pinned with the author's key at a plugin's first
-//! install ([`remember_recovery`]); the author keeps it offline. To move
+//! install, and only then ([`remember_first_install`]): never later, not
+//! even signed by the author's key, which may be the stolen one. The
+//! author keeps it offline. To move
 //! to a new key the author signs [`rotation_message`] with it; a store
 //! that gets the statement with an update hands it to [`accept_rotation`],
 //! which checks it against the pinned keys, so neither a moderator's
-//! mistake nor a taken-over server can forge one. Plugins installed
-//! without a recovery key keep only the successor way (a new id).
+//! mistake nor a taken-over server can forge one. The code installed
+//! before the rotation is not loaded from then on: it may be the stolen
+//! key's, so only an update signed by the new key runs again. Plugins
+//! installed without a recovery key keep only the successor way (a new
+//! id).
 //!
 //! **Revoked keys** come from the store (its library lists them); it
-//! keeps them with [`keep_revoked`]. The kernel does not load the code of
+//! adds them with [`keep_revoked`], and none is ever taken off. The kernel does not load the code of
 //! a plugin whose known author's key is among them
 //! ([`PluginProblem::Revoked`](crate::PluginProblem::Revoked)).
 
@@ -36,17 +41,25 @@ pub fn known_recovery(storage: &dyn Storage, plugin: &str) -> Option<[u8; 32]> {
     super::entry(storage, RECOVERY, plugin)
 }
 
-/// Pins `key` as the recovery key of `plugin`'s author: only with its
-/// first install (no author known yet, or the author's key just
-/// remembered and no recovery key yet), never in place of one; `false` if
-/// one is pinned already or it could not be kept.
+/// Remembers `author` as the key of `plugin`'s author and pins `recovery`
+/// as its recovery key, at the plugin's first install: only where no
+/// author is known for it yet (so an update can never bring a recovery
+/// key); `false` otherwise or where they could not be kept. The author's
+/// key is kept first: cut short after it, the plugin has no recovery key
+/// (only the successor way), never a recovery key without its author.
 #[cfg(any(test, feature = "kernel"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
-pub fn remember_recovery(storage: &dyn Storage, plugin: &str, key: &[u8; 32]) -> bool {
-    if known_recovery(storage, plugin).is_some() {
+pub fn remember_first_install(
+    storage: &dyn Storage,
+    plugin: &str,
+    author: &[u8; 32],
+    recovery: &[u8; 32],
+) -> bool {
+    if super::known_author(storage, plugin).is_some() {
         return false;
     }
-    super::keep_entry(storage, RECOVERY, plugin, key)
+    super::remember_author(storage, plugin, author)
+        && super::keep_entry(storage, RECOVERY, plugin, recovery)
 }
 
 /// The statement the recovery key signs to move `plugin` from the
@@ -74,7 +87,10 @@ pub enum RotationError {
 /// Takes the author of `plugin` to `new`, where `signature` is the pinned
 /// recovery key's over [`rotation_message`] from the known key: from then
 /// on the plugin's code is `new`'s (updates signed by it are taken, and
-/// the old key's are not). The recovery key stays.
+/// the old key's are not). The code installed or fetched before is no
+/// longer named as installed ([`installed_code`](super::installed_code),
+/// [`fetched_code`](super::fetched_code)), so it is not loaded at the next
+/// start: it may be what a stolen key signed. The recovery key stays.
 #[cfg(any(test, feature = "kernel"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub fn accept_rotation(
@@ -92,7 +108,11 @@ pub fn accept_rotation(
     if !paperpaw_native::signature::verify_message(&recovery, message.as_bytes(), signature) {
         return Err(RotationError::BadSignature);
     }
-    if super::keep_entry(storage, super::AUTHORS, plugin, new) {
+    // The old key's code first: cut short after it, nothing is loaded,
+    // and the rotation can be taken again.
+    let forgotten = super::write_entry(storage, super::INSTALLED, plugin, None)
+        && super::write_entry(storage, super::FETCHED, plugin, None);
+    if forgotten && super::keep_entry(storage, super::AUTHORS, plugin, new) {
         Ok(())
     } else {
         Err(RotationError::NotKept)
@@ -117,19 +137,57 @@ pub fn is_revoked(storage: &dyn Storage, key: &[u8; 32]) -> bool {
     revoked(storage).contains(key)
 }
 
-/// Keeps `keys` as the revoked ones, in place of those before (the
-/// store's library lists them all); at most [`MAX_REVOKED`]. `false` if
-/// they could not be kept.
+/// Why revoked keys were not all kept ([`keep_revoked`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum RevokedError {
+    /// More than [`MAX_REVOKED`] in all: those kept before and the first
+    /// of the new ones up to it are kept, the rest not (tell the reader).
+    Full,
+    /// They could not be written, or the list kept could not be read:
+    /// it stays as it is.
+    NotKept,
+}
+
+/// Adds `keys` to the revoked ones (the store's library lists them): a
+/// key once revoked stays so, whatever a later list says, as the list
+/// may come from a taken-over server. At most [`MAX_REVOKED`] in all;
+/// past that, [`RevokedError::Full`].
 #[cfg(any(test, feature = "kernel"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
-pub fn keep_revoked(storage: &dyn Storage, keys: &[[u8; 32]]) -> bool {
-    let text: String = keys
-        .iter()
-        .take(MAX_REVOKED)
-        .map(|key| alloc::format!("{}\n", paperpaw_digest::hex::encode(key)))
-        .collect();
-    let _ = storage.create_dir(crate::data::DIR);
-    storage.write(REVOKED, text.as_bytes()).is_ok()
+pub fn keep_revoked(storage: &dyn Storage, keys: &[[u8; 32]]) -> Result<(), RevokedError> {
+    // A list there that cannot be read is not written over by a shorter
+    // one.
+    if crate::files::load_text_for_update(storage, REVOKED, 64 * 1024).is_err() {
+        return Err(RevokedError::NotKept);
+    }
+    let mut all = revoked(storage);
+    let before = all.len();
+    let mut full = false;
+    for key in keys {
+        if all.contains(key) {
+            continue;
+        }
+        if all.len() >= MAX_REVOKED {
+            full = true;
+            break;
+        }
+        all.push(*key);
+    }
+    if all.len() > before {
+        let text: String = all
+            .iter()
+            .map(|key| alloc::format!("{}\n", paperpaw_digest::hex::encode(key)))
+            .collect();
+        let _ = storage.create_dir(crate::data::DIR);
+        if storage.write(REVOKED, text.as_bytes()).is_err() {
+            return Err(RevokedError::NotKept);
+        }
+    }
+    match full {
+        true => Err(RevokedError::Full),
+        false => Ok(()),
+    }
 }
 
 #[cfg(test)]
@@ -143,13 +201,37 @@ mod tests {
 
     fn installed() -> crate::MemoryStorage {
         let storage = crate::MemoryStorage::new();
-        assert!(super::super::remember_author(&storage, "clock", &AUTHOR));
-        assert!(remember_recovery(
-            &storage,
-            "clock",
-            &public_key(&RECOVERY_SEED)
+        let recovery = public_key(&RECOVERY_SEED);
+        assert!(remember_first_install(
+            &storage, "clock", &AUTHOR, &recovery
         ));
+        assert!(super::super::remember_code(&storage, "clock", &[6; 32]));
+        assert!(super::super::remember_fetched(&storage, "clock", &[5; 32]));
+        assert!(super::super::remember_code(&storage, "other", &[4; 32]));
         storage
+    }
+
+    /// Pinned only with the first author's key: an update of a plugin
+    /// whose author is known brings none, though none was pinned (#20,
+    /// review M1).
+    #[test]
+    fn a_recovery_key_is_pinned_only_at_the_first_install() {
+        let storage = crate::MemoryStorage::new();
+        assert!(super::super::remember_author(&storage, "clock", &AUTHOR));
+        assert!(!remember_first_install(
+            &storage, "clock", &AUTHOR, &[5; 32]
+        ));
+        assert!(!remember_first_install(
+            &storage, "clock", &[3; 32], &[5; 32]
+        ));
+        assert_eq!(known_recovery(&storage, "clock"), None);
+        assert_eq!(super::super::known_author(&storage, "clock"), Some(AUTHOR));
+        // A first install pins both, and a second one neither.
+        assert!(remember_first_install(&storage, "new", &AUTHOR, &[5; 32]));
+        assert_eq!(known_recovery(&storage, "new"), Some([5; 32]));
+        assert!(!remember_first_install(&storage, "new", &[3; 32], &[8; 32]));
+        assert_eq!(known_recovery(&storage, "new"), Some([5; 32]));
+        assert_eq!(super::super::known_author(&storage, "new"), Some(AUTHOR));
     }
 
     #[test]
@@ -168,7 +250,16 @@ mod tests {
             known_recovery(&storage, "clock"),
             Some(public_key(&RECOVERY_SEED))
         );
-        assert!(!remember_recovery(&storage, "clock", &[5; 32]));
+        assert!(!remember_first_install(&storage, "clock", &NEW, &[5; 32]));
+        // The old key's code is no longer named as installed or fetched:
+        // not loaded until an update by the new key (review M2); other
+        // plugins' as they were.
+        assert_eq!(super::super::installed_code(&storage, "clock"), None);
+        assert_eq!(super::super::fetched_code(&storage, "clock"), None);
+        assert_eq!(
+            super::super::installed_code(&storage, "other"),
+            Some([4; 32])
+        );
         // The same statement again: from a key no longer known.
         assert_eq!(
             accept_rotation(&storage, "clock", &NEW, &signature),
@@ -205,29 +296,82 @@ mod tests {
             accept_rotation(&bare, "clock", &NEW, &signature),
             Err(RotationError::NoRecoveryKey)
         );
-        // To a revoked key: refused.
-        assert!(keep_revoked(&storage, &[NEW]));
+        // To a revoked key: refused, and the code stays named.
+        assert_eq!(keep_revoked(&storage, &[NEW]), Ok(()));
         assert_eq!(
             accept_rotation(&storage, "clock", &NEW, &signature),
             Err(RotationError::Refused)
         );
         assert_eq!(super::super::known_author(&storage, "clock"), Some(AUTHOR));
+        assert_eq!(
+            super::super::installed_code(&storage, "clock"),
+            Some([6; 32])
+        );
     }
 
     #[test]
-    fn revoked_keys_are_kept_whole_and_read_leniently() {
+    fn revoked_keys_are_only_added_and_read_leniently() {
         let storage = crate::MemoryStorage::new();
         assert!(revoked(&storage).is_empty());
-        assert!(keep_revoked(&storage, &[AUTHOR, NEW]));
+        assert_eq!(keep_revoked(&storage, &[AUTHOR, NEW]), Ok(()));
         assert!(is_revoked(&storage, &NEW) && !is_revoked(&storage, &[3; 32]));
-        assert!(keep_revoked(&storage, &[NEW]));
-        assert!(!is_revoked(&storage, &AUTHOR));
+        // A later list without a key does not take it off (review S1).
+        assert_eq!(keep_revoked(&storage, &[NEW, [3; 32]]), Ok(()));
+        assert_eq!(revoked(&storage), [AUTHOR, NEW, [3; 32]]);
+        assert_eq!(keep_revoked(&storage, &[]), Ok(()));
+        assert_eq!(revoked(&storage).len(), 3);
         storage
             .write(REVOKED, b"not hex\n0909\n0101010101010101010101010101010101010101010101010101010101010101\n")
             .unwrap();
         assert_eq!(revoked(&storage), [AUTHOR]);
-        let many: Vec<[u8; 32]> = (0..300u16).map(|n| [n as u8; 32]).collect();
-        assert!(keep_revoked(&storage, &many));
-        assert_eq!(revoked(&storage).len(), MAX_REVOKED);
+        // Past the most: those before and the first new ones kept, and
+        // said so (review S2).
+        let many: Vec<[u8; 32]> = (2..300u16)
+            .map(|n| {
+                [
+                    n as u8,
+                    (n >> 8) as u8,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    1,
+                ]
+            })
+            .collect();
+        assert_eq!(keep_revoked(&storage, &many), Err(RevokedError::Full));
+        let kept = revoked(&storage);
+        assert_eq!(kept.len(), MAX_REVOKED);
+        assert_eq!((kept[0], kept[1]), (AUTHOR, many[0]));
+        assert!(is_revoked(&storage, &many[MAX_REVOKED - 2]));
+        assert!(!is_revoked(&storage, &many[MAX_REVOKED - 1]));
+        // A list that cannot be read is not written over.
+        storage.write(REVOKED, &[0xff, 0xfe, b'\n']).unwrap();
+        assert_eq!(keep_revoked(&storage, &[NEW]), Err(RevokedError::NotKept));
     }
 }

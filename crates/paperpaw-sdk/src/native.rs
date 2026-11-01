@@ -360,6 +360,11 @@ fn entry_in(text: &str, plugin: &str) -> Option<[u8; 32]> {
 /// file that is there but cannot be read (a failing card, too large) is
 /// not written over: it holds every other plugin's.
 fn keep_entry(storage: &dyn Storage, file: &str, plugin: &str, value: &[u8; 32]) -> bool {
+    write_entry(storage, file, plugin, Some(value))
+}
+
+/// `plugin`'s line in `file` as [`keep_entry`] writes it, or none.
+fn write_entry(storage: &dyn Storage, file: &str, plugin: &str, value: Option<&[u8; 32]>) -> bool {
     let Ok(kept) = crate::files::load_text_for_update(storage, file, 64 * 1024) else {
         return false;
     };
@@ -369,10 +374,12 @@ fn keep_entry(storage: &dyn Storage, file: &str, plugin: &str, value: &[u8; 32])
         .filter(|line| line.split('\t').next() != Some(plugin))
         .map(|line| alloc::format!("{line}\n"))
         .collect();
-    text.push_str(&alloc::format!(
-        "{plugin}\t{}\n",
-        paperpaw_digest::hex::encode(value)
-    ));
+    if let Some(value) = value {
+        text.push_str(&alloc::format!(
+            "{plugin}\t{}\n",
+            paperpaw_digest::hex::encode(value)
+        ));
+    }
     let _ = storage.create_dir(crate::data::DIR);
     storage.write(file, text.as_bytes()).is_ok()
 }

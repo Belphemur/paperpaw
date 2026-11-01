@@ -40,6 +40,10 @@ pub struct Marks {
     pub code: Option<[u8; 32]>,
     /// The key of its code's author, to remember (a store's).
     pub author: Option<[u8; 32]>,
+    /// The author's recovery key (a store's library names it), pinned
+    /// with `author` where this is the plugin's first install, and never
+    /// otherwise ([`keys::remember_first_install`](native::keys::remember_first_install)).
+    pub recovery: Option<[u8; 32]>,
 }
 
 impl Marks {
@@ -48,6 +52,7 @@ impl Marks {
             from,
             code: None,
             author: None,
+            recovery: None,
         }
     }
 
@@ -62,6 +67,12 @@ impl Marks {
         self.author = Some(key);
         self
     }
+
+    #[must_use]
+    pub fn recovery(mut self, key: [u8; 32]) -> Self {
+        self.recovery = Some(key);
+        self
+    }
 }
 
 /// Writes `marks` into `folder`, the plugin about to be installed; an
@@ -74,6 +85,9 @@ pub fn write(storage: &dyn Storage, folder: &str, marks: &Marks) -> Result<(), c
     };
     if let Some(code) = marks.code {
         text.push_str(&format!("code {}\n", hex(&code)));
+    }
+    if let Some(recovery) = marks.recovery {
+        text.push_str(&format!("recovery {}\n", hex(&recovery)));
     }
     if let Some(author) = marks.author {
         text.push_str(&format!("author {}\n", hex(&author)));
@@ -94,6 +108,11 @@ pub fn settle(storage: &dyn Storage, id: &str, folder: &str) -> bool {
     let bytes32 = |hex: &str| -> Option<[u8; 32]> {
         paperpaw_digest::hex::decode(hex.trim())?.try_into().ok()
     };
+    // Pinned with the author's key, where that is the first one.
+    let recovery = text
+        .lines()
+        .find_map(|line| line.strip_prefix("recovery "))
+        .and_then(bytes32);
     let mut kept = true;
     for line in text.lines() {
         let (key, value) = line.split_once(' ').unwrap_or((line, ""));
@@ -115,7 +134,12 @@ pub fn settle(storage: &dyn Storage, id: &str, folder: &str) -> bool {
                 }
                 _ => true,
             },
-            "author" => bytes32(value).is_none_or(|key| native::remember_author(storage, id, &key)),
+            "author" => bytes32(value).is_none_or(|key| match recovery {
+                Some(recovery) if native::known_author(storage, id).is_none() => {
+                    native::keys::remember_first_install(storage, id, &key, &recovery)
+                }
+                _ => native::remember_author(storage, id, &key),
+            }),
             _ => true,
         };
     }
@@ -165,5 +189,36 @@ mod tests {
         assert!(write(&storage, "plugins/clock", &marks).is_ok());
         settle(&storage, "clock", "plugins/clock");
         assert_eq!(native::installed_code(&storage, "clock"), None);
+    }
+
+    /// A recovery key handed over with the first install is pinned with
+    /// the author's; with an update (the author known) it is not (#20).
+    #[test]
+    fn a_recovery_key_is_pinned_only_with_the_first_author() {
+        let storage = MemoryStorage::new();
+        let marks = Marks::new(From::Local).author([1; 32]).recovery([7; 32]);
+        assert!(write(&storage, "plugins/clock", &marks).is_ok());
+        assert!(settle(&storage, "clock", "plugins/clock"));
+        assert_eq!(native::known_author(&storage, "clock"), Some([1; 32]));
+        assert_eq!(
+            native::keys::known_recovery(&storage, "clock"),
+            Some([7; 32])
+        );
+        // An update that brings another: not taken.
+        let update = Marks::new(From::Local).author([1; 32]).recovery([9; 32]);
+        assert!(write(&storage, "plugins/clock", &update).is_ok());
+        assert!(settle(&storage, "clock", "plugins/clock"));
+        assert_eq!(
+            native::keys::known_recovery(&storage, "clock"),
+            Some([7; 32])
+        );
+        // A plugin installed before without one: none later either.
+        let storage = MemoryStorage::new();
+        assert!(native::remember_author(&storage, "weather", &[2; 32]));
+        let update = Marks::new(From::Local).author([2; 32]).recovery([9; 32]);
+        assert!(write(&storage, "plugins/weather", &update).is_ok());
+        assert!(settle(&storage, "weather", "plugins/weather"));
+        assert_eq!(native::keys::known_recovery(&storage, "weather"), None);
+        assert!(!storage.exists("plugins/weather/.install-marks"));
     }
 }
