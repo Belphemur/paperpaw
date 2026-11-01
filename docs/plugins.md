@@ -20,6 +20,9 @@ There are two kinds:
   the Xteink X4 and X4 Pro load at their start, without a
   new firmware (see [Plugins as files](#plugins-as-files)).
 
+Where a plugin's files go, what they are called and how big its assets
+should be: [Plugin layout and best practices](plugin-conventions.md).
+
 This guide walks through a code plugin, then lists what plugins can
 contribute. Working with an AI assistant: the skill in
 [`.claude/skills/paperpaw-plugin-development`](../.claude/skills/paperpaw-plugin-development/SKILL.md)
