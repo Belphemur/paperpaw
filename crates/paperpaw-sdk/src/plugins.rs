@@ -305,7 +305,10 @@ impl Plugins {
     #[cfg(any(test, feature = "kernel"))]
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn shrink_to_fit(&mut self) {
-        self.list.shrink_to_fit();
+        // Room for one more is kept: a plugin installed after the start
+        // goes in without the list being copied, which would hold the old
+        // list and one twice its size at once (24 KiB on the X4).
+        self.list.shrink_to(self.list.len() + 1);
     }
 }
 
@@ -334,6 +337,20 @@ mod tests {
             problem: None,
             update: None,
         }
+    }
+
+    /// A plugin installed after the start goes in without the list being
+    /// copied.
+    #[test]
+    fn the_list_keeps_room_for_one_more() {
+        let mut plugins = Plugins::new();
+        for _ in 0..40 {
+            plugins.push(info("a", PluginState::Running, true));
+        }
+        plugins.shrink_to_fit();
+        assert_eq!(plugins.list.capacity(), 41);
+        plugins.push(info("b", PluginState::Running, true));
+        assert_eq!(plugins.list.capacity(), 41);
     }
 
     #[test]

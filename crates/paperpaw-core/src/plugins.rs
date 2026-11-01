@@ -463,6 +463,9 @@ impl Kernel {
     /// Builds the key map from all sources and the selected preset.
     /// Problems were reported when the sources were first loaded.
     pub(crate) fn rebuild_keymap(&mut self) {
+        // The old one goes first: the new one is made without it in
+        // memory too (a few KiB on the X4, e.g. while a plugin installs).
+        self.shared.keymap = Keymap::default();
         let mut keymap = Keymap::default();
         let preset = self
             .shared

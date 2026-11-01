@@ -19,6 +19,7 @@
 //! | `phone-joins` | a phone joins the device's own network (the setup with a phone) |
 //! | `ble-key:right` | the pretend Bluetooth remote's key pressed (`right`, `left`, `up`, `down`, `page-down`, `page-up`, `space`, `enter`, `escape`, `volume-up`, `volume-down`), once its keys go to the key maps |
 //! | `reset-peak` | measure the heap's peak anew from now (what one step takes) |
+//! | `step:<name>` | print the heap's peak since the last step (`step <name>: peak … KiB, live … KiB`), then measure anew |
 //! | `emit:core.library-changed` | send an event without parameters, as a plugin would |
 //! | `type:hello world` | type into the text field shown, as if on its keys (a script's commas cannot be typed) |
 //! | `type-enter:hello` | the same, then confirm it (`type-enter:` confirms only) |
@@ -113,6 +114,16 @@ fn run_step(device: &mut Device, step: &str) -> Result<(), String> {
             }
         }
         ["reset-peak"] => crate::budget::reset_peak(),
+        ["step", name] => {
+            let stats = crate::budget::stats();
+            let kib = |bytes: usize| bytes as f64 / 1024.0;
+            println!(
+                "step {name}: peak {:.1} KiB, live {:.1} KiB",
+                kib(stats.peak),
+                kib(stats.live)
+            );
+            crate::budget::reset_peak();
+        }
         ["emit", event] => {
             let event = paperpaw_core::sdk::Id::parse(event).map_err(|e| e.to_string())?;
             let params = paperpaw_core::sdk::Params::new();

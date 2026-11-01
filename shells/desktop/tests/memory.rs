@@ -236,10 +236,15 @@ fn flow_stays_within_budget(
     budgeted
 }
 
+/// How far German may start above English's peak: its own peak is
+/// reading in its longer catalogs. Both started at 135.9 KiB while a
+/// start's key map was made beside the old one; since then (#8) English
+/// peaks at 129.9 KiB, German at 133.4.
+const GERMAN_START_EXTRA_KIB: f64 = 4.0;
+
 /// The language catalogs are read in once the registries have given back
 /// what they reserved, not before: German (longer texts than English)
-/// starts within the peak of English, so a budget that fits English fits
-/// it.
+/// starts within [`GERMAN_START_EXTRA_KIB`] of the peak of English.
 #[test]
 fn starting_in_german_peaks_no_higher_than_in_english() {
     let peak = |language: &str| {
@@ -254,7 +259,7 @@ fn starting_in_german_peaks_no_higher_than_in_english() {
     };
     let (english, german) = (peak("en"), peak("de"));
     assert!(
-        german <= english + 0.05,
+        german <= english + GERMAN_START_EXTRA_KIB,
         "start: peak {german} KiB in German, {english} KiB in English"
     );
 }
@@ -357,6 +362,78 @@ fn the_store_with_the_devices_tls_stays_within_the_x4_budget() {
         "store: peak {whole} KiB + {STORE_DEVICE_EXTRA_KIB} KiB of the device's TLS and Wi-Fi, over {allowed} KiB"
     );
     assert!(store <= whole);
+}
+
+/// What installing a plugin from the store may add on the X4 to the heap
+/// before it, at most: the plugin list keeps room for one more, the key
+/// map is made anew without the old one beside it (#8; 19.2 KiB before,
+/// 6.2 KiB after).
+const INSTALL_GROWTH_KIB: f64 = 10.0;
+
+/// The store on the X4 step by step (`step:` in the flow): its list, a
+/// group, a plugin's page, its install (download, check, install) and its
+/// screenshots, each its peak from the end of the step before. Each with
+/// what the device holds for the network beside it
+/// ([`STORE_DEVICE_EXTRA_KIB`]: the TLS handshake and session, the
+/// sockets and the Wi-Fi, which the emulator's own catalogue does not
+/// take) stays under the margin of the budget, and the install grows the
+/// heap by [`INSTALL_GROWTH_KIB`] at most.
+#[test]
+fn each_step_of_the_store_stays_within_the_x4_budget() {
+    let steps = ["list", "group", "page", "install", "shots"];
+    let parts = [
+        "run:store.open,wait:3000",
+        "run:core.down,run:core.down,run:core.confirm,wait:2000",
+        "run:core.down,run:core.down,run:core.confirm,wait:3000",
+        "run:core.confirm,wait:5000",
+        "run:core.down,run:core.confirm,wait:3000",
+    ];
+    let mut flow = String::from("wait:300,step:start");
+    for (step, part) in steps.iter().zip(parts) {
+        flow.push_str(&format!(",{part},step:{step}"));
+    }
+    let library = library("x4-store-steps", Some("books/die-verwandlung.txt"));
+    let mut command = run_in(&library, "xteink-x4", &[]);
+    command
+        .args(["--network", "fixtures", "--wifi", "online"])
+        .args(["--heap-budget", "none", "--script", &flow]);
+    let output = command.output().unwrap();
+    let installed = library.join("plugins/reading-aids/plugin.ini").exists();
+    let _ = fs::remove_dir_all(&library);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(output.status.success(), "{stdout}");
+    assert!(installed, "the plugin was not installed");
+    // `step <name>: peak <KiB> KiB, live <KiB> KiB`
+    let measured: Vec<(String, f64, f64)> = stdout
+        .lines()
+        .filter_map(|line| {
+            let (name, rest) = line.strip_prefix("step ")?.split_once(": peak ")?;
+            let (peak, rest) = rest.split_once(" KiB, live ")?;
+            let live = rest.strip_suffix(" KiB")?;
+            Some((name.to_string(), peak.parse().ok()?, live.parse().ok()?))
+        })
+        .collect();
+    let names: Vec<&str> = measured.iter().map(|(name, ..)| name.as_str()).collect();
+    assert_eq!(names[1..], steps, "{stdout}");
+    let allowed = 256.0 * MARGIN_PERCENT / 100.0;
+    for pair in measured.windows(2) {
+        let ((_, _, before), (name, peak, _)) = (&pair[0], &pair[1]);
+        eprintln!(
+            "x4 store {name}: peak {peak} KiB (+{:.1} KiB), + {STORE_DEVICE_EXTRA_KIB} KiB of the device of {allowed} KiB",
+            peak - before
+        );
+        assert!(
+            peak + STORE_DEVICE_EXTRA_KIB <= allowed,
+            "store {name}: peak {peak} KiB + {STORE_DEVICE_EXTRA_KIB} KiB of the device, over {allowed} KiB"
+        );
+        if name == "install" {
+            assert!(
+                peak - before <= INSTALL_GROWTH_KIB,
+                "installing grew the heap by {:.1} KiB, more than {INSTALL_GROWTH_KIB} KiB",
+                peak - before
+            );
+        }
+    }
 }
 
 /// The X4 Pro: its own panel (four grays, other bands), touch beside
