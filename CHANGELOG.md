@@ -55,6 +55,9 @@ change the plugin SDK.
   of the plugin interface.
 - The store lists a built-in plugin that is switched off (Android builds the store's plugins in, off until wanted)
   with *Switch on*, which does what the plugin manager does; nothing is downloaded for it.
+- Each release has `paperpaw-fontgen`, which makes bitmap font packs (and, with `--family`, a font plugin to copy to the
+  card), built for Windows (x64), macOS (Apple silicon and Intel) and Linux (x64): `paperpaw-fontgen-<version>-<computer>.zip`,
+  with its SHA-256 and a signature of its own, like the emulators.
 
 ### Changed
 

@@ -27,7 +27,9 @@ name: Release
 # `--check` and paperpaw-sign for signing plugins), driven over `--stdio` and loading code plugins built for
 # the computer, and the handbook (`paperpaw-handbook-<version>.zip`:
 # registry, check codes, docs, samples, the SDK's items and source,
-# PaperPaw's own plugins as examples); each
+# PaperPaw's own plugins as examples), and for people who make their own
+# font packs: `paperpaw-fontgen` for each computer
+# (`paperpaw-fontgen-<version>-<target>.zip`); each
 # with its SHA-256 and a signature of its own, made with the firmware's
 # key over a domain of its own (`paperpaw-sign check-asset` reads it). The release notes come from
 # CHANGELOG.md.
@@ -137,7 +139,7 @@ jobs:
       # The toolchain of rust-toolchain.toml: code plugins built for the
       # computer must be built with it (`--stdio` says it).
       - uses: dtolnay/rust-toolchain@stable
-      - name: Build the emulator, paperpaw-dev and paperpaw-sign
+      - name: Build the emulator, paperpaw-dev, paperpaw-sign and paperpaw-fontgen
         shell: bash
         env:
           RUST_TARGET: ${{ matrix.rust }}
@@ -149,10 +151,10 @@ jobs:
           built=target/release
           if [[ -n "$RUST_TARGET" ]]; then
             rustup target add "$RUST_TARGET"
-            cargo build --release --target "$RUST_TARGET" -p paperpaw-emulator -p paperpaw-dev -p paperpaw-sign
+            cargo build --release --target "$RUST_TARGET" -p paperpaw-emulator -p paperpaw-dev -p paperpaw-sign -p paperpaw-fontgen
             built="target/$RUST_TARGET/release"
           else
-            cargo build --release -p paperpaw-emulator -p paperpaw-dev -p paperpaw-sign
+            cargo build --release -p paperpaw-emulator -p paperpaw-dev -p paperpaw-sign -p paperpaw-fontgen
           fi
           exe=""
           [[ "$RUNNER_OS" == Windows ]] && exe=.exe
@@ -173,6 +175,21 @@ jobs:
           py="$(command -v python3 || command -v python)"
           (cd dist/pkg && "$py" -m zipfile -c "../$name" "${tools[@]}" LICENSE NOTICE)
           rm -r dist/pkg
+          # `paperpaw-fontgen` in a zip of its own, for who makes font
+          # packs (not the workshop's emulator zip, whose tools it expects).
+          mkdir -p dist/fontgen
+          cp "$built/paperpaw-fontgen$exe" LICENSE NOTICE dist/fontgen/
+          fontgen="paperpaw-fontgen-$version-${{ matrix.target }}.zip"
+          (cd dist/fontgen && "$py" -m zipfile -c "../$fontgen" "paperpaw-fontgen$exe" LICENSE NOTICE)
+          rm -r dist/fontgen
+          # Where it runs as built: it prints its usage.
+          if [[ -z "$RUST_TARGET" ]]; then
+            "$built/paperpaw-fontgen$exe" --help > fontgen-usage.txt
+            grep -q "paperpaw-fontgen" fontgen-usage.txt
+            rm fontgen-usage.txt
+          fi
+          grep -q "^paperpaw-fontgen$exe " <<< "$("$py" -m zipfile -l "dist/$fontgen")" \
+            || { echo "$fontgen has no paperpaw-fontgen"; exit 1; }
           # The zip holds all three tools, as tools taking it expect.
           listed="$("$py" -m zipfile -l "dist/$name")"
           for tool in "${tools[@]}"; do
@@ -181,7 +198,9 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: emulator-${{ matrix.target }}
-          path: dist/paperpaw-emu-*.zip
+          path: |
+            dist/paperpaw-emu-*.zip
+            dist/paperpaw-fontgen-*.zip
 
   handbook:
     name: Handbook
@@ -414,7 +433,7 @@ jobs:
       # the firmware's key (the workshop, plugin authors and paperpaw.org
       # pin its public key). The key is on the disk only while they are
       # signed.
-      - name: Sign the emulators, the handbook, the web emulator and the core libraries
+      - name: Sign the emulators, font generator, handbook, web emulator and core libraries
         env:
           PAPERPAW_SIGNING_KEY: ${{ secrets.PAPERPAW_SIGNING_KEY }}
         run: |
@@ -423,7 +442,8 @@ jobs:
             exit 1
           fi
           cargo build -q --release -p paperpaw-sign
-          for file in dist/paperpaw-emu-"$VERSION"-*.zip "dist/paperpaw-handbook-$VERSION.zip" \
+          for file in dist/paperpaw-emu-"$VERSION"-*.zip dist/paperpaw-fontgen-"$VERSION"-*.zip \
+            "dist/paperpaw-handbook-$VERSION.zip" \
             "dist/paperpaw-web-$VERSION.zip" "dist/paperpaw-xtensa-std-$VERSION.tar.gz"; do
             target/release/paperpaw-sign sign-asset "$file" "$file.sig"
             target/release/paperpaw-sign check-asset "$file" "$file.sig"
@@ -469,6 +489,8 @@ jobs:
           for target in windows-x64 macos-arm64 macos-x64 linux-x64; do
             for part in "" .sha256 .sig; do
               assets+=("dist/paperpaw-emu-$VERSION-$target.zip$part")
+              # The font generator, a zip for each computer too.
+              assets+=("dist/paperpaw-fontgen-$VERSION-$target.zip$part")
             done
           done
           for part in "" .sha256 .sig; do
