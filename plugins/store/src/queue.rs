@@ -246,6 +246,8 @@ pub(crate) fn fetched(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         // Not installed yet (the setup's), or newer than the one installed.
         .filter(|plugin| {
             plugin.entry.id == id
+                // A built-in plugin is switched on, never downloaded.
+                && !plugin.entry.switched_off(env)
                 && (plugin.entry.installed(env).is_none() || plugin.entry.newer(env))
         });
     let _ = env.storage().remove(&fetched);

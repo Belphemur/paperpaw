@@ -17,6 +17,8 @@ change the plugin SDK.
   oldest it runs), read from the firmware's ELF file (`PAPERPAW_NATIVE_ABI`, `paperpaw-sign abi`). The store
   and the web flasher use them to refuse a plugin that needs more than a firmware has; the first line is the
   fingerprint as before.
+- The store lists a built-in plugin that is switched off (Android builds the store's plugins in, off until wanted)
+  with *Switch on*, which does what the plugin manager does; nothing is downloaded for it.
 
 ### Changed
 

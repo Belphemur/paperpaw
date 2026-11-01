@@ -63,6 +63,8 @@ enum Row {
     Cancel,
     /// Installed some other way: this store's version in its place.
     UseStore,
+    /// Built in and switched off: switched on, nothing is downloaded.
+    SwitchOn,
     /// Not installed: there is no room for it.
     NoRoom,
     /// Its screenshots, one after another.
@@ -208,6 +210,17 @@ impl PageScreen {
             }
             return alloc::vec![Row::Install];
         };
+        // Built in: switched on if it is off, nothing else (no download).
+        if info.kind == paperpaw_sdk::PluginKind::BuiltIn {
+            let mut rows = Vec::new();
+            if info.restart_needed() {
+                rows.push(Row::Restart);
+            }
+            if !info.enabled {
+                rows.push(Row::SwitchOn);
+            }
+            return rows;
+        }
         // Not this one to install over, update or remove.
         if !catalog::may_install(env.plugins(), &plugin.id, plugin.code) {
             return Vec::new();
@@ -349,6 +362,12 @@ impl PageScreen {
         };
         match self.rows(&env).get(index).copied() {
             Some(Row::Install | Row::Update | Row::UseStore) => self.install(cx),
+            Some(Row::SwitchOn) => {
+                if let Ok(id) = Id::parse(&plugin.id) {
+                    cx.command(Command::SetPluginEnabled(id, true));
+                }
+                self.redraw(cx);
+            }
             Some(Row::NoRoom) => {
                 if let Some(text) = self.room.needs(&env, plugin, self.image_len()) {
                     cx.command(Command::Notify(text));
@@ -437,6 +456,7 @@ impl PageScreen {
             Row::Update => (tr("store.update"), plugin.version.clone()),
             Row::UseStore => (tr("store.use-store"), plugin.version.clone()),
             Row::Remove => (tr("store.remove"), String::new()),
+            Row::SwitchOn => (tr("store.switch-on"), String::new()),
             Row::Restart => (tr("store.restart"), String::new()),
             Row::Understood => (tr("store.code.understood"), String::new()),
             Row::Cancel => (tr("store.not-now"), String::new()),
@@ -543,13 +563,21 @@ fn facts(
         ));
     }
     let size = files::size(plugin.size, i18n.tr("store.decimal"));
-    let mut version = i18n.format(
-        "store.version",
-        &[
-            ("version", Arg::Str(&plugin.version)),
-            ("size", Arg::Str(&size)),
-        ],
-    );
+    let mut version = if plugin.switched_off(env) {
+        // Nothing to download: it is built in.
+        i18n.format(
+            "store.version-built-in",
+            &[("version", Arg::Str(&plugin.version))],
+        )
+    } else {
+        i18n.format(
+            "store.version",
+            &[
+                ("version", Arg::Str(&plugin.version)),
+                ("size", Arg::Str(&size)),
+            ],
+        )
+    };
     if !plugin.licence.is_empty() {
         version.push_str(" · ");
         version.push_str(&i18n.format("store.licence", &[("licence", Arg::Str(&plugin.licence))]));
@@ -557,6 +585,7 @@ fn facts(
     facts.push(("info-circle", version));
     // The room it needs, and what is left.
     if plugin.installed(env).is_none()
+        && !plugin.switched_off(env)
         && let Some(needs) = room.needs(env, plugin, image_len)
     {
         facts.push(("stack-2", needs));
@@ -571,7 +600,7 @@ fn facts(
         };
         facts.push(("chart-bar", i18n.format(key, &[("size", Arg::Str(&size))])));
     }
-    if let Some(installed) = plugin.installed(env) {
+    if let Some(installed) = plugin.installed(env).filter(|_| !plugin.switched_off(env)) {
         facts.push((
             "check",
             i18n.format(

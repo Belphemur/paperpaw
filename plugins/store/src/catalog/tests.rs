@@ -536,3 +536,57 @@ fn a_fair_list_says_so_and_keeps_its_picks() {
     assert!(!index.fair());
     assert_eq!(index.order("fair"), Order::Name);
 }
+
+/// A plugin on the device as the kernel lists it.
+fn on_device(plugins: &mut Plugins, id: &'static str, kind: PluginKind, enabled: bool) {
+    plugins.push(paperpaw_sdk::PluginInfo::new(
+        paperpaw_sdk::Manifest::new(
+            paperpaw_sdk::Id::new_static(id),
+            "Name",
+            Version::new(1, 0, 0),
+        ),
+        if enabled {
+            paperpaw_sdk::PluginState::Running
+        } else {
+            paperpaw_sdk::PluginState::Off
+        },
+        enabled,
+        paperpaw_sdk::RequiredFor::default(),
+        kind,
+        None,
+        None,
+    ));
+}
+
+#[test]
+fn a_built_in_plugin_switched_off_is_listed_to_be_switched_on() {
+    let mut plugins = Plugins::new();
+    on_device(&mut plugins, "off-data", PluginKind::BuiltIn, false);
+    on_device(&mut plugins, "off-code", PluginKind::BuiltIn, false);
+    on_device(&mut plugins, "on", PluginKind::BuiltIn, true);
+    on_device(&mut plugins, "core", PluginKind::BuiltIn, false);
+    let device = Device {
+        plugins: Some(&plugins),
+        ..X4
+    };
+    let storage = list(&[
+        plugin("off-data", "tools", ""),
+        // Code in the library, with no file for this device (Android runs it
+        // built in): still offered to be switched on.
+        plugin("off-code", "tools", "").replace(r#""kind": "data""#, r#""kind": "code""#),
+        // On already: nothing to offer.
+        plugin("on", "tools", ""),
+        // The library says it is built into every PaperPaw: never listed.
+        plugin("core", "tools", r#""built_in": true,"#),
+        plugin("new", "tools", ""),
+    ]);
+    let (entries, _) = entries_for(&storage, &device);
+    let mut listed = ids(&entries);
+    listed.sort_unstable();
+    // `on` takes the place of nothing here: a built-in plugin on is passed
+    // over, as before.
+    assert_eq!(listed, ["new", "off-code", "off-data"]);
+    assert!(switched_off(&plugins, "off-data"));
+    assert!(!switched_off(&plugins, "on"));
+    assert!(!switched_off(&plugins, "new"));
+}

@@ -53,6 +53,8 @@ pub(crate) fn state(
         .is_some_and(paperpaw_sdk::PluginInfo::restart_needed);
     if restart {
         State::Busy(env.i18n().tr("store.state.restart").to_string())
+    } else if plugin.switched_off(env) {
+        State::Offered(env.i18n().tr("store.state.off").to_string())
     } else if plugin.newer_in(env, origins) {
         State::Update
     } else if plugin.installed(env).is_some() {

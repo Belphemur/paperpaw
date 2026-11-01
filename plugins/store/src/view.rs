@@ -195,7 +195,9 @@ impl ViewScreen {
                         if newer {
                             updates.push(e.id.clone());
                         }
-                        e.installed(env).map(|_| u32::from(newer))
+                        e.installed(env)
+                            .filter(|_| !e.switched_off(env))
+                            .map(|_| u32::from(newer))
                     },
                     Order::Rank,
                     usize::MAX,
