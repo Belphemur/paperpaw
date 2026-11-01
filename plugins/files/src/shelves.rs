@@ -101,6 +101,8 @@ pub(crate) struct ShelfScreen {
     names: Vec<(String, usize)>,
     /// No catalog yet: the kernel is making the first.
     collecting: bool,
+    /// The kernel could not make the catalog (`CATALOG_FAILED`).
+    failed: bool,
 }
 
 impl ShelfScreen {
@@ -115,6 +117,7 @@ impl ShelfScreen {
             list: ListView::new(area, style.noted_row()).focus_on_keys(env),
             names: names(&mut |f| library::service(env).each(env, f), shelf),
             collecting: false,
+            failed: false,
             shelf,
             style,
             header,
@@ -154,6 +157,12 @@ impl Screen for ShelfScreen {
             let area = self.list.area();
             // An empty view says what would be in it.
             let (icon, text) = match self.shelf {
+                _ if self.failed => {
+                    let title = env.i18n().tr("files.list.failed.title");
+                    let text = env.i18n().tr("files.list.failed");
+                    ui.empty(area, "books", title, text);
+                    return;
+                }
                 _ if self.collecting => {
                     let message = env.i18n().tr("files.list.collecting");
                     ui.message(area, message);
@@ -194,6 +203,13 @@ impl Screen for ShelfScreen {
     }
 
     fn on_event(&mut self, event: &Id, _: &Params, cx: &mut Cx<'_, '_>) {
+        // The folder could not be read: said until a catalog is made.
+        if *event == events::CATALOG_FAILED {
+            self.failed = true;
+            self.collecting = false;
+            self.redraw(cx);
+            return;
+        }
         // The new catalog, or a book gone (noted beside it): the names
         // again, keeping the place.
         if [
@@ -205,6 +221,7 @@ impl Screen for ShelfScreen {
         {
             let env = *cx.env();
             self.collecting = false;
+            self.failed = false;
             self.names = names(&mut |f| library::service(&env).each(&env, f), self.shelf);
             self.list.set_len(self.names.len());
             self.redraw(cx);

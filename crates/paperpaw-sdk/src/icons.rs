@@ -58,10 +58,21 @@ pub fn default_of(name: &str) -> Option<&'static str> {
     }
 }
 
-/// The name of icon `index` (in the order of [`ICONS`]).
+/// The name of icon `index` (in the order of [`STARTS`]).
 fn name(index: usize) -> &'static str {
-    let start = index.checked_sub(1).map_or(0, |i| ICONS[i].0 as usize);
-    &NAMES[start..ICONS[index].0 as usize]
+    let start = usize::from(STARTS[index]);
+    let length = usize::from(LENGTHS[index] & ((1 << LENGTH_BITS) - 1));
+    NAMES.get(start..start + length).unwrap_or("")
+}
+
+/// The character of icon `index` (in the order of [`STARTS`]).
+#[cfg_attr(
+    all(paperpaw_plugin, target_os = "none"),
+    allow(dead_code, reason = "a plugin file asks the firmware")
+)]
+fn code(index: usize) -> Option<char> {
+    let high = u32::from(LENGTHS[index] >> LENGTH_BITS) << 16;
+    char::from_u32(CODE_BASE + (high | u32::from(CODES[index])))
 }
 
 /// The character of icon `name` in the icon font; a name `U+F8000` is
@@ -106,13 +117,13 @@ pub fn char(name: &str) -> Option<char> {
 /// The character of icon `name`, from the names of all icons.
 #[cfg(not(all(paperpaw_plugin, target_os = "none")))]
 fn by_name(name: &str) -> Option<char> {
-    let (mut low, mut high) = (0, ICONS.len());
+    let (mut low, mut high) = (0, STARTS.len());
     while low < high {
         let middle = (low + high) / 2;
         match self::name(middle).cmp(name) {
             core::cmp::Ordering::Less => low = middle + 1,
             core::cmp::Ordering::Greater => high = middle,
-            core::cmp::Ordering::Equal => return Some(ICONS[middle].1),
+            core::cmp::Ordering::Equal => return code(middle),
         }
     }
     None
@@ -120,7 +131,7 @@ fn by_name(name: &str) -> Option<char> {
 
 /// The names of all icons, sorted.
 pub fn names() -> impl Iterator<Item = &'static str> {
-    (0..ICONS.len()).map(name)
+    (0..STARTS.len()).map(name)
 }
 
 #[cfg(test)]
@@ -134,8 +145,8 @@ mod tests {
         assert_eq!(char("home"), Some('\u{eac1}'));
         assert!(char("books").is_some());
         // The first and the last.
-        assert_eq!(char(all[0]), Some(ICONS[0].1));
-        assert_eq!(char(all[all.len() - 1]), Some(ICONS[ICONS.len() - 1].1));
+        assert_eq!(char(all[0]), code(0));
+        assert_eq!(char(all[all.len() - 1]), code(all.len() - 1));
         assert_eq!(char("no-such-icon"), None);
         assert_eq!(char(""), None);
         // Icons of one's own by their code point.

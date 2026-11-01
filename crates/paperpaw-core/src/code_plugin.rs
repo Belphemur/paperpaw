@@ -183,6 +183,8 @@ impl Kernel {
                 .filter(|id| !disabled.iter().any(|off| off == id.as_str())),
         )
         .unwrap_or_default();
+        // Keys the store said were stolen: their authors' code does not run.
+        let revoked = paperpaw_sdk::native::keys::revoked(storage.as_ref());
         for plugin in found {
             let manifest = plugin.manifest();
             let id = manifest.id.clone();
@@ -200,6 +202,16 @@ impl Kernel {
                 self.list_code_plugin(&plugin, disabled, PluginState::Failed, problem);
                 continue;
             };
+            if !revoked.is_empty()
+                && paperpaw_sdk::native::known_author(storage.as_ref(), id.as_str())
+                    .is_some_and(|key| revoked.contains(&key))
+            {
+                let message = format!("{path}: its author's key is revoked; not loaded");
+                self.warn(WarningSource::Plugin(id.clone()), None, message);
+                let problem = PluginProblem::Revoked;
+                self.list_code_plugin(&plugin, disabled, PluginState::Failed, problem);
+                continue;
+            }
             let file = CodeFile {
                 id: &id,
                 path: &path,
@@ -580,6 +592,72 @@ mod tests {
         assert_eq!(
             (hello.state, hello.problem),
             (PluginState::Failed, Some(PluginProblem::Changed))
+        );
+        assert_eq!(info(&kernel, "zeta").state, PluginState::Running);
+    }
+
+    /// The code of an author whose key the store said was revoked does
+    /// not run, and is not even read; the others' does.
+    #[test]
+    fn code_of_a_revoked_key_does_not_run() {
+        let loader = loader();
+        let storage = storage();
+        assert!(paperpaw_sdk::native::remember_author(
+            &storage, "hello", &[5; 32]
+        ));
+        assert!(paperpaw_sdk::native::remember_author(
+            &storage, "zeta", &[6; 32]
+        ));
+        assert!(paperpaw_sdk::native::keys::keep_revoked(&storage, &[[5; 32]]).is_ok());
+        let kernel = Kernel::builder(DEVICE)
+            .storage(storage)
+            .code_plugins(Native::new("code.ppn"), Box::new(loader.clone()))
+            .build()
+            .unwrap();
+        assert!(!loader.asked.borrow().iter().any(|p| p.contains("hello")));
+        let hello = info(&kernel, "hello");
+        assert_eq!(
+            (hello.state, hello.problem),
+            (PluginState::Failed, Some(PluginProblem::Revoked))
+        );
+        assert_eq!(info(&kernel, "zeta").state, PluginState::Running);
+    }
+
+    /// A stolen key revoked, and the author moved to a new key with the
+    /// recovery key: the code on the card (perhaps the thief's) still
+    /// does not run, until an update by the new key is installed (#20,
+    /// review M2).
+    #[test]
+    fn code_of_a_revoked_key_stays_off_after_a_rotation() {
+        use paperpaw_native::signature::{public_key, sign_message};
+        use paperpaw_sdk::native::{self, keys};
+        let loader = loader();
+        let storage = storage();
+        let recovery = [7; 32];
+        assert!(keys::remember_first_install(
+            &storage,
+            "hello",
+            &[5; 32],
+            &public_key(&recovery)
+        ));
+        assert!(keys::keep_revoked(&storage, &[[5; 32]]).is_ok());
+        let message = keys::rotation_message("hello", &[5; 32], &[8; 32]);
+        let signature = sign_message(message.as_bytes(), &recovery);
+        assert_eq!(
+            keys::accept_rotation(&storage, "hello", &[8; 32], &signature),
+            Ok(())
+        );
+        assert_eq!(native::known_author(&storage, "hello"), Some([8; 32]));
+        let kernel = Kernel::builder(DEVICE)
+            .storage(storage)
+            .code_plugins(Native::new("code.ppn"), Box::new(loader.clone()))
+            .build()
+            .unwrap();
+        assert!(!loader.asked.borrow().iter().any(|p| p.contains("hello")));
+        let hello = info(&kernel, "hello");
+        assert_eq!(
+            (hello.state, hello.problem),
+            (PluginState::Failed, Some(PluginProblem::NotInstalled))
         );
         assert_eq!(info(&kernel, "zeta").state, PluginState::Running);
     }

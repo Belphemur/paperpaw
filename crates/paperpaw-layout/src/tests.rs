@@ -146,6 +146,17 @@ impl Typesetter for Units {
 
 const STYLE: Style = Style::new(0.0, 0.0, 10.0, false);
 
+/// A typesetter built now answers no later question: the layout does
+/// without.
+#[test]
+fn a_typesetter_knows_no_later_measures() {
+    for key in [0, 1, u32::MAX] {
+        let key = TypesetKey(key);
+        assert_eq!(Units.extended(Face::default(), key, 'a'), None);
+        assert_eq!(key.get(), key.0);
+    }
+}
+
 #[test]
 fn widows_and_orphans_move_lines_on() {
     // A line, then a paragraph of three; pages of three lines.

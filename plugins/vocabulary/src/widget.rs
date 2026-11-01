@@ -24,7 +24,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::widgets::{
-    self, Align, Frame, Padding, TextSize, Widget, WidgetLook, WidgetSpec, WidgetTarget, Wrapped,
+    self, Align, FixedWidget, Frame, Padding, TextSize, Widget, WidgetLook, WidgetTarget, Wrapped,
 };
 use paperpaw_sdk::{
     Arg, Canvas, Command, Env, FontHandle, Id, Rect, RegisterError, Registrar, SettingSpec,
@@ -137,34 +137,36 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         &SPEC
     })?;
     r.add_settings(&WORD_SETTINGS)?;
-    r.add_widget(
-        WidgetSpec::new(WORD, "vocabulary.widget.word", |_| {
+    static WORD_WIDGET: [FixedWidget; 1] =
+        [FixedWidget::new(WORD, "vocabulary.widget.word", |_| {
             Box::new(WordWidget::default())
         })
-        .category(widgets::categories::WORDS),
-    )?;
+        .category(widgets::categories::WORDS)];
+    r.add_widgets(&WORD_WIDGET)?;
     r.add_setting_group({
         static SPEC: paperpaw_sdk::SettingGroupSpec =
             paperpaw_sdk::SettingGroupSpec::new(SAVED, "vocabulary.widget.saved");
         &SPEC
     })?;
     r.add_settings(&SAVED_SETTINGS)?;
-    r.add_widget(
-        WidgetSpec::new(SAVED, "vocabulary.widget.saved", |_| {
+    static SAVED_WIDGET: [FixedWidget; 1] =
+        [FixedWidget::new(SAVED, "vocabulary.widget.saved", |_| {
             Box::new(Saved::default())
         })
-        .category(widgets::categories::WORDS),
-    )?;
+        .category(widgets::categories::WORDS)];
+    r.add_widgets(&SAVED_WIDGET)?;
     r.add_setting_group({
         static SPEC: paperpaw_sdk::SettingGroupSpec =
             paperpaw_sdk::SettingGroupSpec::new(DUE, "vocabulary.widget.due");
         &SPEC
     })?;
     r.add_settings(&DUE_SETTINGS)?;
-    r.add_widget(
-        WidgetSpec::new(DUE, "vocabulary.widget.due", |_| Box::new(Due::default()))
-            .category(widgets::categories::WORDS),
-    )
+    static DUE_WIDGET: [FixedWidget; 1] =
+        [
+            FixedWidget::new(DUE, "vocabulary.widget.due", |_| Box::new(Due::default()))
+                .category(widgets::categories::WORDS),
+        ];
+    r.add_widgets(&DUE_WIDGET)
 }
 
 /// The height of a line of text `size` pixels large.

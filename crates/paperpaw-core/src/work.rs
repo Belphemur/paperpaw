@@ -215,6 +215,9 @@ pub(crate) struct Queue {
     /// The screen the reader chose *Go online* on while Offline: the
     /// network for it until it closes ([`Command::GoOnline`]).
     online_for: Option<Id>,
+    /// Until when the reader chose *Go online* outside such a screen
+    /// ([`Command::GoOnlineFor`]).
+    pub(crate) online_until: Option<Instant>,
     /// Works or their states changed since `Env::work` was made.
     changed: bool,
     /// Plugins refused for a full queue, told `WORK_ALLOWED` once there is
@@ -517,6 +520,14 @@ impl Kernel {
                 // What waited may go on this connection.
                 self.output.commands.push(events::WORK_ALLOWED.emit(()));
             }
+            // The reader's choice alone: what background work sends is
+            // not (it would lift Offline for itself).
+            Command::GoOnlineFor(how_long) if self.shared.reader => {
+                let how_long = how_long.min(paperpaw_sdk::power::MAX_ONLINE_FOR);
+                let millis = u64::try_from(how_long.as_millis()).unwrap_or(u64::MAX);
+                self.works.online_until = Some(self.now.add_millis(millis));
+                self.output.commands.push(events::WORK_ALLOWED.emit(()));
+            }
             _ => {}
         }
     }
@@ -665,12 +676,22 @@ impl Kernel {
         }
     }
 
-    /// Whether the reader chose *Go online* on a screen still open.
+    /// Whether the reader chose *Go online* on a screen still open, or
+    /// for a while that has not passed.
     fn went_online(&self) -> bool {
         self.works
             .online_for
             .as_ref()
             .is_some_and(|id| self.stack.iter().any(|s| s.id == *id))
+            || self
+                .works
+                .online_until
+                .is_some_and(|until| self.now < until)
+    }
+
+    /// When the while the reader went online for ends, to look again.
+    pub(crate) fn online_ends(&self) -> Option<Instant> {
+        self.works.online_until.filter(|until| self.now < *until)
     }
 
     /// The power work goes by: the mode's, but while the reader went

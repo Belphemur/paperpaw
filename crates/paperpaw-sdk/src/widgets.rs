@@ -367,6 +367,11 @@ pub struct WidgetSpec {
     /// The cells it takes in a grid ([`WidgetSpec::cells`]); without it,
     /// the grid's width and the rows it needs.
     pub cells: Option<CellSpan>,
+    /// Reserved: zero now. A later release gives its bits a meaning, each
+    /// with a setter and a getter of its own (never by reading a set bit
+    /// another way), so specs can grow without a new plugin interface.
+    #[allow(dead_code, reason = "reserved for later releases")]
+    spare: u32,
 }
 
 impl WidgetSpec {
@@ -383,6 +388,7 @@ impl WidgetSpec {
             category: Cow::Borrowed(categories::OTHER),
             previews: None,
             cells: None,
+            spare: 0,
         }
     }
 
@@ -436,6 +442,166 @@ impl fmt::Debug for WidgetSpec {
     }
 }
 
+/// A widget kept in the program, in a `static` list of them
+/// ([`Registrar::add_widgets`](crate::Registrar::add_widgets)): it takes
+/// next to no memory, where each added with
+/// [`add_widget`](crate::Registrar::add_widget) takes some hundred bytes.
+/// The same as a [`WidgetSpec`], made by a function:
+///
+/// ```
+/// # use paperpaw_sdk::{Id, widgets::{FixedWidget, Widget}};
+/// # fn make(_: &paperpaw_sdk::Env<'_>) -> Box<dyn Widget> { unimplemented!() }
+/// static WIDGETS: [FixedWidget; 1] =
+///     [FixedWidget::new(Id::new_static("my.clock"), "my.clock", make)];
+/// ```
+#[non_exhaustive]
+pub struct FixedWidget {
+    id: Id,
+    title: &'static str,
+    make: Make,
+    category: &'static str,
+    previews: Option<Id>,
+    cells: Option<CellSpan>,
+    /// Reserved, as [`WidgetSpec`]'s: zero now.
+    #[allow(dead_code, reason = "reserved for later releases")]
+    spare: u32,
+}
+
+/// How a [`FixedWidget`] is made.
+#[derive(Clone, Copy)]
+enum Make {
+    Factory(fn(&Env<'_>) -> Box<dyn Widget>),
+    Drawn(Drawn),
+}
+
+impl FixedWidget {
+    /// A widget of a type of its own ([`Widget`]), made by `factory`.
+    pub const fn new(
+        id: Id,
+        title: &'static str,
+        factory: fn(&Env<'_>) -> Box<dyn Widget>,
+    ) -> Self {
+        Self {
+            id,
+            title,
+            make: Make::Factory(factory),
+            category: categories::OTHER,
+            previews: None,
+            cells: None,
+            spare: 0,
+        }
+    }
+
+    /// A widget with nothing of its own to read ([`WidgetSpec::drawn`]).
+    pub const fn drawn(id: Id, title: &'static str, drawn: Drawn) -> Self {
+        Self {
+            id,
+            title,
+            make: Make::Drawn(drawn),
+            category: categories::OTHER,
+            previews: None,
+            cells: None,
+            spare: 0,
+        }
+    }
+
+    /// Of the kind `category`, one of [`categories`].
+    pub const fn category(mut self, category: &'static str) -> Self {
+        self.category = category;
+        self
+    }
+
+    /// Takes `cells` in a grid ([`WidgetSpec::cells`]).
+    pub const fn cells(mut self, cells: CellSpan) -> Self {
+        self.cells = Some(cells);
+        self
+    }
+
+    /// Made to preview the settings of `group` ([`WidgetSpec::previews`]).
+    pub const fn previews(mut self, group: Id) -> Self {
+        core::mem::forget(self.previews.replace(group));
+        self
+    }
+
+    pub fn id(&self) -> &Id {
+        &self.id
+    }
+}
+
+impl fmt::Debug for FixedWidget {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("FixedWidget")
+            .field("id", &self.id)
+            .field("title", &self.title)
+            .field("category", &self.category)
+            .field("previews", &self.previews)
+            .finish_non_exhaustive()
+    }
+}
+
+/// A widget as the store holds it: made at the start, or one of a list
+/// kept in the program.
+#[derive(Clone, Copy)]
+enum Found<'a> {
+    Spec(&'a WidgetSpec),
+    Fixed(&'a FixedWidget),
+}
+
+impl<'a> Found<'a> {
+    fn id(self) -> &'a Id {
+        match self {
+            Found::Spec(w) => &w.id,
+            Found::Fixed(w) => &w.id,
+        }
+    }
+
+    fn title(self) -> &'a str {
+        match self {
+            Found::Spec(w) => &w.title,
+            Found::Fixed(w) => w.title,
+        }
+    }
+
+    fn category(self) -> &'a str {
+        match self {
+            Found::Spec(w) => &w.category,
+            Found::Fixed(w) => w.category,
+        }
+    }
+
+    fn previews(self) -> Option<&'a Id> {
+        match self {
+            Found::Spec(w) => w.previews.as_ref(),
+            Found::Fixed(w) => w.previews.as_ref(),
+        }
+    }
+
+    fn cells(self) -> Option<CellSpan> {
+        match self {
+            Found::Spec(w) => w.cells,
+            Found::Fixed(w) => w.cells,
+        }
+    }
+
+    fn make(self, env: &Env<'_>) -> Box<dyn Widget> {
+        match self {
+            Found::Spec(w) => (w.factory)(env),
+            Found::Fixed(w) => match w.make {
+                Make::Factory(factory) => factory(env),
+                Make::Drawn(drawn) => Box::new(DrawnWidget { drawn, shown: None }),
+            },
+        }
+    }
+}
+
+/// What the store keeps of each contribution, in the order they came: a
+/// list kept in the program in two words.
+#[derive(Debug)]
+enum Entry {
+    One(Box<WidgetSpec>),
+    List(&'static [FixedWidget]),
+}
+
 /// A widget that only draws, as functions ([`WidgetSpec::drawn`]): for
 /// widgets with nothing to read from the storage, such as a clock.
 #[derive(Clone, Copy)]
@@ -455,7 +621,7 @@ pub struct Drawn {
 
 impl Drawn {
     /// A widget `height` high, drawn by `draw`.
-    pub fn new(
+    pub const fn new(
         height: fn(&Env<'_>, u16) -> u16,
         draw: fn(&mut Canvas<'_>, &Env<'_>, Rect),
     ) -> Self {
@@ -468,7 +634,7 @@ impl Drawn {
     }
 
     /// The places in it that do something, drawn in an area.
-    pub fn targets(self, targets: fn(&Env<'_>, Rect) -> Vec<WidgetTarget>) -> Self {
+    pub const fn targets(self, targets: fn(&Env<'_>, Rect) -> Vec<WidgetTarget>) -> Self {
         Self {
             targets: Some(targets),
             ..self
@@ -476,7 +642,7 @@ impl Drawn {
     }
 
     /// Drawn again when what `shows` says changes.
-    pub fn shows(self, shows: fn(&Env<'_>) -> String) -> Self {
+    pub const fn shows(self, shows: fn(&Env<'_>) -> String) -> Self {
         Self {
             shows: Some(shows),
             ..self
@@ -760,7 +926,7 @@ pub fn next_minute(env: &Env<'_>) -> crate::Instant {
 /// The registered widgets.
 #[derive(Debug, Default)]
 pub struct Widgets {
-    widgets: Vec<WidgetSpec>,
+    widgets: Vec<Entry>,
     places: Vec<WidgetPlace>,
     categories: Vec<WidgetCategory>,
 }
@@ -775,7 +941,32 @@ impl Widgets {
     #[cfg(any(test, feature = "kernel"))]
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn add(&mut self, widget: WidgetSpec) {
-        self.widgets.push(widget);
+        self.widgets.push(Entry::One(Box::new(widget)));
+    }
+
+    /// The same, as it came in a contribution.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+    pub fn add_boxed(&mut self, widget: Box<WidgetSpec>) {
+        self.widgets.push(Entry::One(widget));
+    }
+
+    /// Widgets kept in the program ([`FixedWidget`]), as one entry.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+    pub fn add_fixed(&mut self, list: &'static [FixedWidget]) {
+        self.widgets.push(Entry::List(list));
+    }
+
+    /// Every widget, in the order they came.
+    fn all(&self) -> impl DoubleEndedIterator<Item = Found<'_>> {
+        self.widgets.iter().flat_map(|entry| {
+            let (one, list) = match entry {
+                Entry::One(w) => (Some(Found::Spec(w)), &[][..]),
+                Entry::List(list) => (None, *list),
+            };
+            one.into_iter().chain(list.iter().map(Found::Fixed))
+        })
     }
 
     #[cfg(any(test, feature = "kernel"))]
@@ -847,44 +1038,42 @@ impl Widgets {
     }
 
     /// Widget `id`, also of a placement of it (`widgets.clock@2`).
-    fn get(&self, id: &str) -> Option<&WidgetSpec> {
+    fn get(&self, id: &str) -> Option<Found<'_>> {
         let id = base(id);
-        self.widgets.iter().find(|w| w.id.as_str() == id)
+        self.all().find(|w| w.id().as_str() == id)
     }
 
     /// Every widget for screens to show: its id and the translation key
     /// of its name (not those that preview settings).
     pub fn iter(&self) -> impl Iterator<Item = (&Id, &str)> {
-        self.widgets
-            .iter()
-            .filter(|w| w.previews.is_none())
-            .map(|w| (&w.id, w.title.as_ref()))
+        self.all()
+            .filter(|w| w.previews().is_none())
+            .map(|w| (w.id(), w.title()))
     }
 
     /// The widget that previews the settings of `group`, if one does
     /// ([`WidgetSpec::previews`]); made with [`Widgets::make`].
     pub fn preview(&self, group: &str) -> Option<&Id> {
-        self.widgets
-            .iter()
+        self.all()
             .rev()
-            .find(|w| w.previews.as_ref().is_some_and(|g| g.as_str() == group))
-            .map(|w| &w.id)
+            .find(|w| w.previews().is_some_and(|g| g.as_str() == group))
+            .map(Found::id)
     }
 
     /// The kind of widget `id`, one of [`categories`] (or a plugin's own).
     pub fn category(&self, id: &str) -> Option<&str> {
-        self.get(id).map(|w| w.category.as_ref())
+        self.get(id).map(Found::category)
     }
 
     /// The cells widget `id` takes in a grid, where it says
     /// ([`WidgetSpec::cells`]).
     pub fn cells(&self, id: &str) -> Option<CellSpan> {
-        self.get(id)?.cells
+        self.get(id)?.cells()
     }
 
     /// The translation key of the name of widget `id`.
     pub fn title(&self, id: &str) -> Option<&str> {
-        self.get(id).map(|w| w.title.as_ref())
+        self.get(id).map(Found::title)
     }
 
     /// Whether widget `id` exists.
@@ -903,15 +1092,13 @@ impl Widgets {
     pub fn make(&self, id: &str, env: &Env<'_>) -> Option<Box<dyn Widget>> {
         let spec = self.get(id)?;
         let mut widget = if id.contains('@') {
-            let inner = env
-                .settings
-                .with_placement(Some(id), || (spec.factory)(env));
+            let inner = env.settings.with_placement(Some(id), || spec.make(env));
             Box::new(Placed {
                 placement: String::from(id),
                 inner,
             })
         } else {
-            (spec.factory)(env)
+            spec.make(env)
         };
         widget.update(env);
         Some(widget)
@@ -1217,6 +1404,65 @@ mod tests {
         );
         assert_eq!(widgets.preview("core.group.display"), None);
         assert!(widgets.has("a.sample"));
+    }
+
+    /// Widgets kept in the program are found, made and listed as those
+    /// made at the start, in the order they came, and take one entry of
+    /// two words for the list.
+    #[test]
+    fn widgets_kept_in_the_program_are_as_those_made() {
+        fn nothing(_: &Env<'_>, _: u16) -> u16 {
+            0
+        }
+        fn draw(_: &mut Canvas<'_>, _: &Env<'_>, _: Rect) {}
+        static FIXED: [FixedWidget; 3] = [
+            FixedWidget::drawn(
+                Id::new_static("a.clock"),
+                "a.clock.title",
+                Drawn::new(nothing, draw),
+            )
+            .category(categories::TIME)
+            .cells(CellSpan::new(2, 1)),
+            FixedWidget::new(Id::new_static("a.made"), "a.made.title", |_| {
+                Box::new(DrawnWidget {
+                    drawn: Drawn::new(nothing, draw),
+                    shown: None,
+                })
+            }),
+            FixedWidget::drawn(
+                Id::new_static("a.sample"),
+                "a.sample",
+                Drawn::new(nothing, draw),
+            )
+            .previews(Id::new_static("core.group.reading")),
+        ];
+        let mut widgets = Widgets::new();
+        widgets.add(WidgetSpec::drawn(
+            Id::new_static("b.first"),
+            "b.first",
+            Drawn::new(nothing, draw),
+        ));
+        widgets.add_fixed(&FIXED);
+        widgets.add(WidgetSpec::drawn(
+            Id::new_static("c.last"),
+            "c.last",
+            Drawn::new(nothing, draw),
+        ));
+        let offered: Vec<&str> = widgets.iter().map(|(id, _)| id.as_str()).collect();
+        assert_eq!(offered, ["b.first", "a.clock", "a.made", "c.last"]);
+        assert_eq!(widgets.title("a.clock@2"), Some("a.clock.title"));
+        assert_eq!(widgets.category("a.clock"), Some(categories::TIME));
+        assert_eq!(widgets.category("a.made"), Some(categories::OTHER));
+        assert_eq!(widgets.cells("a.clock"), Some(CellSpan::new(2, 1)));
+        assert_eq!(
+            widgets.preview("core.group.reading").map(Id::as_str),
+            Some("a.sample")
+        );
+        assert!(widgets.has("a.made") && !widgets.has("a.none"));
+        assert_eq!(
+            core::mem::size_of::<Entry>(),
+            2 * core::mem::size_of::<usize>()
+        );
     }
 
     #[test]

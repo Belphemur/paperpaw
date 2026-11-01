@@ -374,6 +374,7 @@ mod tests {
             let online = WifiState::Online {
                 ssid: String::from("FRITZ!Box"),
                 address: String::from("192.168.178.39"),
+                name: None,
             };
             assert!(policy.changed(&online).is_empty());
         };
@@ -436,6 +437,7 @@ mod tests {
         let online = WifiState::Online {
             ssid: String::from("Home"),
             address: String::from("10.0.0.2"),
+            name: None,
         };
         assert!(policy.changed(&online).is_empty());
         assert!(policy.may_go_off(false));
@@ -520,6 +522,7 @@ mod tests {
                 &WifiState::Online {
                     ssid: "Home".into(),
                     address: "a".into(),
+                    name: None,
                 },
                 "Hannes",
                 "secret",

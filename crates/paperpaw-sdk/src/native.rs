@@ -295,6 +295,8 @@ pub fn remember_author(storage: &dyn Storage, plugin: &str, key: &[u8; 32]) -> b
 /// the Wi-Fi transfer nor plugins' own folders reach.
 const INSTALLED: &str = crate::data_path!("plugin-code.txt");
 
+pub mod keys;
+
 #[cfg(feature = "kernel")]
 mod installed;
 #[cfg(feature = "kernel")]
@@ -358,6 +360,11 @@ fn entry_in(text: &str, plugin: &str) -> Option<[u8; 32]> {
 /// file that is there but cannot be read (a failing card, too large) is
 /// not written over: it holds every other plugin's.
 fn keep_entry(storage: &dyn Storage, file: &str, plugin: &str, value: &[u8; 32]) -> bool {
+    write_entry(storage, file, plugin, Some(value))
+}
+
+/// `plugin`'s line in `file` as [`keep_entry`] writes it, or none.
+fn write_entry(storage: &dyn Storage, file: &str, plugin: &str, value: Option<&[u8; 32]>) -> bool {
     let Ok(kept) = crate::files::load_text_for_update(storage, file, 64 * 1024) else {
         return false;
     };
@@ -367,10 +374,12 @@ fn keep_entry(storage: &dyn Storage, file: &str, plugin: &str, value: &[u8; 32])
         .filter(|line| line.split('\t').next() != Some(plugin))
         .map(|line| alloc::format!("{line}\n"))
         .collect();
-    text.push_str(&alloc::format!(
-        "{plugin}\t{}\n",
-        paperpaw_digest::hex::encode(value)
-    ));
+    if let Some(value) = value {
+        text.push_str(&alloc::format!(
+            "{plugin}\t{}\n",
+            paperpaw_digest::hex::encode(value)
+        ));
+    }
     let _ = storage.create_dir(crate::data::DIR);
     storage.write(file, text.as_bytes()).is_ok()
 }
@@ -418,6 +427,12 @@ pub struct CodeRoom {
     /// PSRAM): `total` is what was free when the plugins were loaded, an
     /// estimate to say as "about".
     pub shared: bool,
+    /// The room a full flash would give, in bytes, where this device runs
+    /// a smaller partition layout than PaperPaw's own (the X4 after an SD
+    /// install from CrossPoint): the store and the plugin manager then say
+    /// that the web flasher gives more. `None` where it is PaperPaw's own
+    /// or none is known.
+    pub larger: Option<u64>,
 }
 
 impl CodeRoom {
@@ -434,7 +449,18 @@ impl CodeRoom {
             max_plugins: None,
             placed: 0,
             shared: false,
+            larger: None,
         }
+    }
+
+    /// The same, in an app slot of `slot` bytes where PaperPaw's own layout
+    /// has slots of `own` bytes: a smaller slot's room would grow by the
+    /// difference with a full flash ([`larger`](Self::larger)).
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+    pub fn in_slot(mut self, slot: u32, own: u32) -> Self {
+        self.larger = (slot < own).then(|| self.total.saturating_add(u64::from(own - slot)));
+        self
     }
 
     /// The same, with `placed` plugins placed at this start, `most` at
@@ -515,6 +541,8 @@ pub fn code_room(storage: &dyn Storage) -> Option<CodeRoom> {
     let mut number = || fields.next()?.parse::<u64>().ok();
     let (total, used, granule) = (number()?, number()?, number()?);
     let (max, placed, shared) = (number()?, number()?, number()?);
+    // Written by later shells only (0: none).
+    let larger = number().filter(|&l| l > 0);
     Some(CodeRoom {
         total,
         used,
@@ -522,6 +550,7 @@ pub fn code_room(storage: &dyn Storage) -> Option<CodeRoom> {
         max_plugins: u32::try_from(max).ok().filter(|&m| m > 0),
         placed: u32::try_from(placed).ok()?,
         shared: shared != 0,
+        larger,
     })
 }
 
@@ -535,13 +564,14 @@ pub fn keep_code_room(storage: &dyn Storage, room: Option<&CodeRoom>) -> bool {
         return storage.remove(ROOM).is_ok() || !storage.exists(ROOM);
     };
     let text = alloc::format!(
-        "{} {} {} {} {} {}\n",
+        "{} {} {} {} {} {} {}\n",
         room.total,
         room.used,
         room.granule,
         room.max_plugins.unwrap_or(0),
         room.placed,
-        u8::from(room.shared)
+        u8::from(room.shared),
+        room.larger.unwrap_or(0)
     );
     let _ = storage.create_dir(crate::data::DIR);
     storage.write(ROOM, text.as_bytes()).is_ok()
@@ -1100,6 +1130,7 @@ mod tests {
             max_plugins: Some(3),
             placed: 1,
             shared: false,
+            larger: None,
         };
         // Whole granules, or the image's own alignment where larger.
         assert_eq!(room.needs(1, 16), 4096);
@@ -1124,6 +1155,13 @@ mod tests {
         };
         assert!(keep_code_room(&storage, Some(&shared)));
         assert_eq!(code_room(&storage), Some(shared));
+        // The room a full flash would give, kept too; a file of an older
+        // shell (six numbers) reads as none known.
+        let small = room.in_slot(0x64_0000, 0x7F_0000);
+        assert!(keep_code_room(&storage, Some(&small)));
+        assert_eq!(code_room(&storage), Some(small));
+        storage.write(ROOM, b"1000 0 4096 77 0 0\n").unwrap();
+        assert_eq!(code_room(&storage).map(|r| r.larger), Some(None));
         assert!(keep_code_room(&storage, None));
         assert_eq!(code_room(&storage), None);
         assert!(keep_code_room(&storage, None));
@@ -1139,6 +1177,11 @@ mod tests {
         // Nothing placed yet: none of it used; a region too small: none.
         assert_eq!(CodeRoom::in_flash(0, 0x10_0000, 0, 0).used, 0);
         assert_eq!(CodeRoom::in_flash(0x1000, 0x1000, 0, 0).total, 0);
+        // In a stock slot of 6.25 MiB where PaperPaw's are 7.94 MiB: the
+        // room grows by the difference with a full flash; in its own, none.
+        let stock = x4.in_slot(0x64_0000, 0x7F_0000);
+        assert_eq!(stock.larger, Some(1_044_480 + 0x1B_0000));
+        assert_eq!(x4.in_slot(0x7F_0000, 0x7F_0000).larger, None);
         // The X4 Pro: what the images took and what was free beside them.
         let pro = CodeRoom::in_psram(53_000, 6_000_000, 1);
         assert_eq!((pro.total, pro.used, pro.granule), (6_053_000, 53_000, 32));

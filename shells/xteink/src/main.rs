@@ -811,7 +811,10 @@ fn kernel(
         // A plugin may ask to switch the device off (`Command::PowerOff`);
         // `slept_for` stays unknown after a switch-off: the card keeps no
         // clock, so plugins hear no time asleep for such a start.
-        .power_off(true);
+        .power_off(true)
+        // Buttons are read less often in Saving and Offline
+        // (`buttons::read_interval_ms`); the clock stays (ADR 0025).
+        .power(power_controls());
     // The X4's row of hints under the screen (the X4 Classic has its
     // buttons); the X4 Pro is touched.
     #[cfg(feature = "x4")]
@@ -884,4 +887,11 @@ fn kernel(
     // Its warnings are logged as the main loop starts: taken here, the
     // kernel would be one more copy on the stack.
     builder.build().expect("kernel")
+}
+
+/// What the X4 shells change by the power level.
+fn power_controls() -> paperpaw_sdk::power::PowerControls {
+    let mut controls = paperpaw_sdk::power::PowerControls::default();
+    controls.buttons = true;
+    controls
 }

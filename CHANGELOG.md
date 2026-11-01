@@ -18,6 +18,115 @@ change the plugin SDK.
 - Keyboards for Arabic, Persian, Urdu and Hebrew come with their letters packs (`script-arabic`,
   `script-hebrew`, 1.1.0), and a two-set Korean keyboard with the Korean pack: letters typed join to syllables
   (jamo), *Delete* takes back one jamo and *Shift* types the doubled letters (#61, keyboard 1.0.2).
+- SDK (document): a table cell can span rows (`TableCell::rows`) and say where its lines sit
+  (`TableCell::vertical`, `VerticalAlign`); `TableRow`, `TableCell` and `MAX_COLUMNS` are in `paperpaw_sdk::document`
+  for format plugins.
+- SDK: `Command::RequestPlugins` (`Command::request_plugins`): any plugin can ask for plugins by id (e.g. those
+  a template names); those not on the device go to the store as `events::PLUGINS_REQUESTED`
+  (`PluginsRequested`, at most `MAX_REQUESTED_PLUGINS`), which asks the reader before it downloads any. What
+  came of it reaches the plugin that asked as `events::PLUGINS_ANSWERED` (`PluginsAnswered`: installed,
+  missing, declined, an error to show), from the store, or from the kernel where all were there already or
+  no plugin installs plugins.
+- SDK: `Settings::default_from` names the plugin whose default a setting has in place of its own (a template's
+  `settings.ini`, a theme's), so a settings page can say where a value comes from.
+- Font packs (`.ppfp`) can lie loose in a shell's font folder, without a `plugin.ini`: each is a face of the
+  family its file name gives (`Literata-BoldItalic.ppfp`, `Bookerly.ppfp`). A device without scalable fonts
+  leaves OpenType/TrueType files there alone (no warning for each); hidden files (`._…`) are passed over.
+- SDK: `Fonts::missing_letters` (and `FontSet::missing_letters`) counts the letters drawn that no font has, so
+  a screen can tell that a page lacked letters (e.g. to offer the font pack with them).
+- SDK (document, layout VERSION 11): a run's style can carry the book's letter spacing
+  (`TextStyle::letter_spacing`, in fortieths of an em, `LETTER_SPACING_STEPS`), a line over the text
+  (`TextStyle::OVERLINE`) and how its lines are drawn (`TextStyle::line_style`, `LineStyle`: one, two, dotted,
+  wavy); the reading faces measure, lay out and draw them. A drop capital's line is marked
+  (`LineBidi::DROP_CAP`).
+- Numbers in messages are written with the digits a language's catalog names (`[meta] digits`, e.g. `arabext`
+  for Persian, `arab` for Arabic-Indic). SDK: `Translator::digits`, `Translator::number`,
+  `Translator::localize_digits` for numbers a plugin writes itself.
+  What the SDK writes for showing uses them too: the clock (`time::clock_of`, `clock_text`),
+  `time::duration_text`, the battery percent in the status line, a number setting's value
+  (`ui::setting_value`) and the date and time pickers. New: `files::shown_size(env, bytes)`, a size
+  with the language's decimal mark and digits (`files::size` stays Latin, with the mark given).
+- SDK: `Slider::mirrored` for a right-to-left interface: the lowest value at the right, the track filled from
+  there, `−` at the right and `+` at the left (`Slider::parts`), the left button moving it up
+  (`Slider::key_step`); `SliderPart::mirrored` tells a theme's painter.
+- SDK, reserved for features known to come, so they need no new plugin interface (no effect yet):
+  `Command::PlaySound` (`sound::Sound`, reply `replies::Played`, answered at once, not played) and
+  `Command::StopSound`; `Capability::CHORDS` (key maps may bind `chord.<button>_<button>`, read and kept),
+  `Capability::PAGE_TURNER`, `Capability::HOTSPOT`; `paperpaw_table::Family::CORE` for the firmware's own
+  `core`; a spare word (zero) in `Manifest`, `ScreenSpec`, `FixedScreen`, `WidgetSpec`, `FixedWidget` and
+  `StatusItemSpec` for flags later releases give a meaning with setters of their own.
+- SDK: room for later questions without a new plugin interface: `KeyBindings::extended`,
+  `ScreenMaker::extended` and `Typesetter::extended` (with `paperpaw_layout::TypesetKey`) answer `None`
+  by default; none is asked yet (`docs/sdk-design.md`, rule 17).
+- In a right-to-left interface (Arabic), taps at the sides and swipes go the other way on every screen, as
+  they do in a book whose pages go right to left. SDK: `Screen::direction` (a `lang::Direction`) replaces
+  `Screen::mirrored`: `Auto` by default (as the interface goes), `Ltr` or `Rtl` for a screen with a way of
+  its own; the reader gives its book's, so a left-to-right book keeps its sides in Arabic. **Breaking** for
+  screens that implemented `mirrored`.
+- Korean written in jamo (Unicode's decomposed form, NFD, as some books and Mac file names have it) shows as
+  its syllables wherever a font holds them, in books and in the interface, instead of loose jamo or question
+  marks; letters so written no longer count as missing. `paperpaw_text::has_jamo` tells such text (#61).
+- SDK: `CellGrid::mirrored` for a right-to-left interface: rows of cells start at the right, taps find them
+  there, and the left button goes on to the next cell.
+- SDK: rows moved by dragging have their grip at the left in a right-to-left interface.
+  `Reorder::grip` and `Reorder::content` take the `UiStyle`, and `Reorder::draw` takes `&mut self`
+  (it notes the direction for the pointer samples that follow): **breaking** for plugins that move rows.
+- A language can come compiled from the card and be read as it is needed (ADR 0033): a data plugin's
+  `i18n/<lang>.ppcat` (made with `paperpaw-sign catalog <lang>.ini <lang>.ppcat`, data formats 4) keeps its
+  messages on the card, about a kilobyte of memory for 3,400 messages, and the messages of the screen shown;
+  an Arabic interface of all plugins (some 210 KB) fits the X4. A pulled card or a damaged file falls back to
+  English. SDK: `Catalog::compile`, `Catalog::open`, `CatalogFile`, `Translator::forget_read`,
+  `Registrar::add_translation_file`; plugin interface 5 is written anew for it (every plugin is built again),
+  `DATA_FORMATS` is 4.
+- When the library's folder cannot be read (a failing card, one the device cannot use), the library says
+  *Couldn’t read the books folder* instead of collecting books for ever or saying there are none; PaperPaw tries
+  again by itself. SDK: `events::CATALOG_FAILED`.
+- SDK: `WifiState::Online` says the name the device answers to in the network (`name`, e.g. `paperpaw.local`,
+  where the shell gives one), and `WifiState::reach` gives the name or else the address for a page to show.
+- SDK: `HttpRequest::max_file` caps what one download (`save_to`) may write; a longer answer fails and nothing
+  is kept, so a plugin's download cannot fill the card (at most 64 MiB, as before).
+- The store and the plugin manager name the web flasher for more plugin room only where the X4's shell says a
+  full flash gives more (a smaller layout than PaperPaw's own, as after an SD install from CrossPoint), no longer
+  guessed from the room's size. SDK: `CodeRoom::larger`, `CodeRoom::in_slot` (kernel feature).
+- *Automatic* power wears *Saving* while the system's own battery saver is on (where the shell reports it). SDK:
+  `Capabilities::power` (`PowerControls`: what the shell changes by the level, so settings show only what
+  applies), `KernelBuilder::power`, `Battery::saver`.
+- SDK: `PluginUsage::shown_ms`, `read`, `written` and `awake_ms` are `u32` (they stop at their largest value):
+  a row is kept for every plugin, about 1.3 KiB less on the X4.
+- SDK: `Str`, text kept in the program or owned in two words (a `Cow<'static, str>` takes three);
+  `Manifest::name`/`description` and `SettingSpec::title`/`description` are `Str`, as the kernel keeps them for
+  every plugin and setting (16 bytes less per plugin on 64-bit, 8 on the X4).
+- SDK: widgets kept in the program, `FixedWidget` and `Registrar::add_widgets` (a `static` list, two words of
+  memory for the list where each `WidgetSpec` takes about a hundred bytes); `Drawn::new`, `shows` and `targets`
+  are `const`. Home, stats, vocabulary and six of the widgets plugin's widgets use them.
+- SDK: subscriptions kept in the program, `FixedSubscription`, `Registrar::add_subscriptions` and `hears!` (a
+  typed handler, as `Registrar::on` takes it, in a `static` list: one entry of the kernel's for the list);
+  `Event::hear`, `Event::id_static`. The update plugin's seven subscriptions use them.
+- SDK: `Document::prepare_image_larger` decodes a picture anew, larger than for its page (its longer side up to
+  1600 pixels), for a zoom or a picture on the whole screen; EPUB books do, other formats say they cannot.
+- A plugin on the card can name the plugins it needs: `requires` in `plugin.ini` (data formats 4), e.g. a setup
+  template. SDK: `requires::parse`, `requires::of`, `requires::missing`, `Requirement`.
+- SDK: hooks for showing the card to a computer as a USB drive (the X4 Pro's hardware can):
+  `Capability::USB_DRIVE`, `Command::UsbDrive`, `events::USB_DRIVE_ENDED`; kernel: `Effects::usb_drive`,
+  `Kernel::usb_drive_ended`, `KernelBuilder::capability`. No shell offers it yet.
+- In *Offline* a plugin can offer *Go online* outside its network screens too (a widget's *Update now*): SDK
+  `Command::GoOnlineFor` (the network for a while, at most `power::MAX_ONLINE_FOR`, ten minutes; held work runs
+  as in Saving), taken only from the reader's input.
+- Author keys: a recovery key chosen in advance moves a plugin to a new key by a statement the device checks
+  itself (`paperpaw-sign rotation`; SDK `native::keys`: `remember_first_install`, `rotation_message`,
+  `accept_rotation`; `install::Marks::recovery`), and the code of an author whose key the store revoked does not
+  run (`PluginProblem::Revoked`, `keys::keep_revoked`, which only adds). The recovery key is pinned only with the
+  first install, and code installed before a rotation does not run until an update by the new key. The store
+  does not offer either yet.
+- Layout `VERSION` 11: books cached before are laid out anew once, so drop capitals and the new list markers show
+  in them too. SDK, for real tables: `BlockKind::TableRow`, `Block::table` (`TableRow`, `TableCell`, `MAX_COLUMNS`:
+  a row's cells, the table's column weights, header, first and last row) and `Page::rules` (`PageRule`: thin lines
+  such as a table's borders). Formats and the layout do not fill them yet: rows are still set as one line.
+- The start asks for the plugin list and the translations' list once at their size (SDK, kernel feature:
+  `Plugins::reserve`, `Translator::reserve`), so they do not double while plugins register.
+- The English catalogs of the plugins built in are one catalog, indexed together when PaperPaw is built: the
+  translator keeps a table of their sources rather than a catalog for each. SDK: `BuiltCatalogs`, `BuiltTable`,
+  `Translator::built_catalogs`; kernel: `KernelBuilder::built_catalogs`; `paperpaw_app::BUILT_CATALOGS`.
 - *All notes*, a new plugin (Tools): the books that have bookmarks or highlights with how many, a book's notes
   (a note opens the book there), and *Export as My Clippings.txt*, all notes in one file in Kindle's form
   (UTF-8 with a byte order mark, `Exports/My Clippings.txt` beside the library) that notes apps read. A book's
@@ -43,6 +152,7 @@ change the plugin SDK.
   before 10) are the pages after it, up to 300. Each picture is decoded when its page shows, so one is in
   memory at a time; a file that is no picture or too large shows its name. It needs no SDK change and is not
   part of the firmware.
+- *Plugin layout and best practices* (`docs/plugin-conventions.md`): the folders of a plugin, names, where pictures and other assets go (on the card, not in the code), translations, data a plugin writes, and the budgets. `paperpaw-dev package` warns where a data plugin's folder or a code plugin's source (`paperpaw-dev package path/to/crate`) does not keep them. It needs no SDK change.
 - *End of book*, a new plugin: when the last page of a book is reached, a screen offers the next book of its
   series (or the library), a rating of one to five (`4 / 5`, kept as a book field and shown as a badge on the
   book's row and on its information page) and whether the book counts as finished. Two settings in the reading
@@ -113,6 +223,17 @@ change the plugin SDK.
 
 ### Changed
 
+- *Literata's bold and italic* are no longer in the firmware of the X4, X3, X4 Pro and X4 Classic (531 KB less, more
+  room for updates and plugins) but a small font pack on the card, the plugin *Literata bold and italic*
+  (`literata-styles`, 0.5 MB, 0 flash). The web flasher puts it on the card with the firmware; after an update
+  or an install from CrossPoint, the store fetches it once by itself as soon as there is a network (the one download
+  it makes unasked; not in Offline mode, three tries at most), says "Added" once, and else shows a short hint. Until
+  the faces are there, bold and italic words are set in the regular face. `literata-large` (36 to 48 px) now
+  extends these faces. A face that a plugin binds to a role is now loaded also when the reading font is the
+  default one (it was, before, only once its family was chosen).
+- The names of all Tabler icons take 35 KB less firmware: a name that begins the next one (`a-b` in `a-b-2`)
+  is kept only in it, and each name's place, length and character take 5 bytes instead of 8
+  (`tools/icons/subset.py`). `icons::names()` and `icons::char` give the same as before.
 - New reading setting "Hanging punctuation" (`core.hanging-punctuation`, off by default, in the layout settings): an
   opening quote that starts a line, and a stop, comma, hyphen or closing quote that ends a justified one, are set
   just outside the text, so its edges look straight (optical margin alignment). Lines break as before, so pages hold

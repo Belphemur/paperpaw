@@ -654,3 +654,85 @@ fn a_guard_takes_the_fingers_of_recognizers() {
     kernel.finish();
     assert_eq!(kernel.stack[0].key_layer, None);
 }
+
+/// A screen of direction `.1` bound to Home; it logs the actions it gets.
+struct WayPlugin(Log, paperpaw_sdk::lang::Direction);
+
+struct WayScreen(Log, paperpaw_sdk::lang::Direction);
+
+impl Screen for WayScreen {
+    fn draw(&mut self, _: &mut Canvas<'_>, _: &Env<'_>) {}
+
+    fn direction(&self) -> paperpaw_sdk::lang::Direction {
+        self.1
+    }
+
+    fn on_action(&mut self, action: &Id, _: &mut Cx<'_, '_>) -> Handled {
+        self.0.borrow_mut().push(alloc::format!("{action}"));
+        Handled::Yes
+    }
+}
+
+impl Plugin for WayPlugin {
+    fn manifest(&self) -> Manifest {
+        Manifest::new(Id::new_static("way"), "Ways", Version::new(1, 0, 0))
+            .uses(paperpaw_sdk::Uses::NOTHING)
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        let (log, way) = (self.0.clone(), self.1);
+        r.add_screen(ScreenSpec::new(
+            Id::new_static("way.screen"),
+            "way",
+            Box::new(move |_, _| Box::new(WayScreen(log.clone(), way))),
+        ))?;
+        r.bind_slot(slots::HOME, Id::new_static("way.screen"), Priority(20))?;
+        for action in ["way.left", "way.right"] {
+            r.add_action(ActionSpec::new(Id::parse(action).unwrap(), action))?;
+        }
+        r.add_keymap(Cow::Borrowed(
+            "[keymap.way.screen]\ntap.left = way.left\ntap.right = way.right\n\
+             swipe.left = way.left\nswipe.right = way.right\n",
+        ))
+    }
+}
+
+/// What a tap at the right and a swipe to the left run on a screen of
+/// direction `way`, in the interface of `language` (`ar` goes right to
+/// left).
+fn right_side(way: paperpaw_sdk::lang::Direction, language: &str) -> Vec<String> {
+    let log = log();
+    let arabic =
+        "[meta]\nlanguage = ar\nname = العربية\ndirection = rtl\n\n[messages]\nway.x = س\n";
+    let storage = paperpaw_sdk::MemoryStorage::new()
+        .with("plugins/arabic/plugin.ini", "[plugin]\nname = Arabic\n")
+        .with("plugins/arabic/i18n/ar.ini", arabic);
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(WayPlugin(log.clone(), way))
+        .storage(storage)
+        .user_config(alloc::format!("[core]\nlanguage = {language}\n"))
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    render(&mut kernel);
+    log.borrow_mut().clear();
+    tap(&mut kernel, 1000, 80, 45);
+    swipe(&mut kernel, 3000, (60, 45), (20, 45));
+    log.take()
+}
+
+/// Screens go as the interface does unless they have a way of their
+/// own: in Arabic, a tap at the right and a swipe to the left run what
+/// the left side binds; a screen that goes left to right (a book) keeps
+/// its sides, and one that goes right to left mirrors them anywhere.
+#[test]
+fn screens_follow_the_interfaces_direction_unless_they_have_their_own() {
+    use paperpaw_sdk::lang::Direction;
+    let ltr = ["way.right", "way.left"];
+    let rtl = ["way.left", "way.right"];
+    assert_eq!(right_side(Direction::Auto, "en"), ltr);
+    assert_eq!(right_side(Direction::Auto, "ar"), rtl);
+    assert_eq!(right_side(Direction::Ltr, "ar"), ltr);
+    assert_eq!(right_side(Direction::Rtl, "en"), rtl);
+    assert_eq!(right_side(Direction::Rtl, "ar"), rtl);
+}

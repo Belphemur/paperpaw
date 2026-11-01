@@ -16,7 +16,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::widgets::{
-    self, Align, Frame, Padding, TextSize, Widget, WidgetLook, WidgetSpec, WidgetTarget, Wrapped,
+    self, Align, FixedWidget, Frame, Padding, TextSize, Widget, WidgetLook, WidgetTarget, Wrapped,
 };
 use paperpaw_sdk::{
     Arg, Canvas, Command, Env, Id, Params, Point, Rect, RegisterError, Registrar, SettingSpec,
@@ -87,10 +87,12 @@ pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         &SPEC
     })?;
     r.add_settings(&SETTINGS)?;
-    r.add_widget(
-        WidgetSpec::new(YEAR, "stats.widget.year", |_| Box::new(Year::default()))
-            .category(widgets::categories::READING),
-    )
+    static WIDGET: [FixedWidget; 1] =
+        [
+            FixedWidget::new(YEAR, "stats.widget.year", |_| Box::new(Year::default()))
+                .category(widgets::categories::READING),
+        ];
+    r.add_widgets(&WIDGET)
 }
 
 /// The yearly goal, if one is set.

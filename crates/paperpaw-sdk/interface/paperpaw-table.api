@@ -181,6 +181,7 @@ pub paperpaw_table::Misfit::Older
 pub struct paperpaw_table::Family(_)
 impl paperpaw_table::Family
 pub const paperpaw_table::Family::CONTRIBUTION: paperpaw_table::Family
+pub const paperpaw_table::Family::CORE: paperpaw_table::Family
 pub const paperpaw_table::Family::DATA: paperpaw_table::Family
 pub const paperpaw_table::Family::FONTS: paperpaw_table::Family
 pub const paperpaw_table::Family::GRAPHICS: paperpaw_table::Family

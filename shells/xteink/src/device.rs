@@ -123,6 +123,15 @@ pub const FRONTLIGHT: Setting<i64> = Setting::new("x4.frontlight");
 )]
 pub const WARMTH: Setting<i64> = Setting::new("x4.warmth");
 
+/// How long the X4 Pro's front light stays on without input (the choices
+/// are in `paperpaw_x4::light_timer`).
+#[cfg_attr(
+    not(feature = "x4-pro"),
+    expect(dead_code, reason = "only the X4 Pro has a light")
+)]
+pub const LIGHT_OFF_AFTER: Setting<paperpaw_sdk::setting::Text> =
+    Setting::new("x4.light-off-after");
+
 #[derive(Debug, Default)]
 pub struct X4;
 
@@ -305,7 +314,7 @@ static UC_SETTINGS: [SettingSpec; 9] = {
 /// percents, so that `−` and `+` set the dim end finely (see `light`), its
 /// colour in fives.
 #[cfg(feature = "x4-pro")]
-static LIGHT_SETTINGS: [SettingSpec; 2] = {
+static LIGHT_SETTINGS: [SettingSpec; 3] = {
     use paperpaw_sdk::SettingExtra;
     static BRIGHTNESS: SettingExtra = SettingExtra::new().unit("core.unit.percent").slider();
     static PERCENT: SettingExtra = SettingExtra::new()
@@ -333,6 +342,14 @@ static LIGHT_SETTINGS: [SettingSpec; 2] = {
         )
         .with_extra(&PERCENT)
         .description("x4.warmth.help"),
+        SettingSpec::choice(
+            LIGHT_OFF_AFTER.static_str(),
+            "x4.light-off-after",
+            &paperpaw_x4::light_timer::CHOICES,
+            paperpaw_x4::light_timer::DEFAULT,
+            groups::DISPLAY,
+        )
+        .description("x4.light-off-after.help"),
     ]
 };
 

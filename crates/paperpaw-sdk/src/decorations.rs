@@ -463,7 +463,7 @@ pub fn add_role(
             extra.unit = Some(Cow::Borrowed("core.unit.tenth-mm"));
         }
         spec.group = groups::MARKS;
-        spec.description = Some(Cow::Owned(format!("core.mark.{aspect}.help")));
+        spec.description = Some(crate::Str::new(format!("core.mark.{aspect}.help")));
         r.add_setting(spec.with_owned_extra(extra))?;
     }
     Ok(())

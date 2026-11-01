@@ -41,6 +41,7 @@ mod awake;
 mod bluetooth;
 mod builder;
 mod card;
+mod catalog_file;
 mod chrome;
 mod code_plugin;
 mod commands;
@@ -272,6 +273,8 @@ pub struct Kernel {
     sleep: bool,
     /// Switching off was requested (see [`Command::PowerOff`]).
     power_off: bool,
+    /// The card as a USB drive was requested (see [`Command::UsbDrive`]).
+    usb_drive: bool,
     /// When the device went to sleep ([`Kernel::suspend`]): how long it
     /// slept is told on waking.
     suspended_at: Option<Instant>,
@@ -317,6 +320,9 @@ pub struct Kernel {
     tasks: Vec<(Id, Vec<KeptScreen>)>,
     /// The `serial` of the screen opened next.
     next_serial: u32,
+    /// The screen on top when the messages read from the card were last
+    /// forgotten (`forget_read_messages`).
+    read_top: Option<u32>,
     /// `paperpaw.ini` is there but could not be read at start: the user
     /// is told once the first screen shows.
     config_unreadable: bool,
@@ -1214,6 +1220,12 @@ impl Kernel {
     /// asleep.
     pub fn resume(&mut self, now: Instant) -> Effects {
         let _running = self.shared.meter.enter(meter::CORE);
+        self.woke(now);
+        self.finish()
+    }
+
+    /// What waking does before the frame: the time asleep, plugins told.
+    fn woke(&mut self, now: Instant) {
         if let Some(at) = self.suspended_at.take() {
             let slept = now.0.saturating_sub(at.0);
             self.shared.slept_for = Some(core::time::Duration::from_millis(slept));
@@ -1224,6 +1236,17 @@ impl Kernel {
         self.shown_since = now;
         self.close_shut_out();
         self.output.commands.push(events::RESUME.emit(()));
+    }
+
+    /// The card is PaperPaw's again after a computer had it as a USB drive
+    /// ([`Effects::usb_drive`]): as on waking ([`Kernel::resume`]), and
+    /// plugins hear [`events::USB_DRIVE_ENDED`]; the library is walked
+    /// anew, as files may have come, gone or changed.
+    pub fn usb_drive_ended(&mut self, now: Instant) -> Effects {
+        let _running = self.shared.meter.enter(meter::CORE);
+        self.woke(now);
+        self.output.commands.push(events::USB_DRIVE_ENDED.emit(()));
+        self.output.commands.push(events::LIBRARY_CHANGED.emit(()));
         self.finish()
     }
 

@@ -29,6 +29,10 @@ const FONTS: &[(&str, &str, f32)] = &[
     ("paperpaw-sans", "fonts/SourceSans3.ttf", 430.0),
 ];
 
+/// The packs a lean build does not carry: the styles of Literata, which
+/// the data plugin `literata-styles` supplies.
+const LEAN_LEAVES_OUT: &[&str] = &["literata-bold", "literata-italic", "literata-bold-italic"];
+
 /// The largest size of the reading faces in a lean build: larger ones
 /// come from a plugin that extends them (the font library's), drawn by
 /// it where text is asked larger.
@@ -43,9 +47,10 @@ fn main() {
     println!("cargo::rerun-if-env-changed=PAPERPAW_FONT_SIZES");
     println!("cargo::rerun-if-env-changed=PAPERPAW_FONT_LEAN");
     println!("cargo::rustc-check-cfg=cfg(paperpaw_lean_fonts)");
-    // Lean (the firmware): no Literata Bold Italic, which few books use
-    // (bold stands in for it), and the reading faces without their
-    // largest sizes; the font library has both.
+    // Lean (the firmware): no Literata bold, italic or bold italic (the
+    // plugin `literata-styles` brings them from the card, 0.5 MB of
+    // flash saved; regular text stands in until then), and the regular
+    // face without its largest sizes; the font library has both.
     let lean = std::env::var_os("PAPERPAW_FONT_LEAN").is_some_and(|v| v == "1");
     if lean {
         println!("cargo::rustc-cfg=paperpaw_lean_fonts");
@@ -70,7 +75,7 @@ fn main() {
         std::env::var_os("OUT_DIR").unwrap_or_else(|| panic!("OUT_DIR is set by cargo")),
     );
     for &(name, path, weight) in FONTS {
-        if lean && name == "literata-bold-italic" {
+        if lean && LEAN_LEAVES_OUT.contains(&name) {
             continue;
         }
         let data = std::fs::read(path).unwrap_or_else(|e| panic!("{path}: {e}"));

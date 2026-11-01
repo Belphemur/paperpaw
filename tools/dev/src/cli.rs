@@ -295,7 +295,11 @@ pub fn run(args: impl Iterator<Item = String>, add: Option<AddPlugins>) -> Resul
 /// Whether `command` has something to look at.
 fn applies(command: &str, context: &Context) -> bool {
     match command {
-        "package" => !context.target.data.is_empty() || !context.target.ppn.is_empty(),
+        "package" => {
+            !context.target.data.is_empty()
+                || !context.target.ppn.is_empty()
+                || !context.target.sources.is_empty()
+        }
         "flows" => !context.flows.is_empty(),
         "snapshots" => context.snapshots.is_some(),
         _ => context.target.runs(),

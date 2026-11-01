@@ -454,11 +454,17 @@ impl Book {
     /// out in (a frame chosen, a layer's room); asked only where there
     /// are layers or frames.
     pub(super) fn retyped(&self, env: &Env<'_>) -> bool {
-        !env.page_layers().is_idle()
-            && self.font(env).is_some_and(|font| {
-                let whole = self.document.whole_pages();
-                typography(env, &font, &self.language, whole).key != self.typography.key
-            })
+        !env.page_layers().is_idle() && self.type_changed(env)
+    }
+
+    /// Whether the page's type is another now than the pages were laid
+    /// out in, whatever the reason (also a face that came or went with a
+    /// font plugin: the store fetches Literata's bold in the background).
+    pub(super) fn type_changed(&self, env: &Env<'_>) -> bool {
+        self.font(env).is_some_and(|font| {
+            let whole = self.document.whole_pages();
+            typography(env, &font, &self.language, whole).key != self.typography.key
+        })
     }
 
     /// Decodes the pictures of the page shown that are not yet: books

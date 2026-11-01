@@ -30,7 +30,7 @@ use paperpaw_sdk::document::ImageRef;
 use paperpaw_sdk::status::Place;
 use paperpaw_sdk::ui::{self, Thumbnail, UiStyle};
 use paperpaw_sdk::widgets::{
-    self, Align, Drawn, Frame, TextSize, Widget, WidgetSpec, WidgetTarget, grid, line_height,
+    self, Align, Drawn, FixedWidget, Frame, TextSize, Widget, WidgetTarget, grid, line_height,
 };
 use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Env, FontHandle, Id, Params, Rect, RegisterError, Registrar,
@@ -184,8 +184,8 @@ static SETTINGS: [SettingSpec; 21] = {
 
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     use widgets::categories;
-    r.add_widget(
-        WidgetSpec::drawn(
+    static WIDGETS: [FixedWidget; 5] = [
+        FixedWidget::drawn(
             Id::new_static(STATUS),
             "home.widget.status",
             Drawn::new(status_widget_height, draw_status_widget)
@@ -193,35 +193,28 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
                 .targets(status_widget_targets),
         )
         .category(categories::DEVICE),
-    )?;
-    r.add_widget(
-        WidgetSpec::drawn(
+        FixedWidget::drawn(
             Id::new_static(DATE),
             "home.widget.date",
             Drawn::new(date_height, draw_date).shows(date_text),
         )
         .category(categories::TIME),
-    )?;
-    r.add_widget(
-        WidgetSpec::new(Id::new_static(CONTINUE), "home.widget.continue", |_| {
+        FixedWidget::new(Id::new_static(CONTINUE), "home.widget.continue", |_| {
             Box::new(Card::default())
         })
         .category(categories::BOOKS),
-    )?;
-    r.add_widget(
-        WidgetSpec::new(Id::new_static(RECENT), "home.widget.recent", |_| {
+        FixedWidget::new(Id::new_static(RECENT), "home.widget.recent", |_| {
             Box::new(Shelf::default())
         })
         .category(categories::BOOKS),
-    )?;
-    r.add_widget(
-        WidgetSpec::drawn(
+        FixedWidget::drawn(
             Id::new_static(CLOCK),
             "home.widget.clock",
             Drawn::new(clock_height, draw_clock).shows(clock_shows),
         )
         .category(categories::TIME),
-    )?;
+    ];
+    r.add_widgets(&WIDGETS)?;
 
     // The status line's parts: the time on the left; Wi-Fi and the
     // battery on the right.

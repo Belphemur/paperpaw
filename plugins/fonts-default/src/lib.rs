@@ -107,12 +107,17 @@ mod packs {
         use super::*;
         static FACES: super::Faces = &[
             (LITERATA, fonts::READING, pack!("literata"), 400.0),
+            // The lean build (the firmware) leaves out the styles: the data
+            // plugin `literata-styles` brings bold and italic from the card,
+            // and until it is there regular text stands in for them.
+            #[cfg(not(paperpaw_lean_fonts))]
             (
                 LITERATA_BOLD,
                 fonts::READING_BOLD,
                 pack!("literata-bold"),
                 700.0,
             ),
+            #[cfg(not(paperpaw_lean_fonts))]
             (
                 LITERATA_ITALIC,
                 fonts::READING_ITALIC,

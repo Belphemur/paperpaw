@@ -121,6 +121,9 @@ pub struct Battery {
     /// Its voltage, where the device measures it: finer than the percent,
     /// for measuring what uses the battery.
     pub millivolts: Option<u16>,
+    /// The system's battery saver is on (Android's): Automatic wears
+    /// Saving while it is.
+    pub saver: bool,
 }
 
 impl Battery {
@@ -130,7 +133,14 @@ impl Battery {
             percent,
             charging,
             millivolts,
+            saver: false,
         }
+    }
+
+    #[must_use]
+    pub const fn with_saver(mut self, saver: bool) -> Self {
+        self.saver = saver;
+        self
     }
 
     #[must_use]

@@ -613,7 +613,8 @@ impl<'a> ReadingFaces<'a> {
         };
         let font = font.unwrap_or(self.fonts[(style.bits() & 3) as usize]);
         let font = if self.kerning { font } else { font.unkerned() };
-        if self.ligatures {
+        // No ligatures in spaced letters: they are drawn one by one.
+        if self.ligatures && style.letter_spacing() == 0 {
             font.ligatures()
         } else {
             font
@@ -653,9 +654,25 @@ impl<'a> ReadingFaces<'a> {
         }
     }
 
-    /// The letter spacing of `text`: after each of its characters.
-    fn letters(&self, text: &str) -> f32 {
-        match self.letter_spacing {
+    /// The space after each letter in `face`: the reader's letter
+    /// spacing and the book's for the run ([`TextStyle::letter_spacing`],
+    /// in steps of its size).
+    ///
+    /// [`TextStyle::letter_spacing`]: paperpaw_document::TextStyle::letter_spacing
+    fn spacing(&self, face: Face) -> f32 {
+        match face.style.letter_spacing() {
+            0 => self.letter_spacing,
+            steps => {
+                let step = self.size(face) / f32::from(paperpaw_document::LETTER_SPACING_STEPS);
+                self.letter_spacing + f32::from(steps) * step
+            }
+        }
+    }
+
+    /// The letter spacing of `text` in `face`: after each of its
+    /// characters.
+    fn letters(&self, face: Face, text: &str) -> f32 {
+        match self.spacing(face) {
             0.0 => 0.0,
             spacing => spacing * text.chars().count() as f32,
         }
@@ -665,7 +682,7 @@ impl<'a> ReadingFaces<'a> {
     pub fn measure(&self, face: Face, text: &str) -> f32 {
         let text = &*visible(text);
         let (font, size) = (self.font(face), self.size(face));
-        let letters = self.letters(text);
+        let letters = self.letters(face, text);
         if !face.style.small_caps() {
             return font.measure(size, text) + letters;
         }
@@ -678,8 +695,9 @@ impl<'a> ReadingFaces<'a> {
             + letters
     }
 
-    /// The lines under and through text in `face` from `x`, `width` wide,
-    /// on the line's `baseline`, in `ink`.
+    /// The lines under, over and through text in `face` from `x`, `width`
+    /// wide, on the line's `baseline`, in `ink`, drawn as its line style
+    /// says (one, two, dotted or wavy).
     pub fn decorate(
         &self,
         canvas: &mut Canvas<'_>,
@@ -688,21 +706,26 @@ impl<'a> ReadingFaces<'a> {
         baseline: i32,
         ink: Color,
     ) {
-        let (under, through) = (face.style.underline(), face.style.strike());
-        if !(under || through) || width <= 0.0 {
+        let style = face.style;
+        let (under, over, through) = (style.underline(), style.overline(), style.strike());
+        if !(under || over || through) || width <= 0.0 {
             return;
         }
         let size = self.line_size(face);
         let thick = ((size / 16.0) as u32).max(1);
         let (left, right) = ((x + 0.5) as i32, (x + width + 0.5) as i32);
         let length = (right - left).max(0) as u32;
+        let line = style.line_style();
+        let mut draw = |y: i32| decoration(canvas, line, (left, length), y, thick, ink);
         if under {
-            let y = baseline + ((size / 10.0) as i32).max(1);
-            canvas.fill_rect(left, y, length, thick, ink);
+            draw(baseline + ((size / 10.0) as i32).max(1));
+        }
+        if over {
+            // Above the capitals, below the line's top.
+            draw(baseline - (size * 0.78) as i32);
         }
         if through {
-            let y = baseline - (size * 0.28) as i32;
-            canvas.fill_rect(left, y, length, thick, ink);
+            draw(baseline - (size * 0.28) as i32);
         }
     }
 
@@ -740,10 +763,11 @@ impl<'a> ReadingFaces<'a> {
         let (extra, tone) = self.inking(canvas, size);
         let font = self.font(face);
         let baseline = baseline + self.shift(face);
+        let spacing = self.spacing(face);
         // Letter by letter where letters are spaced, each pair kerned as
         // measuring kerns it; at once otherwise.
         let draw = |canvas: &mut Canvas<'_>, size: f32, x: f32, text: &str| -> f32 {
-            if self.letter_spacing == 0.0 {
+            if spacing == 0.0 {
                 return font.draw_toned(canvas, size, x, baseline, text, ink, extra, tone);
             }
             let mut width = 0.0;
@@ -757,7 +781,7 @@ impl<'a> ReadingFaces<'a> {
                 let letter = c.encode_utf8(&mut buf);
                 width +=
                     font.draw_toned(canvas, size, x + width, baseline, letter, ink, extra, tone);
-                width += self.letter_spacing;
+                width += spacing;
             }
             width
         };
@@ -857,6 +881,43 @@ fn shaped(text: &str, around: &crate::text::Around) -> bool {
         || text.chars().any(|c| matches!(c, '\u{0590}'..='\u{08FF}'))
 }
 
+/// One line under, over or through text, `thick` pixels thick, its top
+/// at `y`, from `left` and `length` long, drawn as `line`: a second line
+/// as far below the first as it is thick (double), dots as long as the
+/// line is thick with gaps as wide (dotted), or going up and down by its
+/// thickness every two of them (wavy).
+fn decoration(
+    canvas: &mut Canvas<'_>,
+    line: paperpaw_document::LineStyle,
+    (left, length): (i32, u32),
+    y: i32,
+    thick: u32,
+    ink: Color,
+) {
+    use paperpaw_document::LineStyle;
+    match line {
+        LineStyle::Solid => canvas.fill_rect(left, y, length, thick, ink),
+        LineStyle::Double => {
+            canvas.fill_rect(left, y, length, thick, ink);
+            canvas.fill_rect(left, y + 2 * thick as i32, length, thick, ink);
+        }
+        LineStyle::Dotted | LineStyle::Wavy => {
+            let step = thick.max(1) as usize * 2;
+            for (i, at) in (0..length).step_by(step).enumerate() {
+                let piece = match line {
+                    LineStyle::Dotted => thick.min(length - at),
+                    _ => (step as u32).min(length - at),
+                };
+                let up = match line {
+                    LineStyle::Wavy if i % 2 == 1 => thick as i32,
+                    _ => 0,
+                };
+                canvas.fill_rect(left + at as i32, y - up, piece, thick, ink);
+            }
+        }
+    }
+}
+
 impl Typesetter for ReadingFaces<'_> {
     fn advance(&self, face: Face, c: char) -> f32 {
         if c == ' ' {
@@ -875,14 +936,14 @@ impl Typesetter for ReadingFaces<'_> {
                 upper += font.advance(small, u);
                 before = Some(u);
             }
-            return upper + self.letter_spacing;
+            return upper + self.spacing(face);
         }
         let advance = self.font(face).advance(self.size(face), c);
         // Most books space no letters: no float to add for each one. An
         // advance is never -0.0, the one value adding 0.0 changes.
-        match self.letter_spacing.to_bits() {
-            0 => advance,
-            _ => advance + self.letter_spacing,
+        match self.spacing(face) {
+            spacing if spacing.to_bits() == 0 => advance,
+            spacing => advance + spacing,
         }
     }
 

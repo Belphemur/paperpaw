@@ -441,12 +441,19 @@ impl Screen for ReaderScreen {
         }
     }
 
-    /// A book whose pages go right to left: taps and swipes the other way.
-    fn mirrored(&self) -> bool {
-        self.book.as_ref().is_ok_and(|book| {
-            book.document.metadata().direction
-                == paperpaw_sdk::document::PageProgression::RightToLeft
-        })
+    /// The book's own way: taps and swipes the other way where its pages
+    /// go right to left, as they are where they go left to right (also in
+    /// a right-to-left interface). Without a book, as the interface goes.
+    fn direction(&self) -> paperpaw_sdk::lang::Direction {
+        use paperpaw_sdk::document::PageProgression;
+        use paperpaw_sdk::lang::Direction;
+        match &self.book {
+            Ok(book) if book.document.metadata().direction == PageProgression::RightToLeft => {
+                Direction::Rtl
+            }
+            Ok(_) => Direction::Ltr,
+            Err(_) => Direction::Auto,
+        }
     }
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
@@ -1172,6 +1179,20 @@ impl ReaderScreen {
         let Ok(book) = &mut self.book else {
             return;
         };
+        // A plugin came or went while the book is open (Literata's bold
+        // and italic from the store): laid out again with the faces there
+        // are now, else a word in a new face stands in room measured for
+        // the old one.
+        if *event == events::PLUGINS_CHANGED {
+            let env = *cx.env();
+            if book.type_changed(&env) {
+                self.selection = None;
+                book.relayout(&env);
+                cx.request_redraw();
+                cx.wake_at(env.now());
+            }
+            return;
+        }
         // The book's fonts are loaded with it.
         let reopen = id == crate::settings::PUBLISHER_STYLES.as_str()
             || id == paperpaw_sdk::builtin::settings::READING_FONT.as_str();

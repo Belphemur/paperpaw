@@ -48,6 +48,8 @@ libloading = "0.9"
 [dev-dependencies]
 # The memory tests build a book with ZipBuilder.
 paperpaw-zip = { workspace = true, features = ["testing"] }
+# And a language of an Arabic interface's size, compiled (ADR 0033).
+paperpaw-i18n.workspace = true
 
 [build-dependencies]
 # The compiler that builds the emulator, as plugin files name theirs.

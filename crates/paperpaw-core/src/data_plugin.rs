@@ -6,6 +6,7 @@
 //! plugins/large-print/
 //!   plugin.ini     [plugin] id, name, description, version, formats
 //!   i18n/*.ini     translation catalogs (also whole new languages)
+//!   i18n/*.ppcat   the same compiled, read as needed (formats 4, ADR 0033)
 //!   keymap.ini     key bindings
 //!   settings.ini   new defaults for any plugin's settings ([core] font-size = 14)
 //!   fonts/*.ttf    fonts to read with (also .otf, .ttc), by family
@@ -81,6 +82,8 @@ const MAX_TRANSLATIONS: usize = 512 * 1024;
 const MAX_FORMAT3_DATA: usize = 24 * 1024;
 /// The version of the formats that brought those files.
 const FORMATS_3: u32 = 3;
+/// The version that brought compiled catalogs (`i18n/*.ppcat`).
+const FORMATS_4: u32 = 4;
 /// The files read as the plugin registers, and whether each is of
 /// formats 3.
 const LATER: [(&str, bool); 7] = [
@@ -110,6 +113,8 @@ pub(crate) struct DataPlugin {
     folder: String,
     /// Taken by `register`, which runs once.
     translations: RefCell<Vec<String>>,
+    /// Compiled catalogs (`i18n/*.ppcat`): their paths, read as needed.
+    catalog_files: RefCell<Vec<String>>,
     keymap: RefCell<Option<String>>,
     styles: RefCell<Option<String>>,
     /// Where the files read as it registers are.
@@ -128,6 +133,9 @@ pub(crate) struct DataPlugin {
     /// A family's faces: their key in `[family]` and file, the family.
     faces: RefCell<Vec<(&'static str, String)>>,
     family: Option<String>,
+    /// Packs loose in a font folder, faces of families their file names
+    /// give (see [`pack_face`]): family, key in [`FACES`], path.
+    loose_faces: RefCell<Vec<(String, &'static str, String)>>,
     /// Its folder holds native code (see `code_plugin`).
     code: bool,
 }
@@ -189,6 +197,9 @@ impl Plugin for DataPlugin {
         for source in self.translations.take() {
             r.add_translations(Cow::Owned(source))?;
         }
+        for path in self.catalog_files.take() {
+            r.add_translation_file(path)?;
+        }
         if let Some(css) = self.styles.take() {
             r.add_stylesheet(Cow::Owned(css))?;
         }
@@ -235,6 +246,24 @@ impl Plugin for DataPlugin {
                 })?;
                 r.add_font_face(FontFace::new(id, path, family.clone(), bold, italic))?;
             }
+        }
+        for (family, key, path) in self.loose_faces.take() {
+            let (bold, italic) = FACES
+                .iter()
+                .find(|(k, ..)| *k == key)
+                .map_or((false, false), |&(_, b, i)| (b, i));
+            let mut name = format!("{}-{key}", slug(&family));
+            // The same family and face twice (two folders).
+            while used.contains(&name) {
+                name.push_str("-2");
+            }
+            used.push(name.clone());
+            let id = Id::parse(&format!("{}.{name}", self.manifest.id)).map_err(|_| {
+                RegisterError::Invalid {
+                    message: Cow::Owned(format!("{path}: unusable file name")),
+                }
+            })?;
+            r.add_font_face(FontFace::new(id, path, family, bold, italic))?;
         }
         if let Some(source) = self.read_later("settings.ini") {
             for entry in paperpaw_config::parse(&source) {
@@ -632,13 +661,39 @@ fn load(shared: &Rc<dyn Storage>, path: &str, folder: &str) -> Result<DataPlugin
     let mut translations = Vec::new();
     let catalogs = format!("{path}/i18n");
     let mut files: Vec<String> = Vec::new();
+    let mut compiled: Vec<String> = Vec::new();
     let _ = storage.list(&catalogs, &mut |entry| {
         // `DE.INI` too: a file copied from a memory card may have it so.
         if !entry.is_dir && paperpaw_sdk::files::has_extension(entry.name, "ini") {
             files.push(entry.name.to_string());
         }
+        // Read as needed, so not counted (ADR 0033).
+        if !entry.is_dir && paperpaw_sdk::files::has_extension(entry.name, "ppcat") {
+            compiled.push(format!("{catalogs}/{}", entry.name));
+        }
     });
     files.sort_unstable();
+    compiled.sort_unstable();
+    if budget.formats < FORMATS_4 {
+        if !compiled.is_empty() {
+            budget.problems.push(format!(
+                "{catalogs}: compiled catalogs left out, plugin.ini does not say formats = {FORMATS_4}"
+            ));
+        }
+        compiled.clear();
+    }
+    // A language compiled is read from it: its text beside it is for an
+    // older PaperPaw.
+    let stem = |name: &str| {
+        name.rsplit_once('.')
+            .map_or(name, |(stem, _)| stem)
+            .to_ascii_lowercase()
+    };
+    files.retain(|file| {
+        !compiled
+            .iter()
+            .any(|path| stem(path.rsplit('/').next().unwrap_or(path)) == stem(file))
+    });
     let mut translations_left = MAX_TRANSLATIONS;
     for file in files {
         let path = format!("{catalogs}/{file}");
@@ -667,13 +722,14 @@ fn load(shared: &Rc<dyn Storage>, path: &str, folder: &str) -> Result<DataPlugin
     later.extend(point_files(storage, path, &mut budget));
     let roles = fonts_for_roles(&source, path, &mut budget);
     let (family, faces) = family(&source, path);
-    let mut fonts = font_files(storage, &format!("{path}/fonts"));
+    let mut fonts = font_files(storage, &format!("{path}/fonts"), false);
     // A family's faces are not fonts of their own as well.
     fonts.retain(|file| !faces.iter().any(|(_, face)| face == file));
     Ok(DataPlugin {
         manifest,
         folder: path.to_string(),
         translations: RefCell::new(translations),
+        catalog_files: RefCell::new(compiled),
         keymap: RefCell::new(keymap),
         styles: RefCell::new(styles),
         storage: Some(shared.clone()),
@@ -684,6 +740,7 @@ fn load(shared: &Rc<dyn Storage>, path: &str, folder: &str) -> Result<DataPlugin
         extensions: RefCell::new(extensions(&source, path)),
         faces: RefCell::new(faces),
         family,
+        loose_faces: RefCell::new(Vec::new()),
         code: paperpaw_sdk::native::CODE_FILES
             .iter()
             .any(|file| storage.size(&format!("{path}/{file}")).is_ok()),
@@ -691,13 +748,14 @@ fn load(shared: &Rc<dyn Storage>, path: &str, folder: &str) -> Result<DataPlugin
 }
 
 /// The font files in `dir` and its folders (one level, e.g. a folder per
-/// family), by name.
-fn font_files(storage: &dyn Storage, dir: &str) -> Vec<String> {
+/// family), by name: OpenType/TrueType files, and font packs if `packs`
+/// (a plugin's packs are named in its `plugin.ini` instead).
+fn font_files(storage: &dyn Storage, dir: &str, packs: bool) -> Vec<String> {
     let mut files: Vec<String> = Vec::new();
     let mut folders: Vec<String> = Vec::new();
-    list_fonts(storage, dir, &mut files, Some(&mut folders));
+    list_fonts(storage, dir, packs, &mut files, Some(&mut folders));
     for folder in &folders {
-        list_fonts(storage, folder, &mut files, None);
+        list_fonts(storage, folder, packs, &mut files, None);
     }
     files.sort_unstable();
     files
@@ -707,6 +765,7 @@ fn font_files(storage: &dyn Storage, dir: &str) -> Vec<String> {
 fn list_fonts(
     storage: &dyn Storage,
     dir: &str,
+    packs: bool,
     files: &mut Vec<String>,
     mut folders: Option<&mut Vec<String>>,
 ) {
@@ -718,9 +777,12 @@ fn list_fonts(
             {
                 folders.push(path);
             }
+        } else if entry.name.starts_with('.') {
+            // Hidden: another system's notes on a file (`._Literata.ttf`).
         } else if ["ttf", "otf", "ttc"]
             .iter()
             .any(|ext| paperpaw_sdk::files::has_extension(entry.name, ext))
+            || (packs && paperpaw_sdk::files::has_extension(entry.name, "ppfp"))
         {
             files.push(path);
         }
@@ -728,11 +790,30 @@ fn list_fonts(
 }
 
 /// The fonts of `dirs` as one plugin, `font-folder`; `None` without any.
+/// OpenType/TrueType files (where scalable fonts are drawn) give their
+/// family and style themselves; font packs (`.ppfp`, no `plugin.ini`
+/// needed) are faces of the family their file name says ([`pack_face`]).
 pub(crate) fn font_folder(storage: &dyn Storage, dirs: &[String]) -> Option<DataPlugin> {
-    let fonts: Vec<String> = dirs.iter().flat_map(|d| font_files(storage, d)).collect();
-    if fonts.is_empty() {
+    let (packs, fonts): (Vec<String>, Vec<String>) = dirs
+        .iter()
+        .flat_map(|d| font_files(storage, d, true))
+        .partition(|path| paperpaw_sdk::files::has_extension(path, "ppfp"));
+    // Without scalable fonts, OpenType/TrueType files are of no use.
+    let fonts = match cfg!(feature = "outline") {
+        true => fonts,
+        false => Vec::new(),
+    };
+    if fonts.is_empty() && packs.is_empty() {
         return None;
     }
+    let loose = packs
+        .into_iter()
+        .map(|path| {
+            let file = path.rsplit('/').next().unwrap_or(&path);
+            let (family, key) = pack_face(file);
+            (family, key, path)
+        })
+        .collect();
     Some(DataPlugin {
         manifest: Manifest::new(
             Id::new_static("font-folder"),
@@ -744,6 +825,7 @@ pub(crate) fn font_folder(storage: &dyn Storage, dirs: &[String]) -> Option<Data
         // Folders the shell names; not removed by PaperPaw.
         folder: String::new(),
         translations: RefCell::new(Vec::new()),
+        catalog_files: RefCell::new(Vec::new()),
         keymap: RefCell::new(None),
         styles: RefCell::new(None),
         storage: None,
@@ -754,8 +836,56 @@ pub(crate) fn font_folder(storage: &dyn Storage, dirs: &[String]) -> Option<Data
         extensions: RefCell::new(Vec::new()),
         faces: RefCell::new(Vec::new()),
         family: None,
+        loose_faces: RefCell::new(loose),
         code: false,
     })
+}
+
+/// The family and face (a key of [`FACES`]) a font pack's file name
+/// gives: the style after the last `-`, `_` or space (`Regular`, `Bold`,
+/// `Italic` or `Oblique`, `BoldItalic`, `Bold-Italic` and the like, in
+/// any case), the family before it, e.g. `Literata-BoldItalic.ppfp` the
+/// bold italic face of Literata; a name without a style is the regular
+/// face of a family of that name.
+fn pack_face(file: &str) -> (String, &'static str) {
+    const STYLES: [(&str, &str); 6] = [
+        ("bolditalic", "bold-italic"),
+        ("boldoblique", "bold-italic"),
+        ("italic", "italic"),
+        ("oblique", "italic"),
+        ("bold", "bold"),
+        ("regular", "regular"),
+    ];
+    let stem = file.rsplit_once('.').map_or(file, |(stem, _)| stem).trim();
+    let squeezed: String = stem
+        .chars()
+        .filter(|c| !matches!(c, '-' | '_' | ' '))
+        .flat_map(char::to_lowercase)
+        .collect();
+    for (style, key) in STYLES {
+        if !squeezed.ends_with(style) {
+            continue;
+        }
+        // Where the style starts in the name, separators and all: as
+        // many letters from the end as it has.
+        let mut letters = style.len();
+        let mut start = stem.len();
+        for (at, c) in stem.char_indices().rev() {
+            if letters == 0 {
+                break;
+            }
+            if !matches!(c, '-' | '_' | ' ') {
+                letters -= c.len_utf8().min(letters);
+            }
+            start = at;
+        }
+        let family = stem[..start].trim_end_matches(['-', '_', ' ']);
+        // A style needs a family before it, apart from it.
+        if !family.is_empty() && stem[family.len()..].starts_with(['-', '_', ' ']) {
+            return (String::from(family), key);
+        }
+    }
+    (String::from(stem), "regular")
 }
 
 /// The packs `[extends]` in a `plugin.ini` names: their paths under the
@@ -831,7 +961,7 @@ fn read(storage: &dyn Storage, path: &str, max: usize) -> Option<String> {
 /// formats to 1.
 fn parse_manifest(source: &str, folder: &str) -> Result<(Manifest, u32), String> {
     let (mut id, mut name, mut description, mut version) = (None, None, None, None);
-    let mut formats = None;
+    let (mut formats, mut requires) = (None, None);
     for entry in paperpaw_config::parse(source) {
         let entry = entry.map_err(|e| e.to_string())?;
         if entry.section != "plugin" {
@@ -844,6 +974,7 @@ fn parse_manifest(source: &str, folder: &str) -> Result<(Manifest, u32), String>
             "description" => description = Some(value),
             "version" => version = Some(value),
             "formats" => formats = Some(value),
+            "requires" => requires = Some(value),
             _ => {}
         }
     }
@@ -870,6 +1001,14 @@ fn parse_manifest(source: &str, folder: &str) -> Result<(Manifest, u32), String>
         }
         None => Version::new(0, 1, 0),
     };
+    // Plugins it needs (the store fetches them): named as said, in
+    // formats 4 and later.
+    if let Some(text) = requires {
+        if made_for < 4 {
+            return Err(String::from("`requires` needs formats 4"));
+        }
+        paperpaw_sdk::requires::parse(&text, id.as_str())?;
+    }
     let name = name.unwrap_or_else(|| id.as_str().to_string());
     let manifest = Manifest::new(id, name, version)
         .description(description.unwrap_or_default())
@@ -975,6 +1114,95 @@ version = 1.0.0-gamma
     }
 
     #[test]
+    fn a_packs_file_name_gives_its_family_and_face() {
+        let of = |family: &str, key| (String::from(family), key);
+        assert_eq!(
+            pack_face("Literata-BoldItalic.ppfp"),
+            of("Literata", "bold-italic")
+        );
+        assert_eq!(
+            pack_face("Literata-Bold-Italic.ppfp"),
+            of("Literata", "bold-italic")
+        );
+        assert_eq!(
+            pack_face("Noto Serif Bold Italic.ppfp"),
+            of("Noto Serif", "bold-italic")
+        );
+        assert_eq!(
+            pack_face("noto_serif_italic.PPFP"),
+            of("noto_serif", "italic")
+        );
+        assert_eq!(pack_face("Fredoka-Oblique.ppfp"), of("Fredoka", "italic"));
+        assert_eq!(
+            pack_face("Fredoka-BoldOblique.ppfp"),
+            of("Fredoka", "bold-italic")
+        );
+        assert_eq!(pack_face("Fredoka-Bold.ppfp"), of("Fredoka", "bold"));
+        assert_eq!(pack_face("Fredoka-Regular.ppfp"), of("Fredoka", "regular"));
+        // No style: the regular face; a style alone or run into the
+        // name is no style.
+        assert_eq!(pack_face("Bookerly.ppfp"), of("Bookerly", "regular"));
+        assert_eq!(pack_face("Bold.ppfp"), of("Bold", "regular"));
+        assert_eq!(pack_face("Seabold.ppfp"), of("Seabold", "regular"));
+        assert_eq!(pack_face("Ä-Bold.ppfp"), of("Ä", "bold"));
+        assert_eq!(pack_face("ÄİBold.ppfp"), of("ÄİBold", "regular"));
+    }
+
+    #[test]
+    fn packs_loose_in_a_font_folder_are_faces_of_their_families() {
+        let storage = shared(
+            MemoryStorage::new()
+                .with("fonts/Literata-Regular.ppfp", "x")
+                .with("fonts/Literata-Bold.ppfp", "x")
+                .with("fonts/greek/Literata-Italic.ppfp", "x")
+                .with("fonts/Bookerly.ppfp", "x")
+                .with("other/Bookerly.ppfp", "x")
+                .with("fonts/notes.txt", "")
+                .with("fonts/._Literata-Bold.ppfp", "x"),
+        );
+        let dirs = [String::from("fonts"), String::from("other")];
+        let folder = font_folder(storage.as_ref(), &dirs).unwrap();
+        assert!(folder.fonts.borrow().is_empty());
+        let mut r = Registrar::new(Id::new_static("font-folder"));
+        folder.register(&mut r).unwrap();
+        let faces: Vec<(String, String, bool, bool)> = r
+            .contributions()
+            .iter()
+            .filter_map(|c| match c {
+                paperpaw_sdk::Contribution::FontFace(face) => Some((
+                    face.id.to_string(),
+                    String::from(face.family.as_ref()),
+                    face.bold,
+                    face.italic,
+                )),
+                _ => None,
+            })
+            .collect();
+        let face = |id: &str, family: &str, bold, italic| {
+            (String::from(id), String::from(family), bold, italic)
+        };
+        assert_eq!(
+            faces,
+            [
+                face("font-folder.bookerly-regular", "Bookerly", false, false),
+                face("font-folder.literata-bold", "Literata", true, false),
+                face("font-folder.literata-regular", "Literata", false, false),
+                face("font-folder.literata-italic", "Literata", false, true),
+                // The same name in another folder: kept apart.
+                face("font-folder.bookerly-regular-2", "Bookerly", false, false),
+            ]
+        );
+        // A plugin's own packs are named in its plugin.ini: not fonts.
+        let plugin = shared(
+            MemoryStorage::new()
+                .with("plugins/greek/plugin.ini", "[plugin]\n")
+                .with("plugins/greek/fonts/literata.ppfp", "x"),
+        );
+        let found = discover(&plugin, "plugins", &mut |_| {});
+        assert!(found[0].fonts.borrow().is_empty());
+    }
+
+    #[test]
     fn finds_fonts_in_plugins_and_font_folders() {
         let storage = MemoryStorage::new()
             .with(
@@ -994,11 +1222,15 @@ version = 1.0.0-gamma
             ["plugins/serif/fonts/Book Antiqua-Bold.TTF"]
         );
         let dirs = [String::from("fonts"), String::from("more-fonts")];
-        let folder = font_folder(storage.as_ref(), &dirs).unwrap();
-        assert_eq!(
-            *folder.fonts.borrow(),
-            ["fonts/a.otf", "more-fonts/b.ttc", "more-fonts/family/c.ttf"]
-        );
+        // Scalable fonts only where they are drawn.
+        let folder = font_folder(storage.as_ref(), &dirs);
+        match cfg!(feature = "outline") {
+            true => assert_eq!(
+                *folder.unwrap().fonts.borrow(),
+                ["fonts/a.otf", "more-fonts/b.ttc", "more-fonts/family/c.ttf"]
+            ),
+            false => assert!(folder.is_none()),
+        }
         assert!(font_folder(storage.as_ref(), &[String::from("nothing")]).is_none());
         assert_eq!(slug("Book Antiqua-Bold.TTF"), "book-antiqua-bold");
         // Packs that extend other fonts, named in plugin.ini.
@@ -1132,9 +1364,25 @@ kind = Not An Id
         assert!(parse_manifest(&ini("formats = 2\n"), "large").is_ok());
         assert_eq!(parse_manifest(&ini(""), "large").unwrap().1, 1);
         assert!(parse_manifest(&ini("formats = 3\n"), "large").is_ok());
-        let later = parse_manifest(&ini("formats = 4\n"), "large").unwrap_err();
+        assert!(parse_manifest(&ini("formats = 4\n"), "large").is_ok());
+        let later = parse_manifest(&ini("formats = 5\n"), "large").unwrap_err();
         assert!(later.contains("later PaperPaw"), "{later}");
         assert!(parse_manifest(&ini("formats = new\n"), "large").is_err());
+    }
+
+    /// `requires` names plugins as said, in formats 4 and later; else the
+    /// plugin is not loaded, with why.
+    #[test]
+    fn requirements_are_checked_with_the_manifest() {
+        let ini = |rest: &str| format!("[plugin]\nname = Cosy\n{rest}");
+        assert!(
+            parse_manifest(&ini("formats = 4\nrequires = stats 1.0.0, news\n"), "cosy").is_ok()
+        );
+        let old = parse_manifest(&ini("formats = 3\nrequires = stats\n"), "cosy").unwrap_err();
+        assert!(old.contains("formats 4"), "{old}");
+        let own = parse_manifest(&ini("formats = 4\nrequires = cosy\n"), "cosy").unwrap_err();
+        assert!(own.contains("itself"), "{own}");
+        assert!(parse_manifest(&ini("formats = 4\nrequires = Not Ok\n"), "cosy").is_err());
     }
 
     /// Fonts bound to roles in `[fonts]` of `plugin.ini`.

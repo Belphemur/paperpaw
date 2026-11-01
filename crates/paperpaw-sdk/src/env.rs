@@ -61,6 +61,9 @@ pub struct Capabilities {
     /// where the system decides (Android) or that never switches off (the
     /// emulator).
     pub power_off: bool,
+    /// What the shell changes by the power level (ADR 0025): the power
+    /// settings show only what applies here.
+    pub power: crate::power::PowerControls,
     /// More of what the device can do, by [`Capability`] (new ones come as
     /// constants, without a new plugin interface).
     pub(crate) more: u64,
@@ -106,6 +109,20 @@ impl Capability {
     /// ([`Painters::extras`](crate::ui::look::Painters::extras)); where it
     /// is missing none is asked.
     pub const LOOK_EXTRAS: Self = Self(1 << 10);
+    /// The card can be shown to a computer as a USB drive
+    /// ([`Command::UsbDrive`](crate::Command::UsbDrive)), e.g. the X4 Pro.
+    pub const USB_DRIVE: Self = Self(1 << 11);
+    /// Buttons pressed together are told apart, so key maps may bind
+    /// chords (`chord.<button>_<button>`). Reserved: no shell says so yet,
+    /// and the kernel reads such bindings but raises none.
+    pub const CHORDS: Self = Self(1 << 12);
+    /// Bluetooth page turners and keyboards connect as buttons (their keys
+    /// `hid.<name>` in key maps). Reserved: no shell says so yet.
+    pub const PAGE_TURNER: Self = Self(1 << 13);
+    /// The device opens a Wi-Fi network of its own to be reached without
+    /// a router (transfer, the phone keyboard). Reserved: no shell says so
+    /// yet.
+    pub const HOTSPOT: Self = Self(1 << 14);
 }
 
 impl Capabilities {

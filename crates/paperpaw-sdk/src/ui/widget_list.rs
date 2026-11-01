@@ -236,7 +236,7 @@ impl Screen for ListScreen {
                 };
                 let rect = if matches!(rows[index], Row::Widget(_)) {
                     Reorder::draw_grip(ui.canvas(), env, &style, rect, focused);
-                    Reorder::content(rect)
+                    Reorder::content(rect, &style)
                 } else {
                     rect
                 };

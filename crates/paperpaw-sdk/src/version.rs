@@ -66,8 +66,9 @@ pub const SDK_VERSION: Version = crate::package_version!();
 /// loaded, rather than read wrongly. 2 adds `marks.ini` (see
 /// [`decorations::MarkRules`](crate::decorations::MarkRules)); 3 adds
 /// `menus.ini`, `actions.ini`, `icons.ini`, `points/`, `setup.ini` and
-/// `[fonts]` in `plugin.ini`.
-pub const DATA_FORMATS: u32 = 3;
+/// `[fonts]` in `plugin.ini`; 4 adds compiled catalogs, `i18n/*.ppcat`
+/// (read as needed, ADR 0033).
+pub const DATA_FORMATS: u32 = 4;
 
 /// `a` is `b`, as bytes (const).
 const fn same(a: &[u8], b: &[u8]) -> bool {

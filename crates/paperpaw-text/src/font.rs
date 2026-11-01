@@ -217,13 +217,16 @@ impl Font {
     }
 
     paperpaw_table::shared! {
+    /// Whether the font draws `ch`: its own glyph, or for a jamo of a
+    /// modern Hangul syllable, the syllables it is set as.
     pub fn has_char(&self, ch: char) -> bool {
-        match self {
+        let has = |ch| match self {
             Font::Bitmap(font) => font.has_char(ch),
             Font::Stored(font) => font.has_char(ch),
             #[cfg(feature = "outline")]
             Font::Outline(font) => font.has_char(ch),
-        }
+        };
+        has(ch) || (crate::hangul::composes(ch) && has(crate::hangul::FIRST_SYLLABLE))
     } @ text::FONT_HAS_CHAR
     }
 

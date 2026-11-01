@@ -214,6 +214,7 @@ impl Test {
             WifiState::Online {
                 ssid: String::from("home"),
                 address: String::from("192.168.1.20"),
+                name: None,
             }
         } else {
             WifiState::On

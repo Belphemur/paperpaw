@@ -93,6 +93,10 @@ pub struct HttpOptions {
     /// 1 MiB on others); at most 1 MiB. Large answers go to a file
     /// ([`HttpRequest::save_to`]).
     pub max_body: Option<usize>,
+    /// The largest file a download ([`HttpRequest::save_to`]) may write,
+    /// in bytes: a longer answer fails ([`HttpError::Refused`](crate::HttpError))
+    /// and the file stays as it was. `None`: 64 MiB, the most any may.
+    pub max_file: Option<u64>,
 }
 
 /// The options of a request that sets none.
@@ -100,6 +104,7 @@ static NO_OPTIONS: HttpOptions = HttpOptions {
     timeout: None,
     want_headers: Vec::new(),
     max_body: None,
+    max_file: None,
 };
 
 impl HttpRequest {
@@ -256,6 +261,14 @@ impl HttpRequest {
     /// Keeping at most this many bytes of the answer's body in memory.
     pub fn max_body(mut self, bytes: usize) -> Self {
         self.options_mut().max_body = Some(bytes);
+        self
+    }
+
+    /// Saving a file of at most this many bytes ([`save_to`](Self::save_to)):
+    /// a longer answer fails and nothing is written, so a download cannot
+    /// fill the card.
+    pub fn max_file(mut self, bytes: u64) -> Self {
+        self.options_mut().max_file = Some(bytes);
         self
     }
 }
@@ -749,6 +762,17 @@ pub enum Command {
     /// follows. A folder that holds another plugin, or none that loads,
     /// is deleted with a warning, and the version before stays.
     InstallPlugin(Id, String),
+    /// Asks for plugins by id, e.g. those a template or a plugin's own
+    /// page names: those not on the device (in any version, switched off
+    /// or not) go to the plugin that installs plugins as
+    /// [`PLUGINS_REQUESTED`](crate::builtin::events::PLUGINS_REQUESTED),
+    /// which asks the reader first; nothing is installed without them.
+    /// What came of it comes back as
+    /// [`PLUGINS_ANSWERED`](crate::builtin::events::PLUGINS_ANSWERED).
+    /// `by` is the plugin that asks, as the reader is told. At most
+    /// [`MAX_REQUESTED_PLUGINS`](crate::MAX_REQUESTED_PLUGINS)
+    /// ids are taken. Made with [`Command::request_plugins`].
+    RequestPlugins { by: Id, plugins: Vec<Id> },
     /// Makes an HTTP request (see [`HttpRequest`]); the answer comes as
     /// the request's reply event. Check [`Capabilities::network`](crate::Capabilities) first.
     /// Made with [`Command::http`].
@@ -830,6 +854,13 @@ pub enum Command {
     /// [`power`](crate::power)): the network for the screen sending it
     /// until it closes; work held back runs on the same connection.
     GoOnline,
+    /// The reader chose *Go online* where the mode is Offline outside a
+    /// screen of the network (a widget's *Update now*, a plugin's own
+    /// offer for what its background work would bring): the network for
+    /// at most this long (at most [`MAX_ONLINE_FOR`](crate::power::MAX_ONLINE_FOR)),
+    /// whatever screen shows; work held back runs as in Saving, then the
+    /// radio goes off once nothing needs it. Only on the reader's input.
+    GoOnlineFor(core::time::Duration),
     /// Wears a power mode: its level for plugins and declared work, its
     /// values over the reader's own (see [`power`](crate::power)). Sent
     /// by the plugin that chooses the mode.
@@ -897,12 +928,31 @@ pub enum Command {
     Speak(alloc::boxed::Box<Speech>),
     /// Stops speaking; no reply comes for the texts cut off.
     StopSpeaking,
+    /// Plays a sound file (reserved: no shell plays sound yet, see
+    /// [`sound`](crate::sound)). Its reply, a
+    /// [`Played`](crate::replies::Played), comes once it has played, and
+    /// at once, not played, where the device has no sound
+    /// ([`Capability::AUDIO`](crate::Capability::AUDIO)). A sound in its
+    /// place stops. Made with [`Command::play_sound`].
+    PlaySound(alloc::boxed::Box<crate::sound::Sound>),
+    /// Stops the sound playing (reserved, see [`Command::PlaySound`]); no
+    /// reply comes for it.
+    StopSound,
     /// Switches the device off once the frame is shown, where PaperPaw
     /// does so ([`Capabilities::power_off`](crate::Capabilities)): plugins
     /// hear [`events::SUSPEND`](crate::builtin::events::SUSPEND) first, and
     /// the next start is a cold one. Ignored elsewhere; to put the device
     /// to sleep, [`Command::Sleep`].
     PowerOff,
+    /// Shows the card to a computer as a USB drive once the frame is shown,
+    /// where the device can ([`Capability::USB_DRIVE`](crate::Capability)):
+    /// plugins hear [`events::SUSPEND`](crate::builtin::events::SUSPEND)
+    /// first and PaperPaw leaves the card alone while the computer has it;
+    /// when it ejects it or the cable goes, plugins hear
+    /// [`events::USB_DRIVE_ENDED`](crate::builtin::events::USB_DRIVE_ENDED)
+    /// and the library is walked anew. The frame shown should say that the
+    /// device is connected to a computer. Ignored elsewhere.
+    UsbDrive,
 }
 
 impl Command {
@@ -953,6 +1003,14 @@ impl Command {
         Command::Broadcast(alloc::boxed::Box::new(broadcast))
     }
 
+    /// [`Command::RequestPlugins`]: plugin `by` asks for `plugins`.
+    pub fn request_plugins(by: impl Into<Id>, plugins: impl IntoIterator<Item = Id>) -> Self {
+        Command::RequestPlugins {
+            by: by.into(),
+            plugins: plugins.into_iter().collect(),
+        }
+    }
+
     /// [`Command::Http`]: makes `request`.
     pub fn http(request: HttpRequest) -> Self {
         Command::Http(alloc::boxed::Box::new(request))
@@ -966,6 +1024,11 @@ impl Command {
     /// [`Command::Speak`]: speaks `speech`.
     pub fn speak(speech: Speech) -> Self {
         Command::Speak(alloc::boxed::Box::new(speech))
+    }
+
+    /// [`Command::PlaySound`]: plays `sound` (reserved).
+    pub fn play_sound(sound: crate::sound::Sound) -> Self {
+        Command::PlaySound(alloc::boxed::Box::new(sound))
     }
 
     /// [`Command::Work`]: declares `work`.

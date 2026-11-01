@@ -20,6 +20,9 @@ There are two kinds:
   the Xteink X4 and X4 Pro load at their start, without a
   new firmware (see [Plugins as files](#plugins-as-files)).
 
+Where a plugin's files go, what they are called and how big its assets
+should be: [Plugin layout and best practices](plugin-conventions.md).
+
 This guide walks through a code plugin, then lists what plugins can
 contribute. Working with an AI assistant: the skill in
 [`.claude/skills/paperpaw-plugin-development`](../.claude/skills/paperpaw-plugin-development/SKILL.md)
@@ -505,6 +508,11 @@ What it is given:
   `cargo run --example paperpaw-dev -- check --plugin my-plugin`.
 - **A data plugin**: its folder, `paperpaw-dev check path/to/my-theme`.
 - **A code plugin built for a device**: `paperpaw-dev package hello.ppn`.
+- **A code plugin's source**: `paperpaw-dev package path/to/crate` reads its
+  `src/` for the conventions of
+  [Plugin layout and best practices](plugin-conventions.md): files over 4 KB
+  embedded in the code, writes under `plugins/<id>/`, ids outside `<id>.`.
+  Only warnings.
 - **PaperPaw's own plugins**, which the app has already:
   `cargo run -p paperpaw-dev -- check --plugin widgets`.
 
@@ -761,6 +769,25 @@ The documentation of `builtin::slots` says the same for every slot.
   were added; a menu the user redefined in their order, with entries
   contributed since after their neighbour.
 
+### Pressing twice
+
+A button, or a tap zone, can do one thing when pressed once and another
+when pressed twice: bind the second as `double.<button>` (or
+`double-tap.<zone>`) in a key map, in `paperpaw.ini` or on the device
+(*Buttons and gestures*, "Buttons pressed twice"):
+
+```ini
+[keymap.global]
+double.confirm = core.home
+```
+
+How quickly the second press must follow the first is the setting
+*Double tap* (`core.double-tap-ms`, 300 ms; advanced). A button waits for
+a second press only if something is bound to its double press, so the
+buttons that have none respond at once. Where one is bound, the single
+press is answered after that time instead of at once, as the second press
+might still come. Chords (two buttons at once) are not built.
+
 ### Examples
 
 A format: files with these extensions open as a `Document`.
@@ -855,7 +882,7 @@ that their choices go along; a shell opens a book with
 | Where a book was left | `positions::{load, save}`, `Reading::xpointer` with `BOOK_CLOSED` | readers keep it; syncs and lists read it without opening the book |
 | The contents, search, the marks, a footnote, skimming | `slots::TOC`, `SEARCH`, `ANNOTATIONS`, `FOOTNOTE`, `SKIM`, `events::FOLLOW_LINK`, `SKIM`, `SKIMMED` | bind a screen of one's own; readers open the slots, follow the links and go where skimming asks |
 | A book opened as the reader opens it | `reading::open_options`, `reading::conversion` | its places fit the reader's (a search, contents, an XPointer) |
-| Pages that go right to left | `Metadata::direction` (`PageProgression`), `Screen::mirrored` | readers mirror taps and swipes (an EPUB's `page-progression-direction`) |
+| Pages that go right to left | `Metadata::direction` (`PageProgression`), `Screen::direction` | readers mirror taps and swipes (an EPUB's `page-progression-direction`); other screens follow the interface (`Direction::Auto`) |
 | Status lines' settings | `groups::STATUS_LINES` | the group readers put them in |
 | Reading aloud's settings | `group_sections::ALOUD` | the section readers and shells put them in |
 | Key bindings while reading | the layer `[keymap.core.reader]` | the slot's layer, whichever screen fills it |
@@ -1989,6 +2016,7 @@ A data plugin is a folder:
 plugins/large-print/
   plugin.ini     [plugin] id, name, description, version, formats
   i18n/*.ini     translation catalogs (also whole new languages)
+  i18n/*.ppcat   the same compiled (paperpaw-sign catalog), read as needed
   keymap.ini     key bindings
   settings.ini   new defaults for any plugin's settings ([core] font-size = 14)
   fonts/*.ttf    fonts to read with (also .otf, .ttc), by family
@@ -2091,8 +2119,9 @@ in `tools/fonts`. A pack that extends a face with sizes larger than its own,
 and has its letters (at least those of `aenoAEO0` the face has), draws
 text asked that large, and the font size goes as far; a pack of another
 script's letters adds those letters only, in whatever sizes: the X4's firmware has
-Literata up to 32 px, and `tools/literata-packs.py` builds its larger
-sizes (and its bold italic face) as plugins for the font library.
+Literata's regular face up to 32 px, and `tools/literata-packs.py` builds its
+bold and italic faces (`literata-styles`, which the store fetches by itself
+where they are missing), its larger sizes and its bold italic face as plugins.
 Icon packs are such packs for the icon font: `tools/icons/pack.py` builds
 one with the Tabler icons named
 (`[extends] icons.ppfp = fonts-default.icons`).
@@ -2129,17 +2158,25 @@ bold = bold.ppfp
 ```
 
 A plugin may also bring a face of a family that is there without it,
-bound to its role: the X4's firmware has no Literata Bold Italic, which
-such a plugin brings back:
+bound to its role: the X4's firmware has Literata's regular face alone
+(no bold, italic or bold italic), which such plugins bring back (bold and
+italic in `literata-styles`, which the store fetches by itself at the first
+start where they are missing). Until they are there, bold and italic text
+is set in the regular face:
 
 ```ini
 [family]
 name = Literata
-bold-italic = literata-bold-italic.ppfp
+bold = literata-bold.ppfp
+italic = literata-italic.ppfp
 
 [fonts]
-core.font-reading-bold-italic = literata-bold-italic.bold-italic
+core.font-reading-bold = literata-styles.bold
+core.font-reading-italic = literata-styles.italic
 ```
+
+Packs that extend a face the plugin brings name it as
+`<plugin>.<style>` (`[extends] literata-bold-large.ppfp = literata-styles.bold`).
 
 A logo of its own takes the place of PaperPaw's (on the sleep screen,
 the About page and the logo widget): a picture in the folder, named in

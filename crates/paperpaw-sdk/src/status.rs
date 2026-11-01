@@ -262,6 +262,11 @@ pub struct StatusItemSpec {
     /// line does not move when its text gets shorter (a clock's `9:59`
     /// after `10:00`); 0 for its own width.
     pub min_width: f32,
+    /// Reserved: zero now. A later release gives its bits a meaning, each
+    /// with a setter and a getter of its own (never by reading a set bit
+    /// another way), so specs can grow without a new plugin interface.
+    #[allow(dead_code, reason = "reserved for later releases")]
+    spare: u32,
 }
 
 impl StatusItemSpec {
@@ -274,6 +279,7 @@ impl StatusItemSpec {
             tap: None,
             priority: PRIORITY,
             min_width: 0.0,
+            spare: 0,
         }
     }
 
@@ -847,7 +853,7 @@ fn value_width(
         StatusValue::Icon(name) => crate::ui::icon_width(env, name, size),
         StatusValue::Text(text) => font.measure(size, text),
         StatusValue::Level { percent, .. } if with_percent => {
-            battery_width(size) + size * 0.3 + font.measure(size, &level_text(*percent))
+            battery_width(size) + size * 0.3 + font.measure(size, &level_text(env, *percent))
         }
         StatusValue::Level { .. } => battery_width(size),
         StatusValue::Bar { .. } => bar_width(size),
@@ -869,8 +875,11 @@ fn label_gap(size: f32) -> f32 {
     size * 0.25
 }
 
-fn level_text(percent: u8) -> String {
-    alloc::format!("{percent} %")
+/// The battery's percent, in the digits of the language shown.
+fn level_text(env: &Env<'_>, percent: u8) -> String {
+    env.i18n()
+        .localize_digits(&alloc::format!("{percent} %"))
+        .into_owned()
 }
 
 fn battery_width(size: f32) -> f32 {
@@ -1007,7 +1016,14 @@ fn draw_value(
             draw_battery(canvas, battery, size, *percent, *charging, color);
             if laid.percent {
                 let at = x + battery_width(size) + size * 0.3;
-                font.draw(canvas, size, at, baseline, &level_text(*percent), color);
+                font.draw(
+                    canvas,
+                    size,
+                    at,
+                    baseline,
+                    &level_text(env, *percent),
+                    color,
+                );
             }
         }
         StatusValue::Bar { permille } => {

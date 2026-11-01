@@ -472,6 +472,7 @@ fn a_secured_network_joined_with_a_password_by_touch() {
     device.radio(WifiEvent::State(WifiState::Online {
         ssid: UNICODE.into(),
         address: "192.168.1.20".into(),
+        name: None,
     }));
     assert_eq!(device.saved(), [(UNICODE.into(), "hunter22".into())]);
     assert!(
@@ -503,6 +504,7 @@ fn the_longest_name_joined_by_buttons_only() {
     device.radio(WifiEvent::State(WifiState::Online {
         ssid: LONGEST.into(),
         address: "10.0.0.2".into(),
+        name: None,
     }));
     assert_eq!(device.saved(), [(LONGEST.into(), "pw2024x".into())]);
 }
@@ -543,6 +545,7 @@ fn a_wrong_password_is_said_and_not_kept() {
     device.radio(WifiEvent::State(WifiState::Online {
         ssid: "Home".into(),
         address: "10.0.0.2".into(),
+        name: None,
     }));
     assert_eq!(device.saved(), [("Home".into(), "right".into())]);
 }
@@ -581,6 +584,7 @@ fn an_open_network_is_joined_without_asking_and_not_saved() {
     device.radio(WifiEvent::State(WifiState::Online {
         ssid: "Library".into(),
         address: "10.0.0.2".into(),
+        name: None,
     }));
     assert!(device.saved().is_empty());
 }
@@ -596,6 +600,7 @@ fn a_saved_network_is_joined_again_without_asking_and_forgotten() {
     device.radio(WifiEvent::State(WifiState::Online {
         ssid: "Home".into(),
         address: "10.0.0.2".into(),
+        name: None,
     }));
     device.told();
 
@@ -619,6 +624,7 @@ fn a_saved_network_is_joined_again_without_asking_and_forgotten() {
     device.radio(WifiEvent::State(WifiState::Online {
         ssid: "Home".into(),
         address: "10.0.0.2".into(),
+        name: None,
     }));
     // Held: forgotten, and left as it is joined.
     device.hold("Home");
@@ -641,6 +647,7 @@ fn forgetting_by_buttons_with_the_menu_button() {
     device.radio(WifiEvent::State(WifiState::Online {
         ssid: "Home".into(),
         address: "10.0.0.2".into(),
+        name: None,
     }));
     assert_eq!(device.saved(), [("Home".into(), "pw1".into())]);
     device.told();
@@ -678,6 +685,7 @@ fn a_name_with_a_tab_stays_known_after_a_restart() {
     device.radio(WifiEvent::State(WifiState::Online {
         ssid: name.into(),
         address: "10.0.0.2".into(),
+        name: None,
     }));
     assert_eq!(device.saved(), [(name.into(), "pw1".into())]);
     let device = Device::on(TOUCH, storage);
@@ -721,6 +729,7 @@ fn wanted_the_radio_joins_the_saved_network_and_goes_off_after() {
     device.radio(WifiEvent::State(WifiState::Online {
         ssid: "Home".into(),
         address: "10.0.0.2".into(),
+        name: None,
     }));
     assert_eq!(device.requests.len(), 1);
     device.now += 100;
@@ -771,6 +780,7 @@ fn the_network_picked_last_is_joined_first_after_a_restart() {
     device.radio(WifiEvent::State(WifiState::Online {
         ssid: "Weak".into(),
         address: "10.0.0.2".into(),
+        name: None,
     }));
 
     // Another start: wanted, both in reach, the one picked joins.
@@ -850,6 +860,7 @@ fn a_password_that_got_no_answer_is_offered_again() {
     device.radio(WifiEvent::State(WifiState::Online {
         ssid: "Hannes".into(),
         address: "10.0.0.7".into(),
+        name: None,
     }));
     assert_eq!(device.saved(), [("Hannes".into(), "secret1".into())]);
 }

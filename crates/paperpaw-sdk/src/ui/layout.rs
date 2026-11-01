@@ -32,7 +32,9 @@ use super::{Ink, UiStyle};
 
 /// `count` columns of `area` side by side, `gap` apart, as wide as each
 /// other to a pixel (what dividing leaves goes a pixel each to the last
-/// ones), so the last ends where `area` does. None for no columns.
+/// ones), so the last ends where `area` does. None for no columns. They
+/// run left to right: in a right-to-left interface ([`UiStyle::is_rtl`])
+/// the first item goes in the last column.
 pub fn columns(area: Rect, count: usize, gap: u16) -> Vec<Rect> {
     let Ok(n) = u16::try_from(count) else {
         return Vec::new();
@@ -199,13 +201,16 @@ impl Stack {
 /// A grid of cells, `columns` across, rows `cell_height` tall, `gap`
 /// apart: where each cell of a page goes, which one a tap hits, where the
 /// focus goes with the buttons (left and right along the cells, up and
-/// down a row).
+/// down a row). In a right-to-left interface ([`CellGrid::mirrored`] with
+/// [`UiStyle::is_rtl`]) the first cell of a row is at its right.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CellGrid {
     area: Rect,
     columns: u16,
     cell_height: u16,
     gap: u16,
+    /// The first cell of a row at its right.
+    mirrored: bool,
 }
 
 impl CellGrid {
@@ -217,7 +222,17 @@ impl CellGrid {
             columns: columns.max(1),
             cell_height: cell_height.max(1),
             gap,
+            mirrored: false,
         }
+    }
+
+    /// The same, right to left where the interface goes so
+    /// ([`UiStyle::is_rtl`]): rows start at the right, and the left
+    /// button goes on to the next cell, the right one back.
+    #[must_use]
+    pub const fn mirrored(mut self, mirrored: bool) -> Self {
+        self.mirrored = mirrored;
+        self
     }
 
     /// The rows that fit (at least one).
@@ -234,7 +249,11 @@ impl CellGrid {
     pub fn cell(&self, index: usize) -> Rect {
         let on_page = index % self.per_page();
         let columns = usize::from(self.columns);
-        let column = columns_of(self.area, self.columns, self.gap)[on_page % columns];
+        let mut column = on_page % columns;
+        if self.mirrored {
+            column = columns - 1 - column;
+        }
+        let column = columns_of(self.area, self.columns, self.gap)[column];
         let row = (on_page / columns) as u16;
         Rect::new(
             column.x,
@@ -257,9 +276,15 @@ impl CellGrid {
     pub fn step(&self, focus: usize, action: &Id, count: usize) -> Option<usize> {
         let last = count.checked_sub(1)?;
         let row = usize::from(self.columns);
-        let to = if [actions::LEFT, actions::PREVIOUS].contains(action) {
+        // Left goes back along the cells, but on where they run right to
+        // left.
+        let (back, on) = match self.mirrored {
+            false => (actions::LEFT, actions::RIGHT),
+            true => (actions::RIGHT, actions::LEFT),
+        };
+        let to = if [back, actions::PREVIOUS].contains(action) {
             focus.saturating_sub(1)
-        } else if [actions::RIGHT, actions::NEXT].contains(action) {
+        } else if [on, actions::NEXT].contains(action) {
             focus + 1
         } else if *action == actions::UP {
             focus.checked_sub(row).unwrap_or(focus)
@@ -505,6 +530,31 @@ mod tests {
         assert_eq!(grid.step(0, &actions::LEFT, 10), Some(0));
         assert_eq!(grid.step(0, &actions::CONFIRM, 10), None);
         assert_eq!(grid.page_of(7), 1);
+    }
+
+    /// Right to left, a row starts at the right: each cell is the mirror
+    /// of its place left to right, taps find it there, and left goes on.
+    #[test]
+    fn a_mirrored_grid_starts_its_rows_at_the_right() {
+        let area = Rect::new(10, 0, 310, 220);
+        let ltr = CellGrid::new(area, 3, 100, 5);
+        let rtl = ltr.mirrored(true);
+        for i in 0..12 {
+            let (a, b) = (ltr.cell(i), rtl.cell(i));
+            assert_eq!((b.y, b.width, b.height), (a.y, a.width, a.height));
+            assert_eq!(
+                b.x - area.x,
+                area.right() as u16 - a.right() as u16,
+                "cell {i}"
+            );
+            let middle = Point::new(i32::from(b.x + b.width / 2), i32::from(b.y + 1));
+            assert_eq!(rtl.hit(middle, i / 6, 12), Some(i));
+        }
+        assert_eq!(rtl.cell(0).right(), area.right());
+        assert_eq!(rtl.step(0, &actions::LEFT, 10), Some(1));
+        assert_eq!(rtl.step(1, &actions::RIGHT, 10), Some(0));
+        assert_eq!(rtl.step(1, &actions::NEXT, 10), Some(2));
+        assert_eq!(rtl.step(1, &actions::DOWN, 10), Some(4));
     }
 
     #[test]

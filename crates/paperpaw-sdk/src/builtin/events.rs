@@ -151,6 +151,66 @@ crate::event_data! {
 }
 
 crate::event_data! {
+    /// Plugins asked for by id ([`PLUGINS_REQUESTED`], sent with
+    /// [`Command::RequestPlugins`](crate::Command::RequestPlugins)).
+    pub struct PluginsRequested {
+        /// The plugin that asks, as it names itself.
+        pub by: Id,
+        /// The ids asked for that are not on the device, each once,
+        /// separated by spaces (see [`PluginsRequested::ids`]).
+        pub plugins: String,
+    }
+}
+
+impl PluginsRequested {
+    /// The ids asked for, in their order.
+    pub fn ids(&self) -> impl Iterator<Item = Id> + '_ {
+        ids_in(&self.plugins)
+    }
+}
+
+/// The ids in `list`, separated by spaces.
+fn ids_in(list: &str) -> impl Iterator<Item = Id> + '_ {
+    list.split(' ').filter_map(|id| Id::parse(id).ok())
+}
+
+crate::event_data! {
+    /// What came of plugins asked for ([`PLUGINS_ANSWERED`]), for the
+    /// plugin that asked ([`PluginsAnswered::by`]): e.g. a reader lays
+    /// its book out anew once a pack of letters is installed, or says
+    /// what went wrong.
+    pub struct PluginsAnswered {
+        /// The plugin that asked.
+        pub by: Id,
+        /// The ids installed now, separated by spaces (see
+        /// [`PluginsAnswered::installed_ids`]).
+        pub installed: String,
+        /// The ids not installed, separated by spaces (see
+        /// [`PluginsAnswered::missing_ids`]): the reader said not now
+        /// ([`PluginsAnswered::declined`]), or they could not be
+        /// ([`PluginsAnswered::error`]).
+        pub missing: String,
+        /// The reader chose not to install them now: nothing to report.
+        pub declined: bool,
+        /// What went wrong, already translated, to be shown as it is;
+        /// empty where nothing did.
+        pub error: String,
+    }
+}
+
+impl PluginsAnswered {
+    /// The ids installed now, in their order.
+    pub fn installed_ids(&self) -> impl Iterator<Item = Id> + '_ {
+        ids_in(&self.installed)
+    }
+
+    /// The ids not installed, in their order.
+    pub fn missing_ids(&self) -> impl Iterator<Item = Id> + '_ {
+        ids_in(&self.missing)
+    }
+}
+
+crate::event_data! {
     /// The catalog wanted ([`CATALOG_WANTED`]).
     pub struct CatalogWanted {
         /// Made anew in any case, not only where it was not made since
@@ -510,6 +570,12 @@ pub const BOOK_CHOSEN: Event<BookChosen> = Event::new("core.book-chosen");
 /// ([`library::catalog`](crate::library::catalog)): views of it read it
 /// again.
 pub const CATALOG_CHANGED: Event<()> = Event::new("core.catalog-changed");
+/// The catalog of the library could not be made: the library folder or
+/// the card could not be read or written. The old catalog stays and the
+/// kernel tries again after a while; views stop saying the books are being
+/// collected and say the folder could not be read, until
+/// [`CATALOG_CHANGED`].
+pub const CATALOG_FAILED: Event<()> = Event::new("core.catalog-failed");
 /// The catalog is wanted ([`CatalogWanted`],
 /// [`library::request_catalog`](crate::library::request_catalog)):
 /// the kernel walks the library in the background where needed.
@@ -589,6 +655,18 @@ pub const WIDGET_CHANGED: Event<WidgetChanged> = Event::new("core.widget-changed
 /// [`Command::RemovePlugin`](crate::Command::RemovePlugin)): lists of
 /// plugins, fonts and presets read them anew.
 pub const PLUGINS_CHANGED: Event<()> = Event::new("core.plugins-changed");
+/// A plugin asked for plugins by id that are not on the device
+/// ([`Command::RequestPlugins`](crate::Command::RequestPlugins)): for the
+/// plugin that installs plugins (the store), which asks the reader
+/// before it downloads any, and answers each request with
+/// [`PLUGINS_ANSWERED`] once it is done: installed, declined or failed.
+pub const PLUGINS_REQUESTED: Event<PluginsRequested> = Event::new("core.plugins-requested");
+/// What came of plugins asked for ([`PluginsAnswered`]): sent by the
+/// plugin that installs plugins, or by the kernel where none is there
+/// (all missing, with an error) or where all were on the device already
+/// (none installed, none missing). The plugin that asked compares
+/// [`PluginsAnswered::by`] with itself.
+pub const PLUGINS_ANSWERED: Event<PluginsAnswered> = Event::new("core.plugins-answered");
 /// Another screen is shown on top ([`ScreenShown`]): one opened, or
 /// the one below a screen closed. The whole stack is in
 /// [`Env::stack`](crate::Env::stack). For plugins that subscribe:
@@ -604,6 +682,11 @@ pub const SUSPEND: Event<()> = Event::new("core.suspend");
 /// the sleep, so a plugin that does something on waking needs nothing
 /// more; a power-up with no sleep before it sends [`STARTED`] alone.
 pub const RESUME: Event<()> = Event::new("core.resume");
+/// The card is PaperPaw's again after a computer had it as a USB drive
+/// ([`Command::UsbDrive`](crate::Command::UsbDrive)): files may have come,
+/// gone or changed; what a plugin keeps of the card it reads anew. The
+/// kernel walks the library anew too.
+pub const USB_DRIVE_ENDED: Event<()> = Event::new("core.usb-drive-ended");
 /// PaperPaw stops (the device restarts, or an app closes for good):
 /// save what is pending, as at [`SUSPEND`]; the device may lose its
 /// power right after. No [`RESUME`] follows, and it is no sleep.

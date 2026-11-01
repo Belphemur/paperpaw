@@ -26,6 +26,9 @@ pub enum Effect {
     /// still hear [`events::RESUME`](paperpaw_sdk::builtin::events::RESUME)
     /// after that start, with the time asleep unknown.
     PowerOff,
+    /// Show the card to a computer as a USB drive once the frame is shown
+    /// (see [`Effects::usb_drive`]).
+    UsbDrive,
     /// The frame is best shown in grays (see [`Effects::grays`]).
     Grays,
     /// Call [`Kernel::proceed`] while the panel shows the busy mark (see
@@ -43,6 +46,7 @@ pub struct Effects {
     pub(crate) restart: bool,
     pub(crate) sleep: bool,
     pub(crate) power_off: bool,
+    pub(crate) usb_drive: bool,
     pub(crate) proceed: bool,
     pub(crate) pace: Option<core::time::Duration>,
 }
@@ -99,6 +103,16 @@ impl Effects {
         self.power_off
     }
 
+    /// Whether the shell should show the card to a computer as a USB drive
+    /// once the frame is shown ([`paperpaw_sdk::Command::UsbDrive`]): it
+    /// calls [`Kernel::suspend`] first, leaves the card to the computer
+    /// alone, and calls [`Kernel::usb_drive_ended`] when the computer
+    /// ejected it or the cable went (checking the card's file system
+    /// first where it may have been left half written).
+    pub fn usb_drive(&self) -> bool {
+        self.usb_drive
+    }
+
     /// What these and the `later` effects ask together, for a shell that
     /// shows one frame for both (input that came while the last frame
     /// refreshed): the parts to refresh joined, in the stronger mode; the
@@ -120,6 +134,7 @@ impl Effects {
             restart: self.restart || later.restart,
             sleep: self.sleep || later.sleep,
             power_off: self.power_off || later.power_off,
+            usb_drive: self.usb_drive || later.usb_drive,
             proceed: self.proceed || later.proceed,
             pace: later.pace,
         }
@@ -131,6 +146,7 @@ impl Effects {
             && !self.restart
             && !self.sleep
             && !self.power_off
+            && !self.usb_drive
             && !self.proceed
     }
 
@@ -144,6 +160,7 @@ impl Effects {
             .chain(self.restart.then_some(Effect::Restart))
             .chain(self.sleep.then_some(Effect::Sleep))
             .chain(self.power_off.then_some(Effect::PowerOff))
+            .chain(self.usb_drive.then_some(Effect::UsbDrive))
             .chain(self.grays.then_some(Effect::Grays))
             .chain(self.proceed.then_some(Effect::Proceed))
     }

@@ -392,11 +392,22 @@ impl Kernel {
         bound.then_some(side)
     }
 
+    /// Whether the screen on top goes right to left
+    /// ([`Screen::direction`](paperpaw_sdk::Screen::direction)): its own
+    /// way, or by default the interface's.
+    fn mirrored(&self) -> bool {
+        use paperpaw_sdk::lang::Direction as Way;
+        match self.stack.last().map(|top| top.screen.direction()) {
+            Some(Way::Rtl) => true,
+            Some(Way::Auto) => self.shared.translator.direction() == Way::Rtl,
+            _ => false,
+        }
+    }
+
     /// `side` the other way, left for right, where the screen on top is
-    /// mirrored ([`Screen::mirrored`](paperpaw_sdk::Screen::mirrored)).
+    /// mirrored ([`Kernel::mirrored`]).
     fn mirrored_side(&self, side: Direction) -> Direction {
-        let mirrored = self.stack.last().is_some_and(|top| top.screen.mirrored());
-        match (mirrored, side) {
+        match (self.mirrored(), side) {
             (true, Direction::Left) => Direction::Right,
             (true, Direction::Right) => Direction::Left,
             _ => side,
@@ -537,9 +548,9 @@ impl Kernel {
                 }
                 let display = self.shared.device.display;
                 let mut zone = Zone::of(gesture.start, display.width, display.height);
-                // A screen whose pages go right to left: sides and swipes
-                // the other way.
-                if self.stack.last().is_some_and(|top| top.screen.mirrored()) {
+                // A screen that goes right to left (a book's pages, an
+                // Arabic interface): sides and swipes the other way.
+                if self.mirrored() {
                     zone = zone.mirrored();
                 }
                 let long = gesture.kind == GestureKind::LongPress;

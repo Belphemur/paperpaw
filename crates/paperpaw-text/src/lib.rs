@@ -41,6 +41,8 @@ mod font;
 #[cfg(fuzzing)]
 pub mod fuzz;
 mod glyph;
+mod hangul;
+pub use hangul::has_jamo;
 mod ink;
 mod kern_table;
 #[cfg(feature = "outline")]

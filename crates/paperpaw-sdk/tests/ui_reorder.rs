@@ -34,7 +34,7 @@ fn list() -> ListView {
 /// grip.
 fn grip_of(list: &ListView, index: usize) -> (i32, i32) {
     let slot = index - list.page() * list.rows();
-    let grip = middle(Reorder::grip(list.row_rect(slot)));
+    let grip = middle(Reorder::grip(list.row_rect(slot), &style()));
     (grip.x, grip.y)
 }
 
@@ -203,15 +203,48 @@ fn another_finger_does_not_move_the_row_and_a_cancel_drops_nothing() {
 #[test]
 fn the_grip_is_a_square_at_the_rows_end_and_the_content_the_rest() {
     let row = Rect::new(10, 20, 300, 50);
-    let grip = Reorder::grip(row);
+    let style = style();
+    let grip = Reorder::grip(row, &style);
     assert_eq!(grip, Rect::new(260, 20, 50, 50));
-    let content = Reorder::content(row);
+    let content = Reorder::content(row, &style);
     assert_eq!(content, Rect::new(10, 20, 250, 50));
     assert_eq!(content.right(), u32::from(grip.x), "side by side");
     // A row narrower than high: the grip takes all of it.
     let narrow = Rect::new(0, 0, 30, 50);
-    assert_eq!(Reorder::grip(narrow), narrow);
-    assert_eq!(Reorder::content(narrow).width, 0);
+    assert_eq!(Reorder::grip(narrow, &style), narrow);
+    assert_eq!(Reorder::content(narrow, &style).width, 0);
+}
+
+/// Right to left, the row ends at the left: the grip is there, and a
+/// finger takes the row there once the list was drawn that way.
+#[test]
+fn right_to_left_the_grip_is_at_the_left() {
+    let rtl = style().with_rtl(true);
+    let row = Rect::new(10, 20, 300, 50);
+    let grip = Reorder::grip(row, &rtl);
+    assert_eq!(grip, Rect::new(10, 20, 50, 50));
+    let content = Reorder::content(row, &rtl);
+    assert_eq!(content, Rect::new(60, 20, 250, 50));
+    assert_eq!(grip.right(), u32::from(content.x), "side by side");
+
+    let list = list();
+    let mut reorder = Reorder::default();
+    let mut frame = frame(400, 600);
+    let harness = support::Harness::new(support::Device::BUTTONS);
+    let env = harness.env();
+    reorder.draw(
+        &mut paperpaw_sdk::ui::Ui::new(&mut frame.canvas(), &env, &rtl),
+        &list,
+    );
+    let left = middle(Reorder::grip(list.row_rect(1), &rtl));
+    let right = middle(Reorder::grip(list.row_rect(1), &style()));
+    let down = |x, y| pointer(PointerPhase::Down, x, y);
+    assert_eq!(reorder.on_pointer(&down(right.x, right.y), &list, 8), None);
+    assert_eq!(
+        reorder.on_pointer(&down(left.x, left.y), &list, 8),
+        Some(ReorderStep::Changed)
+    );
+    assert_eq!(reorder.dragging(), Some((1, 1)));
 }
 
 /// The bar lies on the line between two rows, half on either side: at

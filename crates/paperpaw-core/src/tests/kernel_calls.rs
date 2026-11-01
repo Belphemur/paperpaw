@@ -185,6 +185,104 @@ impl Plugin for OffAtStart {
     }
 }
 
+/// The same, its subscription kept in the program.
+struct OffAtStartFixed;
+
+impl Plugin for OffAtStartFixed {
+    fn manifest(&self) -> Manifest {
+        Manifest::new(Id::new_static("off"), "Off", Version::new(1, 0, 0))
+            .uses(paperpaw_sdk::Uses::NOTHING)
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        static HEARS: [paperpaw_sdk::FixedSubscription; 2] = [
+            paperpaw_sdk::hears!(paperpaw_sdk::builtin::events::STARTED, |_, _, out| {
+                out.push(Command::PowerOff);
+            }),
+            // Another event: not called at the start.
+            paperpaw_sdk::hears!(
+                paperpaw_sdk::builtin::events::CATALOG_CHANGED,
+                |_, _, out| {
+                    out.push(Command::Sleep);
+                }
+            ),
+        ];
+        r.add_subscriptions(&HEARS)
+    }
+}
+
+#[test]
+fn subscriptions_kept_in_the_program_are_heard() {
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(OffAtStartFixed)
+        .power_off(true)
+        .build()
+        .unwrap();
+    let effects = kernel.start(Instant(0));
+    assert!(effects.power_off() && !effects.sleep());
+}
+
+/// Asks for the card as a USB drive at the start, and notes what it
+/// hears after.
+struct Drive {
+    log: Log,
+}
+
+impl Plugin for Drive {
+    fn manifest(&self) -> Manifest {
+        Manifest::new(Id::new_static("drive"), "Drive", Version::new(1, 0, 0))
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        use paperpaw_sdk::builtin::events;
+        r.on(events::STARTED, |_, _, out| out.push(Command::UsbDrive))?;
+        for (event, name) in [
+            (events::RESUME.id(), "resume"),
+            (events::USB_DRIVE_ENDED.id(), "ended"),
+            (events::LIBRARY_CHANGED.id(), "library"),
+        ] {
+            let log = self.log.clone();
+            r.subscribe(
+                event.clone(),
+                Box::new(move |_, _, _| log.borrow_mut().push(String::from(name))),
+            )?;
+        }
+        Ok(())
+    }
+}
+
+#[test]
+fn the_card_goes_to_a_computer_as_a_drive_where_the_device_can() {
+    // Where it cannot, nothing happens.
+    let log = log();
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(Drive { log: log.clone() })
+        .build()
+        .unwrap();
+    assert!(!kernel.start(Instant(0)).usb_drive());
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(Drive { log: log.clone() })
+        .capability(paperpaw_sdk::Capability::USB_DRIVE)
+        .build()
+        .unwrap();
+    assert!(
+        kernel
+            .shared
+            .env(Instant(0))
+            .caps()
+            .has(paperpaw_sdk::Capability::USB_DRIVE)
+    );
+    let effects = kernel.start(Instant(0));
+    assert!(effects.usb_drive() && !effects.power_off());
+    assert!(effects.iter().any(|e| e == crate::Effect::UsbDrive));
+    // The computer had it; back: woken, told, the library walked anew.
+    kernel.suspend(Instant(10));
+    log.borrow_mut().clear();
+    let effects = kernel.usb_drive_ended(Instant(60_000));
+    assert!(!effects.usb_drive());
+    assert_eq!(*log.borrow(), ["resume", "ended", "library"]);
+}
+
 #[test]
 fn plugins_switch_the_device_off_where_the_shell_can() {
     // Where the system decides (Android), nothing happens.
@@ -199,6 +297,17 @@ fn plugins_switch_the_device_off_where_the_shell_can() {
     let effects = kernel.start(Instant(0));
     assert!(effects.power_off() && !effects.sleep());
     assert!(effects.iter().any(|e| e == crate::Effect::PowerOff));
+}
+
+#[test]
+fn plugins_see_what_the_shell_changes_by_the_power_level() {
+    let kernel = Kernel::builder(DEVICE).build().unwrap();
+    assert!(!kernel.shared.env(Instant(0)).caps().power.any());
+    let mut controls = paperpaw_sdk::power::PowerControls::default();
+    controls.buttons = true;
+    let kernel = Kernel::builder(DEVICE).power(controls).build().unwrap();
+    let power = kernel.shared.env(Instant(0)).caps().power;
+    assert!(power.any() && power.buttons && !power.cpu_clock && !power.system_saver);
 }
 
 #[test]
@@ -219,4 +328,43 @@ fn plugins_hear_how_long_the_device_slept() {
         .unwrap();
     let slept = kernel.shared.env(Instant(0)).slept_for();
     assert_eq!(slept, Some(core::time::Duration::from_secs(3_600)));
+}
+
+/// Hears whether its sound played.
+struct Listener(Log);
+
+const PLAYED: paperpaw_sdk::event::Event<paperpaw_sdk::replies::Played> =
+    paperpaw_sdk::event::Event::new("ear.played");
+
+impl Plugin for Listener {
+    fn manifest(&self) -> Manifest {
+        Manifest::new(Id::new_static("ear"), "Ear", Version::new(1, 0, 0))
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        let log = self.0.clone();
+        r.on(PLAYED, move |_, played, _| {
+            let word = played.context.get("word").unwrap_or_default();
+            log.borrow_mut()
+                .push(alloc::format!("{word} played {}", played.played));
+        })
+    }
+}
+
+/// No shell plays sound yet (reserved): a sound asked for is answered at
+/// once, not played, with its parameters; stopping one does nothing.
+#[test]
+fn sounds_are_answered_not_played() {
+    let log = log();
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(Listener(log.clone()))
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    let sound = paperpaw_sdk::sound::Sound::new("plugins/ear/haus.ogg", &PLAYED)
+        .with(paperpaw_sdk::Params::new().with("word", "Haus"));
+    kernel.apply(Command::play_sound(sound));
+    kernel.apply(Command::StopSound);
+    kernel.run_commands();
+    assert_eq!(*log.borrow(), ["Haus played false"]);
 }

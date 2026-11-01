@@ -101,13 +101,17 @@ impl Kernel {
         if RESERVED_IDS.contains(&id.as_str()) {
             return self.register_plugin(plugin, manifest);
         }
-        let mut registrar = Registrar::new(id);
+        let mut registrar = Registrar::new(id.clone());
         if plugin.register(&mut registrar).is_ok() {
             for contribution in registrar.into_contributions() {
-                if let Contribution::Translations(source) = contribution
-                    && let Ok(catalog) = registry::catalog(source)
-                {
-                    self.shared.translator.add(catalog);
+                match contribution {
+                    Contribution::Translations(source) => {
+                        if let Ok(catalog) = registry::catalog(source) {
+                            self.shared.translator.add(catalog);
+                        }
+                    }
+                    Contribution::TranslationFile(path) => self.add_translation_file(&id, path),
+                    _ => {}
                 }
             }
         }
@@ -238,6 +242,9 @@ impl Kernel {
         for catalog in staging.catalogs.drain(..) {
             self.shared.translator.add(catalog);
         }
+        for path in staging.catalog_files.drain(..) {
+            self.add_translation_file(plugin, path);
+        }
         for font in staging.fonts.drain(..) {
             // Cannot fail: checked above.
             let _ = self.shared.fonts.add(font);
@@ -364,8 +371,13 @@ impl Kernel {
         for preset in staging.presets.drain(..) {
             self.shared.settings.presets_mut().add(preset);
         }
-        for widget in staging.widgets.drain(..) {
-            self.shared.widgets.add(widget);
+        for widgets in staging.widgets.drain(..) {
+            match widgets {
+                crate::registry::StagedWidgets::One(widget) => {
+                    self.shared.widgets.add_boxed(widget)
+                }
+                crate::registry::StagedWidgets::List(list) => self.shared.widgets.add_fixed(list),
+            }
         }
         self.stylesheet_owners
             .extend(staging.stylesheets.iter().map(|_| plugin.clone()));
@@ -558,6 +570,26 @@ impl Kernel {
         }
     }
 
+    /// Opens the compiled catalog `path` (`Registrar::add_translation_file`)
+    /// and adds it; one that cannot be opened is reported.
+    pub(crate) fn add_translation_file(&mut self, plugin: &Id, path: String) {
+        let file =
+            crate::catalog_file::StoredCatalog::new(self.shared.storage.clone(), path.clone());
+        match file.map(|file| paperpaw_i18n::Catalog::open(alloc::rc::Rc::new(file))) {
+            Some(Ok(catalog)) => self.shared.translator.add(catalog),
+            Some(Err(error)) => self.warn(
+                WarningSource::Plugin(plugin.clone()),
+                None,
+                format!("{path}: {error}"),
+            ),
+            None => self.warn(
+                WarningSource::Plugin(plugin.clone()),
+                None,
+                format!("{path}: not found"),
+            ),
+        }
+    }
+
     /// Adds a face of a family `plugin` names in a file: packs everywhere,
     /// scalable fonts where they are drawn.
     pub(crate) fn add_font_face(&mut self, plugin: &Id, face: paperpaw_sdk::FontFace) {
@@ -661,6 +693,58 @@ impl Kernel {
             self.shared.translator.language(),
         );
         self.shared.fonts.set_ui_ink(ink);
+    }
+
+    /// Plugin `by` asks for `plugins` ([`Command::RequestPlugins`](paperpaw_sdk::Command::RequestPlugins)):
+    /// those not on the device, each once and at most
+    /// [`MAX_REQUESTED_PLUGINS`](paperpaw_sdk::MAX_REQUESTED_PLUGINS),
+    /// go to the store as
+    /// [`PLUGINS_REQUESTED`](paperpaw_sdk::builtin::events::PLUGINS_REQUESTED),
+    /// which answers. Where none is missing, or no plugin installs
+    /// plugins, the kernel answers itself
+    /// ([`PLUGINS_ANSWERED`](paperpaw_sdk::builtin::events::PLUGINS_ANSWERED)).
+    pub(crate) fn request_plugins(&mut self, by: Id, plugins: Vec<Id>) {
+        use paperpaw_sdk::builtin::events::{self, PluginsAnswered};
+        let mut wanted: Vec<Id> = Vec::new();
+        for id in plugins {
+            if wanted.len() == paperpaw_sdk::MAX_REQUESTED_PLUGINS {
+                self.warn_runtime(format!(
+                    "{by}: more than {} plugins asked for at once; the rest left out",
+                    paperpaw_sdk::MAX_REQUESTED_PLUGINS
+                ));
+                break;
+            }
+            let known = self.shared.plugins.get(id.as_str()).is_some()
+                || id.as_str() == crate::core_plugin::CORE.as_str();
+            if !known && !wanted.contains(&id) {
+                wanted.push(id);
+            }
+        }
+        let mut list = String::new();
+        for id in &wanted {
+            if !list.is_empty() {
+                list.push(' ');
+            }
+            list.push_str(id.as_str());
+        }
+        let requested = Id::from(&events::PLUGINS_REQUESTED);
+        let installer = self.subscriptions.iter().any(|(id, ..)| *id == requested);
+        let answer = if wanted.is_empty() {
+            PluginsAnswered::new(by, String::new(), String::new(), false, String::new())
+        } else if !installer {
+            let error = self
+                .shared
+                .translator
+                .tr("core.plugins.no-installer")
+                .to_string();
+            PluginsAnswered::new(by, String::new(), list, false, error)
+        } else {
+            let request = events::PluginsRequested::new(by, list);
+            let params = paperpaw_sdk::event::EventData::to_params(&request);
+            return self.emit(&requested, &params);
+        };
+        let params = paperpaw_sdk::event::EventData::to_params(&answer);
+        self.emit(&Id::from(&events::PLUGINS_ANSWERED), &params);
     }
 
     /// Loads the data plugin in `folder` while running (see

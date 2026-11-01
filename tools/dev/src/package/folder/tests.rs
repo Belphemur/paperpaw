@@ -453,3 +453,118 @@ fn families_and_packs_are_named() {
         "a face is read: {found:#?}"
     );
 }
+
+/// A PNG header of `width` x `height`, interlaced or not, padded to `size`.
+fn png(width: u32, height: u32, interlaced: bool, size: usize) -> Vec<u8> {
+    let mut bytes = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR".to_vec();
+    bytes.extend(width.to_be_bytes());
+    bytes.extend(height.to_be_bytes());
+    bytes.extend([8, 0, 0, 0, u8::from(interlaced)]);
+    bytes.resize(size, 0);
+    bytes
+}
+
+const MANIFEST: &[u8] = b"[plugin]\nid = owls\nname = Owls\ndescription = Owls.\nversion = 1.0.0\n";
+
+/// What the conventions say of `files` (`package.*` warnings of theirs).
+fn conventions(files: &[(&str, &[u8])]) -> Vec<(&'static str, String)> {
+    let mut all = vec![("plugin.ini", MANIFEST)];
+    all.extend_from_slice(files);
+    findings(&folder("owls", &all))
+        .into_iter()
+        .filter(|f| {
+            f.0 == Level::Warning
+                && [
+                    "package.folder",
+                    "package.picture",
+                    "package.picture-place",
+                    "package.how",
+                    "package.languages",
+                    "package.code-data",
+                ]
+                .contains(&f.1)
+        })
+        .map(|f| (f.1, f.2))
+        .collect()
+}
+
+#[test]
+fn a_plugin_that_keeps_the_conventions_is_not_warned() {
+    let picture = png(480, 800, false, 30_000);
+    let logo = png(160, 160, false, 4_000);
+    let found = conventions(&[
+        ("pictures/owl.png", &picture),
+        ("pictures/logo.png", &logo),
+        (
+            "i18n/en.ini",
+            b"[meta]\nlanguage = en\nname = English\nplural = one-other\n",
+        ),
+        (
+            "i18n/de.ini",
+            b"[meta]\nlanguage = de\nname = Deutsch\nplural = one-other\n",
+        ),
+        ("how/en.txt", b"x"),
+        ("how/de.txt", b"x"),
+        ("data/words.txt", b"x"),
+        ("store/shot.png", &png(1000, 1000, true, 600_000)),
+    ]);
+    assert_eq!(found, []);
+}
+
+#[test]
+fn a_folder_that_is_none_of_the_conventions_is_said_once() {
+    let found = conventions(&[("images/a.txt", b"x"), ("images/b.txt", b"x")]);
+    assert_eq!(found, [("package.folder", "images/".to_string())]);
+}
+
+#[test]
+fn a_picture_outside_pictures_is_said_to_belong_there() {
+    let found = conventions(&[("logo.png", &png(100, 100, false, 2_000))]);
+    assert_eq!(found, [("package.picture-place", "logo.png".to_string())]);
+}
+
+#[test]
+fn pictures_are_checked_for_interlacing_size_and_weight() {
+    let found = conventions(&[
+        ("pictures/interlaced.png", &png(100, 100, true, 1_000)),
+        ("pictures/big.png", &png(1200, 1600, false, 1_000)),
+        ("pictures/heavy.png", &png(400, 600, false, 61_000)),
+        ("pictures/logo.png", &png(100, 100, false, 11_000)),
+        ("pictures/turned.png", &png(800, 480, false, 1_000)),
+    ]);
+    let places: Vec<&str> = found.iter().map(|f| f.1.as_str()).collect();
+    assert_eq!(
+        places,
+        [
+            "pictures/big.png",
+            "pictures/heavy.png",
+            "pictures/interlaced.png",
+            "pictures/logo.png",
+        ]
+    );
+    assert!(found.iter().all(|f| f.0 == "package.picture"));
+}
+
+#[test]
+fn how_it_works_comes_in_english_and_german_also_per_plugin() {
+    let found = conventions(&[("how/en.txt", b"x"), ("how/format-cbz/de.txt", b"x")]);
+    let places: Vec<&str> = found.iter().map(|f| f.1.as_str()).collect();
+    assert_eq!(places, ["how/de.txt", "how/format-cbz/en.txt"]);
+}
+
+#[test]
+fn english_texts_without_german_ones_are_said() {
+    let en: &[u8] = b"[meta]\nlanguage = en\nname = English\nplural = one-other\n";
+    let found = conventions(&[("i18n/en.ini", en)]);
+    assert_eq!(found, [("package.languages", "i18n/de.ini".to_string())]);
+    // A language of its own is a plugin of its own.
+    let fr: &[u8] = b"[meta]\nlanguage = fr\nname = Francais\nplural = one-other\n";
+    assert_eq!(conventions(&[("i18n/fr.ini", fr)]), []);
+}
+
+#[test]
+fn a_folder_with_code_and_kernel_data_files_is_said() {
+    let found = conventions(&[("code.ppn", b"x"), ("keymap.ini", b"[keymap.reader]\n")]);
+    assert!(found.contains(&("package.code-data", "keymap.ini".to_string())));
+    assert!(!found.iter().any(|f| f.1 == "plugin.ini"));
+}

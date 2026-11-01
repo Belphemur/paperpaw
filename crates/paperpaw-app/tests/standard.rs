@@ -158,11 +158,24 @@ impl App {
 }
 
 /// The catalogs built in take their indexes from the program (made by
-/// the build script): none is made on the heap, in English or German.
+/// the build script): none is made on the heap, in English or German;
+/// the English ones are one catalog whose table holds each plugin's
+/// source in two words.
 #[test]
 fn translations_keep_no_index_on_the_heap() {
+    let slots = paperpaw_app::BUILT_CATALOGS.prints.len() * 2 * core::mem::size_of::<usize>();
+    assert!(paperpaw_app::BUILT_CATALOGS.prints.len() > 20);
     let app = App::new();
-    assert_eq!(app.kernel.translator().indexes_on_heap(), 0);
+    assert_eq!(app.kernel.translator().indexes_on_heap(), slots);
+    // One English catalog for the plugins built in.
+    let english = app
+        .kernel
+        .translator()
+        .catalogs()
+        .iter()
+        .filter(|c| c.language() == "en")
+        .count();
+    assert!(english < 5, "{english} English catalogs");
     let storage = MemoryStorage::new().with(".paperpaw/plugins/setup/done", "");
     let builder = Kernel::builder(DEVICE).storage(storage).user_config(
         "[core]
@@ -172,7 +185,7 @@ language = de
     let mut kernel = paperpaw_app::install(builder, fonts()).build().unwrap();
     kernel.start(Instant(0));
     assert_eq!(kernel.translator().language(), "de");
-    assert_eq!(kernel.translator().indexes_on_heap(), 0);
+    assert_eq!(kernel.translator().indexes_on_heap(), slots);
 }
 
 #[test]

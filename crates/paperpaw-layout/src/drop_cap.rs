@@ -194,6 +194,6 @@ pub(crate) fn line(block: &Block, cap: Cap, (x, baseline): (f32, f32), section: 
         leading: 0.0,
         inserted: false,
         annotations: Vec::new(),
-        bidi: LineBidi::new(0, 0),
+        bidi: LineBidi::new(0, LineBidi::DROP_CAP),
     }
 }

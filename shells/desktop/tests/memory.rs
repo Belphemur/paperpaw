@@ -272,6 +272,7 @@ fn starting_in_german_peaks_no_higher_than_in_english() {
         .peak
     };
     let (english, german) = (peak("en"), peak("de"));
+    eprintln!("start: peak {english} KiB in English, {german} KiB in German");
     assert!(
         german <= english + GERMAN_START_EXTRA_KIB,
         "start: peak {german} KiB in German, {english} KiB in English"
@@ -279,6 +280,54 @@ fn starting_in_german_peaks_no_higher_than_in_english() {
     assert!(
         german <= GERMAN_START_CEILING_KIB,
         "start: peak {german} KiB in German, over {GERMAN_START_CEILING_KIB} KiB"
+    );
+}
+
+/// What a language of all plugins' texts from the card may add to the
+/// start's peak, compiled and read as needed (ADR 0033): its block table
+/// and the messages of the first screen, not its 210 KB.
+const CARD_LANGUAGE_EXTRA_KIB: f64 = 8.0;
+
+/// A language from the card, of an Arabic interface's size (3,400
+/// messages, some 210 KB), starts within [`CARD_LANGUAGE_EXTRA_KIB`] of
+/// English's peak.
+#[test]
+fn starting_in_a_large_language_from_the_card_peaks_little_above_english() {
+    let mut source = String::from(
+        "[meta]\nlanguage = ar\nname = العربية\nplural = arabic\ndirection = rtl\n[messages]\n",
+    );
+    for n in 0..3400 {
+        source.push_str(&format!(
+            "filler.{n:04} = نص الرسالة رقم {n} لواجهة المستخدم في الجهاز\n"
+        ));
+    }
+    assert!(source.len() > 200_000, "{}", source.len());
+    let compiled = paperpaw_i18n::Catalog::compile(&source).unwrap();
+    let files = [
+        (
+            "plugins/arabic/plugin.ini",
+            b"[plugin]\nname = Arabic\nformats = 4\n".to_vec(),
+        ),
+        ("plugins/arabic/i18n/ar.ppcat", compiled),
+    ];
+    let peak = |language: &str| {
+        let language = format!("core.language={language}");
+        heap(&emulator_with(
+            "x4-card-language",
+            "xteink-x4",
+            None,
+            &files,
+            &["--set", &language, "--script", "wait:300"],
+        ))
+        .peak
+    };
+    let (english, arabic) = (peak("en"), peak("ar"));
+    eprintln!(
+        "start: peak {english} KiB in English, {arabic} KiB in a 210 KB language from the card"
+    );
+    assert!(
+        arabic <= english + CARD_LANGUAGE_EXTRA_KIB,
+        "start: peak {arabic} KiB in a language from the card, {english} KiB in English"
     );
 }
 

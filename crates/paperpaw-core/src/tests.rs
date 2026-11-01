@@ -3064,6 +3064,7 @@ fn network_work_waits_for_wifi_and_goes_on_once_online() {
     let online = WifiState::Online {
         ssid: String::from("Home"),
         address: String::from("10.0.0.2"),
+        name: None,
     };
     kernel.wifi_event(Instant(10), WifiEvent::State(online));
     let calls = kernel.take_requests();
@@ -3232,6 +3233,7 @@ fn the_shell_takes_all_it_is_asked_at_once() {
     let online = paperpaw_sdk::wifi::WifiState::Online {
         ssid: String::from("Home"),
         address: String::from("10.0.0.2"),
+        name: None,
     };
     kernel.wifi_event(Instant(10), crate::WifiEvent::State(online));
     let io = kernel.take_io();

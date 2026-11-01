@@ -173,7 +173,7 @@ pub struct SettingSpec {
     /// `<plugin>.<name>`; in configuration files written as `[<plugin>] <name> = …`.
     pub id: Id,
     /// Translation key of the setting's display name.
-    pub title: Cow<'static, str>,
+    pub title: crate::Str,
     pub kind: SettingKind,
     pub default: SettingValue,
     /// The group it is shown in, e.g.
@@ -181,7 +181,7 @@ pub struct SettingSpec {
     pub group: Id,
     pub level: Level,
     /// Translation key of a short help text.
-    pub description: Option<Cow<'static, str>>,
+    pub description: Option<crate::Str>,
     /// May differ per scope, e.g. per book (see [`Settings::scope`]).
     pub scoped: bool,
     /// It keeps the device safe (a lock's): changed by its own plugin and
@@ -458,7 +458,7 @@ impl SettingSpec {
     ) -> Self {
         Self {
             id,
-            title: Cow::Borrowed(title),
+            title: crate::Str::new_static(title),
             kind,
             default,
             group,
@@ -570,7 +570,7 @@ impl SettingSpec {
 
     /// With a help text, the translation key `key`.
     pub const fn description(mut self, key: &'static str) -> Self {
-        core::mem::forget(self.description.replace(Cow::Borrowed(key)));
+        core::mem::forget(self.description.replace(crate::Str::new_static(key)));
         self
     }
 
@@ -841,6 +841,9 @@ pub struct Settings {
     /// until the next mode (see [`Settings::released`]).
     released: Vec<Id>,
     presets: crate::presets::Presets,
+    /// The plugins whose defaults are in force, by setting (see
+    /// [`Settings::default_from`]).
+    defaults_by: VecMap<Id, Id>,
 }
 
 impl Settings {
@@ -1243,6 +1246,15 @@ impl Settings {
         let id = self.value_id(id)?;
         self.values.insert(id, value);
         Ok(())
+    }
+
+    /// The plugin whose default setting `id` has in place of its own
+    /// plugin's, e.g. a template's (a data plugin's `settings.ini`), so a
+    /// settings page can say where the value comes from; `None` where
+    /// the default is the setting's own or the device's. The default only:
+    /// the reader's own value may be set over it ([`Settings::is_set`]).
+    pub fn default_from(&self, id: &str) -> Option<&Id> {
+        self.defaults_by.get(id)
     }
 
     paperpaw_table::shared! {

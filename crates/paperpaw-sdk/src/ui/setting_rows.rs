@@ -1042,7 +1042,7 @@ pub fn number_room<'a>(
         for v in [min, max] {
             let text = match &spec.extra().unit {
                 Some(unit) => env.i18n().plural(unit, v, &[]),
-                None => format!("{v}"),
+                None => env.i18n().localize_digits(&format!("{v}")).into_owned(),
             };
             let text = if spec.scoped {
                 format!("• {text}")

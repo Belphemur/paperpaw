@@ -204,6 +204,63 @@ fn a_themes_defaults_win_over_the_devices() {
         .unwrap();
     assert_eq!(kernel.settings().int("core.ui-size"), 14);
     assert_eq!(kernel.settings().int("core.font-size"), 12, "the user's");
+    // Where each default comes from, for a settings page to tell: the
+    // theme's for both (the user's value over one aside), none for a
+    // setting it leaves alone.
+    let from = |id| kernel.settings().default_from(id).map(Id::as_str);
+    assert_eq!(from("core.ui-size"), Some("large"));
+    assert_eq!(from("core.font-size"), Some("large"));
+    assert_eq!(from("core.line-spacing"), None);
+}
+
+/// A plugin's defaults for its own settings are the settings' own: none
+/// is named as coming from it; a plugin switched off gives none.
+#[test]
+fn defaults_name_the_plugin_they_come_from_only_for_others_settings() {
+    let storage = MemoryStorage::new()
+        .with("plugins/large/plugin.ini", "[plugin]\nname = Large print\n")
+        .with("plugins/large/settings.ini", "[core]\nui-size = 14\n")
+        .with("plugins/calm/plugin.ini", "[plugin]\nname = Calm\n")
+        .with("plugins/calm/settings.ini", "[core]\nfont-size = 15\n");
+    let kernel = Kernel::builder(DEVICE)
+        .storage(storage)
+        .user_config("[plugins]\ncalm = off\n")
+        .build()
+        .unwrap();
+    let mut settings = paperpaw_sdk::Settings::new();
+    settings
+        .define(paperpaw_sdk::SettingSpec::number(
+            "own.size",
+            "x",
+            0,
+            9,
+            1,
+            paperpaw_sdk::builtin::groups::OTHER,
+        ))
+        .unwrap();
+    settings
+        .set_default_by("own.size", "4", Id::new_static("own"))
+        .unwrap();
+    assert_eq!(settings.int("own.size"), 4);
+    assert_eq!(settings.default_from("own.size"), None);
+    assert!(
+        settings
+            .set_default_by("own.size", "x", Id::new_static("b"))
+            .is_err()
+    );
+    assert_eq!(settings.default_from("own.size"), None, "not taken");
+    assert_eq!(
+        kernel
+            .settings()
+            .default_from("core.ui-size")
+            .map(Id::as_str),
+        Some("large")
+    );
+    assert_eq!(
+        kernel.settings().default_from("core.font-size"),
+        None,
+        "switched off"
+    );
 }
 
 /// A data plugin marks words by patterns: its `marks.ini` makes roles,
@@ -296,4 +353,140 @@ fn data_plugins_bring_actions_menus_icons_points_and_steps() {
         Some(&SettingValue::Int(4))
     );
     assert_eq!(*log.borrow(), ["a:cosy.night", "a:core.confirm"]);
+}
+
+/// What the store hears of plugins asked for by id (where it `installs`
+/// plugins), and the answers anyone hears.
+struct Store {
+    log: Log,
+    installs: bool,
+}
+
+impl Plugin for Store {
+    fn manifest(&self) -> Manifest {
+        Manifest::new(Id::new_static("shop"), "Shop", Version::new(1, 0, 0))
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        use paperpaw_sdk::builtin::events;
+        let log = self.log.clone();
+        r.on(events::PLUGINS_ANSWERED, move |_, answer, _| {
+            let ids = |list: Vec<Id>| list.iter().map(Id::as_str).collect::<Vec<_>>().join(",");
+            log.borrow_mut().push(alloc::format!(
+                "{} got [{}] not [{}] declined {} error {:?}",
+                answer.by,
+                ids(answer.installed_ids().collect()),
+                ids(answer.missing_ids().collect()),
+                answer.declined,
+                answer.error
+            ));
+        })?;
+        if !self.installs {
+            return Ok(());
+        }
+        let log = self.log.clone();
+        r.on(events::PLUGINS_REQUESTED, move |_, asked, _| {
+            let ids: Vec<String> = asked.ids().map(|id| id.to_string()).collect();
+            log.borrow_mut()
+                .push(alloc::format!("{} asks {}", asked.by, ids.join(",")));
+        })
+    }
+}
+
+/// Where all asked for are on the device, or no plugin installs
+/// plugins, the kernel answers the plugin that asked itself; else the
+/// store does, and the kernel says nothing.
+#[test]
+fn the_kernel_answers_requests_no_store_can() {
+    let log = log();
+    let storage = MemoryStorage::new().with("plugins/dictionary/plugin.ini", "[plugin]\n");
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(Store {
+            log: log.clone(),
+            installs: false,
+        })
+        .storage(storage)
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    let id = Id::new_static;
+    kernel.apply(Command::request_plugins(id("reader"), [id("dictionary")]));
+    kernel.apply(Command::request_plugins(
+        id("reader"),
+        [id("script-arabic"), id("dictionary"), id("script-hebrew")],
+    ));
+    kernel.run_commands();
+    let error = kernel
+        .translator()
+        .tr("core.plugins.no-installer")
+        .to_string();
+    assert!(!error.is_empty() && error != "core.plugins.no-installer");
+    assert_eq!(
+        *log.borrow(),
+        [
+            String::from("reader got [] not [] declined false error \"\""),
+            alloc::format!(
+                "reader got [] not [script-arabic,script-hebrew] declined false error {error:?}"
+            ),
+        ]
+    );
+}
+
+/// A plugin asks for plugins by id: the store hears those not on the
+/// device, each once, with who asked; nothing where all are there.
+#[test]
+fn plugins_asked_for_by_id_go_to_the_store_if_not_on_the_device() {
+    let log = log();
+    let storage = MemoryStorage::new()
+        .with("plugins/dictionary/plugin.ini", "[plugin]\n")
+        .with("plugins/aids/plugin.ini", "[plugin]\n");
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(Store {
+            log: log.clone(),
+            installs: true,
+        })
+        .storage(storage)
+        .user_config("[plugins]\naids = off\n")
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    let id = Id::new_static;
+    kernel.apply(Command::request_plugins(
+        id("template-learning"),
+        [
+            id("vocabulary"),
+            id("dictionary"),
+            id("aids"),
+            id("core"),
+            id("shop"),
+            id("vocabulary"),
+            id("quotes"),
+        ],
+    ));
+    kernel.run_commands();
+    // On the device (switched off too), the kernel, twice: left out.
+    assert_eq!(*log.borrow(), ["template-learning asks vocabulary,quotes"]);
+    log.borrow_mut().clear();
+    kernel.apply(Command::request_plugins(id("x"), [id("dictionary")]));
+    kernel.apply(Command::request_plugins(id("x"), []));
+    kernel.run_commands();
+    // All there: answered at once, nothing for the store.
+    let none = "x got [] not [] declined false error \"\"";
+    assert_eq!(*log.borrow(), [none, none]);
+    log.borrow_mut().clear();
+    // More than one request takes: the rest left out, with a warning.
+    let many = (0..40).map(|i| Id::parse(&alloc::format!("p{i}")).unwrap());
+    kernel.apply(Command::request_plugins(id("x"), many));
+    kernel.run_commands();
+    let heard = log.borrow()[0].clone();
+    assert_eq!(
+        heard.matches(',').count() + 1,
+        paperpaw_sdk::MAX_REQUESTED_PLUGINS
+    );
+    assert!(
+        kernel
+            .take_warnings()
+            .iter()
+            .any(|w| w.message.contains("more than 32"))
+    );
 }

@@ -70,6 +70,7 @@ paperpaw-i18n.workspace = true
 
 [dependencies]
 paperpaw-core.workspace = true
+paperpaw-i18n.workspace = true
 paperpaw-plugin-diagnostics = { workspace = true, optional = true }
 paperpaw-plugin-dictionary.workspace = true
 paperpaw-plugin-files.workspace = true

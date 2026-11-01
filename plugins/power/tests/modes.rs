@@ -82,6 +82,27 @@ fn automatic_goes_by_the_battery_and_back_with_a_margin() {
     assert_eq!(device.mode().1, PowerLevel::Normal);
 }
 
+/// The system's own battery saver (Android's) on: Automatic wears Saving
+/// however full the battery, Offline still below its level, and Normal
+/// again once the saver is off.
+#[test]
+fn automatic_follows_the_system_saver() {
+    let mut device = Device::new();
+    let saver = |device: &mut Device, percent: u8, on: bool| {
+        device.now += 60_000;
+        let battery = Battery::new(percent, false, None).with_saver(on);
+        device
+            .kernel
+            .set_status(Instant(device.now), SystemStatus::new(None, Some(battery)));
+    };
+    saver(&mut device, 90, true);
+    assert_eq!(device.mode(), (power::SAVING, PowerLevel::Saving, true));
+    saver(&mut device, 5, true);
+    assert_eq!(device.mode().1, PowerLevel::Offline);
+    saver(&mut device, 90, false);
+    assert_eq!(device.mode().1, PowerLevel::Normal);
+}
+
 #[test]
 fn a_mode_wears_its_values_and_takes_them_off_again() {
     let mut device = Device::new();

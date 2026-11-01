@@ -189,6 +189,14 @@ impl<'a> FontHandle<'a> {
         }
     }
 
+    /// The font `text` is drawn in by [`FontHandle::draw_in`]: the one of
+    /// its first character that is not a space or a mark.
+    pub(super) fn pick_text(&self, text: &str) -> (&'a Font, u16) {
+        text.chars()
+            .find(|c| !c.is_whitespace() && !paperpaw_text::is_mark(*c))
+            .map_or((self.font, self.index), |c| self.pick(c))
+    }
+
     /// Whether `font` draws `c` in a part: a character it has; a space
     /// only where no font has one (the packs of a script have none: it is
     /// drawn by the font that has it, as wide as it is there).
@@ -199,7 +207,7 @@ impl<'a> FontHandle<'a> {
 
 /// Whether `text` is set as [`FontHandle::measure`] sets it, whatever is
 /// `around` it: left to right alone, no flags, no letter at its edges it
-/// could join.
+/// could join, no Hangul in jamo.
 pub(super) fn plain_in(text: &str, around: &paperpaw_text::Around) -> bool {
     let joins = |c: Option<char>| c.is_some_and(|c| matches!(c, '\u{0600}'..='\u{08FF}'));
     around.base != paperpaw_lang::Direction::Rtl
@@ -207,4 +215,5 @@ pub(super) fn plain_in(text: &str, around: &paperpaw_text::Around) -> bool {
         && !joins(around.before)
         && !joins(around.after)
         && !paperpaw_text::bidi::needs_bidi(text)
+        && !paperpaw_text::has_jamo(text)
 }

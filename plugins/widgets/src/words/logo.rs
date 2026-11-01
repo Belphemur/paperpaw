@@ -9,7 +9,7 @@ use alloc::string::{String, ToString};
 use paperpaw_sdk::logo::{LOGO, Logo};
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::{self, Thumbnail, UiStyle};
-use paperpaw_sdk::widgets::{self, Align, Frame, Padding, TextSize, Widget, WidgetSpec};
+use paperpaw_sdk::widgets::{self, Align, FixedWidget, Frame, Padding, TextSize, Widget};
 use paperpaw_sdk::{Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec};
 
 use super::frame_height;
@@ -47,10 +47,12 @@ pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         &SPEC
     })?;
     r.add_settings(&SETTINGS)?;
-    r.add_widget(
-        WidgetSpec::new(ID, "widgets.logo", |_| Box::new(LogoWidget::default()))
-            .category(widgets::categories::OTHER),
-    )
+    static WIDGET: [FixedWidget; 1] =
+        [
+            FixedWidget::new(ID, "widgets.logo", |_| Box::new(LogoWidget::default()))
+                .category(widgets::categories::OTHER),
+        ];
+    r.add_widgets(&WIDGET)
 }
 
 /// The logo, read where it is placed.

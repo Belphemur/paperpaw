@@ -416,6 +416,42 @@ impl EventData for Spoken {
     }
 }
 
+/// The reply to [`Command::PlaySound`](crate::Command::PlaySound): whether
+/// the sound was played, and its own parameters
+/// ([`Sound::with`](crate::sound::Sound::with)).
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Played {
+    /// It was played; `false` if it could not be (e.g. on a device
+    /// without sound, which is every device today).
+    pub played: bool,
+    /// The parameters the sound was given.
+    pub context: Params,
+}
+
+impl Played {
+    pub fn new(played: bool, context: Params) -> Self {
+        Self { played, context }
+    }
+}
+
+impl EventData for Played {
+    fn to_params(&self) -> Params {
+        let params = with_context(Params::new(), &self.context);
+        match self.played {
+            true => params,
+            false => params.with(crate::sound::params::FAILED, "1"),
+        }
+    }
+
+    fn from_params(params: &Params) -> Option<Self> {
+        Some(Self {
+            played: params.get(crate::sound::params::FAILED).is_none(),
+            context: context(params, &[crate::sound::params::FAILED]),
+        })
+    }
+}
+
 /// What happened to a plugin's server ([`Command::Serve`](crate::Command::Serve)).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]

@@ -28,6 +28,41 @@ use core::time::Duration;
 
 use crate::id::Id;
 
+/// What the shell changes by the power level (ADR 0025), so that the
+/// power settings show only what applies on this device
+/// ([`Capabilities::power`](crate::Capabilities::power)). Everything else a
+/// mode does (declared work, the radio's natural moments) applies on
+/// every device.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct PowerControls {
+    /// The radio's own power saving follows the level.
+    pub radio: bool,
+    /// The processor's clock follows the level.
+    pub cpu_clock: bool,
+    /// How often the buttons are read follows the level (less often in
+    /// Saving and Offline).
+    pub buttons: bool,
+    /// The front light follows the level (dimmer, off sooner).
+    pub frontlight: bool,
+    /// The system has a battery saver of its own (Android's), which the
+    /// shell reports ([`Battery::saver`](crate::Battery)): Automatic wears
+    /// Saving while it is on.
+    pub system_saver: bool,
+}
+
+impl PowerControls {
+    /// Whether the shell changes anything by the level.
+    pub const fn any(&self) -> bool {
+        self.radio || self.cpu_clock || self.buttons || self.frontlight || self.system_saver
+    }
+}
+
+/// The longest the reader goes online for with
+/// [`Command::GoOnlineFor`](crate::Command::GoOnlineFor): what Offline
+/// held back runs within it.
+pub const MAX_ONLINE_FOR: Duration = Duration::from_secs(10 * 60);
+
 /// The longest a [`WakeHold`] lasts: one wanted longer is renewed before
 /// it ends, so that a hold forgotten cannot empty the battery.
 pub const MAX_HOLD: Duration = Duration::from_secs(30 * 60);

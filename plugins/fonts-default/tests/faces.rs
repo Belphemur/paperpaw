@@ -303,3 +303,37 @@ fn packs_hold_the_latin_set_at_every_size() {
     };
     assert!(icons.has_char(icons::char("home").unwrap()));
 }
+
+/// The roles the bitmap packs bind. The lean build (the firmware, whose
+/// flash has no room for them) leaves out Literata's bold and italic:
+/// the data plugin `literata-styles` brings them from the card, and
+/// until then the reader sets them in the regular face. Not a missing
+/// binding that breaks anything: the roles are simply unbound.
+#[cfg(feature = "packs")]
+#[test]
+fn the_packs_bind_the_styles_unless_the_build_is_lean() {
+    use paperpaw_plugin_fonts_default::DefaultFontPacks;
+
+    let mut registrar = Registrar::new(PLUGIN);
+    DefaultFontPacks.register(&mut registrar).unwrap();
+    let contributions = registrar.into_contributions();
+    let mut bound: Vec<String> = contributions
+        .iter()
+        .filter_map(|c| match c {
+            Contribution::FontBinding { role, .. } => Some(role.to_string()),
+            _ => None,
+        })
+        .collect();
+    bound.sort_unstable();
+    let mut expected = vec![fonts::READING, fonts::UI, fonts::ICONS];
+    if cfg!(not(paperpaw_lean_fonts)) {
+        expected.extend([
+            fonts::READING_BOLD,
+            fonts::READING_ITALIC,
+            fonts::READING_BOLD_ITALIC,
+        ]);
+    }
+    let mut expected: Vec<String> = expected.iter().map(ToString::to_string).collect();
+    expected.sort_unstable();
+    assert_eq!(bound, expected);
+}

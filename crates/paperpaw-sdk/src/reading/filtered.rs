@@ -216,6 +216,15 @@ impl Document for FilteredDocument<'_, '_> {
         self.document.prepare_image(storage, image)
     }
 
+    fn prepare_image_larger(
+        &self,
+        storage: &dyn Storage,
+        image: &ImageRef,
+        long: u32,
+    ) -> Option<ImageRef> {
+        self.document.prepare_image_larger(storage, image, long)
+    }
+
     fn cover(&self, storage: &dyn Storage) -> Result<Option<ImageRef>, DocumentError> {
         self.document.cover(storage)
     }
