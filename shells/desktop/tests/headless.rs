@@ -347,8 +347,8 @@ fn a_plugin_switched_on_applies_after_the_restart() {
     let run = run(
         "restart",
         "boox-go-7",
-        "open:plugin-manager.list,wait:300,tap-on:Browser,wait:300,\
-         tap-on:Restart now,wait:500,open:plugin-manager.list,wait:300,describe",
+        "open:plugin-manager.list,wait:300,page-forward,wait:300,\
+         tap-on:Browser,wait:300,tap-on:Restart now,wait:500,open:plugin-manager.list,wait:300,page-forward,wait:300,describe",
         &[],
     );
     assert!(run.ok, "{}", run.stderr);
