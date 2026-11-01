@@ -47,6 +47,23 @@ impl<IO: ReadWriteSeek, TP, OCC> DirRawStream<'_, IO, TP, OCC> {
     }
 }
 
+// Modified for PaperPaw: `chain_at` and `seek_from` added (see `File::seek_from`).
+impl<IO: ReadWriteSeek, TP, OCC> DirRawStream<'_, IO, TP, OCC> {
+    fn chain_at(&self) -> Option<(u32, u32)> {
+        match self {
+            DirRawStream::File(file) => file.chain_at(),
+            DirRawStream::Root(_) => None,
+        }
+    }
+
+    fn seek_from(&mut self, offset: u64, at: Option<(u32, u32)>) -> Result<u64, Error<IO::Error>> {
+        match self {
+            DirRawStream::File(file) => file.seek_from(offset, at),
+            DirRawStream::Root(raw) => raw.seek(SeekFrom::Start(offset)),
+        }
+    }
+}
+
 // Note: derive cannot be used because of invalid bounds. See: https://github.com/rust-lang/rust/issues/26925
 impl<IO: ReadWriteSeek, TP, OCC> Clone for DirRawStream<'_, IO, TP, OCC> {
     fn clone(&self) -> Self {
@@ -137,7 +154,14 @@ impl<'a, IO: ReadWriteSeek, TP, OCC> Dir<'a, IO, TP, OCC> {
     /// `Error::Io` will be returned if the underlying storage object returned an I/O error.
     pub fn iter_from(&self, offset: u64) -> Result<DirIter<'a, IO, TP, OCC>, Error<IO::Error>> {
         let mut stream = self.stream.clone();
-        stream.seek(SeekFrom::Start(offset))?;
+        // From where the last such seek in this directory ended, while it is noted: the chain of a
+        // directory of thousands of entries is long, and seeking from its first cluster reads the
+        // FAT along all of it.
+        let first = stream.first_cluster();
+        stream.seek_from(offset, first.and_then(|c| self.fs.dir_chain(c)))?;
+        if let (Some(first), Some(at)) = (first, stream.chain_at()) {
+            self.fs.set_dir_chain(first, at);
+        }
         Ok(DirIter::new(stream, self.fs, true))
     }
 

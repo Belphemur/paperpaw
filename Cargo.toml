@@ -283,7 +283,8 @@ jni-macros = { path = "patches/jni-macros" }
 # entry before it removes the old one (rename, `Dir::replace`) and adds
 # `Dir::unlink`; it moves and removes an entry found without looking for it
 # again (`Dir::rename_found`, `remove_found`), lists a folder from an entry
-# on (`Dir::iter_from`) and keeps notes about folders until an entry is
+# on (`Dir::iter_from`, seeking from a place in the folder's cluster chain
+# kept with its note) and keeps notes about folders until an entry is
 # added to them (`Dir::note`), for lookups in big folders (patches/fatfs,
 # "Modified for PaperPaw"). The X4's
 # firmware, a workspace of its own, patches it the same way.

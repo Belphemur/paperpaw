@@ -175,3 +175,110 @@ fn files_moved_out_of_a_noted_folder_are_found_after_any_cut() {
         assert_nothing_lost(&s, s.fs.cluster_size(), n);
     }
 }
+
+/// A card of `count` files in folder `big` in clusters of one block, the
+/// folder's between the files' (as when books are copied into one folder
+/// one after the other): its chain is long and spread over the FAT. FAT32,
+/// as the X4's cards (of 40 MB: FAT32 needs that many clusters).
+fn long_chain(count: usize) -> Cut {
+    let options = FormatVolumeOptions::new()
+        .fat_type(fatfs::FatType::Fat32)
+        .bytes_per_cluster(512);
+    let card = Cut::formatted_of(40 << 20, options);
+    let s = card.storage();
+    for n in 0..count {
+        s.write(&format!("big/{}", long(n)), long(n).as_bytes())
+            .unwrap();
+    }
+    s.sync().unwrap();
+    card
+}
+
+/// Blocks read reading the files of a folder of `count` one after the
+/// other as it lists them, where `write`, a file elsewhere written after
+/// each (as the catalog's walk keeps what it read of a book: the blocks
+/// kept make room for others).
+fn read_in_order(count: usize, write: bool) -> usize {
+    let card = long_chain(count);
+    let s = card.storage();
+    let names = listed(&s, "big");
+    let mut read = 0;
+    for (n, name) in names.iter().enumerate() {
+        let before = card.reads.get();
+        assert_eq!(
+            whole(&s, &format!("big/{name}")),
+            Ok(name.clone().into_bytes())
+        );
+        read += card.reads.get() - before;
+        if write {
+            s.write(&format!("kept/{}.txt", n % 8), name.as_bytes())
+                .unwrap();
+        }
+    }
+    read
+}
+
+#[test]
+fn files_read_out_of_a_big_folder_in_its_order_take_as_many_blocks_each_whatever_its_size() {
+    let (few, many) = (read_in_order(400, true), read_in_order(1600, true));
+    // Each looked up from where the last one was, its place in the
+    // folder's chain too: the FAT is not read along the chain up to it
+    // (which took 4,908 blocks for the 1,600, 1,923 now).
+    assert!(many <= few * 4 * 5 / 4, "{few} then {many} blocks");
+    // Without the writes between, as many.
+    let (few, many) = (read_in_order(400, false), read_in_order(1600, false));
+    assert!(many <= few * 4 * 5 / 4, "{few} then {many} blocks");
+}
+
+#[test]
+fn names_of_a_folder_of_a_long_chain_are_found_from_any_place_in_it() {
+    let count = 700;
+    let card = long_chain(count);
+    let s = card.storage();
+    assert_eq!(listed(&s, "big").len(), count);
+    let found = |n: usize| {
+        assert_eq!(
+            whole(&s, &format!("big/{}", long(n))),
+            Ok(long(n).into_bytes()),
+            "{n}"
+        );
+    };
+    // In its order, backwards (the place kept is past each), by strides
+    // over clusters' ends, and from one end to the other.
+    (0..count).for_each(found);
+    (0..count).rev().for_each(found);
+    (0..count).step_by(37).for_each(found);
+    [count - 1, 0, count / 2, 1, count - 2]
+        .into_iter()
+        .for_each(found);
+    assert_eq!(
+        s.size("big/0123456789abcdef.ini"),
+        Err(StorageError::NotFound)
+    );
+    // Some removed: still noted, the others found at their places.
+    for n in (0..count).step_by(5) {
+        s.remove(&format!("big/{}", long(n))).unwrap();
+    }
+    assert!(s.dir("big").unwrap().note().is_some());
+    for n in 0..count {
+        let read = whole(&s, &format!("big/{}", long(n)));
+        if n % 5 == 0 {
+            assert_eq!(read, Err(StorageError::NotFound), "{n}");
+        } else {
+            assert_eq!(read, Ok(long(n).into_bytes()), "{n}");
+        }
+    }
+    // One added past the chain's end: no longer noted, all found again
+    // once it is read whole.
+    s.write(&format!("big/{}", long(count + 1)), b"new")
+        .unwrap();
+    assert_eq!(s.dir("big").unwrap().note(), None);
+    listed(&s, "big");
+    assert!(s.dir("big").unwrap().note().is_some());
+    found(count - 1);
+    found(3);
+    assert_eq!(
+        whole(&s, &format!("big/{}", long(count + 1))),
+        Ok(b"new".to_vec())
+    );
+}
