@@ -130,7 +130,7 @@ critical-section = "1.2"
 # tried; only `src/wifi.rs` uses it.
 esp-radio = { version = "=1.0.0-beta.1", features = ["wifi", "unstable", "esp-alloc"] }
 esp-rtos = { version = "0.4", features = ["esp-radio", "esp-alloc"] }
-smoltcp = { version = "0.12", default-features = false, features = ["medium-ethernet", "proto-ipv4", "proto-dhcpv4", "proto-dns", "socket-tcp", "socket-udp", "socket-dhcpv4", "socket-dns", "alloc"] }
+smoltcp = { version = "0.12", default-features = false, features = ["medium-ethernet", "proto-ipv4", "proto-dhcpv4", "proto-dns", "multicast", "socket-tcp", "socket-udp", "socket-dhcpv4", "socket-dns", "alloc"] }
 embassy-net-driver = "0.2"
 # Bluetooth (feature `bluetooth`): trouble-host's 0.7 is the one on
 # esp-radio's bt-hci 0.9. Central and GATT client with pairing; the

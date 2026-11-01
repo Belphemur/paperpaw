@@ -127,6 +127,12 @@ pub struct Net {
     server: Option<(SocketHandle, paperpaw_x4::dhcp::Server)>,
     /// Created once DHCP named the name servers.
     dns: Option<SocketHandle>,
+    /// The device's name as the router has it (DHCP's option 12): also
+    /// the label of its `.local` name.
+    label: Option<&'static [u8]>,
+    /// Answers for `<label>.local` (multicast DNS): its socket, once the
+    /// network gave an address.
+    names: Option<(SocketHandle, paperpaw_x4::mdns::Responder)>,
     /// The address DHCP gave, with its network's size.
     address: Option<smoltcp::wire::Ipv4Cidr>,
     /// The next local port for a connection.
@@ -149,6 +155,7 @@ impl Net {
     /// The name the router lists the device by (DHCP's option 12,
     /// `host`), from the next time DHCP asks (joining a network).
     pub fn set_host_name(&mut self, host: &'static [smoltcp::wire::DhcpOption<'static>]) {
+        self.label = host.first().map(|option| option.data);
         if let Some(handle) = self.dhcp {
             self.sockets
                 .get_mut::<dhcpv4::Socket<'static>>(handle)
@@ -197,6 +204,8 @@ impl Net {
             dhcp: None,
             server: None,
             dns: None,
+            label: None,
+            names: None,
             address: None,
             // In the range for ports a client picks.
             port: 49152 + (rng.random() % 16000) as u16,
@@ -249,6 +258,7 @@ impl Net {
         }
         self.stack.poll(now(), &mut self.phy, &mut self.sockets);
         self.serve_addresses();
+        self.serve_names();
         let Some(dhcp) = self.dhcp else {
             return;
         };
@@ -262,6 +272,7 @@ impl Net {
                     addrs.clear();
                     let _ = addrs.push(IpCidr::Ipv4(config.address));
                 });
+                let local = config.address.address().octets();
                 match config.router {
                     Some(router) => {
                         let _ = self.stack.routes_mut().add_default_ipv4_route(router);
@@ -288,6 +299,7 @@ impl Net {
                         self.dns = Some(self.sockets.add(socket));
                     }
                 }
+                self.answer_for_name(local);
             }
             Some(dhcpv4::Event::Deconfigured) => {
                 log::info!("net: address gone");
@@ -309,6 +321,7 @@ impl Net {
 
     fn forget_address(&mut self) {
         self.address = None;
+        self.silence_name();
         self.stack.update_ip_addrs(|addrs| addrs.clear());
         self.stack.routes_mut().remove_default_ipv4_route();
     }
@@ -320,6 +333,87 @@ impl Net {
         self.server
             .as_ref()
             .map_or(0, |(_, server)| server.guests(seconds))
+    }
+
+    /// In a network with an address: answers for the device's `.local`
+    /// name (`paperpaw_x4::mdns`) at `address`. Without a name, or memory
+    /// for the socket, the device is only found by its address.
+    fn answer_for_name(&mut self, address: [u8; 4]) {
+        let Some(responder) = self
+            .label
+            .and_then(|label| paperpaw_x4::mdns::Responder::new(label, address))
+        else {
+            return;
+        };
+        if let Some((_, kept)) = &mut self.names {
+            *kept = responder;
+            return;
+        }
+        let Ok(handle) = self.open_udp(2, 2 * 512) else {
+            return;
+        };
+        let Some(raw) = handle.of(self.generation) else {
+            return;
+        };
+        let socket = self.sockets.get_mut::<udp::Socket<'_>>(raw);
+        socket.close();
+        if socket.bind(paperpaw_x4::mdns::PORT).is_err() {
+            self.sockets.remove(raw);
+            return;
+        }
+        let group = smoltcp::wire::Ipv4Address::from(paperpaw_x4::mdns::GROUP);
+        if self.stack.join_multicast_group(group).is_err() {
+            log::info!("net: the multicast group was not joined");
+        }
+        log::info!(
+            "net: answering for {}",
+            core::str::from_utf8(&responder.name()).unwrap_or("?")
+        );
+        self.names = Some((raw, responder));
+    }
+
+    /// The address is gone: the name is not answered for, and the socket
+    /// and the group are let go.
+    fn silence_name(&mut self) {
+        if let Some((handle, _)) = self.names.take() {
+            self.sockets.remove(handle);
+            let group = smoltcp::wire::Ipv4Address::from(paperpaw_x4::mdns::GROUP);
+            let _ = self.stack.leave_multicast_group(group);
+        }
+    }
+
+    /// Answers the queries for the device's name, while something serves
+    /// (a TCP socket listens): an idle reader on a network does not
+    /// announce itself.
+    fn serve_names(&mut self) {
+        let Some((handle, responder)) = &mut self.names else {
+            return;
+        };
+        let serving = self.sockets.iter().any(|(_, socket)| {
+            matches!(socket, smoltcp::socket::Socket::Tcp(tcp)
+                if tcp.listen_endpoint().port != 0)
+        });
+        let socket = self.sockets.get_mut::<udp::Socket<'_>>(*handle);
+        let mut answers = Vec::new();
+        while let Ok((query, meta)) = socket.recv() {
+            let from = meta.endpoint;
+            if serving && let Some(reply) = responder.answer(query, from.port) {
+                answers.push((reply, from));
+            }
+        }
+        let group = smoltcp::wire::IpEndpoint::new(
+            IpAddress::Ipv4(smoltcp::wire::Ipv4Address::from(paperpaw_x4::mdns::GROUP)),
+            paperpaw_x4::mdns::PORT,
+        );
+        for (reply, from) in answers {
+            let (bytes, to) = match reply {
+                paperpaw_x4::mdns::Reply::Group(bytes) => (bytes, group),
+                paperpaw_x4::mdns::Reply::Asker(bytes) => (bytes, from),
+            };
+            if let Err(e) = socket.send_slice(&bytes, to) {
+                log::info!("net: the name was not answered: {e:?}");
+            }
+        }
     }
 
     /// In the device's own network: answers those asking for an address.
