@@ -8,6 +8,11 @@ change the plugin SDK.
 
 ### Added
 
+- SDK: `Command::RequestPlugins` (`Command::request_plugins`): any plugin can ask for plugins by id (e.g. those
+  a template names); those not on the device go to the store as `events::PLUGINS_REQUESTED`
+  (`PluginsRequested`, at most `MAX_REQUESTED_PLUGINS`), which asks the reader before it downloads any.
+- SDK: `Settings::default_from` names the plugin whose default a setting has in place of its own (a template's
+  `settings.ini`, a theme's), so a settings page can say where a value comes from.
 - Font packs (`.ppfp`) can lie loose in a shell's font folder, without a `plugin.ini`: each is a face of the
   family its file name gives (`Literata-BoldItalic.ppfp`, `Bookerly.ppfp`). A device without scalable fonts
   leaves OpenType/TrueType files there alone (no warning for each); hidden files (`._…`) are passed over.

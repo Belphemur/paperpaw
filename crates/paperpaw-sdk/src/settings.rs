@@ -841,6 +841,9 @@ pub struct Settings {
     /// until the next mode (see [`Settings::released`]).
     released: Vec<Id>,
     presets: crate::presets::Presets,
+    /// The plugins whose defaults are in force, by setting (see
+    /// [`Settings::default_from`]).
+    defaults_by: VecMap<Id, Id>,
 }
 
 impl Settings {
@@ -1243,6 +1246,15 @@ impl Settings {
         let id = self.value_id(id)?;
         self.values.insert(id, value);
         Ok(())
+    }
+
+    /// The plugin whose default setting `id` has in place of its own
+    /// plugin's, e.g. a template's (a data plugin's `settings.ini`), so a
+    /// settings page can say where the value comes from; `None` where
+    /// the default is the setting's own or the device's. The default only:
+    /// the reader's own value may be set over it ([`Settings::is_set`]).
+    pub fn default_from(&self, id: &str) -> Option<&Id> {
+        self.defaults_by.get(id)
     }
 
     paperpaw_table::shared! {

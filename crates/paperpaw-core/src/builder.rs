@@ -1099,10 +1099,10 @@ impl Kernel {
                 );
                 continue;
             }
-            if let Err(error) = self
-                .shared
-                .settings
-                .set_default_from_text(id.as_str(), &value)
+            if let Err(error) =
+                self.shared
+                    .settings
+                    .set_default_by(id.as_str(), &value, plugin.clone())
             {
                 self.warn(
                     WarningSource::Plugin(plugin),

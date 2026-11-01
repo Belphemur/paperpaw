@@ -762,6 +762,15 @@ pub enum Command {
     /// follows. A folder that holds another plugin, or none that loads,
     /// is deleted with a warning, and the version before stays.
     InstallPlugin(Id, String),
+    /// Asks for plugins by id, e.g. those a template or a plugin's own
+    /// page names: those not on the device (in any version, switched off
+    /// or not) go to the plugin that installs plugins as
+    /// [`PLUGINS_REQUESTED`](crate::builtin::events::PLUGINS_REQUESTED),
+    /// which asks the reader first; nothing is installed without them.
+    /// `by` is the plugin that asks, as the reader is told. At most
+    /// [`MAX_REQUESTED_PLUGINS`](crate::MAX_REQUESTED_PLUGINS)
+    /// ids are taken. Made with [`Command::request_plugins`].
+    RequestPlugins { by: Id, plugins: Vec<Id> },
     /// Makes an HTTP request (see [`HttpRequest`]); the answer comes as
     /// the request's reply event. Check [`Capabilities::network`](crate::Capabilities) first.
     /// Made with [`Command::http`].
@@ -980,6 +989,14 @@ impl Command {
     pub fn broadcast(id: Id, ports: Vec<u16>, data: Vec<u8>, wait_ms: u32, events: Id) -> Self {
         let broadcast = Broadcast::new(id, ports, data, wait_ms, events);
         Command::Broadcast(alloc::boxed::Box::new(broadcast))
+    }
+
+    /// [`Command::RequestPlugins`]: plugin `by` asks for `plugins`.
+    pub fn request_plugins(by: impl Into<Id>, plugins: impl IntoIterator<Item = Id>) -> Self {
+        Command::RequestPlugins {
+            by: by.into(),
+            plugins: plugins.into_iter().collect(),
+        }
     }
 
     /// [`Command::Http`]: makes `request`.

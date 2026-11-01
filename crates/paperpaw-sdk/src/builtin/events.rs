@@ -151,6 +151,25 @@ crate::event_data! {
 }
 
 crate::event_data! {
+    /// Plugins asked for by id ([`PLUGINS_REQUESTED`], sent with
+    /// [`Command::RequestPlugins`](crate::Command::RequestPlugins)).
+    pub struct PluginsRequested {
+        /// The plugin that asks, as it names itself.
+        pub by: Id,
+        /// The ids asked for that are not on the device, each once,
+        /// separated by spaces (see [`PluginsRequested::ids`]).
+        pub plugins: String,
+    }
+}
+
+impl PluginsRequested {
+    /// The ids asked for, in their order.
+    pub fn ids(&self) -> impl Iterator<Item = Id> + '_ {
+        self.plugins.split(' ').filter_map(|id| Id::parse(id).ok())
+    }
+}
+
+crate::event_data! {
     /// The catalog wanted ([`CATALOG_WANTED`]).
     pub struct CatalogWanted {
         /// Made anew in any case, not only where it was not made since
@@ -595,6 +614,11 @@ pub const WIDGET_CHANGED: Event<WidgetChanged> = Event::new("core.widget-changed
 /// [`Command::RemovePlugin`](crate::Command::RemovePlugin)): lists of
 /// plugins, fonts and presets read them anew.
 pub const PLUGINS_CHANGED: Event<()> = Event::new("core.plugins-changed");
+/// A plugin asked for plugins by id that are not on the device
+/// ([`Command::RequestPlugins`](crate::Command::RequestPlugins)): for the
+/// plugin that installs plugins (the store), which asks the reader
+/// before it downloads any.
+pub const PLUGINS_REQUESTED: Event<PluginsRequested> = Event::new("core.plugins-requested");
 /// Another screen is shown on top ([`ScreenShown`]): one opened, or
 /// the one below a screen closed. The whole stack is in
 /// [`Env::stack`](crate::Env::stack). For plugins that subscribe:

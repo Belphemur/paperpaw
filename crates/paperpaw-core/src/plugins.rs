@@ -695,6 +695,46 @@ impl Kernel {
         self.shared.fonts.set_ui_ink(ink);
     }
 
+    /// Plugin `by` asks for `plugins` ([`Command::RequestPlugins`](paperpaw_sdk::Command::RequestPlugins)):
+    /// those not on the device, each once and at most
+    /// [`MAX_REQUESTED_PLUGINS`](paperpaw_sdk::MAX_REQUESTED_PLUGINS),
+    /// go to the store as
+    /// [`PLUGINS_REQUESTED`](paperpaw_sdk::builtin::events::PLUGINS_REQUESTED);
+    /// none, no event.
+    pub(crate) fn request_plugins(&mut self, by: Id, plugins: Vec<Id>) {
+        let mut wanted: Vec<Id> = Vec::new();
+        for id in plugins {
+            if wanted.len() == paperpaw_sdk::MAX_REQUESTED_PLUGINS {
+                self.warn_runtime(format!(
+                    "{by}: more than {} plugins asked for at once; the rest left out",
+                    paperpaw_sdk::MAX_REQUESTED_PLUGINS
+                ));
+                break;
+            }
+            let known = self.shared.plugins.get(id.as_str()).is_some()
+                || id.as_str() == crate::core_plugin::CORE.as_str();
+            if !known && !wanted.contains(&id) {
+                wanted.push(id);
+            }
+        }
+        if wanted.is_empty() {
+            return;
+        }
+        let mut list = String::new();
+        for id in &wanted {
+            if !list.is_empty() {
+                list.push(' ');
+            }
+            list.push_str(id.as_str());
+        }
+        let request = paperpaw_sdk::builtin::events::PluginsRequested::new(by, list);
+        let event = paperpaw_sdk::builtin::events::PLUGINS_REQUESTED;
+        self.emit(
+            &Id::from(&event),
+            &paperpaw_sdk::event::EventData::to_params(&request),
+        );
+    }
+
     /// Loads the data plugin in `folder` while running (see
     /// [`Command::LoadPlugin`](paperpaw_sdk::Command::LoadPlugin)).
     pub(crate) fn load_plugin(&mut self, folder: &str) {

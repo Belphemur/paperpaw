@@ -401,6 +401,7 @@ impl Kernel {
             Command::LoadPlugin(folder) => self.load_plugin(&folder),
             Command::RemovePlugin(id) => self.remove_plugin(&id),
             Command::InstallPlugin(id, folder) => self.install_plugin(&id, &folder),
+            Command::RequestPlugins { by, plugins } => self.request_plugins(by, plugins),
             Command::Sleep => self.sleep = self.shared.caps.sleep,
             Command::PowerOff => self.power_off = self.shared.caps.power_off,
             Command::UsbDrive => {

@@ -16,6 +16,10 @@ use crate::plugin::Manifest;
 
 pub mod requires;
 
+/// The most plugins one [`Command::RequestPlugins`](crate::Command::RequestPlugins)
+/// asks for; those past it are left out.
+pub const MAX_REQUESTED_PLUGINS: usize = 32;
+
 /// What [`RequiredFor`] can name: the standard slots and the UI font.
 static ESSENTIALS: [Id; 6] = [
     slots::HOME,
