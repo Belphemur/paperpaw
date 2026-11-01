@@ -8,6 +8,11 @@ change the plugin SDK.
 
 ### Added
 
+- Font packs (`.ppfp`) can lie loose in a shell's font folder, without a `plugin.ini`: each is a face of the
+  family its file name gives (`Literata-BoldItalic.ppfp`, `Bookerly.ppfp`). A device without scalable fonts
+  leaves OpenType/TrueType files there alone (no warning for each); hidden files (`._…`) are passed over.
+- SDK: `Fonts::missing_letters` (and `FontSet::missing_letters`) counts the letters drawn that no font has, so
+  a screen can tell that a page lacked letters (e.g. to offer the font pack with them).
 - SDK (document, layout VERSION 11): a run's style can carry the book's letter spacing
   (`TextStyle::letter_spacing`, in fortieths of an em, `LETTER_SPACING_STEPS`), a line over the text
   (`TextStyle::OVERLINE`) and how its lines are drawn (`TextStyle::line_style`, `LineStyle`: one, two, dotted,

@@ -167,9 +167,12 @@ impl KernelBuilder {
         self
     }
 
-    /// A folder on the storage with font files (OpenType/TrueType) to
-    /// read with; they appear as one plugin, "font folder". Only for
-    /// devices that render scalable fonts.
+    /// A folder on the storage with font files to read with, also in
+    /// folders of its own (one level); they appear as one plugin, "font
+    /// folder". Font packs (`.ppfp`) on every device, each a face of the
+    /// family its file name gives (`Literata-BoldItalic.ppfp`), without a
+    /// `plugin.ini`; OpenType/TrueType files where scalable fonts are
+    /// drawn (the `outline` feature).
     pub fn font_dir(mut self, dir: impl Into<String>) -> Self {
         self.0.font_dirs.push(dir.into());
         self
