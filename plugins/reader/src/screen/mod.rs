@@ -440,12 +440,19 @@ impl Screen for ReaderScreen {
         }
     }
 
-    /// A book whose pages go right to left: taps and swipes the other way.
-    fn mirrored(&self) -> bool {
-        self.book.as_ref().is_ok_and(|book| {
-            book.document.metadata().direction
-                == paperpaw_sdk::document::PageProgression::RightToLeft
-        })
+    /// The book's own way: taps and swipes the other way where its pages
+    /// go right to left, as they are where they go left to right (also in
+    /// a right-to-left interface). Without a book, as the interface goes.
+    fn direction(&self) -> paperpaw_sdk::lang::Direction {
+        use paperpaw_sdk::document::PageProgression;
+        use paperpaw_sdk::lang::Direction;
+        match &self.book {
+            Ok(book) if book.document.metadata().direction == PageProgression::RightToLeft => {
+                Direction::Rtl
+            }
+            Ok(_) => Direction::Ltr,
+            Err(_) => Direction::Auto,
+        }
     }
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {

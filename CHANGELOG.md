@@ -35,6 +35,11 @@ change the plugin SDK.
 - SDK: room for later questions without a new plugin interface: `KeyBindings::extended`,
   `ScreenMaker::extended` and `Typesetter::extended` (with `paperpaw_layout::TypesetKey`) answer `None`
   by default; none is asked yet (`docs/sdk-design.md`, rule 17).
+- In a right-to-left interface (Arabic), taps at the sides and swipes go the other way on every screen, as
+  they do in a book whose pages go right to left. SDK: `Screen::direction` (a `lang::Direction`) replaces
+  `Screen::mirrored`: `Auto` by default (as the interface goes), `Ltr` or `Rtl` for a screen with a way of
+  its own; the reader gives its book's, so a left-to-right book keeps its sides in Arabic. **Breaking** for
+  screens that implemented `mirrored`.
 - SDK: rows moved by dragging have their grip at the left in a right-to-left interface.
   `Reorder::grip` and `Reorder::content` take the `UiStyle`, and `Reorder::draw` takes `&mut self`
   (it notes the direction for the pointer samples that follow): **breaking** for plugins that move rows.

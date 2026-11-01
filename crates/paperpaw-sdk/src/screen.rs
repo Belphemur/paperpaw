@@ -535,14 +535,19 @@ pub trait Screen {
         false
     }
 
-    /// Whether its taps and swipes go the other way: what the key map
+    /// Which way its taps and swipes go. Right to left, what the key map
     /// binds to the left side and to a swipe to the left happens on the
-    /// right and for a swipe to the right, and the other way round, e.g.
-    /// a book whose pages go right to left
-    /// ([`PageProgression`](crate::document::PageProgression)). Buttons
-    /// stay as they are.
-    fn mirrored(&self) -> bool {
-        false
+    /// right and for a swipe to the right, and the other way round;
+    /// buttons stay as they are. By default ([`Direction::Auto`]) as the
+    /// interface goes ([`Env::direction`]): right to left in Arabic. A
+    /// screen with a direction of its own says so, e.g. a book whose
+    /// pages go right to left
+    /// ([`PageProgression`](crate::document::PageProgression)), or left
+    /// to right in an Arabic interface.
+    ///
+    /// [`Direction::Auto`]: paperpaw_lang::Direction::Auto
+    fn direction(&self) -> paperpaw_lang::Direction {
+        paperpaw_lang::Direction::Auto
     }
 
     /// When it shows the row of hints, where it knows better than the
