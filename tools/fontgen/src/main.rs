@@ -305,6 +305,53 @@ mod tests {
         std::fs::remove_dir_all(out).ok();
     }
 
+    /// The Korean letters come in two packs (#61): `hangul-ks.txt` for the
+    /// base pack, `hangul-rest.txt` for the extra one that only adds
+    /// letters. A syllable outside KS X 1001 is in the extra pack's set, not
+    /// the base pack's, and the font draws it.
+    #[test]
+    fn rare_syllables_are_the_extra_packs() {
+        let sets = concat!(env!("CARGO_MANIFEST_DIR"), "/sets");
+        let has = |file: &str, c: char| {
+            let set = format!("@{sets}/{file}");
+            let ranges = ranges_of(&[set]).unwrap();
+            ranges.iter().any(|r| r.contains(&c))
+        };
+        // 한 is of everyday text; 똠 (U+B620) is in no KS X 1001 row.
+        assert!(has("hangul-ks.txt", '한') && !has("hangul-rest.txt", '한'));
+        assert!(has("hangul-rest.txt", '똠') && !has("hangul-ks.txt", '똠'));
+        // Together, all of them, each once.
+        let count = |file: &str| {
+            let ranges = ranges_of(&[format!("@{sets}/{file}")]).unwrap();
+            ranges
+                .iter()
+                .map(|r| *r.end() as u32 - *r.start() as u32 + 1)
+                .sum::<u32>()
+        };
+        assert_eq!(count("hangul-ks.txt") + count("hangul-rest.txt"), 11_172);
+        // The pack of the rare syllables (here one of them and a size)
+        // draws it, with letters in it.
+        let font = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../fonts/NanumMyeongjo-Regular.ttf"
+        );
+        let out = std::env::temp_dir().join(format!("fontgen-rest-{}.ppfp", std::process::id()));
+        let args = [
+            font,
+            out.to_str().unwrap(),
+            "--sizes",
+            "20",
+            "--chars",
+            "U+B620",
+        ];
+        run(args.iter().map(|a| (*a).to_string()).collect()).unwrap();
+        let pack = paperpaw_text::BitmapFont::new(std::fs::read(&out).unwrap()).unwrap();
+        assert!(pack.has_char('똠'));
+        assert!(pack.glyph('똠', 20.0).width > 0);
+        assert!(!pack.has_char('한'));
+        std::fs::remove_file(out).ok();
+    }
+
     #[test]
     fn set_files_say_their_format() {
         let dir = std::env::temp_dir().join(format!("fontgen-sets-{}", std::process::id()));

@@ -28,7 +28,7 @@ def ready():
     """The entries below the marker's text, their comment signs taken away."""
     text = (data.HERE / "data.toml").read_text(encoding="utf-8")
     block = text[text.index(READY):]
-    block = block[block.index("# # script-korean"):]
+    block = block[block.index("# # script-korean (#61)"):]
     lines = [line[2:] if line.startswith("# ") else "" for line in block.splitlines()]
     return tomllib.loads("\n".join(lines))
 
@@ -75,6 +75,43 @@ class Ready(unittest.TestCase):
         # use it (NOTICE).
         texts = [fields["name"], fields["description"], *fields["de"].values()]
         self.assertFalse([t for t in texts if "Nanum" in t])
+
+    def test_the_extra_pack_adds_what_the_korean_pack_lacks(self):
+        entries = ready()
+        fields = entries["script-korean-extra"]
+        self.assertEqual(fields["build"], "tools/script-pack.py")
+        self.assertTrue(fields["off_by_default"])
+        self.assertEqual(fields["licence"], "OFL-1.1")
+        # Names, descriptions and how it works, in both languages; the
+        # size is named where the store shows it.
+        for key in ["name", "description", "how"]:
+            self.assertTrue(fields[key] and fields["de"][key], key)
+        self.assertIn("30 MiB", fields["description"])
+        self.assertIn("30 MiB", fields["de"]["description"])
+        for path in [fields["build"], *fields["inputs"]]:
+            self.assertTrue((data.ROOT / path).exists(), path)
+        self.assertIn("id = script-korean-extra\n",
+                      data.plugin_ini("script-korean-extra", fields))
+        catalog = dict(data.catalogs("script-korean-extra", fields))
+        for lang in ["en", "de"]:
+            self.assertIn("script-korean-extra.plugin.how = \"", catalog[f"i18n/{lang}.ini"])
+            self.assertNotIn("\n\n\n", catalog[f"i18n/{lang}.ini"])
+        # Its letters and the Korean pack's are all the syllables, none twice.
+        base, rest = sets("hangul-ks.txt"), sets("hangul-rest.txt")
+        self.assertFalse(base & rest)
+        self.assertEqual(base | rest, set(range(0xAC00, 0xD7A4)))
+        self.assertEqual((len(base), len(rest)), (2350, 8822))
+
+
+def sets(name):
+    """The code points of a character set file of tools/fontgen/sets."""
+    found = set()
+    text = (data.ROOT / "tools/fontgen/sets" / name).read_text(encoding="utf-8")
+    for line in text.splitlines():
+        for item in line.split("#")[0].split():
+            first, _, last = item.removeprefix("U+").partition("-")
+            found.update(range(int(first, 16), int(last or first, 16) + 1))
+    return found
 
 
 if __name__ == "__main__":

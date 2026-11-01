@@ -2085,7 +2085,8 @@ little memory can use them ([ADR 0018](adr/0018-font-packs-for-other-scripts.md)
 `tools/script-pack.py` builds Cyrillic and Greek for Literata (the data plugins
 `script-cyrillic` and `script-greek`), and
 Arabic and Hebrew (with where their marks sit) and Korean (the Hangul
-of KS X 1001, ready as `script-korean`, not offered yet) from the fonts
+of KS X 1001, ready as `script-korean`, and the other 8,822 syllables as
+`script-korean-extra`, about 30 MiB; neither offered yet) from the fonts
 in `tools/fonts`. A pack that extends a face with sizes larger than its own,
 and has its letters (at least those of `aenoAEO0` the face has), draws
 text asked that large, and the font size goes as far; a pack of another

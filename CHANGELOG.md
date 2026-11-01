@@ -104,6 +104,12 @@ change the plugin SDK.
   `tools/script-pack.py korean` builds from the repository, with no code and no interface change. Its entry in
   `tools/plugin-files/data.toml` is commented out until the owner decides to offer it in the store; its keyboard
   layout (two-set Hangul, `tools/plugin-files/keyboards/korean.txt`) comes with it.
+- A second Korean pack, `script-korean-extra` (#61): the other 8,822 of the 11,172 Hangul syllables (rare ones outside
+  KS X 1001), about 30 MiB on the card and no flash. It only adds letters to `script-korean`, so it needs no interface
+  change; `tools/script-pack.py korean-extra` builds it (`tools/fontgen/sets/hangul-rest.txt`). Its entry in
+  `tools/plugin-files/data.toml` is commented out like the Korean pack's, and the reader is to offer it only for a
+  book that uses such syllables, with its size.
+- A data plugin's entry in `tools/plugin-files/data.toml` may have `how` and `de.how`: its *How it works* text.
 
 ### Changed
 

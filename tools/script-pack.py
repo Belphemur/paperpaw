@@ -58,6 +58,10 @@ def upright(name, file):
 # Korean: one static face (no weight axis); its pack is not named after
 # the font, whose licence reserves its name for the font itself (NOTICE).
 KOREAN = [("korean", OTHER_FONTS / "NanumMyeongjo-Regular.ttf", None, "fonts-default.literata")]
+# The other 8,822 syllables, a pack of its own that only adds letters to
+# the Korean pack (about 30 MiB on the card): offered for books that use them.
+KOREAN_EXTRA = [("korean-extra", OTHER_FONTS / "NanumMyeongjo-Regular.ttf", None,
+                 "fonts-default.literata")]
 
 # Per set: its name, the faces it is drawn in, the font's licence, the
 # font named in the plugin's description, and the characters
@@ -72,6 +76,8 @@ SETS = {
     "korean": ("Korean", KOREAN, OTHER_FONTS / "NanumMyeongjo-OFL.txt", "a Korean book face",
                [f"@{ROOT / 'tools/fontgen/sets/hangul-ks.txt'}",
                 "cjk-punctuation", "hangul-jamo", "fullwidth"]),
+    "korean-extra": ("Korean", KOREAN_EXTRA, OTHER_FONTS / "NanumMyeongjo-OFL.txt",
+                     "a Korean book face", [f"@{ROOT / 'tools/fontgen/sets/hangul-rest.txt'}"]),
 }
 
 
@@ -156,7 +162,9 @@ def main():
     if sets:
         plugins = [sets]
     else:
-        plugins = [id.removeprefix("script-").split("-")
+        # A pack named for a set of its own (script-korean-extra), else for
+        # the sets it holds (script-cyrillic-greek).
+        plugins = [[named] if (named := id.removeprefix("script-")) in SETS else named.split("-")
                    for id, fields in data.plugins().items()
                    if fields["build"] == "tools/script-pack.py"] or [["cyrillic", "greek"]]
     subprocess.run(["cargo", "build", "-q", "--release", "-p", "paperpaw-fontgen"],

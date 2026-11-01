@@ -114,3 +114,23 @@ de.description = "Bücher auf Russisch, Ukrainisch, Bulgarisch, Serbisch und and
 # description = "Korean books in a classic book face: the 2,350 Hangul syllables of everyday text, and a keyboard for typing Korean."
 # de.name = "Koreanische Schrift"
 # de.description = "Bücher auf Koreanisch in einer klassischen Buchschrift: die 2.350 Hangul-Silben des Alltags, und eine Tastatur dafür."
+#
+# # script-korean-extra (#61, owner decision 43): the other 8,822 of the
+# # 11,172 Hangul syllables, rare ones outside KS X 1001, as a pack of its
+# # own that only adds letters to script-korean (it needs that pack, and
+# # brings no letters of its own beyond them). About 30 MiB on the card, so
+# # the reader offers it only for a book that uses such syllables.
+# [script-korean-extra]
+# version = "1.0.0"
+# group = "look"
+# licence = "OFL-1.1"
+# devices = ["x4", "x4-pro", "x4-classic"]
+# off_by_default = true
+# build = "tools/script-pack.py"
+# inputs = ["tools/fonts/NanumMyeongjo-Regular.ttf", "tools/fontgen", "tools/fontgen/sets/hangul-rest.txt"]
+# name = "Korean letters, rare syllables"
+# description = "The rare Hangul syllables outside everyday text, for books that use them. Needs Korean letters. About 30 MiB on the card."
+# de.name = "Koreanische Schrift, seltene Silben"
+# de.description = "Die seltenen Hangul-Silben außerhalb des Alltagstexts, für Bücher, die sie brauchen. Braucht die Koreanische Schrift. Etwa 30 MiB auf der Karte."
+# how = "Korean letters shows the 2,350 Hangul syllables of everyday text. A few books use rarer ones, which then show as question marks. This pack adds the other 8,822 syllables.\n\nIt needs Korean letters and about 30 MiB on the memory card (flash is not used). Install it only if a book shows question marks in Korean text; PaperPaw offers it for such books. It adds letters only and changes nothing else."
+# de.how = "Die Koreanische Schrift zeigt die 2.350 Hangul-Silben des Alltagstexts. Einige Bücher brauchen seltenere Silben, die dann als Fragezeichen erscheinen. Dieses Paket ergänzt die übrigen 8.822 Silben.\n\nEs braucht die Koreanische Schrift und etwa 30 MiB auf der Speicherkarte (der Flash-Speicher bleibt unberührt). Installiere es nur, wenn ein Buch in koreanischem Text Fragezeichen zeigt; PaperPaw bietet es für solche Bücher an. Es ergänzt nur Buchstaben und ändert sonst nichts."
