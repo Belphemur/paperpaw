@@ -18,8 +18,21 @@ pub struct Addresses<const N: usize>(pub [*const (); N]);
 // never written.
 unsafe impl<const N: usize> Sync for Addresses<N> {}
 
+// Only where a plugin can call the tables: a RISC-V chip's firmware, and
+// a computer's build (the tests of table mode). Elsewhere (the X4 Pro's
+// Xtensa chip) the addresses would only keep the firmware's compiler from
+// inlining the shared functions into their one caller.
+#[cfg(any(target_arch = "riscv32", not(target_os = "none")))]
 #[path = "shared_table.rs"]
 mod tables;
+
+/// A chip whose plugins carry their own copies: no tables.
+#[cfg(not(any(target_arch = "riscv32", not(target_os = "none"))))]
+mod tables {
+    pub(super) const fn of(_: usize) -> paperpaw_table::Table {
+        paperpaw_table::Table::NONE
+    }
+}
 
 /// The table of `family`, [`Table::NONE`] for one the firmware does not
 /// share. The revisions of the families are `paperpaw_table::REVISIONS`.
@@ -33,15 +46,29 @@ mod tests {
     use super::*;
 
     /// Every family with revisions has a table of one non-null address for
-    /// each index of `paperpaw_table::index`.
+    /// each index of `paperpaw_table::index`; one without has none.
     #[test]
-    fn the_text_table_is_whole() {
-        let t = table(Family::TEXT);
-        assert!(!t.0.is_null());
-        for i in 0..paperpaw_table::index::text::COUNT {
-            // SAFETY: within the table.
-            assert!(!unsafe { *t.0.add(i) }.is_null(), "entry {i}");
+    fn the_tables_are_whole() {
+        let families = [
+            (Family::TEXT, paperpaw_table::index::text::COUNT),
+            (Family::FONTS, paperpaw_table::index::fonts::COUNT),
+            (Family::UI, paperpaw_table::index::ui::COUNT),
+            (Family::GRAPHICS, paperpaw_table::index::graphics::COUNT),
+            (
+                Family::CONTRIBUTION,
+                paperpaw_table::index::contribution::COUNT,
+            ),
+            (Family::DATA, paperpaw_table::index::data::COUNT),
+        ];
+        for (family, count) in families {
+            let t = table(family);
+            let revision = paperpaw_table::REVISIONS[family.number()];
+            assert_eq!(t.0.is_null(), revision == 0, "family {}", family.number());
+            assert_eq!(count == 0, revision == 0, "family {}", family.number());
+            for i in 0..count {
+                // SAFETY: within the table.
+                assert!(!unsafe { *t.0.add(i) }.is_null(), "entry {i}");
+            }
         }
-        assert_eq!(table(Family::FONTS).0, Table::NONE.0);
     }
 }

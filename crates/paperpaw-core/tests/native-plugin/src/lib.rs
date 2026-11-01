@@ -33,6 +33,12 @@ impl Plugin for Probe {
             Id::new_static("hello.text-probe"),
             probe::probe(),
             Version::new(1, 0, 0),
+        )?;
+        // One call or more of each later family (ui, data, graphics).
+        r.provide(
+            Id::new_static("hello.family-probe"),
+            probe::family_probe(),
+            Version::new(1, 0, 0),
         )
     }
 }

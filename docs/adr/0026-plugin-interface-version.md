@@ -123,6 +123,42 @@ with that before the betas of 0.5:
   it through the table of a plugin built before, which does not have it,
   and the same holds for the firmware's own trait objects a plugin is
   handed. Either way the files are written anew (`PAPERPAW_BLESS=1`).
+- **Shared functions run the firmware's body, so a body change is
+  judged like an interface change** (#44). On a RISC-V chip a plugin
+  calls the functions of `crates/paperpaw-table/shared.list` (families
+  text, ui, graphics, data) in the firmware, by index, whichever release
+  built it: their signatures are pinned (`table.sig`), their bodies are
+  not, and no check sees what a body does. A change to the body of an
+  entry is one of three:
+  1. **Free**: for the same input it returns, writes into its arguments
+     and leaves in what a plugin keeps the same as before; only how it
+     looks inside the area it was given changes (a new look, a fix of a
+     drawing), or its speed or memory, or what it does with input no
+     plugin can give it (a panic that never happened). Plugins built
+     before take it up without a rebuild, which is the point of sharing.
+  2. **Free as well**, where a result does change (a height, a position,
+     a hit, a line break, a focus or page, a parsed value), when every
+     function that must agree with it is an entry of the same family,
+     changed in the same commit, and no value a plugin keeps (a cache, a
+     file, a page index, a revision such as `paperpaw_layout::VERSION`)
+     and no promise of the documentation rests on the old result. A
+     plugin built before then calls all of them anew, and they agree.
+     Example: `Row::height`, `Row::draw` and `Row::hit` are all ui
+     entries, so a row 4 pixels taller is free.
+  3. **A bump** otherwise: a line `bump <family> <revision>` appended to
+     `shared.list` in the same commit, at the family's next revision.
+     The firmware then refuses the plugins of that family built before
+     it ("rebuild the plugin", `Misfit::Older`) and runs the others.
+     Example: a ui height that changes while the function that must
+     agree with it (`switch_rect`, a constant, a helper that is no
+     entry) stays a copy in the plugin. A bump costs every user of those
+     plugins a rebuild, so it is reviewed as an interface change is and
+     named in the release notes; often making the partner an entry too
+     (appended at the next revision) turns it into case 2.
+
+  A changed signature, an entry removed or moved, or a type's layout
+  is never a bump: those raise the interface. Reviewers of a change to a
+  file with `shared!` in it say which of the three it is.
 - **Cache revisions can increase without changing the interface.** The
   exact `paperpaw_layout::VERSION: u32` constant identifies the layout
   algorithm in page-index keys. Raising it keeps indexes made by the old
@@ -171,7 +207,8 @@ with that before the betas of 0.5:
   default, so the gate errs on the side of a new interface: a private
   field renamed raises it too.
 - The gate sees types and signatures, not behaviour. A plugin carries
-  its own copy of the SDK's code, so a function whose body changes what
+  its own copy of the SDK's code (except the shared functions, see
+  above), so a function whose body changes what
   it writes into a value both sides read (a format, an invariant) is the
   same item to the gate, and such a change raises the interface by hand.
 - Interface 1 was never released: 2 is the first, with the files of

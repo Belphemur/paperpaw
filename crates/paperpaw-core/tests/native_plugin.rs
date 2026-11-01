@@ -110,7 +110,7 @@ unsafe extern "C" fn alloc_in(size: usize, align: usize, _placement: u32) -> *mu
     unsafe { alloc(size, align) }
 }
 
-/// The same text calls as the plugin makes: with this build's own copies.
+/// The same calls as the plugin makes: with this build's own copies.
 #[path = "native-plugin/src/probe.rs"]
 mod probe;
 
@@ -145,7 +145,11 @@ impl Plugin for Loaded {
 
 /// A plugin of this build that looks for the loaded one's service by
 /// name.
-struct Looks(Rc<Cell<Option<Version>>>, Rc<Cell<Option<bool>>>);
+struct Looks(
+    Rc<Cell<Option<Version>>>,
+    Rc<Cell<Option<bool>>>,
+    Rc<Cell<Option<bool>>>,
+);
 
 impl Plugin for Looks {
     fn manifest(&self) -> Manifest {
@@ -157,6 +161,7 @@ impl Plugin for Looks {
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let found = self.0.clone();
         let text = self.1.clone();
+        let families = self.2.clone();
         r.on(
             events::STARTED,
             move |env: &Env<'_>, _, _: &mut paperpaw_sdk::Commands| {
@@ -172,6 +177,12 @@ impl Plugin for Looks {
                     services
                         .get::<probe::TextProbe>("hello.text-probe", Version::new(1, 0, 0))
                         .map(|got| *got == probe::probe()),
+                );
+                // And its calls of the later families (ui, data, graphics).
+                families.set(
+                    services
+                        .get::<probe::FamilyProbe>("hello.family-probe", Version::new(1, 0, 0))
+                        .map(|got| *got == probe::family_probe()),
                 );
             },
         )
@@ -240,9 +251,10 @@ fn a_plugin_built_apart_runs_in_the_kernel() {
 
     let found = Rc::new(Cell::new(None));
     let text = Rc::new(Cell::new(None));
+    let families = Rc::new(Cell::new(None));
     let mut kernel = Kernel::builder(DEVICE)
         .plugin(Loaded(plugin))
-        .plugin(Looks(found.clone(), text.clone()))
+        .plugin(Looks(found.clone(), text.clone(), families.clone()))
         .build()
         .unwrap();
     assert!(kernel.take_warnings().is_empty());
@@ -258,6 +270,22 @@ fn a_plugin_built_apart_runs_in_the_kernel() {
         Some(true),
         "its text calls come out as the kernel's own"
     );
+    // A plugin built before the probe of the later families (an older
+    // baseline of tools/table-compat.sh) has none: where it has one, it
+    // agrees; this tree's own plugin has one.
+    if std::env::var_os("PAPERPAW_TEST_PLUGIN").is_none() {
+        assert_eq!(
+            families.get(),
+            Some(true),
+            "its ui, data and graphics calls come out as the kernel's own"
+        );
+    } else {
+        assert_ne!(
+            families.get(),
+            Some(false),
+            "its ui, data and graphics calls come out as the kernel's own"
+        );
+    }
 
     // Its action opens its screen, drawn by its code; its translations
     // are the kernel's.

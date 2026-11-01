@@ -89,13 +89,16 @@ pub struct Parser {
 }
 
 impl Parser {
+    paperpaw_table::shared! {
     /// Reads `data`, the next piece of the text, reporting what it finds.
     pub fn feed(&mut self, data: &[u8], emit: &mut dyn FnMut(Event<'_>)) {
         for &b in data {
             self.byte(b, emit);
         }
+    } @ data::JSON_STREAM_FEED
     }
 
+    paperpaw_table::shared! {
     /// Ends the text: reports a number or `true`/`false`/`null` it ends
     /// with, which only what follows it could end otherwise (e.g. `42` as
     /// the whole text). A string left open is not reported.
@@ -103,6 +106,7 @@ impl Parser {
         if matches!(self.state, State::Plain) {
             self.end_plain(emit);
         }
+    } @ data::JSON_STREAM_FINISH
     }
 
     /// Adds `bytes` to the text being read.
@@ -304,6 +308,7 @@ impl Parser {
     }
 }
 
+paperpaw_table::shared! {
 /// Reads the JSON file at `path`, a piece at a time, reporting what it
 /// finds to `emit`.
 pub fn read_file(storage: &dyn Storage, path: &str, emit: &mut dyn FnMut(Event<'_>)) {
@@ -318,6 +323,7 @@ pub fn read_file(storage: &dyn Storage, path: &str, emit: &mut dyn FnMut(Event<'
         offset += n as u64;
     }
     parser.finish(emit);
+} @ data::JSON_READ_FILE
 }
 
 #[cfg(test)]

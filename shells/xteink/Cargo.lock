@@ -2301,6 +2301,9 @@ dependencies = [
 [[package]]
 name = "paperpaw-config"
 version = "0.5.0-beta.12"
+dependencies = [
+ "paperpaw-table",
+]
 
 [[package]]
 name = "paperpaw-core"
@@ -2342,6 +2345,7 @@ name = "paperpaw-graphics"
 version = "0.5.0-beta.12"
 dependencies = [
  "paperpaw-platform",
+ "paperpaw-table",
 ]
 
 [[package]]
@@ -2362,6 +2366,7 @@ version = "0.5.0-beta.12"
 dependencies = [
  "paperpaw-config",
  "paperpaw-lang",
+ "paperpaw-table",
 ]
 
 [[package]]
@@ -2377,6 +2382,7 @@ name = "paperpaw-json"
 version = "0.5.0-beta.12"
 dependencies = [
  "paperpaw-platform",
+ "paperpaw-table",
 ]
 
 [[package]]
@@ -2685,6 +2691,9 @@ dependencies = [
 [[package]]
 name = "paperpaw-xml"
 version = "0.5.0-beta.12"
+dependencies = [
+ "paperpaw-table",
+]
 
 [[package]]
 name = "paperpaw-xteink"

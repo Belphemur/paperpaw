@@ -83,6 +83,7 @@ const NAMED: &[(&str, char)] = &[
     ("Ccedil", 'Ç'),
 ];
 
+paperpaw_table::shared! {
 /// Decodes character and entity references; unknown or malformed ones are
 /// kept as written.
 pub fn decode(text: &str) -> Cow<'_, str> {
@@ -114,6 +115,7 @@ pub fn decode(text: &str) -> Cow<'_, str> {
     }
     out.push_str(rest);
     Cow::Owned(out)
+} @ data::XML_DECODE
 }
 
 fn resolve(entity: &str) -> Option<char> {

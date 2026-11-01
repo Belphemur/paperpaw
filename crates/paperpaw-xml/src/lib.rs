@@ -80,11 +80,13 @@ pub enum Token<'a> {
 pub struct Attrs<'a>(&'a str);
 
 impl<'a> Attrs<'a> {
+    paperpaw_table::shared! {
     /// The decoded value of attribute `name` (exact name, prefix included).
     pub fn get(&self, name: &str) -> Option<Cow<'a, str>> {
         self.iter()
             .find(|(n, _)| *n == name)
             .map(|(_, value)| decode(value))
+    } @ data::XML_ATTRS_GET
     }
 
     /// `(name, raw value)` pairs; malformed attributes are skipped.
@@ -179,13 +181,16 @@ impl Tokenizer {
         }
     }
 
+    paperpaw_table::shared! {
     /// Tokenizes a complete document.
     pub fn parse(data: &[u8], emit: &mut dyn FnMut(Token<'_>)) {
         let mut tokenizer = Tokenizer::new();
         tokenizer.feed(data, emit);
         tokenizer.finish(emit);
+    } @ data::XML_PARSE
     }
 
+    paperpaw_table::shared! {
     /// Adds a chunk and emits every token it completes. Large chunks are
     /// processed in small pieces, so the buffer only ever holds an
     /// incomplete token plus one piece.
@@ -200,8 +205,10 @@ impl Tokenizer {
             });
             debug_assert!(grown.is_ok(), "growing infallibly cannot fail");
         }
+    } @ data::XML_FEED
     }
 
+    paperpaw_table::shared! {
     /// As [`Tokenizer::feed`], but an error where the heap cannot give the
     /// buffer room for the next piece (at most a piece more than the
     /// buffer has). The tokens before it were emitted; the rest of `data`
@@ -217,6 +224,7 @@ impl Tokenizer {
             })?;
         }
         Ok(())
+    } @ data::XML_TRY_FEED
     }
 
     /// Tokenizes one piece of at most [`PIECE`] bytes; `grow` makes room
@@ -254,12 +262,14 @@ impl Tokenizer {
         Ok(())
     }
 
+    paperpaw_table::shared! {
     /// Emits what is left at the end of the input.
     pub fn finish(&mut self, emit: &mut dyn FnMut(Token<'_>)) {
         process(&self.pending, true, self.html, &mut self.raw, emit);
         self.pending.clear();
         self.skip = None;
         self.raw = None;
+    } @ data::XML_FINISH
     }
 }
 
