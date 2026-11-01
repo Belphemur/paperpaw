@@ -7,8 +7,9 @@
 //!
 //! Before the first code plugin the page says once what code plugins are
 //! (full access to the device, safe mode when one goes wrong). An update
-//! signed by another author than the version before waits here, with a
-//! warning, until the reader installs it anyway or not.
+//! signed by another author than the version before is refused, with no
+//! way to install it anyway (`trust::Refusal::KeyChanged`): the reader's
+//! device keeps the version it has.
 
 use alloc::boxed::Box;
 use alloc::format;

@@ -279,9 +279,10 @@ pub fn known_author(storage: &dyn Storage, plugin: &str) -> Option<[u8; 32]> {
 }
 
 /// Remembers `key` as the author of `plugin`'s code, in place of one
-/// known before: at its first install, and when the reader installed an
-/// update by another; `false` if it could not be kept (the file left as
-/// it is where it could not be read).
+/// known before; `false` if it could not be kept (the file left as it is
+/// where it could not be read). The installs call it after the file is
+/// in place: a key other than the known one was refused before
+/// ([`Author::Other`]), so nothing replaces a key that is known.
 #[cfg(any(test, feature = "kernel"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub fn remember_author(storage: &dyn Storage, plugin: &str, key: &[u8; 32]) -> bool {
@@ -1194,7 +1195,8 @@ mod tests {
         assert!(remember_author(&storage, "clock-face", &[2; 32]));
         assert_eq!(author(&storage, "clock", &[1; 32]), Author::Known);
         assert_eq!(author(&storage, "clock", &[2; 32]), Author::Other);
-        // Another author installed anyway: the one from now on.
+        // The call itself replaces a known key (the callers refuse `Other`
+        // first): the new one from now on.
         assert!(remember_author(&storage, "clock", &[3; 32]));
         assert_eq!(known_author(&storage, "clock"), Some([3; 32]));
         assert_eq!(known_author(&storage, "clock-face"), Some([2; 32]));
