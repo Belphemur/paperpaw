@@ -238,7 +238,13 @@ pub fn profile() {
 /// The first frames in PaperPaw code below the allocator, e.g.
 /// `paperpaw_text::cache::GlyphCache::insert (cache.rs:120)`.
 fn site_of(backtrace: &Backtrace, depth: usize) -> String {
-    let text = backtrace.to_string();
+    site_in(&backtrace.to_string(), depth)
+}
+
+/// [`site_of`] a backtrace's text. A method of a type is named as the
+/// type in angle brackets (`<paperpaw_core::Kernel>::start`), and counts
+/// as PaperPaw's as a function does.
+fn site_in(text: &str, depth: usize) -> String {
     let mut frames = Vec::new();
     let mut lines = text.lines().peekable();
     while let Some(line) = lines.next() {
@@ -254,7 +260,10 @@ fn site_of(backtrace: &Backtrace, depth: usize) -> String {
             })
             .unwrap_or_default();
         let name = name.rsplit_once("::h").map_or(name, |(n, _)| n);
-        if name.starts_with("paperpaw") && !name.contains("budget") && !name.contains("__rust_") {
+        if name.trim_start_matches('<').starts_with("paperpaw")
+            && !name.contains("budget")
+            && !name.contains("__rust_")
+        {
             frames.push(format!("{name} ({location})"));
             if frames.len() == depth {
                 break;

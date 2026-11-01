@@ -219,6 +219,25 @@ fn a_site_leaves_out_the_budgets_own_frames() {
 }
 
 #[test]
+fn a_site_names_methods_of_paperpaw_types() {
+    let text =
+        "   0: <paperpaw_emulator::budget::Budget as core::alloc::global::GlobalAlloc>::alloc
+             at ./shells/desktop/src/budget.rs:95:20
+   1: <alloc::vec::Vec<u8>>::with_capacity
+             at /rustc/library/alloc/src/vec/mod.rs:480:9
+   2: <paperpaw_core::Kernel>::start::h0123456789abcdef
+             at ./crates/paperpaw-core/src/lib.rs:120:5
+   3: paperpaw_emulator::device::build_kernel
+             at ./shells/desktop/src/device.rs:1022:9
+   4: paperpaw_emu::main
+             at ./shells/desktop/src/main.rs:99:5";
+    assert_eq!(
+        site_in(text, 2),
+        "<paperpaw_core::Kernel>::start (lib.rs:120)\n      <- paperpaw_emulator::device::build_kernel (device.rs:1022)"
+    );
+}
+
+#[test]
 fn stats_show_the_heap_in_kib_with_the_budget_where_there_is_one() {
     let with = Stats {
         live: 1536,
