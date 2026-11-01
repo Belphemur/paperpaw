@@ -189,6 +189,7 @@ fn read_entry(
         )
         .dir(convert::dir_from_bits(entry[20]))
         .inline_langs(&inline_langs)
+        .drop_cap(entry[22])
         .image(image))
 }
 

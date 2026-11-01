@@ -37,6 +37,8 @@ struct Para {
     indent: Option<i16>,
     /// The book's margins at the sides, hundredths of an em.
     margins: (u16, u16),
+    /// The lines of its drop capital (0 for none).
+    drop_cap: u8,
 }
 
 /// Sections of paragraphs; in the source every paragraph ends with `\n`,
@@ -88,7 +90,8 @@ impl Document for Book {
                         .align(para.align)
                         .indent(para.indent)
                         .margins(para.margins.0, para.margins.1)
-                        .size(para.size),
+                        .size(para.size)
+                        .drop_cap(para.drop_cap),
                 ));
             }
             start = end;
@@ -207,8 +210,10 @@ fn para() -> impl Strategy<Value = Para> {
         // Now and then the book's margins at the sides, and a hanging
         // indent into them.
         prop_oneof![3 => Just(((0u16, 0u16), None)), 1 => ((0u16..400, 0u16..400), -300i16..100).prop_map(|(m, i)| (m, Some(i)))],
+        // Now and then a drop capital, of any number of lines.
+        prop_oneof![3 => Just(0u8), 1 => any::<u8>()],
     )
-        .prop_map(|(words, kind, align, size, (margins, indent))| {
+        .prop_map(|(words, kind, align, size, (margins, indent), drop_cap)| {
             let mut text = String::new();
             let mut runs = Vec::new();
             for (i, (word, bold, gap)) in words.iter().enumerate() {
@@ -235,6 +240,7 @@ fn para() -> impl Strategy<Value = Para> {
                 size,
                 indent,
                 margins,
+                drop_cap,
             }
         })
 }
@@ -316,7 +322,13 @@ fn check_pages(cx: &LayoutContext<'_>, book: &Book, pages: &[Page], height: f32,
     let mut words: Vec<(u32, u32, u32)> = Vec::new();
     for page in pages {
         let mut last_baseline = f32::NEG_INFINITY;
-        for line in &page.lines {
+        for (i, line) in page.lines.iter().enumerate() {
+            // A drop capital stands on the baseline of the last line it
+            // spans, which come after it.
+            let capital = page
+                .lines
+                .get(i + 1)
+                .is_some_and(|next| next.baseline <= line.baseline);
             // Runs cover the text in order.
             let mut at = 0;
             for run in &line.runs {
@@ -340,8 +352,15 @@ fn check_pages(cx: &LayoutContext<'_>, book: &Book, pages: &[Page], height: f32,
             // not fit is alone on its page.
             let face = line.runs[0].face;
             let (ascent, line_height) = widths.line(face);
-            assert!(line.baseline > last_baseline);
-            last_baseline = line.baseline;
+            if capital {
+                assert_eq!(line.words.len(), 1, "a capital is one letter: {line:?}");
+                assert!(line.baseline <= height + 1e-3);
+            } else {
+                assert!(line.baseline > last_baseline);
+                last_baseline = line.baseline;
+            }
+            // A capital's letter reaches no lower than its baseline.
+            let line_height = if capital { ascent } else { line_height };
             let bottom = line.baseline - ascent + line_height;
             assert!(
                 bottom <= height + 1e-3 || page.lines.len() == 1,
@@ -448,10 +467,17 @@ fn positions_survive(
 ) {
     let cx = context(book, width, style, hyphenate, &widths);
     let pages = paginate(&cx, height, book);
+    // The line beside a drop capital is the capital's line: it starts
+    // with the capital.
     let starts: Vec<(Locator, &paperpaw_layout::PageLine)> = pages
         .iter()
-        .flat_map(|page| page.lines.iter())
-        .filter_map(|line| {
+        .flat_map(|page| {
+            page.lines.iter().enumerate().filter(|(i, line)| {
+                let before = i.checked_sub(1).and_then(|i| page.lines.get(i));
+                !before.is_some_and(|before| before.baseline >= line.baseline)
+            })
+        })
+        .filter_map(|(_, line)| {
             let first = line.words.first()?;
             Some((Locator::new(line.section, first.0), line))
         })
@@ -551,6 +577,7 @@ fn one_paragraph(text: &str, align: Align) -> Book {
             size: None,
             indent: None,
             margins: (0, 0),
+            drop_cap: 0,
         }]],
         metadata: Metadata::default(),
     }

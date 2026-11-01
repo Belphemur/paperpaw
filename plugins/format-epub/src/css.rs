@@ -60,6 +60,10 @@ pub(crate) struct Props {
     /// `text-decoration`: a line under, a line through.
     pub underline: Option<bool>,
     pub strike: Option<bool>,
+    /// Floated to the left (`float: left`), or not.
+    pub float_left: Option<bool>,
+    /// The lines of a drop capital (`initial-letter`), 0 for `normal`.
+    pub initial_letter: Option<u8>,
 }
 
 /// Where text sits on its line (`vertical-align`).
@@ -152,6 +156,8 @@ impl Props {
         self.vertical = other.vertical.or(self.vertical);
         self.underline = other.underline.or(self.underline);
         self.strike = other.strike.or(self.strike);
+        self.float_left = other.float_left.or(self.float_left);
+        self.initial_letter = other.initial_letter.or(self.initial_letter);
     }
 
     /// The margin and padding at the start and the end of the lines, in
@@ -227,15 +233,12 @@ impl Props {
                     }
                 }
                 "text-decoration" | "text-decoration-line" => {
-                    if value.contains("none") {
-                        (props.underline, props.strike) = (Some(false), Some(false));
-                    }
-                    if value.contains("underline") {
-                        props.underline = Some(true);
-                    }
-                    if value.contains("line-through") {
-                        props.strike = Some(true);
-                    }
+                    (props.underline, props.strike) =
+                        decoration(&value, (props.underline, props.strike));
+                }
+                "float" => props.float_left = Some(value == "left"),
+                "initial-letter" => {
+                    props.initial_letter = initial_letter(&value).or(props.initial_letter);
                 }
                 "margin-top" => props.margin_top = space(&value).or(props.margin_top),
                 "margin-bottom" => props.margin_bottom = space(&value).or(props.margin_bottom),
@@ -303,6 +306,7 @@ impl Props {
             ('Q', self.padding_right),
             ('H', self.line_height),
             ('v', self.vertical.map(|v| u16::from(v.code()))),
+            ('I', self.initial_letter.map(u16::from)),
         ] {
             if let Some(value) = value {
                 out.push_str(&alloc::format!(" {key}{value}"));
@@ -315,6 +319,7 @@ impl Props {
             ('h', self.hidden),
             ('u', self.underline),
             ('s', self.strike),
+            ('F', self.float_left),
         ] {
             if let Some(value) = value {
                 out.push(' ');
@@ -359,6 +364,8 @@ impl Props {
                 'v' => props.vertical = item[1..].parse().ok().and_then(Vertical::from_code),
                 'u' => props.underline = Some(flag),
                 's' => props.strike = Some(flag),
+                'F' => props.float_left = Some(flag),
+                'I' => props.initial_letter = item[1..].parse().ok(),
                 'r' => props.size = item[1..].parse().ok().map(FontSize::Relative),
                 'z' => props.size = item[1..].parse().ok().map(FontSize::Absolute),
                 _ => {}
@@ -431,6 +438,34 @@ pub(crate) fn length(value: &str) -> Option<i32> {
 }
 
 /// A `font-size` value; `None` for what is not understood.
+/// Lines under and through text as `text-decoration` sets them, over
+/// `(underline, strike)` as they were.
+fn decoration(
+    value: &str,
+    (mut underline, mut strike): (Option<bool>, Option<bool>),
+) -> (Option<bool>, Option<bool>) {
+    if value.contains("none") {
+        (underline, strike) = (Some(false), Some(false));
+    }
+    if value.contains("underline") {
+        underline = Some(true);
+    }
+    if value.contains("line-through") {
+        strike = Some(true);
+    }
+    (underline, strike)
+}
+
+/// The lines of a drop capital CSS `initial-letter` asks for (a sink
+/// after them is left out); 0 for `normal`.
+fn initial_letter(value: &str) -> Option<u8> {
+    if value == "normal" {
+        return Some(0);
+    }
+    let lines: f32 = value.split_whitespace().next()?.parse().ok()?;
+    Some(lines.clamp(0.0, 9.0) as u8)
+}
+
 fn font_size(value: &str) -> Option<FontSize> {
     let keyword = match value.trim() {
         "xx-small" => Some(FontSize::Absolute(60)),
@@ -1145,6 +1180,22 @@ mod tests {
             (p("plain").underline, p("plain").strike),
             (Some(false), Some(false))
         );
+        let copy = Rules::decode(&r.encode());
+        assert_eq!(copy.rules, r.rules);
+    }
+
+    #[test]
+    fn drop_capital_styles_survive_the_cache() {
+        let r = rules(
+            ".dc { float: left; font-size: 3em } .il { initial-letter: 3 2 } .no { float: none }",
+        );
+        let p = |class| r.props("span", class);
+        assert_eq!(
+            (p("dc").float_left, p("dc").initial_letter),
+            (Some(true), None)
+        );
+        assert_eq!(p("il").initial_letter, Some(3));
+        assert_eq!(p("no").float_left, Some(false));
         let copy = Rules::decode(&r.encode());
         assert_eq!(copy.rules, r.rules);
     }

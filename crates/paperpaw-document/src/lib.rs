@@ -443,7 +443,10 @@ pub struct Block {
     /// almost every block.
     pub inline_langs: Option<alloc::boxed::Box<[Lang]>>,
     /// The lines its first letter spans as a drop capital; 0 for none.
-    /// Reserved: the layout does not set drop capitals yet.
+    /// The layout sets one of two to five lines (more are five) for a
+    /// paragraph that runs left to right and starts with a letter (after
+    /// an opening quote or two), its first lines set in beside it; a
+    /// paragraph of fewer lines has a smaller one, of one line none.
     pub drop_cap: u8,
 }
 

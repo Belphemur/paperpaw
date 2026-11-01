@@ -206,3 +206,28 @@ pub(super) fn heading_level(tag: &str) -> Option<u8> {
         _ => None,
     }
 }
+
+/// The lines of a drop capital an inline element starting a paragraph
+/// asks for, set in `size` (percent of body text) within text of `parent`
+/// size: CSS `initial-letter`, or a letter floated left half as large
+/// again as the text around it or more, a line for each 1.2 times (as
+/// the layout keeps it, two to five); 0 for none.
+pub(super) fn drop_cap(props: &Props, size: Option<u16>, parent: Option<u16>) -> u8 {
+    match props.initial_letter {
+        Some(lines) => lines,
+        None if props.float_left == Some(true) => {
+            let ratio = f32::from(size.unwrap_or(100)) / f32::from(parent.unwrap_or(100).max(1));
+            match ratio >= 1.5 {
+                true => (ratio / 1.2 + 0.5).clamp(2.0, 5.0) as u8,
+                false => 0,
+            }
+        }
+        None => 0,
+    }
+}
+
+/// Whether a paragraph's `text` so far, once the element that asked for
+/// a drop capital ends, is one: a letter, and an opening quote or two.
+pub(super) fn is_capital(text: &str) -> bool {
+    text.chars().filter(|c| c.is_alphanumeric()).count() == 1 && text.chars().count() <= 3
+}

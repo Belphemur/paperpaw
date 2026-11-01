@@ -13,15 +13,24 @@ impl Book {
     }
 
     /// The lines of the page as layers see them: each as wide as its
-    /// column, as high as a line of body text, on its baseline.
+    /// column, as high as a line of body text, on its baseline. A drop
+    /// capital (a line on the baseline of a line after it) is part of the
+    /// line beside it, which starts with it.
     fn line_boxes(&self) -> Vec<LineBox> {
         let t = &self.typography;
         let text = Rect::new(t.x as u16, t.y as u16, t.width as u16, t.height as u16);
-        self.page
-            .lines
+        let lines = &self.page.lines;
+        let capital = |i: usize| is_capital(lines, i);
+        lines
             .iter()
-            .filter_map(|line| {
-                let (first, last) = (line.words.first()?.0, line.words.last()?.1);
+            .enumerate()
+            .filter(|&(i, _)| !capital(i))
+            .filter_map(|(i, line)| {
+                let first = match i.checked_sub(1).filter(|&before| capital(before)) {
+                    Some(before) => lines[before].words.first()?.0,
+                    None => line.words.first()?.0,
+                };
+                let last = line.words.last()?.1;
                 let x = (t.x + line.x) as u32;
                 let column = t
                     .columns

@@ -31,18 +31,22 @@ use alloc::vec::Vec;
 pub use paperpaw_document::ImageRef;
 pub use paperpaw_document::TextStyle;
 use paperpaw_document::{
-    Align, AnnotationKind, Block, BlockKind, Direction, Document, DocumentError, Lang, Locator,
+    Align, AnnotationKind, Block, BlockKind, Document, DocumentError, Lang, Locator,
     MAX_LEADING_ABOVE, Storage,
 };
 pub use paperpaw_platform::Rect;
 pub use paperpaw_text::Around;
 pub use paperpaw_text::Hyphenate;
-use paperpaw_text::{Line, wrap_lines_balanced_opts, wrap_lines_kerned_opts};
 
+use breaking::block_lines;
 use levels::BlockLevels;
 pub use pieces::PieceStarts;
 
+mod breaking;
+mod drop_cap;
+mod hanging;
 mod levels;
+mod measure;
 mod pieces;
 
 /// Largest extra space per word gap for justification, relative to the
@@ -194,7 +198,11 @@ impl ScriptOptions {
     /// Justified Arabic lines stretched by lengthening letters (kashida)
     /// rather than by wider gaps. Reserved.
     pub const KASHIDA: ScriptOptions = ScriptOptions(1);
-    /// Punctuation at a line's ends hung into the margin. Reserved.
+    /// Punctuation at a line's ends hung into the margin (optical margin
+    /// alignment): an opening quote that starts a line, a stop, comma,
+    /// hyphen or closing quote that ends a justified one. Lines break as
+    /// without it, so pages hold the same text; only left-to-right lines
+    /// hang, and a first line's indent keeps its quote.
     pub const HANGING_PUNCTUATION: ScriptOptions = ScriptOptions(1 << 1);
     /// Korean (and CJK) text broken only at spaces, between words, never
     /// inside a word of Hangul or of ideographs (CSS `word-break: keep-all`;
@@ -796,158 +804,6 @@ fn block_em(block: &Block, style: &Style) -> f32 {
     style.em * f32::from(book_size(block, style).unwrap_or(100)) / 100.0
 }
 
-/// Where a block's lines start and how wide they are: the first line
-/// (indented where the block starts, by half a line at most, perhaps
-/// hanging out into the book's margin) and the others, within the book's
-/// margins, each kept to a quarter of the width.
-#[derive(Debug, Clone, Copy)]
-struct Measure {
-    first: (f32, f32),
-    rest: (f32, f32),
-}
-
-impl Measure {
-    fn of(block: &Block, style: &Style, width: f32, indent: f32) -> Measure {
-        let (start, end) = match style.book.has(BookStyles::MARGINS) {
-            true => {
-                let em = block_em(block, style);
-                let side = |m: u16| (f32::from(m) / 100.0 * em).clamp(0.0, width / 4.0);
-                (side(block.margins.0), side(block.margins.1))
-            }
-            false => (0.0, 0.0),
-        };
-        let rest = (start, (width - start - end).max(1.0));
-        // Indented by half a line at most, so a narrow page keeps room.
-        let first_x = (start + indent).clamp(0.0, start + rest.1 / 2.0);
-        Measure {
-            first: (first_x, (width - end - first_x).max(1.0)),
-            rest,
-        }
-    }
-
-    /// Where line `n` starts and how wide it is.
-    fn line(&self, n: usize) -> (f32, f32) {
-        if n == 0 { self.first } else { self.rest }
-    }
-}
-
-/// The lines of `block` from byte `from` of its text on (a line's start),
-/// their ranges in its text, and where they are set: broken line by line
-/// from there, or (balanced) over the whole block, from where it starts
-/// (`indent` is its first line's), and those from `from` on taken.
-#[allow(
-    clippy::too_many_arguments,
-    reason = "what a block's lines need, each of it different; a struct would be built for one call"
-)]
-fn block_lines(
-    block: &Block,
-    from: usize,
-    base: Face,
-    cx: &LayoutContext<'_>,
-    heading: u8,
-    indent: f32,
-    justify_limit: Option<f32>,
-    levels: &BlockLevels,
-) -> Vec<(Line, (f32, f32))> {
-    let (style, width) = (cx.style, cx.width);
-    // Letters that join are as wide as the form they take between their
-    // neighbours (marks left out), as drawing sets them.
-    let advance = |i: usize, c: char| {
-        if paperpaw_text::is_invisible(c) {
-            // Direction controls an EPUB sets text apart with.
-            return 0.0;
-        }
-        let face = face_at(block, base, i, style.book);
-        if levels.is_plain() || !levels::may_join(c) {
-            return cx.typesetter.advance(face, c);
-        }
-        let not_mark = |c: &char| !paperpaw_text::is_mark(*c);
-        let before = block
-            .text
-            .get(..i)
-            .and_then(|t| t.chars().rev().find(not_mark));
-        let after = block
-            .text
-            .get(i + c.len_utf8()..)
-            .and_then(|t| t.chars().find(not_mark));
-        let around =
-            Around::new(Direction::Rtl, block.lang_of(face.style)).with_context(before, after);
-        let mut letter = [0u8; 4];
-        cx.typesetter
-            .advance_text(face, c.encode_utf8(&mut letter), &around)
-    };
-    // A pair in one face: the character before `i` and `right`, the text's
-    // own there or a hyphen set like the character before it. Pairs that
-    // run right to left are not kerned.
-    let kern = |i: usize, left: char, right: char| {
-        if levels.is_rtl_at(i) || levels.is_rtl_at(i - left.len_utf8()) {
-            return 0.0;
-        }
-        let face = face_at(block, base, i - left.len_utf8(), style.book);
-        let own = block.text[i..].starts_with(right);
-        if own && face_at(block, base, i, style.book) != face {
-            return 0.0;
-        }
-        cx.typesetter.kern(face, left, right)
-    };
-    let hyphenate = cx.hyphenate.filter(|_| heading == 0);
-    if style.balanced {
-        let measure = Measure::of(block, style, width, indent);
-        let lines = wrap_lines_balanced_opts(
-            &block.text,
-            |n| measure.line(n).1,
-            advance,
-            kern,
-            hyphenate,
-            |free, spaces| justification_cost(free, spaces, justify_limit),
-            style.script_options.bits(),
-        );
-        return lines
-            .into_iter()
-            .enumerate()
-            .filter(|(_, line)| line.range.start >= from)
-            .map(|(n, line)| (line, measure.line(n)))
-            .collect();
-    }
-    // A page that goes on with a block sets its lines as wide as those
-    // after a first line.
-    let measure = match from == 0 && !block.continues {
-        true => Measure::of(block, style, width, indent),
-        false => {
-            let rest = Measure::of(block, style, width, 0.0).rest;
-            Measure { first: rest, rest }
-        }
-    };
-    let lines = wrap_lines_kerned_opts(
-        &block.text[from..],
-        |n| measure.line(n).1,
-        |i, c| advance(from + i, c),
-        |i, left, right| kern(from + i, left, right),
-        hyphenate,
-        style.script_options.bits(),
-    );
-    lines
-        .into_iter()
-        .enumerate()
-        .map(|(n, mut line)| {
-            line.range = from + line.range.start..from + line.range.end;
-            (line, measure.line(n))
-        })
-        .collect()
-}
-
-/// Prefer gaps that can take the spare width, while retaining the
-/// ordinary paragraph and hyphen costs. Beyond the drawing limit, the
-/// undistributed width also counts: a shorter line should be exceptional.
-fn justification_cost(free: f32, spaces: usize, limit: Option<f32>) -> f32 {
-    let Some(limit) = limit.filter(|_| spaces > 0) else {
-        return 0.0;
-    };
-    let extra = free / spaces as f32;
-    let left = (free - spaces as f32 * limit).max(0.0);
-    extra * extra + left * left
-}
-
 /// How a block's lines are aligned, by the paragraph's direction: the
 /// page's edges (`Left`, `Right`) as its start or end.
 fn block_align(block: &Block, style: &Style, heading: u8, levels: &BlockLevels) -> Align {
@@ -1085,7 +941,7 @@ pub fn line_start(cx: &LayoutContext<'_>, at: Locator) -> Result<Locator, Docume
         let em = block_em(&block, style);
         block_line(&block, style, cx.typesetter.line(base), em).1 * MAX_JUSTIFY_GAP
     });
-    let lines = block_lines(&block, 0, base, cx, heading, indent, justify_limit, &levels);
+    let (lines, _) = block_lines(&block, 0, base, cx, heading, indent, justify_limit, &levels);
     let start = lines
         .iter()
         .rev()
@@ -1239,7 +1095,7 @@ pub fn layout_page(
             false => indent,
         };
         let justify_limit = (align == Align::Justify).then_some(letters * MAX_JUSTIFY_GAP);
-        let lines = block_lines(
+        let (lines, cap) = block_lines(
             &block,
             from,
             base,
@@ -1260,7 +1116,9 @@ pub fn layout_page(
                 let left = lines.len() - n;
                 let back = usize::from(style.widows).saturating_sub(left).min(n);
                 let stay = n - back;
-                let orphans = usize::from(style.orphans.max(1));
+                // A drop capital's lines go together.
+                let spanned = cap.filter(|_| from == 0).map_or(0, |cap| cap.lines);
+                let orphans = usize::from(style.orphans.max(1)).max(spanned);
                 let alone = stay < orphans;
                 let line_start = |i: usize| {
                     Locator::new(at.section, block.source_offset(lines[i].0.range.start))
@@ -1274,7 +1132,7 @@ pub fn layout_page(
                         }
                         // The paragraph goes whole.
                         None => {
-                            page.lines.truncate(page.lines.len() - n);
+                            page.lines.truncate(lines_before);
                             return ended(page, line_start(0));
                         }
                         // Under a heading that starts the page nothing can
@@ -1289,6 +1147,18 @@ pub fn layout_page(
                 // falls rather than leaving an orphan here.
                 return ended(page, line_start(n));
             }
+            // Punctuation hung out of the measure, where asked for.
+            let (hang_start, hang_end) =
+                match style.script_options.has(ScriptOptions::HANGING_PUNCTUATION) {
+                    true => {
+                        let beside = cap.is_some_and(|cap| from == 0 && n < cap.lines);
+                        let indented = beside
+                            || (line.range.start == 0 && !block.continues && block_indent > 0.0);
+                        hanging::hanging(cx, &block, base, line, &levels, align, indented)
+                    }
+                    false => (0.0, 0.0),
+                };
+            let (first_x, available) = (first_x - hang_start, available + hang_start + hang_end);
             let free = (available - line.width).max(0.0);
             let (x, word_spacing) = match align {
                 Align::Center => (first_x + free / 2.0, 0.0),
@@ -1304,11 +1174,28 @@ pub fn layout_page(
             };
             let drawn = line.width + word_spacing * line.spaces as f32;
             let x = placed_x(&levels, width, x, drawn);
-            let mut line_text = String::from(&block.text[line.range.clone()]);
+            // The drop capital beside the first line and those after it,
+            // its baseline theirs; the line without it.
+            let range = match cap.filter(|_| line.range.start == 0) {
+                Some(cap) => {
+                    // On a page too short for its lines (that it starts),
+                    // as large as the lines it has there.
+                    let fit = ((height - y) / line_height).max(1.0) as usize;
+                    let spans = cap.lines.min(fit);
+                    let face = drop_cap::face(cx, &block, base, spans as u8);
+                    let baseline = y + ascent + (spans - 1) as f32 * line_height;
+                    let place = (first_x - cap.room, baseline);
+                    let shown = drop_cap::Cap { face, ..cap };
+                    page.lines
+                        .push(drop_cap::line(&block, shown, place, at.section));
+                    cap.len..line.range.end
+                }
+                None => line.range.clone(),
+            };
+            let mut line_text = String::from(&block.text[range.clone()]);
             if line.hyphen {
                 line_text.push('-');
             }
-            let range = line.range.clone();
             let words = word_sources(&block, range.clone());
             let runs = line_runs(
                 &block,
@@ -1318,7 +1205,7 @@ pub fn layout_page(
                 style.book,
                 &levels,
             );
-            let bidi = line_bidi(&levels, &runs, range.start == 0 && !block.continues);
+            let bidi = line_bidi(&levels, &runs, line.range.start == 0 && !block.continues);
             page.lines.push(PageLine {
                 x,
                 baseline: y + ascent,
@@ -1422,7 +1309,7 @@ fn inserted_lines(
         y += style.paragraph_spacing;
         let indent = first_indent(inserted, style, align);
         for (line, (first_x, available)) in
-            block_lines(inserted, 0, base, cx, heading, indent, None, &levels)
+            block_lines(inserted, 0, base, cx, heading, indent, None, &levels).0
         {
             if y + line_height > height {
                 return (placed, y, false);
