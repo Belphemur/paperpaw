@@ -1075,6 +1075,10 @@ impl<'a> FontHandle<'a> {
         if let Some(larger) = self.larger_for(size) {
             return larger.measure(size, text);
         }
+        // Hangul in jamo: set as its syllables.
+        if paperpaw_text::has_jamo(text) {
+            return self.measure_in(size, text, &paperpaw_text::Around::NONE);
+        }
         let size = self.size_for(size, text);
         let single = self.others[0].is_none();
         let mut width = 0.0;
@@ -1267,6 +1271,11 @@ impl<'a> FontHandle<'a> {
         if canvas.is_blind() || self.drawing.describing.get() {
             return self.measure(size, text);
         }
+        // Hangul in jamo: set as its syllables.
+        if paperpaw_text::has_jamo(text) {
+            let none = &paperpaw_text::Around::NONE;
+            return self.draw_in(canvas, size, x, baseline, text, color, (extra, tone), none);
+        }
         self.count_missing(text);
         let size = self.size_for(size, text);
         let mut cache = self.cache.borrow_mut();
@@ -1389,14 +1398,6 @@ impl<'a> FontHandle<'a> {
             around,
         )
     } @ text::HANDLE_DRAW_IN
-    }
-
-    /// The font `text` is drawn in by [`FontHandle::draw_in`]: the one of
-    /// its first character that is not a space or a mark.
-    fn pick_text(&self, text: &str) -> (&'a Font, u16) {
-        text.chars()
-            .find(|c| !c.is_whitespace() && !paperpaw_text::is_mark(*c))
-            .map_or((self.font, self.index), |c| self.pick(c))
     }
 
     /// Draws `run`, all in `style`'s font, from `x`; its width. At once

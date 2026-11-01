@@ -859,3 +859,27 @@ fn letters_drawn_missing_are_counted() {
         (1, before)
     );
 }
+
+/// Hangul written in jamo (NFD) is set as the syllables of the pack that
+/// holds them, beside Latin: as wide as the text written whole, and no
+/// letter counted missing.
+#[test]
+fn hangul_in_jamo_is_set_by_the_syllables_pack() {
+    use paperpaw_graphics::Framebuffer;
+    use paperpaw_platform::PixelFormat;
+    use paperpaw_text::Around;
+    let (fonts, _storage) = latin_and_letters("가한국");
+    let font = fonts.get("a.latin").unwrap();
+    let nfd = "a \u{1112}\u{1161}\u{11AB}\u{1100}\u{116E}\u{11A8}";
+    let ltr = Around::new(crate::lang::Direction::Ltr, crate::lang::Lang::NONE);
+    assert!(font.has_char('\u{1112}'));
+    assert_eq!(
+        font.measure_in(10.0, nfd, &ltr),
+        font.measure_in(10.0, "a 한국", &ltr)
+    );
+    assert_eq!(font.measure(10.0, nfd), font.measure(10.0, "a 한국"));
+    let mut frame = Framebuffer::new(200, 20, PixelFormat::Gray8).unwrap();
+    let before = fonts.missing_letters();
+    font.draw(&mut frame.canvas(), 10.0, 0.0, 15, nfd, Color::BLACK);
+    assert_eq!(fonts.missing_letters(), before);
+}

@@ -43,6 +43,9 @@ change the plugin SDK.
   `Screen::mirrored`: `Auto` by default (as the interface goes), `Ltr` or `Rtl` for a screen with a way of
   its own; the reader gives its book's, so a left-to-right book keeps its sides in Arabic. **Breaking** for
   screens that implemented `mirrored`.
+- Korean written in jamo (Unicode's decomposed form, NFD, as some books and Mac file names have it) shows as
+  its syllables wherever a font holds them, in books and in the interface, instead of loose jamo or question
+  marks; letters so written no longer count as missing. `paperpaw_text::has_jamo` tells such text (#61).
 - SDK: `CellGrid::mirrored` for a right-to-left interface: rows of cells start at the right, taps find them
   there, and the left button goes on to the next cell.
 - SDK: rows moved by dragging have their grip at the left in a right-to-left interface.
