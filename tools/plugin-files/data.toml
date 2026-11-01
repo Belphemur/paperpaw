@@ -104,6 +104,20 @@ description = "Russian, Ukrainian, Bulgarian, Serbian and other Cyrillic books i
 de.name = "Kyrillische Schrift"
 de.description = "Bücher auf Russisch, Ukrainisch, Bulgarisch, Serbisch und anderen kyrillischen Sprachen in Literata."
 
+[language-ar]
+version = "1.0.0"
+group = "look"
+licence = "Apache-2.0"
+formats = 4
+devices = ["x4", "x4-pro", "x4-classic"]
+off_by_default = true
+build = "tools/language-pack.py"
+inputs = ["tools/plugin-files/languages/ar.ini", "tools/language-pack.py", "tools/sign"]
+name = "Arabic (user interface)"
+description = "PaperPaw's menus and settings in Arabic, running from right to left."
+de.name = "Arabisch (Oberfläche)"
+de.description = "PaperPaws Menüs und Einstellungen auf Arabisch, von rechts nach links."
+
 # Ready for the store, not offered yet: whether to offer it is the owner's
 # call (#61). To offer it, take the comment signs away;
 # tools/script-pack.py then builds it for the release.

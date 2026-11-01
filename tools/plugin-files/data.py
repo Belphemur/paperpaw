@@ -38,6 +38,7 @@ def plugin_ini(plugin, fields):
         f"name = {fields['name']}\n"
         f"description = {fields['description']}\n"
         f"version = {fields['version']}\n"
+        + (f"formats = {fields['formats']}\n" if "formats" in fields else "")
     )
 
 
