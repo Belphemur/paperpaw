@@ -32,6 +32,10 @@ change the plugin SDK.
 - Numbers in messages are written with the digits a language's catalog names (`[meta] digits`, e.g. `arabext`
   for Persian, `arab` for Arabic-Indic). SDK: `Translator::digits`, `Translator::number`,
   `Translator::localize_digits` for numbers a plugin writes itself.
+  What the SDK writes for showing uses them too: the clock (`time::clock_of`, `clock_text`),
+  `time::duration_text`, the battery percent in the status line, a number setting's value
+  (`ui::setting_value`) and the date and time pickers. New: `files::shown_size(env, bytes)`, a size
+  with the language's decimal mark and digits (`files::size` stays Latin, with the mark given).
 - SDK: `Slider::mirrored` for a right-to-left interface: the lowest value at the right, the track filled from
   there, `−` at the right and `+` at the left (`Slider::parts`), the left button moving it up
   (`Slider::key_step`); `SliderPart::mirrored` tells a theme's painter.

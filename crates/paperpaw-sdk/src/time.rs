@@ -696,10 +696,13 @@ pub fn twelve_hours(env: &Env<'_>) -> bool {
 }
 
 /// A time of day (`hour` 0 to 23) as the user wants to see it: `14:05`
-/// or `2:05 PM` ([`twelve_hours`]).
+/// or `2:05 PM` ([`twelve_hours`]), in the digits of the language shown.
 pub fn clock_of(env: &Env<'_>, hour: u8, minute: u8) -> String {
     if !twelve_hours(env) {
-        return format!("{hour:02}:{minute:02}");
+        return env
+            .i18n()
+            .localize_digits(&format!("{hour:02}:{minute:02}"))
+            .into_owned();
     }
     let key = if hour < 12 {
         "core.clock.am"
@@ -711,6 +714,7 @@ pub fn clock_of(env: &Env<'_>, hour: u8, minute: u8) -> String {
         h => h,
     };
     let time = format!("{shown}:{minute:02}");
+    let time = env.i18n().localize_digits(&time);
     env.i18n()
         .format(key, &[("time", paperpaw_i18n::Arg::Str(&time))])
 }
@@ -838,7 +842,7 @@ fn iso_millis(text: &str) -> Option<i64> {
 }
 
 /// A length of time as people read it: `1 h 05 min`, `42 min`, or
-/// `< 1 min` (in the language's words, `core.duration.*`).
+/// `< 1 min` (in the language's words and digits, `core.duration.*`).
 pub fn duration_text(env: &Env<'_>, seconds: u64) -> String {
     let minutes = seconds / 60;
     if minutes == 0 {
@@ -850,14 +854,13 @@ pub fn duration_text(env: &Env<'_>, seconds: u64) -> String {
             &[("m", paperpaw_i18n::Arg::Int(minutes as i64))],
         );
     }
+    let m = alloc::format!("{:02}", minutes % 60);
+    let m = env.i18n().localize_digits(&m);
     env.i18n().format(
         "core.duration.hours",
         &[
             ("h", paperpaw_i18n::Arg::Int((minutes / 60) as i64)),
-            (
-                "m",
-                paperpaw_i18n::Arg::Str(&alloc::format!("{:02}", minutes % 60)),
-            ),
+            ("m", paperpaw_i18n::Arg::Str(&m)),
         ],
     )
 }
