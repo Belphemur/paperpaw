@@ -893,3 +893,13 @@ fn partial_windows_are_in_whole_bytes() {
         [0x00, 0x60, 0x00, 0x6F, 0x00, 0x78, 0x02, 0x57, 0x01]
     );
 }
+
+#[test]
+fn a_wait_with_work_has_nothing_to_do_where_the_controller_is_ready() {
+    let (mut d, _) = display();
+    d.start_refresh(Refresh::Fast, false).unwrap();
+    let mut rounds = 0;
+    d.wait_with(|| rounds += 1).unwrap();
+    // The simulated busy pin reads ready at once.
+    assert_eq!(rounds, 0);
+}

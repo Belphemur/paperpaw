@@ -256,6 +256,13 @@ where
         each!(self, d => d.wait())
     }
 
+    /// As [`Panel::wait`], calling `meanwhile` each round of the wait (about
+    /// a millisecond), for work the processor can do while the panel
+    /// refreshes: keeping the radio's queue of five frames emptied.
+    pub fn wait_with(&mut self, meanwhile: impl FnMut()) -> Result<(), Error> {
+        each!(self, d => d.wait_with(meanwhile))
+    }
+
     /// Whether a refresh started still goes on, without waiting;
     /// [`Panel::wait`] ends it once it is over.
     pub fn refreshing(&mut self) -> Result<bool, Error> {

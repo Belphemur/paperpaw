@@ -950,7 +950,10 @@ impl Firmware {
         let until = started.0 + expected;
         while expected > 0 && !input::settling() && power::nap_until(until.min(now().0 + idle)) {}
         let woke = now();
-        let waited = self.panel.wait();
+        // The radio's frames are taken out of its queue meanwhile: five fit
+        // in it, and a refresh takes up to 3.5 s.
+        let network = &mut self.network;
+        let waited = self.panel.wait_with(|| network.keep_served());
         let took = now().since(started);
         let busy = self.panel.take_busy_ms();
         info!(
@@ -990,7 +993,8 @@ impl Firmware {
         let refreshing = self.panel.start_refresh(Refresh::Fast, false).is_ok();
         let next = self.kernel.proceed(now());
         let worked = now();
-        if refreshing && let Err(e) = self.panel.wait() {
+        let network = &mut self.network;
+        if refreshing && let Err(e) = self.panel.wait_with(|| network.keep_served()) {
             warn!("display: {e:?}");
         }
         self.state.panel_idle_at = Some(now().0 + self.panel_idle_ms());

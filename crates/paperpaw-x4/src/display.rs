@@ -606,10 +606,20 @@ where
     /// Waits while the controller is busy (its busy pin high), e.g. with a
     /// refresh started by [`Display::start_refresh`].
     pub fn wait(&mut self) -> Result<(), Error> {
+        self.wait_with(|| {})
+    }
+
+    /// As [`Display::wait`], calling `meanwhile` each round (a millisecond
+    /// and what it takes): the processor is free during a refresh, and the
+    /// radio's frames wait in a queue of a few (esp-radio's, five) that a
+    /// processor spinning here for seconds does not empty. Keep `meanwhile`
+    /// short: the time limit is counted in rounds.
+    pub fn wait_with(&mut self, mut meanwhile: impl FnMut()) -> Result<(), Error> {
         for _ in 0..BUSY_TIMEOUT_MS {
             if !self.busy.is_high().map_err(|_| Error::Pin)? {
                 return Ok(());
             }
+            meanwhile();
             self.delay.delay_ms(1);
         }
         Err(Error::Timeout)
@@ -827,6 +837,50 @@ mod tests {
         assert!(matches!(display.wait(), Err(Error::Timeout)));
         let seconds = waited.get() / 1_000_000_000;
         assert!((5..20).contains(&seconds), "waited {seconds} s");
+    }
+
+    /// A busy line high for `n` readings, then low.
+    struct BusyFor(u32);
+    impl embedded_hal::digital::ErrorType for BusyFor {
+        type Error = core::convert::Infallible;
+    }
+    impl InputPin for BusyFor {
+        fn is_high(&mut self) -> Result<bool, Self::Error> {
+            let high = self.0 > 0;
+            self.0 = self.0.saturating_sub(1);
+            Ok(high)
+        }
+        fn is_low(&mut self) -> Result<bool, Self::Error> {
+            Ok(self.0 == 0)
+        }
+    }
+
+    #[test]
+    fn something_is_done_in_every_round_of_the_wait() {
+        let controller = Controller::new();
+        let mut display = Display::new(
+            Spi(controller.clone()),
+            Dc(controller),
+            Pin,
+            BusyFor(500),
+            Delay,
+        );
+        let mut rounds = 0;
+        assert!(display.wait_with(|| rounds += 1).is_ok());
+        // Busy for 500 readings: 500 rounds, none once it is over.
+        assert_eq!(rounds, 500);
+    }
+
+    #[test]
+    fn the_wait_with_work_still_ends_on_a_stuck_line() {
+        let controller = Controller::new();
+        let mut display = Display::new(Spi(controller.clone()), Dc(controller), Pin, Stuck, Delay);
+        let mut rounds = 0u32;
+        assert!(matches!(
+            display.wait_with(|| rounds += 1),
+            Err(Error::Timeout)
+        ));
+        assert_eq!(rounds, BUSY_TIMEOUT_MS);
     }
 
     /// Where screen pixel `(x, y)` lies on the panel, turned: the
