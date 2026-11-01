@@ -8,6 +8,16 @@ change the plugin SDK.
 
 ### Added
 
+- Screens mirror in a user-interface language that runs right to left (#33): the switch, value rows and their
+  chevrons, ticked rows, the number buttons, text fields, dialog buttons, list rows' icons, chips, the date
+  and time pickers, headings and the reader's menu bar start at the right, and left/right follow them. The
+  shared UI functions changed for this: `switch_rect` is the one whose partner stays a copy in plugins
+  (ADR 0026 case 3), which the interface raise of this release makes moot, as every plugin is rebuilt.
+- A book in Greek, Cyrillic, Arabic or Hebrew whose letters the reading font lacks names the pack that brings
+  them, once for each script (to become one dialog with *Download* once for each book).
+- Keyboards for Arabic, Persian, Urdu and Hebrew come with their letters packs (`script-arabic`,
+  `script-hebrew`, 1.1.0), and a two-set Korean keyboard with the Korean pack: letters typed join to syllables
+  (jamo), *Delete* takes back one jamo and *Shift* types the doubled letters (#61, keyboard 1.0.2).
 - *All notes*, a new plugin (Tools): the books that have bookmarks or highlights with how many, a book's notes
   (a note opens the book there), and *Export as My Clippings.txt*, all notes in one file in Kindle's form
   (UTF-8 with a byte order mark, `Exports/My Clippings.txt` beside the library) that notes apps read. A book's
