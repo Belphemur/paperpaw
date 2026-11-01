@@ -177,7 +177,7 @@ const SYSTEMS: [(&str, u32); 25] = [
 const HANIDEC: [char; 10] = ['〇', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
 
 /// Latin digits: where a catalog says none, or none this release knows.
-const LATIN: [char; 10] = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+pub(crate) const LATIN: [char; 10] = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
 
 /// A catalog's digits place when `[meta] digits` gives the ten digits
 /// themselves: read again from the source when asked.

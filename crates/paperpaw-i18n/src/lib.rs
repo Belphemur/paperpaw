@@ -43,10 +43,11 @@ pub use format::Arg;
 pub use paperpaw_lang::{Direction, Lang};
 pub use plural::{PluralCategory, PluralRule, cldr_rules};
 
+use alloc::borrow::Cow;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use catalog::Parked;
+use catalog::{LATIN as LATIN_DIGITS, Parked};
 
 /// The language every message must exist in; the last fallback.
 pub const FALLBACK_LANGUAGE: &str = "en";
@@ -73,6 +74,9 @@ pub struct Translator {
     /// The interface's direction in the language: 1 right to left, 0
     /// left to right (see [`Translator::direction`]).
     direction: u8,
+    /// The digits of the language where they are not Latin (see
+    /// [`Translator::digits`]).
+    digits: Option<[char; 10]>,
 }
 
 impl Translator {
@@ -187,6 +191,37 @@ impl Translator {
         }
     }
 
+    /// The digits numbers are written with in the language, 0 to 9: those
+    /// the first of its catalogs that names other than Latin ones gives
+    /// (`[meta] digits`, e.g. `arabext` for Persian), else Latin. Numbers
+    /// in messages ([`Arg::Int`], `{count}`) are written with them; for
+    /// numbers written otherwise, see [`Translator::number`] and
+    /// [`Translator::localize_digits`].
+    pub fn digits(&self) -> [char; 10] {
+        self.digits.unwrap_or(LATIN_DIGITS)
+    }
+
+    /// `number` written with the language's digits
+    /// ([`Translator::digits`]), e.g. `۱۲۳` in Persian.
+    pub fn number(&self, number: i64) -> String {
+        let mut out = String::new();
+        format::write_int(&mut out, number, self.digits.as_ref());
+        out
+    }
+
+    /// `text` with its Latin digits (0 to 9) written in the language's
+    /// ([`Translator::digits`]), e.g. a page's `12 / 300` or a time a
+    /// plugin formatted itself; as it is (borrowed) where the language
+    /// writes Latin digits or `text` has none.
+    pub fn localize_digits<'a>(&self, text: &'a str) -> Cow<'a, str> {
+        match self.digits {
+            Some(digits) if text.bytes().any(|b| b.is_ascii_digit()) => {
+                Cow::Owned(format::with_digits(text, &digits))
+            }
+            _ => Cow::Borrowed(text),
+        }
+    }
+
     /// Available languages as `(tag, name)`, each listed once: English,
     /// PaperPaw's own language, first, then the others by tag.
     pub fn languages(&self) -> Vec<(&str, &str)> {
@@ -244,7 +279,7 @@ impl Translator {
     paperpaw_table::shared! {
     /// The message for `key` with `{placeholders}` replaced by `args`.
     pub fn format(&self, key: &str, args: &[(&str, Arg<'_>)]) -> String {
-        format::interpolate(self.tr(key), args)
+        format::interpolate(self.tr(key), args, self.digits.as_ref())
     } @ data::I18N_FORMAT
     }
 
@@ -263,7 +298,12 @@ impl Translator {
                 candidate.push('.');
                 candidate.push_str(category.id());
                 if let Some(message) = catalog.get(&candidate) {
-                    return format::interpolate_with_count(message, count, args);
+                    return format::interpolate_with_count(
+                        message,
+                        count,
+                        args,
+                        self.digits.as_ref(),
+                    );
                 }
             }
         }
@@ -392,6 +432,11 @@ impl Translator {
             .map(Catalog::direction)
             .find(|d| *d != Direction::Auto)
             .map_or(0, |d| u8::from(d == Direction::Rtl));
+        self.digits = order
+            .iter()
+            .filter_map(|&i| self.catalogs.get(usize::from(i)))
+            .map(Catalog::digits)
+            .find(|d| *d != LATIN_DIGITS);
         self.order = order;
     }
 }
@@ -480,6 +525,38 @@ mod tests {
         t.add(Catalog::parse("[meta]\nlanguage = km\ndigits = ០១២៣៤៥៦៧៨៩\n").unwrap());
         t.set_language("en");
         assert_eq!(t.catalogs()[1].digits()[1], '១');
+    }
+
+    #[test]
+    fn numbers_are_written_in_the_languages_digits() {
+        let mut t = Translator::new();
+        t.add(Catalog::parse(EN).unwrap());
+        // One of the language's catalogs names its digits, another not.
+        t.add(
+            Catalog::parse(
+                "[meta]\nlanguage = fa\nplural = one-other\n[messages]\n\
+                 library.books.other = {count} کتاب\npage = {n} از {of}\n",
+            )
+            .unwrap(),
+        );
+        t.add(Catalog::parse("[meta]\nlanguage = fa\ndigits = arabext\n").unwrap());
+        t.set_language("fa");
+        assert_eq!(t.digits()[1], '۱');
+        assert_eq!(t.plural("library.books", 12, &[]), "۱۲ کتاب");
+        let args = [("n", Arg::Int(3)), ("of", Arg::Str("40"))];
+        assert_eq!(
+            t.format("page", &args),
+            "۳ از 40",
+            "text arguments as given"
+        );
+        assert_eq!(t.number(-1_024), "-۱۰۲۴");
+        assert_eq!(t.localize_digits("12 / 300"), "۱۲ / ۳۰۰");
+        assert!(matches!(t.localize_digits("no digits"), Cow::Borrowed(_)));
+        // Back in English: Latin, and texts as they are.
+        t.set_language("en");
+        assert_eq!(t.digits(), LATIN_DIGITS);
+        assert_eq!(t.number(1_024), "1024");
+        assert!(matches!(t.localize_digits("12 / 300"), Cow::Borrowed(_)));
     }
 
     fn translator(language: &str) -> Translator {
