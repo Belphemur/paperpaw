@@ -15,7 +15,8 @@ use crate::ToneCurve;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TextInk {
     tone: ToneCurve,
-    /// Reserved: 0 is what text does today, per bit.
+    /// [`TextInk::RIGHT_TO_LEFT`]; the other bits are reserved: 0 is what
+    /// text does today, per bit.
     flags: u32,
     /// For the edges of letters in black-and-white frames. Stored, and not
     /// read by drawing yet: [`Dither::NONE`] is today's threshold.
@@ -25,6 +26,13 @@ pub struct TextInk {
 }
 
 impl TextInk {
+    /// Flag: the line a text without a direction of its own is on runs
+    /// right to left (the interface does, in Arabic): where a text has
+    /// letters of both directions, the first one is at the right. Without
+    /// it, the first strong letter of the text says (UAX #9 P2, P3). Set
+    /// by the kernel for the interface's font (`Fonts::set_ui_ink`).
+    pub const RIGHT_TO_LEFT: u32 = 1;
+
     /// What text is drawn with unless told otherwise: smooth, no dither,
     /// no flags.
     pub const DEFAULT: TextInk = TextInk {
@@ -70,9 +78,14 @@ impl TextInk {
         self.dither
     }
 
-    /// The reserved flags.
+    /// The flags, those this release does not know too.
     pub const fn flags(&self) -> u32 {
         self.flags
+    }
+
+    /// Whether its lines run right to left ([`TextInk::RIGHT_TO_LEFT`]).
+    pub const fn is_right_to_left(&self) -> bool {
+        self.flags & TextInk::RIGHT_TO_LEFT != 0
     }
 }
 
@@ -105,6 +118,16 @@ mod tests {
         let ink = ink.with_dither(Dither::ORDERED);
         assert_eq!((ink.dither(), ink.flags()), (Dither::ORDERED, 0x8000_0001));
         assert_eq!(ink.tone(), ToneCurve::contrast(2));
+    }
+
+    #[test]
+    fn right_to_left_is_one_flag_beside_the_others() {
+        assert!(!TextInk::DEFAULT.is_right_to_left());
+        let ink = TextInk::DEFAULT.with_flags(0x8000_0000 | TextInk::RIGHT_TO_LEFT);
+        assert!(ink.is_right_to_left());
+        let ink = ink.with_flags(ink.flags() & !TextInk::RIGHT_TO_LEFT);
+        assert!(!ink.is_right_to_left());
+        assert_eq!(ink.flags(), 0x8000_0000);
     }
 
     #[test]

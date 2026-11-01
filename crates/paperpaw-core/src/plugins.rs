@@ -684,15 +684,22 @@ impl Kernel {
 
     /// Makes how the interface's letters are inked of `core.ui-text-curve`
     /// and the interface's language, for the UI font's handles (plugins
-    /// do not parse it).
+    /// do not parse it): also whether its lines run right to left, so that
+    /// a label of both directions starts at the right (`Wi-Fi` in Arabic).
     pub(crate) fn apply_ui_text_curve(&mut self) {
+        use paperpaw_sdk::text::TextInk;
         let ink = paperpaw_sdk::ui::text_ink(
             self.shared
                 .settings
                 .text(core_settings::UI_TEXT_CURVE.as_str()),
             self.shared.translator.language(),
         );
-        self.shared.fonts.set_ui_ink(ink);
+        let rtl = self.shared.translator.direction() == paperpaw_sdk::lang::Direction::Rtl;
+        let flags = match rtl {
+            true => ink.flags() | TextInk::RIGHT_TO_LEFT,
+            false => ink.flags() & !TextInk::RIGHT_TO_LEFT,
+        };
+        self.shared.fonts.set_ui_ink(ink.with_flags(flags));
     }
 
     /// Plugin `by` asks for `plugins` ([`Command::RequestPlugins`](paperpaw_sdk::Command::RequestPlugins)):

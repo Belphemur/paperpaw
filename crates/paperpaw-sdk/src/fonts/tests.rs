@@ -883,3 +883,5 @@ fn hangul_in_jamo_is_set_by_the_syllables_pack() {
     font.draw(&mut frame.canvas(), 10.0, 0.0, 15, nfd, Color::BLACK);
     assert_eq!(fonts.missing_letters(), before);
 }
+
+mod interface;

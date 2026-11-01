@@ -21,6 +21,7 @@ const paperpaw_text::curve::ToneCurve::DARKEST: i8 = 2
 const paperpaw_text::curve::ToneCurve::LIGHTEST: i8 = -1
 const paperpaw_text::curve::ToneCurve::SMOOTH: paperpaw_text::curve::ToneCurve = ToneCurve { alphas: CURVES[1] }
 const paperpaw_text::ink::TextInk::DEFAULT: paperpaw_text::ink::TextInk = TextInk { tone: ToneCurve::SMOOTH, flags: 0, dither: Dither::NONE, spare: [0
+const paperpaw_text::ink::TextInk::RIGHT_TO_LEFT: u32 = 1
 const paperpaw_text::layout::MAX_BREAKS: usize = 1_024usize
 const paperpaw_text::linebreak::UNICODE_VERSION: (u8, u8, u8) = table_data::UNICODE
 const paperpaw_text::stored::PackLimits::LARGE: paperpaw_text::stored::PackLimits = PackLimits { index: 32 * 1024, advances: 16 * 1024, }
