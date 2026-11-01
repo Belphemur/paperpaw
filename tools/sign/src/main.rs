@@ -83,6 +83,12 @@ USAGE:
         with the author's recovery key, chosen in advance and kept
         offline; the key as for sign. Prints the signature (128
         hexadecimal digits) the store hands readers with the update.
+    paperpaw-sign revocation <plugin-id> <key> [--key <secret-key-file>]
+        Signs the statement that revokes <key> (a public key, 64
+        hexadecimal digits), the key of the plugin's author: with that key
+        itself, or with the author's recovery key where it was lost; the
+        key as for sign. Prints the signature (128 hexadecimal digits) the
+        store's library lists with the plugin and the key.
     paperpaw-sign plugin <plugin.ppn>
         Shows what a plugin file holds, and its author if it is signed
         (failing if the signature does not hold).
@@ -146,6 +152,8 @@ fn run(args: Vec<String>) -> Result<(), String> {
         ["catalog", source, out] => catalog(source, out),
         ["rotation", plugin, old, new] => rotation(plugin, old, new, None),
         ["rotation", plugin, old, new, "--key", key] => rotation(plugin, old, new, Some(key)),
+        ["revocation", plugin, key] => revocation(plugin, key, None),
+        ["revocation", plugin, key, "--key", file] => revocation(plugin, key, Some(file)),
         ["plugin", file] => plugin::show(file),
         ["sign-plugin", file] => plugin::sign(file, None),
         ["sign-plugin", file, "--key", key] => plugin::sign(file, Some(key)),
@@ -188,6 +196,20 @@ fn rotation(plugin: &str, old: &str, new: &str, key_file: Option<&str>) -> Resul
     }
     let seed = secret_key(key_file)?;
     let message = paperpaw_native::signature::rotation_message(plugin, &old, &new);
+    let signature = paperpaw_native::signature::sign_message(message.as_bytes(), &seed);
+    println!("{}", paperpaw_digest::hex::encode(&signature));
+    Ok(())
+}
+
+/// `revocation`: the signature over the revocation of `key` for
+/// `plugin`, by the key in `key_file` (the revoked one, or the recovery
+/// key).
+fn revocation(plugin: &str, key: &str, key_file: Option<&str>) -> Result<(), String> {
+    let key: [u8; 32] = paperpaw_digest::hex::decode(key.trim())
+        .and_then(|bytes| bytes.try_into().ok())
+        .ok_or_else(|| format!("`{key}` is not a public key of 64 hexadecimal digits"))?;
+    let seed = secret_key(key_file)?;
+    let message = paperpaw_native::signature::revocation_message(plugin, &key);
     let signature = paperpaw_native::signature::sign_message(message.as_bytes(), &seed);
     println!("{}", paperpaw_digest::hex::encode(&signature));
     Ok(())

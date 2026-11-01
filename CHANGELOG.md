@@ -112,9 +112,12 @@ Workshop builds from those commits are thrown away.
 - Author keys: a recovery key chosen in advance moves a plugin to a new key by a statement the device checks
   itself (`paperpaw-sign rotation`; SDK `native::keys`: `remember_first_install`, `rotation_message`,
   `accept_rotation`; `install::Marks::recovery`), and the code of an author whose key the store revoked does not
-  run (`PluginProblem::Revoked`, `keys::keep_revoked`, which only adds). The recovery key is pinned only with the
+  run (`PluginProblem::Revoked`, `keys::keep_revoked`, which only adds). A revocation is a statement
+  (`keys::Revocation`, `paperpaw-sign revocation`) signed by the revoked key itself or by the plugin's recovery
+  key, about the key pinned as its author on the device; any other is left out, and the list is checked again where
+  it is read, so no plugin and no taken-over library can revoke another author's key. The recovery key is pinned only with the
   first install, and code installed before a rotation does not run until an update by the new key. The store
-  does not offer either yet; it calls `keys::keep_revoked` with its library's list and `keys::accept_rotation`
+  does not offer either yet; it calls `keys::keep_revoked` with its library's revocations and `keys::accept_rotation`
   with a statement that came with an update (both plugin-facing; the recovery key arrives with the install marks).
 - Layout `VERSION` 11: books cached before are laid out anew once, so drop capitals and the new list markers show
   in them too. SDK, for real tables: `BlockKind::TableRow`, `Block::table` (`TableRow`, `TableCell`, `MAX_COLUMNS`:

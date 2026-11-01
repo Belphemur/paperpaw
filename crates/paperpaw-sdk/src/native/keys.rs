@@ -16,9 +16,15 @@
 //! installed without a recovery key keep only the successor way (a new
 //! id).
 //!
-//! **Revoked keys** come from the store (its library lists them); it
-//! adds them with [`keep_revoked`], and none is ever taken off. The kernel does not load the code of
-//! a plugin whose known author's key is among them
+//! **Revoked keys** come from the store (its library lists them) as
+//! [`Revocation`]s: a statement ([`revocation_message`]) signed by the
+//! revoked key itself or by the plugin's pinned recovery key, about the key
+//! pinned as that plugin's author here. The store hands them to
+//! [`keep_revoked`], which keeps those that hold, and none is ever taken
+//! off; the list is checked again where it is read (any plugin can write
+//! the card). So no plugin and no taken-over library can revoke another
+//! author's key. The kernel does not load the code of a plugin whose known
+//! author's key is among them
 //! ([`PluginProblem::Revoked`](crate::PluginProblem::Revoked)).
 
 use alloc::string::String;
@@ -30,11 +36,71 @@ use crate::Storage;
 /// its own, as older builds read every line of that one as one key).
 const RECOVERY: &str = crate::data_path!("plugin-recovery.txt");
 
-/// Where the revoked keys are kept: one in hex on each line.
+/// Where the revocations are kept: one on each line, the plugin, the key
+/// and the signature (hex), apart by a space.
 const REVOKED: &str = crate::data_path!("revoked-keys.txt");
 
-/// Revoked keys kept at most.
+/// Revocations kept at most (one holds per plugin installed).
 pub const MAX_REVOKED: usize = 256;
+
+/// That the key of `plugin`'s author is revoked: `signature` over
+/// [`revocation_message`] by `key` itself (the author, or whoever took
+/// the key, can only revoke it) or by the plugin's pinned recovery key
+/// (for a key the author lost).
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Revocation {
+    pub plugin: String,
+    pub key: [u8; 32],
+    pub signature: [u8; 64],
+}
+
+impl Revocation {
+    pub fn new(plugin: impl Into<String>, key: [u8; 32], signature: [u8; 64]) -> Self {
+        Self {
+            plugin: plugin.into(),
+            key,
+            signature,
+        }
+    }
+
+    /// Whether it holds on this device: `key` is the author pinned for
+    /// `plugin`, and the signature is `key`'s or the recovery key's.
+    fn holds(&self, storage: &dyn Storage) -> bool {
+        if super::known_author(storage, &self.plugin) != Some(self.key) {
+            return false;
+        }
+        let message = revocation_message(&self.plugin, &self.key);
+        let by = |key: &[u8; 32]| {
+            paperpaw_native::signature::verify_message(key, message.as_bytes(), &self.signature)
+        };
+        by(&self.key) || known_recovery(storage, &self.plugin).is_some_and(|key| by(&key))
+    }
+
+    /// Its line in the list, or `None` for a plugin id a line cannot hold.
+    fn line(&self) -> Option<String> {
+        let plain = !self.plugin.is_empty()
+            && self.plugin.len() <= 128
+            && !self
+                .plugin
+                .chars()
+                .any(|c| c.is_whitespace() || c.is_control());
+        plain.then(|| {
+            alloc::format!(
+                "{} {} {}\n",
+                self.plugin,
+                paperpaw_digest::hex::encode(&self.key),
+                paperpaw_digest::hex::encode(&self.signature)
+            )
+        })
+    }
+}
+
+/// The statement that revokes `key`, the key of `plugin`'s author: these
+/// bytes, exactly (`paperpaw-sign revocation` signs it).
+pub fn revocation_message(plugin: &str, key: &[u8; 32]) -> String {
+    paperpaw_native::signature::revocation_message(plugin, key)
+}
 
 /// The recovery key of `plugin`'s author, as pinned at its first install.
 pub fn known_recovery(storage: &dyn Storage, plugin: &str) -> Option<[u8; 32]> {
@@ -117,24 +183,38 @@ pub fn accept_rotation(
     }
 }
 
-/// The keys the store said were revoked.
+/// The revoked keys: those of the revocations kept that hold.
 pub fn revoked(storage: &dyn Storage) -> Vec<[u8; 32]> {
     match crate::files::load_for_update(storage, REVOKED, MAX_REVOKED_BYTES) {
-        Ok(Some(data)) => revoked_in(&data),
+        Ok(Some(data)) => revocations_in(&data)
+            .into_iter()
+            .filter(|r| r.holds(storage))
+            .map(|r| r.key)
+            .collect(),
         _ => Vec::new(),
     }
 }
 
-/// How large the list of revoked keys may be: [`MAX_REVOKED`] lines of
-/// 65 bytes, with room for line breaks of two.
-const MAX_REVOKED_BYTES: usize = 64 * 1024;
+/// How large the list of revocations may be: [`MAX_REVOKED`] lines of a
+/// plugin id and 194 bytes, with room.
+const MAX_REVOKED_BYTES: usize = 96 * 1024;
 
-/// The revoked keys in `data`, a line each. A line that is none (a
-/// damaged byte) is left out on its own: the others stay revoked.
-fn revoked_in(data: &[u8]) -> Vec<[u8; 32]> {
+/// The revocations in `data`, a line each. A line that is none (a
+/// damaged byte, a key or signature of another length) is left out on
+/// its own: the others stay.
+fn revocations_in(data: &[u8]) -> Vec<Revocation> {
+    let bytes = |hex: &str| paperpaw_digest::hex::decode(hex);
     data.split(|&b| b == b'\n')
         .filter_map(|line| core::str::from_utf8(line).ok())
-        .filter_map(|line| paperpaw_digest::hex::decode(line.trim())?.try_into().ok())
+        .filter_map(|line| {
+            let mut parts = line.split_whitespace();
+            let (plugin, key, signature) = (parts.next()?, parts.next()?, parts.next()?);
+            Some(Revocation::new(
+                plugin,
+                bytes(key)?.try_into().ok()?,
+                bytes(signature)?.try_into().ok()?,
+            ))
+        })
         .take(MAX_REVOKED)
         .collect()
 }
@@ -144,7 +224,7 @@ pub fn is_revoked(storage: &dyn Storage, key: &[u8; 32]) -> bool {
     revoked(storage).contains(key)
 }
 
-/// Why revoked keys were not all kept ([`keep_revoked`]).
+/// Why revocations were not all kept ([`keep_revoked`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum RevokedError {
@@ -156,34 +236,35 @@ pub enum RevokedError {
     NotKept,
 }
 
-/// Adds `keys` to the revoked ones (the store's library lists them): a
-/// key once revoked stays so, whatever a later list says, as the list
-/// may come from a taken-over server. At most [`MAX_REVOKED`] in all;
-/// past that, [`RevokedError::Full`].
-pub fn keep_revoked(storage: &dyn Storage, keys: &[[u8; 32]]) -> Result<(), RevokedError> {
+/// Adds the `revocations` that hold on this device (see [`Revocation`];
+/// the store's library lists them) to those kept, and leaves out the
+/// others without a word: a key once revoked stays so, whatever a later
+/// list says, as the list may come from a taken-over server. At most
+/// [`MAX_REVOKED`] in all; past that, [`RevokedError::Full`].
+pub fn keep_revoked(storage: &dyn Storage, revocations: &[Revocation]) -> Result<(), RevokedError> {
     // A list there that cannot be read is not written over by a shorter
     // one; one with damaged lines is written anew from the others.
     let mut all = match crate::files::load_for_update(storage, REVOKED, MAX_REVOKED_BYTES) {
-        Ok(data) => data.as_deref().map(revoked_in).unwrap_or_default(),
+        Ok(data) => data.as_deref().map(revocations_in).unwrap_or_default(),
         Err(_) => return Err(RevokedError::NotKept),
     };
     let before = all.len();
     let mut full = false;
-    for key in keys {
-        if all.contains(key) {
+    for revocation in revocations {
+        let known = all
+            .iter()
+            .any(|r| r.plugin == revocation.plugin && r.key == revocation.key);
+        if known || revocation.line().is_none() || !revocation.holds(storage) {
             continue;
         }
         if all.len() >= MAX_REVOKED {
             full = true;
             break;
         }
-        all.push(*key);
+        all.push(revocation.clone());
     }
     if all.len() > before {
-        let text: String = all
-            .iter()
-            .map(|key| alloc::format!("{}\n", paperpaw_digest::hex::encode(key)))
-            .collect();
+        let text: String = all.iter().filter_map(Revocation::line).collect();
         let _ = storage.create_dir(crate::data::DIR);
         if storage.write(REVOKED, text.as_bytes()).is_err() {
             return Err(RevokedError::NotKept);
@@ -301,8 +382,18 @@ mod tests {
             accept_rotation(&bare, "clock", &NEW, &signature),
             Err(RotationError::NoRecoveryKey)
         );
-        // To a revoked key: refused, and the code stays named.
-        assert_eq!(keep_revoked(&storage, &[NEW]), Ok(()));
+        // To a revoked key (another plugin's author's, revoked with its
+        // recovery key): refused, and the code stays named.
+        assert!(remember_first_install(
+            &storage,
+            "spare",
+            &NEW,
+            &public_key(&RECOVERY_SEED)
+        ));
+        assert_eq!(
+            keep_revoked(&storage, &[revocation("spare", NEW, &RECOVERY_SEED)]),
+            Ok(())
+        );
         assert_eq!(
             accept_rotation(&storage, "clock", &NEW, &signature),
             Err(RotationError::Refused)
@@ -314,84 +405,120 @@ mod tests {
         );
     }
 
+    /// A revocation of `key` for `plugin`, signed with `seed`.
+    fn revocation(plugin: &str, key: [u8; 32], seed: &[u8; 32]) -> Revocation {
+        let message = revocation_message(plugin, &key);
+        Revocation::new(plugin, key, sign_message(message.as_bytes(), seed))
+    }
+
+    /// A revocation holds where it is about the key pinned as the
+    /// plugin's author and signed by that key or the recovery key; any
+    /// other is left out, so no plugin and no taken-over library can
+    /// revoke another author's key (#20, review of #277).
     #[test]
-    fn revoked_keys_are_only_added_and_read_leniently() {
-        let storage = crate::MemoryStorage::new();
+    fn only_signed_revocations_of_the_pinned_author_are_kept() {
+        let storage = installed();
+        let notes_seed = [2; 32];
+        let notes = public_key(&notes_seed);
+        assert!(super::super::remember_author(&storage, "notes", &notes));
         assert!(revoked(&storage).is_empty());
-        assert_eq!(keep_revoked(&storage, &[AUTHOR, NEW]), Ok(()));
-        assert!(is_revoked(&storage, &NEW) && !is_revoked(&storage, &[3; 32]));
-        // A later list without a key does not take it off (review S1).
-        assert_eq!(keep_revoked(&storage, &[NEW, [3; 32]]), Ok(()));
-        assert_eq!(revoked(&storage), [AUTHOR, NEW, [3; 32]]);
+        // Signed by another, about another plugin's key, about a key not
+        // pinned, for a plugin with no author: none kept.
+        let forged = [
+            revocation("notes", notes, &[8; 32]),
+            revocation("clock", AUTHOR, &notes_seed),
+            revocation("clock", notes, &notes_seed),
+            revocation("notes", NEW, &notes_seed),
+            revocation("gone", notes, &notes_seed),
+        ];
+        assert_eq!(keep_revoked(&storage, &forged), Ok(()));
+        assert!(revoked(&storage).is_empty());
+        assert!(storage.size(REVOKED).is_err(), "nothing written");
+        // By the key itself, and by the recovery key for a lost one.
+        let real = [
+            revocation("notes", notes, &notes_seed),
+            revocation("clock", AUTHOR, &RECOVERY_SEED),
+        ];
+        assert_eq!(keep_revoked(&storage, &real), Ok(()));
+        assert_eq!(revoked(&storage), [notes, AUTHOR]);
+        assert!(is_revoked(&storage, &AUTHOR) && !is_revoked(&storage, &NEW));
+        // A later list without them does not take them off (review S1),
+        // nor are they kept twice.
+        assert_eq!(keep_revoked(&storage, &real[..1]), Ok(()));
         assert_eq!(keep_revoked(&storage, &[]), Ok(()));
-        assert_eq!(revoked(&storage).len(), 3);
+        assert_eq!(revoked(&storage).len(), 2);
+        assert_eq!(
+            revocations_in(&crate::read_file(&storage, REVOKED, MAX_REVOKED_BYTES).unwrap()).len(),
+            2
+        );
+    }
+
+    /// The list is checked where it is read: a line any plugin wrote onto
+    /// the card itself revokes nothing unless it holds.
+    #[test]
+    fn a_list_written_past_keep_revoked_is_checked_when_read() {
+        let storage = installed();
+        let forged = revocation("clock", AUTHOR, &[8; 32]).line().unwrap();
+        let real = revocation("clock", AUTHOR, &RECOVERY_SEED).line().unwrap();
+        storage.write(REVOKED, forged.as_bytes()).unwrap();
+        assert!(revoked(&storage).is_empty());
         storage
-            .write(REVOKED, b"not hex\n0909\n0101010101010101010101010101010101010101010101010101010101010101\n")
+            .write(REVOKED, alloc::format!("{forged}{real}").as_bytes())
             .unwrap();
         assert_eq!(revoked(&storage), [AUTHOR]);
-        // Past the most: those before and the first new ones kept, and
-        // said so (review S2).
-        let many: Vec<[u8; 32]> = (2..300u16)
+        // A plugin id a line cannot hold is not written.
+        assert_eq!(revocation("a b", AUTHOR, &RECOVERY_SEED).line(), None);
+    }
+
+    /// Past the most: those before and the first new ones kept, and said
+    /// so (review S2). (One holds per plugin installed, so a device meets
+    /// it only with more than MAX_REVOKED plugins.)
+    #[test]
+    fn past_the_most_revocations_say_so() {
+        let storage = crate::MemoryStorage::new();
+        let many: Vec<Revocation> = (0..MAX_REVOKED as u32 + 2)
             .map(|n| {
-                [
-                    n as u8,
-                    (n >> 8) as u8,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    1,
-                ]
+                let mut seed = [0; 32];
+                seed[..4].copy_from_slice(&n.to_le_bytes());
+                seed[31] = 1;
+                let plugin = alloc::format!("p{n}");
+                assert!(super::super::remember_author(
+                    &storage,
+                    &plugin,
+                    &public_key(&seed)
+                ));
+                revocation(&plugin, public_key(&seed), &seed)
             })
             .collect();
         assert_eq!(keep_revoked(&storage, &many), Err(RevokedError::Full));
         let kept = revoked(&storage);
         assert_eq!(kept.len(), MAX_REVOKED);
-        assert_eq!((kept[0], kept[1]), (AUTHOR, many[0]));
-        assert!(is_revoked(&storage, &many[MAX_REVOKED - 2]));
-        assert!(!is_revoked(&storage, &many[MAX_REVOKED - 1]));
+        assert!(is_revoked(&storage, &many[MAX_REVOKED - 1].key));
+        assert!(!is_revoked(&storage, &many[MAX_REVOKED].key));
     }
 
     /// A damaged line leaves the others revoked, and does not keep new
-    /// keys out: the list is written anew from what can be read. One that
+    /// ones out: the list is written anew from what can be read. One that
     /// cannot be read at all (too large) is not written over.
     #[test]
     fn a_damaged_line_costs_only_itself() {
-        let storage = crate::MemoryStorage::new();
-        let mut text = alloc::format!("{}\n", paperpaw_digest::hex::encode(&AUTHOR)).into_bytes();
+        let storage = installed();
+        let notes_seed = [2; 32];
+        let notes = public_key(&notes_seed);
+        assert!(super::super::remember_author(&storage, "notes", &notes));
+        let mut text = revocation("clock", AUTHOR, &RECOVERY_SEED)
+            .line()
+            .unwrap()
+            .into_bytes();
         text.extend_from_slice(&[0xff, 0xfe, b'\n']);
-        text.extend_from_slice(
-            alloc::format!("{}\r\n", paperpaw_digest::hex::encode(&[3; 32])).as_bytes(),
-        );
+        text.extend_from_slice(b"clock 0909 0909\n");
         storage.write(REVOKED, &text).unwrap();
-        assert_eq!(revoked(&storage), [AUTHOR, [3; 32]]);
-        assert_eq!(keep_revoked(&storage, &[NEW]), Ok(()));
-        assert_eq!(revoked(&storage), [AUTHOR, [3; 32], NEW]);
+        assert_eq!(revoked(&storage), [AUTHOR]);
+        assert_eq!(
+            keep_revoked(&storage, &[revocation("notes", notes, &notes_seed)]),
+            Ok(())
+        );
+        assert_eq!(revoked(&storage), [AUTHOR, notes]);
         assert!(
             !crate::read_file(&storage, REVOKED, MAX_REVOKED_BYTES)
                 .unwrap()
@@ -402,7 +529,7 @@ mod tests {
             .write(REVOKED, &alloc::vec![b'0'; MAX_REVOKED_BYTES + 1])
             .unwrap();
         assert_eq!(
-            keep_revoked(&storage, &[[4; 32]]),
+            keep_revoked(&storage, &[revocation("notes", notes, &notes_seed)]),
             Err(RevokedError::NotKept)
         );
         assert_eq!(storage.size(REVOKED), Ok(MAX_REVOKED_BYTES as u64 + 1));
