@@ -31,6 +31,10 @@ change the plugin SDK.
   [--bold-italic bi.ttf] <folder>` makes the whole font plugin for the X4 and X4 Pro, which read font packs
   only: `<folder>/font-my-font` with its `plugin.ini` and a pack per face, to copy into the card's `plugins`
   folder; it prints how large each pack is and how many of the characters asked for the font has. No SDK change.
+- A Greek letters pack, `script-greek` (#60): Literata's Greek, modern and with the older accents (Greek
+  Extended), for books whose Greek shows as `?` on a device whose fonts hold Latin only. It is a data plugin
+  that `tools/script-pack.py greek` builds, with no code and no interface change. Its entry in
+  `tools/plugin-files/data.toml` is commented out until the owner decides to offer it in the store.
 
 ### Changed
 
