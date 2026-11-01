@@ -17,6 +17,11 @@ name: Store plugin update
 # base's; its builder makes its folder, nothing is built for a device or
 # signed, and the release holds its folder's ZIP and its entry alone.
 #
+# A base before the files were made for a chip (`chips.py`; releases up to
+# 0.5.0-beta.12 name them by device and have one for the X4 Classic) takes
+# this workflow from its own branch, not from main: run it with "Use
+# workflow from" that branch.
+#
 # The release is made with this workflow's token, and release.yml runs
 # only for tags of PaperPaw's versions, so nothing else starts with it.
 on:
@@ -113,8 +118,9 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        # The devices the base release has firmware for.
-        device: [x4, x4-pro, x4-classic]
+        # One file for each chip (tools/plugin-files/chips.py): the X4's
+        # (the X3 takes it) and the X4 Pro's (the X4 Classic takes it).
+        device: [x4, x4-pro]
     env:
       DEVICE: ${{ matrix.device }}
     steps:
@@ -132,12 +138,10 @@ jobs:
         run: |
           base="${BASE#v}"
           dir="$RUNNER_TEMP/base"
-          # The X4 Classic has the X4 Pro's chip: its plugins are the
-          # Pro's, fingerprint and all, and a release names the Pro's only.
-          abi="$DEVICE"
-          [[ "$DEVICE" == x4-classic ]] && abi=x4-pro
-          gh release download "$BASE" -R "$GITHUB_REPOSITORY" -D "$dir" -p "paperpaw-$abi-$base-abi.txt"
-          echo "FINGERPRINT=$(awk 'NR == 1 { print $1 }' "$dir/paperpaw-$abi-$base-abi.txt")" >> "$GITHUB_ENV"
+          # The X4 Classic has the X4 Pro's chip and fingerprint (a release
+          # checks it): its firmware takes the Pro's file.
+          gh release download "$BASE" -R "$GITHUB_REPOSITORY" -D "$dir" -p "paperpaw-$DEVICE-$base-abi.txt"
+          echo "FINGERPRINT=$(awk 'NR == 1 { print $1 }' "$dir/paperpaw-$DEVICE-$base-abi.txt")" >> "$GITHUB_ENV"
           if [[ "$DEVICE" != x4 ]]; then
             gh release download "$BASE" -R "$GITHUB_REPOSITORY" -D "$dir" \
               -p "paperpaw-xtensa-std-$base.tar.gz" -p "paperpaw-xtensa-std-$base.tar.gz.sha256"

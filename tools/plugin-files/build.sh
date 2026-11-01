@@ -1,20 +1,21 @@
 #!/usr/bin/env bash
 # Builds PaperPaw's own plugins that the store offers (plugins.txt) as
-# native plugin files for one reader, as the release pipeline does, packs
+# native plugin files for one chip, as the release pipeline does, packs
 # each (signed with --key), and checks that it fits the firmware:
 #
-#   tools/plugin-files/build.sh <device> <out-dir> [--key <file>] [--fingerprint <hex>]
-#       [--only <id>]
+#   tools/plugin-files/build.sh <chip|device> <out-dir> [--key <file>]
+#       [--fingerprint <hex>] [--only <id>]
 #
-# <device> is x4, x4-pro or x4-classic; the files are
-# <out-dir>/<id>-<version>-<device>.ppn, <version> the plugin's own (its
+# A file is built for a chip, not for a device (chips.py): <chip> is
+# esp32c3 (the X4 and the X3) or esp32s3 (the X4 Pro and the X4 Classic),
+# or a device (x4, x3, x4-pro, x4-classic) for its chip. The files are
+# <out-dir>/<id>-<version>-<chip>.ppn, <version> the plugin's own (its
 # crate's, which its manifest says). With --fingerprint (the firmware's,
 # `paperpaw-sign fingerprint <elf>`) each file must have it. With --only,
 # one plugin alone (an update of it between releases). Run from
 # anywhere; paperpaw-sign is built from this repository.
 #
-# Needs: the X4's Rust from rust-toolchain.toml, for the X4 Pro and the
-# X4 Classic espup's `esp` toolchain with its environment and the
+# Needs: the X4's Rust from rust-toolchain.toml, for the ESP32-S3 espup's `esp` toolchain with its environment and the
 # release's core libraries in it (tools/xtensa-std). Never set
 # RUSTFLAGS: it would replace .cargo/config.toml's flags, which link the
 # plugins.
@@ -22,9 +23,9 @@ set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 root="$(cd "$here/../.." && pwd)"
 
-usage() { echo "usage: $0 <x4|x4-pro|x4-classic> <out-dir> [--key <file>] [--fingerprint <hex>] [--only <id>]" >&2; exit 2; }
+usage() { echo "usage: $0 <esp32c3|esp32s3|x4|x3|x4-pro|x4-classic> <out-dir> [--key <file>] [--fingerprint <hex>] [--only <id>]" >&2; exit 2; }
 [[ $# -ge 2 ]] || usage
-device=$1
+chip="$(python3 "$here/chips.py" chip "$1")" || usage
 out=$2
 shift 2
 key=()
@@ -39,9 +40,9 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-case "$device" in
-    x4) build=(cargo x4 --locked); target=riscv32imc-unknown-none-elf; chip=5 ;;
-    x4-pro | x4-classic) build=(cargo +esp x4pro --locked); target=xtensa-esp32s3-none-elf; chip=9 ;;
+case "$chip" in
+    esp32c3) build=(cargo x4 --locked); target=riscv32imc-unknown-none-elf; chip_id=5 ;;
+    esp32s3) build=(cargo +esp x4pro --locked); target=xtensa-esp32s3-none-elf; chip_id=9 ;;
     *) usage ;;
 esac
 
@@ -65,11 +66,11 @@ sign() { (cd "$root" && cargo run -q --release -p paperpaw-sign -- "$@"); }
 mkdir -p "$out"
 out="$(cd "$out" && pwd)"
 for id in $ids; do
-    file="$out/$id-$(version_of "$id")-$device.ppn"
+    file="$out/$id-$(version_of "$id")-$chip.ppn"
     sign pack "$target_dir/$target/release/$id" "$file" "${key[@]}"
     shown="$(sign plugin "$file")"
-    if ! grep -Eq "^chip: .*\($chip\)\$" <<< "$shown"; then
-        echo "$file: not for chip $chip" >&2
+    if ! grep -Eq "^chip: .*\($chip_id\)\$" <<< "$shown"; then
+        echo "$file: not for chip $chip_id" >&2
         echo "$shown" >&2
         exit 1
     fi

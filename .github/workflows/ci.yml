@@ -272,7 +272,10 @@ jobs:
           tools/plugin-files/anywhere.sh x4-pro "$RUNNER_TEMP/anywhere-x4-pro"
       # PaperPaw's own plugins that the store offers, as the release
       # builds them (unsigned here): each packs, for this chip, with the
-      # firmware's fingerprint.
+      # firmware's fingerprint. The release builds one file for each chip
+      # (the X4 and the X4 Pro); here the X4 Classic builds the X4 Pro's
+      # file again, so that a Classic firmware that stopped fitting it
+      # shows before a release.
       # Signed with a key made for this run, and their catalogue entries
       # made, as the release does.
       # The X3 takes the X4's builds (the same chip and fingerprint).

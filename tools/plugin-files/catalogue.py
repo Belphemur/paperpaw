@@ -10,7 +10,9 @@
 where not given; a plugin's update between releases has its own,
 `<id>-v<version>`). Each plugin has a version of its own, its crate's
 (`plugins/<id>/Cargo.toml`), which its manifest says. <dist> holds
-<id>-<version>-<device>.ppn for each reader built. Writes into <dist>:
+<id>-<version>-<chip>.ppn for each chip built (esp32c3: the X4, esp32s3: the
+X4 Pro and the X4 Classic; chips.py), a file for a chip, not for a device.
+Writes into <dist>:
 
 - <id>-<version>.zip: the plugin's folder (its plugin.ini, and its How it
   works, `how/<lang>.txt`, which the store's page of it and readers'
@@ -18,10 +20,10 @@ where not given; a plugin's update between releases has its own,
   it;
 - catalogue/<id>.toml: its entry in the plugin library, as the website's
   catalogue reads it (`catalogue/<id>.toml`, ADR 0023), with this
-  version's builds, each
-  file named by its address under <base-url> (the release's downloads)
-  and its SHA-256;
-- SHA256SUMS of the ZIPs and the plugin files.
+  version's builds, one for each device (`devices`), each file named by
+  its address under <base-url> (the release's downloads) and its SHA-256:
+  devices of one chip name the same file;
+- SHA256SUMS of the ZIPs and the plugin files (each file once).
 
 With `--data <dir>` the data plugins of data.toml come too, their folders
 in <dir> as data.py built them (`<dir>/<id>`): each its folder's ZIP,
@@ -48,10 +50,13 @@ import sys
 import tomllib
 import zipfile
 
+import chips
 import data
 
 HERE = pathlib.Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
+# The devices the plugin library lists (the X3 takes the X4's files, not yet
+# offered); each is built from its chip's file.
 DEVICES = ["x4", "x4-pro", "x4-classic"]
 REPOSITORY = "https://github.com/hthoene/paperpaw"
 SIGNATURE_LEN = 112
@@ -227,14 +232,19 @@ def main():
         if "how/en.txt" not in dict(how):
             fail(f"{plugin}: no How it works in English (plugins/{plugin}/how/en.txt)")
         builds = []
+        files = {}
         for device in DEVICES:
-            path = dist / f"{plugin}-{version}-{device}.ppn"
-            if path.exists():
+            path = dist / chips.file_name(plugin, version, chips.chip_of(device))
+            if not path.exists():
+                continue
+            if path.name not in files:
                 abi, key = ppn(path)
                 keys.add(key)
                 digest = sha256(path)
                 sums.append((digest, path.name))
-                builds.append((device, abi, f"{base}/{path.name}", digest))
+                files[path.name] = (abi, digest)
+            abi, digest = files[path.name]
+            builds.append((device, abi, f"{base}/{path.name}", digest))
         if not builds:
             fail(f"{plugin}: no file built for any reader")
         plugin_ini = (

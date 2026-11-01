@@ -13,7 +13,9 @@ name: Release
 # the ESP32-S3 link with (`paperpaw-xtensa-std-<version>.tar.gz`,
 # tools/xtensa-std), built once here, with a checksum and a signature of
 # their own. PaperPaw's own plugins that the store
-# offers (tools/plugin-files) come as files for each device, signed with
+# offers (tools/plugin-files) come as files for each chip (the X4's
+# `esp32c3`, the X4 Pro's and X4 Classic's `esp32s3`; a device of a chip
+# already here adds none), signed with
 # the first-party plugin key, with their folders and their entries for
 # the plugin library (`paperpaw-<version>-catalogue.zip`); each keeps
 # its own version (its crate's), the release builds it again for its
@@ -327,9 +329,13 @@ jobs:
       # PaperPaw's own plugins that the store offers, built for this
       # firmware (ADR 0024) and signed with the first-party plugin key (its
       # public key is the catalogue's `author_key`; never the firmware's).
-      # Not for the X3 yet: the plugin library does not list it.
+      # A file is for a chip: the X4 builds the ESP32-C3's, the X4 Pro the
+      # ESP32-S3's; the X4 Classic and the X3 take those (their firmwares'
+      # fingerprints are checked to be the same: "Devices of one chip" in the
+      # release job). Not offered for the X3 yet: the plugin library does not
+      # list it.
       - name: The store's first-party plugins
-        if: matrix.device != 'x3'
+        if: matrix.device == 'x4' || matrix.device == 'x4-pro'
         env:
           FINGERPRINT: ${{ steps.native.outputs.fingerprint }}
         run: |
@@ -339,7 +345,7 @@ jobs:
       # Apart from every build: the key is on the disk only while the
       # files are signed (audit O-17).
       - name: Sign the store's first-party plugins
-        if: matrix.device != 'x3'
+        if: matrix.device == 'x4' || matrix.device == 'x4-pro'
         env:
           PAPERPAW_PLUGIN_KEY: ${{ secrets.PAPERPAW_PLUGIN_KEY }}
         run: |
@@ -384,6 +390,7 @@ jobs:
           name: firmware-${{ matrix.device }}
           path: dist/paperpaw-${{ matrix.device }}-*
       - uses: actions/upload-artifact@v7
+        if: matrix.device == 'x4' || matrix.device == 'x4-pro'
         with:
           name: plugins-${{ matrix.device }}
           path: dist/plugins/*.ppn
@@ -406,6 +413,10 @@ jobs:
           merge-multiple: true
       - name: The version
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+      # Devices that share a chip share a plugin file: the firmware of
+      # each says the same fingerprint, or the release stops here.
+      - name: Devices of one chip take one plugin file
+        run: python3 tools/plugin-files/chips.py fingerprints dist "$VERSION"
       # The plugins' folders and their entries for the plugin library,
       # each file named by its address in this release.
       # A plugin's version is published once (published.py): one that did

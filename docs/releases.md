@@ -115,6 +115,10 @@ before the interruption.
 - Confirm the GitHub release contains the expected signed firmware,
   updates, applications, emulators, handbook, core libraries and plugin
   catalogue. Check every required workflow.
+  Plugin files are one for each chip (`<id>-<version>-esp32c3.ppn`, the
+  X4's, and `-esp32s3.ppn`, the X4 Pro's and the X4 Classic's), not for
+  each device; the plugin catalogue lists each device's build. The release
+  workflow stops if the firmwares of one chip say different fingerprints.
 - Run `python3 tools/publish-workspace.py --plan` again: it must report
   no missing crates and verify all published sources.
 - paperpaw.org imports release files and plugin catalogues hourly.

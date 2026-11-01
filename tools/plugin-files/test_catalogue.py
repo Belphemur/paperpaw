@@ -29,10 +29,11 @@ def signed(fingerprint):
 
 
 def built(dist):
-    """A file for the X4 of each plugin of the store, named by its version."""
+    """A file for the X4's chip of each plugin of the store, named by its
+    version."""
     for plugin, _ in catalogue.plugins():
         version = catalogue.plugin_version(plugin)
-        dist.joinpath(f"{plugin}-{version}-x4.ppn").write_bytes(signed(0x85073A61323717FF))
+        dist.joinpath(f"{plugin}-{version}-esp32c3.ppn").write_bytes(signed(0x85073A61323717FF))
 
 
 class HowItWorks(unittest.TestCase):
@@ -74,6 +75,61 @@ class HowItWorks(unittest.TestCase):
             sums = dist.joinpath("SHA256SUMS").read_text(encoding="utf-8")
             self.assertIn(folder, sums)
 
+
+
+class ChipFiles(unittest.TestCase):
+    """A file is made for a chip: the devices of a chip name the same one."""
+
+    def run_catalogue(self, dist):
+        argv = ["catalogue.py", str(dist), "0.6.0", "https://example.invalid/r", "--only", "battery",
+                "--date", "2026-11-02"]
+        with unittest.mock.patch.object(sys, "argv", argv), contextlib.redirect_stdout(io.StringIO()):
+            catalogue.main()
+        return dist.joinpath("catalogue", "battery.toml").read_text(encoding="utf-8")
+
+    def builds(self, entry):
+        import tomllib
+        return tomllib.loads(entry)["versions"][0]["builds"]
+
+    def test_the_x4_pro_and_the_x4_classic_name_one_file(self):
+        with tempfile.TemporaryDirectory() as dist:
+            dist = pathlib.Path(dist)
+            own = catalogue.plugin_version("battery")
+            riscv, xtensa = f"battery-{own}-esp32c3.ppn", f"battery-{own}-esp32s3.ppn"
+            dist.joinpath(riscv).write_bytes(signed(0x85073A61323717FF))
+            dist.joinpath(xtensa).write_bytes(signed(0x1111111111111111))
+            entry = self.run_catalogue(dist)
+            builds = {b["device"]: b for b in self.builds(entry)}
+            self.assertEqual(list(builds), ["x4", "x4-pro", "x4-classic"])
+            self.assertTrue(builds["x4"]["url"].endswith("/" + riscv))
+            self.assertEqual(builds["x4"]["abi"], "85073a61323717ff")
+            for device in ("x4-pro", "x4-classic"):
+                self.assertTrue(builds[device]["url"].endswith("/" + xtensa), device)
+                self.assertEqual(builds[device]["abi"], "1111111111111111")
+            self.assertEqual(builds["x4-pro"]["sha256"], builds["x4-classic"]["sha256"])
+            self.assertNotEqual(builds["x4"]["sha256"], builds["x4-pro"]["sha256"])
+            self.assertIn('devices = ["x4", "x4-pro", "x4-classic"]', entry)
+            # Each file once in the release's checksums.
+            sums = dist.joinpath("SHA256SUMS").read_text(encoding="utf-8")
+            self.assertEqual(sums.count(".ppn"), 2)
+            self.assertNotIn("-x4", sums)
+
+    def test_a_chip_without_a_file_has_no_device_of_it(self):
+        with tempfile.TemporaryDirectory() as dist:
+            dist = pathlib.Path(dist)
+            own = catalogue.plugin_version("battery")
+            dist.joinpath(f"battery-{own}-esp32s3.ppn").write_bytes(signed(0x1111111111111111))
+            entry = self.run_catalogue(dist)
+            self.assertEqual([b["device"] for b in self.builds(entry)], ["x4-pro", "x4-classic"])
+            self.assertIn('devices = ["x4-pro", "x4-classic"]', entry)
+
+    def test_files_named_by_device_are_no_longer_taken_as_built(self):
+        with tempfile.TemporaryDirectory() as dist:
+            dist = pathlib.Path(dist)
+            own = catalogue.plugin_version("battery")
+            dist.joinpath(f"battery-{own}-x4.ppn").write_bytes(signed(0x85073A61323717FF))
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
+                self.run_catalogue(dist)
 
 
 class DataPlugins(unittest.TestCase):
@@ -191,7 +247,7 @@ class Versions(unittest.TestCase):
         with tempfile.TemporaryDirectory() as dist:
             dist = pathlib.Path(dist)
             own = catalogue.plugin_version("vocabulary")
-            dist.joinpath(f"vocabulary-{own}-x4.ppn").write_bytes(signed(0x85073A61323717FF))
+            dist.joinpath(f"vocabulary-{own}-esp32c3.ppn").write_bytes(signed(0x85073A61323717FF))
             argv = ["catalogue.py", str(dist), "0.5.0-beta.2", "https://example.invalid/r",
                     "--only", "vocabulary", "--tag", f"vocabulary-v{own}"]
             with unittest.mock.patch.object(sys, "argv", argv), contextlib.redirect_stdout(io.StringIO()):

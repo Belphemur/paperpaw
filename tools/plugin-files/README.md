@@ -10,19 +10,31 @@ repository is, set up as `samples/hello-native`: one binary for each
 plugin, `paperpaw_sdk::plugin!` around it.
 
 The release pipeline (`.github/workflows/release.yml`) builds them for
-every release and device, as the release's firmware is built, signs
+every release and **chip**, as the release's firmware is built, signs
 them with the first-party plugin key, and publishes them with their
-folders and their entries for the plugin library:
+folders and their entries for the plugin library. A file is for a chip,
+not a device: a device loads a file whose header has its chip and its
+firmware's fingerprint, which does not hash the device. So the release
+holds one file `<id>-<version>-<chip>.ppn` for the ESP32-C3 (`esp32c3`:
+the X4, and the X3, which takes the X4's) and one for the ESP32-S3
+(`esp32s3`: the X4 Pro and the X4 Classic), and the plugin library lists
+each device's build with its chip's file. A new device with a known chip
+adds no plugin file; the release stops if the firmwares of one chip do
+not say one fingerprint (`chips.py fingerprints`). Releases up to
+0.5.0-beta.12 named the files by device (`-x4`, `-x4-pro`, `-x4-classic`):
+`published.py` still finds a version published under those names, and the
+site still serves them from their catalogue entries.
 
 | | What |
 |---|---|
 | `plugins.txt` | the plugins, with their group in the plugin library |
-| `build.sh <device> <out> [--key <file>] [--fingerprint <hex>]` | builds, packs and checks the files for one reader: `<id>-<version>-<device>.ppn`, `<version>` the plugin's own. `<device>` is `x4` or `x4-pro`. With `--only <id>`, one plugin alone (see below). |
+| `chips.py` | which chip each device has (`chips.py chip x4-classic` prints `esp32s3`), the names files had by device before (for `published.py`), and the release's check that devices of one chip have one fingerprint |
+| `build.sh <chip\|device> <out> [--key <file>] [--fingerprint <hex>]` | builds, packs and checks the files for one chip: `<id>-<version>-<chip>.ppn`, `<version>` the plugin's own. The chip is `esp32c3` or `esp32s3`, or a device (`x4`, `x3`, `x4-pro`, `x4-classic`) for its chip. With `--only <id>`, one plugin alone (see below). |
 | `anywhere.sh <x4\|x4-pro> [<work-dir>]` | checks that a plugin's file is the same wherever it is built, as the plugin library's rebuild needs: the sample, with the SDK from a registry as an author's repository has it, built in two folders and compared (CI runs it) |
 | `sign.sh <dir> <paperpaw-sign> --key <file>` | signs the files apart from building them, so the key is on the disk only while it signs |
-| `catalogue.py <dist> <release> <base-url>` | makes each plugin's folder as a ZIP with its `plugin.ini` and its How it works, `how/<lang>.txt`, which the store shows. It also makes the entry `catalogue/<id>.toml` for the plugin library, and `SHA256SUMS`. It takes `--date YYYY-MM-DD` too, `--only <id>` for one plugin alone and `--tag <tag>` for the tag the files are at (`v<release>` where not given). `test_catalogue.py` tests it: `python3 -m unittest discover -s tools/plugin-files`. |
+| `catalogue.py <dist> <release> <base-url>` | takes the chips' files in `<dist>` and makes each plugin's folder as a ZIP with its `plugin.ini` and its How it works, `how/<lang>.txt`, which the store shows. It also makes the entry `catalogue/<id>.toml` for the plugin library, and `SHA256SUMS`. It takes `--date YYYY-MM-DD` too, `--only <id>` for one plugin alone and `--tag <tag>` for the tag the files are at (`v<release>` where not given). `test_catalogue.py` tests it: `python3 -m unittest discover -s tools/plugin-files`. |
 | `versions.py [<since>]` | checks that each plugin that changed since the last release, or its own, has a newer version (CI runs it; see below) |
-| `published.py files\|folders <dir> <releases.json>` | in a release, takes a plugin's file as published where its version and firmware were (`files`), and checks that a published version's folder is the same (`folders`) |
+| `published.py files\|folders <dir> <releases.json>` | in a release, takes a plugin's file as published (under its name or the device names it had before) where its version and firmware were (`files`), and checks that a published version's folder is the same (`folders`) |
 | `data.toml`, `data.py <dir> [--only <id>]` | PaperPaw's own data plugins (no code), such as the Literata packs the X4's firmware leaves out: their versions, groups, devices and texts, and the builder and inputs of each. `data.py` runs the builders into `<dir>`; `catalogue.py --data <dir>` makes their folders' ZIPs and entries (kind `data`, the folder alone) beside the others. `versions.py` asks a newer version of one whose builder or inputs changed since the last release or its own; `data.py --newer <id> <tag>` checks its version against a release. |
 
 A plugin added to `plugins.txt` gets a binary here (`src/bin/<id>.rs`),

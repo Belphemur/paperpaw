@@ -265,6 +265,12 @@ refused too. Store, test-card and Workshop builds from commits before `e5f4a41a`
 
 ### Changed
 
+- **Release plugin files are named by chip, not by device** (#89): `<id>-<version>-esp32c3.ppn` (the X4; the X3 takes
+  it) and `<id>-<version>-esp32s3.ppn` (the X4 Pro and the X4 Classic) instead of one file per device, which were the
+  same bytes for devices of one chip (34 of 34 in 0.5.0-beta.12). A release has a third fewer plugin files and a new
+  device with a known chip adds none; the plugin library still lists a build for each device, and releases up to
+  0.5.0-beta.12 keep their per-device names. The release stops if the firmwares of one chip say different
+  fingerprints (`tools/plugin-files/chips.py`). `store-plugin.yml` builds two files, not three.
 - *Literata's bold and italic* are no longer in the firmware of the X4, X3, X4 Pro and X4 Classic (531 KB less, more
   room for updates and plugins) but a small font pack on the card, the plugin *Literata bold and italic*
   (`literata-styles`, 0.5 MB, 0 flash). The web flasher puts it on the card with the firmware; after an update

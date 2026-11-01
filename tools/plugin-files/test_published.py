@@ -68,6 +68,46 @@ class Published(unittest.TestCase):
             published.files(self.folder, published.assets(self.list), self.online.__getitem__)
             self.assertEqual(built.read_bytes(), other)
 
+    def test_versions_published_under_a_device_s_name_keep_their_bytes(self):
+        # beta.12 and before named a file by device; its bytes are the chip's.
+        names = ["hello-1.0.0-x4.ppn", "hello-1.0.0-x4-pro.ppn", "hello-1.0.0-x4-classic.ppn"]
+        found = published.assets(json.dumps([[release("v0.5.0-beta.12", "2026-10-30", names)]]))
+        online = {
+            "https://r/v0.5.0-beta.12/hello-1.0.0-x4.ppn": ppn(0xA1, b"risc-v published"),
+            "https://r/v0.5.0-beta.12/hello-1.0.0-x4-pro.ppn": ppn(0xB2, b"xtensa published", chip=9),
+            "https://r/v0.5.0-beta.12/hello-1.0.0-x4-classic.ppn": ppn(0xB2, b"xtensa published", chip=9),
+        }
+        riscv = self.folder / "hello-1.0.0-esp32c3.ppn"
+        riscv.write_bytes(ppn(0xA1, b"built again"))
+        xtensa = self.folder / "hello-1.0.0-esp32s3.ppn"
+        xtensa.write_bytes(ppn(0xB2, b"built again", chip=9))
+        said = published.files(self.folder, found, online.__getitem__)
+        self.assertEqual(riscv.read_bytes(), ppn(0xA1, b"risc-v published"))
+        self.assertEqual(xtensa.read_bytes(), ppn(0xB2, b"xtensa published", chip=9))
+        self.assertEqual(said, [
+            "hello-1.0.0-esp32c3.ppn: as published in v0.5.0-beta.12 (hello-1.0.0-x4.ppn)",
+            "hello-1.0.0-esp32s3.ppn: as published in v0.5.0-beta.12 (hello-1.0.0-x4-pro.ppn)",
+        ])
+
+    def test_a_chip_s_new_name_wins_over_the_old_ones_and_another_firmware_is_new(self):
+        names = ["hello-1.0.0-esp32s3.ppn", "hello-1.0.0-x4-pro.ppn"]
+        found = published.assets(json.dumps([[release("v0.6.0", "2026-11-05", names)]]))
+        online = {
+            "https://r/v0.6.0/hello-1.0.0-esp32s3.ppn": ppn(0xC3, b"new name", chip=9),
+            "https://r/v0.6.0/hello-1.0.0-x4-pro.ppn": ppn(0xB2, b"old name", chip=9),
+        }
+        built = self.folder / "hello-1.0.0-esp32s3.ppn"
+        built.write_bytes(ppn(0xB2, b"built", chip=9))
+        # The old name holds the same firmware's file: taken from it, though
+        # the new name has another firmware's.
+        said = published.files(self.folder, found, online.__getitem__)
+        self.assertEqual(built.read_bytes(), ppn(0xB2, b"old name", chip=9))
+        self.assertIn("(hello-1.0.0-x4-pro.ppn)", said[0])
+        built.write_bytes(ppn(0xD4, b"built", chip=9))
+        said = published.files(self.folder, found, online.__getitem__)
+        self.assertEqual(built.read_bytes(), ppn(0xD4, b"built", chip=9))
+        self.assertIn("a new build", said[0])
+
     def test_a_published_folder_must_be_the_same(self):
         folder = self.folder / "vocabulary-1.0.1.zip"
         folder.write_bytes(b"folder")

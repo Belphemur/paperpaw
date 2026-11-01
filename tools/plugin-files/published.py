@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """A plugin's version is published once: the files of PaperPaw's own
 store plugins a release built, against those its releases published
-before under the same names (`<id>-<version>-<device>.ppn`, the folder
-`<id>-<version>.zip`), as GitHub lists them:
+before under the same names (`<id>-<version>-<chip>.ppn`, the folder
+`<id>-<version>.zip`), as GitHub lists them. Releases before the files
+were made for a chip named them by device (`<id>-<version>-x4.ppn`,
+`-x4-pro.ppn`, `-x4-classic.ppn`; chips.py): a file of a chip is also looked
+for under those names, so a version published then keeps its bytes:
 
     gh api --paginate --slurp repos/<owner>/<repo>/releases > releases.json
     python3 tools/plugin-files/published.py files <dir> releases.json
@@ -21,6 +24,8 @@ import json
 import pathlib
 import sys
 import urllib.request
+
+import chips
 
 # Where the header says what a file runs on (paperpaw-native's Header):
 # its chip, its fingerprint, its compiler.
@@ -67,15 +72,22 @@ def files(folder, published, fetch):
     firmware as published; what it did, a line a file."""
     said = []
     for path in sorted(folder.glob("*.ppn")):
-        if path.name not in published:
+        # Under its name, or under those a device's had before.
+        names = [n for n in [path.name, *chips.legacy_names(path.name)] if n in published]
+        if not names:
             continue
-        tag, url = published[path.name]
-        before = fetch(url)
-        if runs_on(before) == runs_on(path.read_bytes()):
-            path.write_bytes(before)
-            said.append(f"{path.name}: as published in {tag}")
+        now = runs_on(path.read_bytes())
+        other = None
+        for name in names:
+            tag, url = published[name]
+            before = fetch(url)
+            if runs_on(before) == now:
+                path.write_bytes(before)
+                said.append(f"{path.name}: as published in {tag}" + (f" ({name})" if name != path.name else ""))
+                break
+            other = tag
         else:
-            said.append(f"{path.name}: a new build, for another firmware than {tag}'s")
+            said.append(f"{path.name}: a new build, for another firmware than {other}'s")
     return said
 
 

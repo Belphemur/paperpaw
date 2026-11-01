@@ -307,3 +307,20 @@ What the spike left open, as the implementation found it (2026-10-20):
   author than the version installed is not installed and the plugin
   manager says so (`Native::not_installed`). The store refuses it too
   (`Refusal::KeyChanged`): nowhere can the reader accept a new key.
+
+## Addendum (2026-11): PaperPaw's own plugin files are named by chip
+
+The loader checks the header's chip and the firmware's fingerprint, and
+the fingerprint hashes the interface, the target, the pointer size and the
+layouts: nothing of the device. A file is therefore for a chip, not for a
+device, and PaperPaw's releases name its own plugins' files so:
+`<id>-<version>-esp32c3.ppn` (the X4; the X3 takes it) and
+`<id>-<version>-esp32s3.ppn` (the X4 Pro and the X4 Classic). The catalogue
+lists a build for each device, the devices of a chip naming one file
+and one hash; a new device with a known chip adds no file to a release
+(the count of a release's assets no longer grows with the devices). A
+release stops if the firmwares of one chip say different fingerprints
+(`tools/plugin-files/chips.py`); then the devices would get files of their
+own again. Plugins of other authors keep the per-device builds the
+catalogue's `builds` list, and may name one file for several devices as
+well.
