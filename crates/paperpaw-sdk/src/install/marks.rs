@@ -115,7 +115,7 @@ pub fn settle(storage: &dyn Storage, id: &str, folder: &str) -> bool {
         .and_then(bytes32);
     // A known author stays: only a rotation moves it to another key
     // (`keys::accept_rotation`), never a mark. Code is named as installed
-    // only where its author's key signed it (none, where none is known).
+    // only where its author's key signed it (any, where none is known).
     let pinned = native::known_author(storage, id);
     let author = pinned.or_else(|| {
         text.lines()
@@ -160,8 +160,9 @@ pub fn settle(storage: &dyn Storage, id: &str, folder: &str) -> bool {
     true
 }
 
-/// Whether the code file in `folder` is the code named `sha256`, whole
-/// and signed by `author` (unsigned where that is `None`).
+/// Whether the code file in `folder` is the code named `sha256` and,
+/// where an `author` is known, signed by that author's key (checked
+/// whole, as the signature is over all of it).
 fn code_is(
     storage: &dyn Storage,
     folder: &str,
@@ -171,8 +172,10 @@ fn code_is(
     native::CODE_FILES.iter().any(|name| {
         let path = format!("{}/{name}", folder.trim_end_matches('/'));
         native::read_header(storage, &path).is_some_and(|header| header.sha256 == *sha256)
-            && native::checked_file(storage, &path)
-                .is_ok_and(|(_, signature)| signature.map(|s| s.key) == author)
+            && author.is_none_or(|author| {
+                native::checked_file(storage, &path)
+                    .is_ok_and(|(_, signature)| signature.is_some_and(|s| s.key == author))
+            })
     })
 }
 
