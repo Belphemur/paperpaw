@@ -215,6 +215,7 @@ pub const MIN_LETTER_SPACING: i8 = -16;
 /// How the lines under, over or through text are drawn
 /// ([`TextStyle::line_style`]), as CSS's `text-decoration-style`.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum LineStyle {
     /// One line.
     #[default]

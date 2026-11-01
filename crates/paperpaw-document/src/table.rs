@@ -50,6 +50,7 @@ pub struct TableCell {
 /// Where a cell's lines sit in a row taller than they are
 /// ([`TableCell::vertical`]), as CSS's `vertical-align` in a table.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum VerticalAlign {
     /// At the top.
     #[default]
