@@ -127,7 +127,7 @@ impl MobiDocument {
             }
             let last = record == header.text_records;
             let expected = if last {
-                header.text_length as usize - fed
+                (header.text_length as usize).saturating_sub(fed)
             } else {
                 record_size
             };
