@@ -350,7 +350,7 @@ fn shown_items_are_reordered_by_their_grip() {
     let h = status_harness(Device::TOUCH, "t.page, t.time, t.battery");
     let mut screen = items_screen(&h);
     let rows = item_rows(&h, &mut screen);
-    let grip = middle(Reorder::grip(rows[0]));
+    let grip = middle(Reorder::grip(rows[0], &UiStyle::PLAIN));
     let to = middle(rows[2]);
     let (_, commands) = run(&h, |cx| {
         assert_eq!(
@@ -368,7 +368,7 @@ fn shown_items_are_reordered_by_their_grip() {
     let h = status_harness(Device::TOUCH, "t.page");
     let mut screen = items_screen(&h);
     let rows = item_rows(&h, &mut screen);
-    let grip = middle(Reorder::grip(rows[1]));
+    let grip = middle(Reorder::grip(rows[1], &UiStyle::PLAIN));
     let (handled, _) = run(&h, |cx| {
         screen.on_pointer(&pointer(PointerPhase::Down, grip.x, grip.y), cx)
     });

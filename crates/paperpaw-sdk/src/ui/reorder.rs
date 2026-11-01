@@ -8,6 +8,10 @@
 //! in what [`Reorder::content`] leaves, the bar with [`Reorder::draw`],
 //! and passes pointer samples to [`Reorder::on_pointer`] from
 //! [`Screen::on_pointer`](crate::Screen::on_pointer).
+//!
+//! The row's end is where its line of text ends: at the left in a
+//! right-to-left UI language ([`UiStyle::is_rtl`]). [`Reorder::draw`]
+//! takes the direction along for the pointer samples that follow.
 
 use alloc::vec::Vec;
 
@@ -22,6 +26,8 @@ const GRIP: &str = "menu-2";
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Reorder {
     drag: Option<Drag>,
+    /// The grips are at the left (from the last [`Reorder::draw`]).
+    mirrored: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -44,15 +50,31 @@ pub enum ReorderStep {
 }
 
 impl Reorder {
-    /// The grip of `row`: as wide as the row is high, at its end.
-    pub fn grip(row: Rect) -> Rect {
+    /// The grip of `row`: as wide as the row is high, at its end (the
+    /// left in a right-to-left UI language).
+    pub fn grip(row: Rect, style: &UiStyle) -> Rect {
+        Self::grip_at(row, style.is_rtl())
+    }
+
+    fn grip_at(row: Rect, mirrored: bool) -> Rect {
         let width = row.height.min(row.width);
-        Rect::new(row.x + row.width - width, row.y, width, row.height)
+        let x = if mirrored {
+            row.x
+        } else {
+            row.x + row.width - width
+        };
+        Rect::new(x, row.y, width, row.height)
     }
 
     /// What is left of `row` for its content when it has a grip.
-    pub fn content(row: Rect) -> Rect {
-        Rect::new(row.x, row.y, row.width - Self::grip(row).width, row.height)
+    pub fn content(row: Rect, style: &UiStyle) -> Rect {
+        let grip = Self::grip(row, style);
+        let x = if style.is_rtl() {
+            row.x + grip.width
+        } else {
+            row.x
+        };
+        Rect::new(x, row.y, row.width - grip.width, row.height)
     }
 
     /// Draws the grip of `row` (white on a focused row).
@@ -63,11 +85,15 @@ impl Reorder {
         row: Rect,
         focused: bool,
     ) {
-        let grip = Self::grip(row);
+        let grip = Self::grip(row, style);
         let size = style.text;
         // Flush with the margin, where other rows end their values.
-        let right = f32::from(grip.x + grip.width) - style.margin as f32;
-        let x = right - icon_width(env, GRIP, size);
+        let x = if style.is_rtl() {
+            f32::from(grip.x) + style.margin as f32
+        } else {
+            let right = f32::from(grip.x + grip.width) - style.margin as f32;
+            right - icon_width(env, GRIP, size)
+        };
         let ink = style.focus_ink(focused);
         canvas.describe(Role::Button, env.i18n().tr("core.move"), grip);
         draw_icon(canvas, env, GRIP, size, x, grip, ink);
@@ -95,7 +121,7 @@ impl Reorder {
                 self.drag = None;
                 let index = list.hit(event.point, movable)?;
                 let slot = index - list.page() * list.rows();
-                if !Self::grip(list.row_rect(slot)).contains(event.point) {
+                if !Self::grip_at(list.row_rect(slot), self.mirrored).contains(event.point) {
                     return None;
                 }
                 self.drag = Some(Drag {
@@ -141,9 +167,10 @@ impl Reorder {
     }
 
     /// Draws, while a row is moved, a frame around it and a bar where it
-    /// would land.
-    pub fn draw(&self, ui: &mut super::Ui<'_>, list: &ListView) {
+    /// would land; notes the UI's direction for [`Reorder::on_pointer`].
+    pub fn draw(&mut self, ui: &mut super::Ui<'_>, list: &ListView) {
         let style = ui.style();
+        self.mirrored = style.is_rtl();
         let canvas = ui.canvas();
         let Some(Drag { from, to, .. }) = self.drag else {
             return;
