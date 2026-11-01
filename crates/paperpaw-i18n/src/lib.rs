@@ -28,11 +28,13 @@
 
 extern crate alloc;
 
+mod card;
 mod catalog;
 pub mod check;
 mod format;
 mod plural;
 
+pub use card::{CatalogFile, MAX_MESSAGE, MAX_READ};
 pub use catalog::{Catalog, CatalogError, FixedIndexes, fingerprint};
 pub use catalog::{calendars, digit_systems};
 pub use format::Arg;
@@ -114,6 +116,20 @@ impl Translator {
         self.drop_covered();
         self.catalogs.shrink_to_fit();
         self.parked.shrink_to_fit();
+    }
+
+    /// Forgets the messages read from catalogs on the card
+    /// ([`Catalog::open`]): the kernel does so, with no message lent out,
+    /// when the screen changes and once they take more than it allows.
+    pub fn forget_read(&mut self) {
+        for catalog in &mut self.catalogs {
+            catalog.forget_read();
+        }
+    }
+
+    /// The bytes the messages read from catalogs on the card take.
+    pub fn read_bytes(&self) -> usize {
+        self.catalogs.iter().map(Catalog::read_bytes).sum()
     }
 
     /// Selects the UI language, e.g. `de` or `pt-BR`.
@@ -287,11 +303,14 @@ impl Translator {
             .catalogs
             .iter()
             .map(|catalog| {
+                // Catalogs on the card neither list their keys nor are
+                // asked for all of English's (ADR 0033).
                 english(catalog.language())
                     && catalog.is_loaded()
+                    && !catalog.is_on_card()
                     && catalog.keys().all(|key| {
                         self.ordered()
-                            .filter(|other| !english(other.language()))
+                            .filter(|other| !english(other.language()) && !other.is_on_card())
                             .any(|other| other.get(key).is_some())
                     })
             })

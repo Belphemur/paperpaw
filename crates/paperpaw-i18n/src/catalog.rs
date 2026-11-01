@@ -1,5 +1,6 @@
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
+use alloc::rc::Rc;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::cmp::Ordering;
@@ -7,6 +8,7 @@ use core::fmt;
 
 use paperpaw_config::ParseError;
 
+use crate::card::{self, Card, CatalogFile};
 use crate::plural::PluralRule;
 
 /// The messages of one language.
@@ -55,6 +57,10 @@ pub struct Catalog {
     wide: bool,
     /// When it was added to a translator, of those added: later ones win.
     pub(crate) added: u32,
+    /// Where its messages are a compiled catalog on the card, read as
+    /// needed (ADR 0033): its file and block table. Its source is then
+    /// the meta text alone.
+    card: Option<Box<Card>>,
 }
 
 /// The numbering systems a catalog can name (`[meta] digits`), as the
@@ -422,6 +428,12 @@ pub enum CatalogError {
     /// that doesn't know one treats it as the most general failure of its
     /// kind.
     Other(u16),
+    /// A compiled catalog that cannot be read or is not right: not the
+    /// format, places out of order or outside the file.
+    Corrupt,
+    /// A catalog too large to compile: a key over 255 bytes, a message
+    /// over [`MAX_MESSAGE`](crate::MAX_MESSAGE) bytes, too many messages.
+    TooLarge,
 }
 
 impl fmt::Display for CatalogError {
@@ -436,6 +448,8 @@ impl fmt::Display for CatalogError {
                 write!(f, "line {line}: a key before [meta]")
             }
             CatalogError::Other(code) => write!(f, "catalog error {code}"),
+            CatalogError::Corrupt => f.write_str("not a compiled catalog, or a damaged one"),
+            CatalogError::TooLarge => f.write_str("too large to compile"),
         }
     }
 }
@@ -462,6 +476,7 @@ impl Catalog {
             loaded: false,
             wide: false,
             added: 0,
+            card: None,
         };
         catalog.scan(true)?;
         Ok(catalog)
@@ -475,7 +490,8 @@ impl Catalog {
     /// Kept small while its language is not in use ([`Parked`]); itself
     /// where its language or name is escaped (they would be lost).
     pub(crate) fn park(self) -> Result<Parked, Catalog> {
-        if self.meta_len > 0 {
+        // One on the card keeps no more than its meta when unloaded.
+        if self.meta_len > 0 || self.card.is_some() {
             return Err(self);
         }
         Ok(Parked {
@@ -603,8 +619,12 @@ impl Catalog {
         Ok(())
     }
 
-    /// Drops the message index (keeps language, name and plural rule).
+    /// Drops the message index (keeps language, name and plural rule);
+    /// one on the card its block table and the messages read.
     pub fn unload(&mut self) {
+        if let Some(card) = &mut self.card {
+            card.unload();
+        }
         self.index = Index::default();
         self.wide = false;
         self.others = Box::default();
@@ -613,7 +633,13 @@ impl Catalog {
     }
 
     /// Rebuilds the message index after [`Catalog::unload`].
+    /// One on the card reads its block table again; where that fails (the
+    /// card pulled) it stays unloaded and its language falls back.
     pub fn load(&mut self) {
+        if let Some(card) = &mut self.card {
+            let _ = card.load();
+            return;
+        }
         if !self.loaded {
             // The source was validated when it was parsed.
             let _ = self.scan(false);
@@ -621,7 +647,52 @@ impl Catalog {
     }
 
     pub fn is_loaded(&self) -> bool {
-        self.loaded
+        match &self.card {
+            Some(card) => card.is_loaded(),
+            None => self.loaded,
+        }
+    }
+
+    /// A compiled catalog (`*.ppcat`, see [`Catalog::compile`]) read from
+    /// `file` as needed: its meta and block table now (about 8 bytes for
+    /// every 32 messages), each message when it is first looked up, kept
+    /// until [`Catalog::forget_read`]. Checked whole as it opens.
+    pub fn open(file: Rc<dyn CatalogFile>) -> Result<Catalog, CatalogError> {
+        let (meta, messages) = card::open(&*file)?;
+        let mut catalog = Catalog::parse(meta)?;
+        catalog.card = Some(Box::new(Card::new(file, messages)?));
+        Ok(catalog)
+    }
+
+    /// The catalog `source` (as [`Catalog::parse`] reads it) compiled, to
+    /// be read from a card as needed ([`Catalog::open`]).
+    pub fn compile(source: &str) -> Result<Vec<u8>, CatalogError> {
+        let catalog = Catalog::parse(String::from(source))?;
+        let meta = meta_text(source);
+        let messages: Vec<(&str, &str)> = catalog
+            .keys()
+            .filter_map(|key| Some((key, catalog.get(key)?)))
+            .collect();
+        card::compile(&meta, &messages)
+    }
+
+    /// Whether its messages are read from a card as needed.
+    pub fn is_on_card(&self) -> bool {
+        self.card.is_some()
+    }
+
+    /// The bytes the messages read from the card take, until
+    /// [`Catalog::forget_read`].
+    pub fn read_bytes(&self) -> usize {
+        self.card.as_ref().map_or(0, |card| card.read_bytes())
+    }
+
+    /// Forgets the messages read from the card: no message borrowed from
+    /// it is left (`&mut`).
+    pub fn forget_read(&mut self) {
+        if let Some(card) = &mut self.card {
+            card.forget();
+        }
     }
 
     fn text(&self, span: Span) -> &str {
@@ -708,6 +779,9 @@ impl Catalog {
     paperpaw_table::shared! {
     /// The message for `key`, if this catalog has one and is loaded.
     pub fn get(&self, key: &str) -> Option<&str> {
+        if let Some(card) = &self.card {
+            return card.get(key);
+        }
         let len = self.index.len(self.wide);
         // A key before the first or after the last is not here. A catalog
         // mostly holds one plugin's keys, so a translator looking through
@@ -739,30 +813,38 @@ impl Catalog {
     } @ data::I18N_CATALOG_GET as for<'s> fn(&'s Self, &str) -> Option<&'s str>
     }
 
-    /// All message keys, sorted.
+    /// All message keys, sorted; none of a catalog on the card (that
+    /// would read it whole).
     pub fn keys(&self) -> impl Iterator<Item = &str> {
         (0..self.index.len(self.wide)).map(|i| self.key(self.index.at(i, self.wide)))
     }
 
     pub fn len(&self) -> usize {
-        self.index.len(self.wide)
+        match &self.card {
+            Some(card) => card.len(),
+            None => self.index.len(self.wide),
+        }
     }
 
     pub fn is_empty(&self) -> bool {
-        self.index.0.is_empty()
+        match &self.card {
+            Some(card) => card.len() == 0,
+            None => self.index.0.is_empty(),
+        }
     }
 
     /// Its index, two bytes an entry, for a build script that keeps it in
     /// the program ([`FixedIndexes`]); `None` while unloaded or where the
     /// index is wide.
     pub fn narrow_index(&self) -> Option<&[u16]> {
-        (self.loaded && !self.wide).then_some(&*self.index.0)
+        (self.loaded && !self.wide && self.card.is_none()).then_some(&*self.index.0)
     }
 
     /// The bytes its index takes on the heap: none where it is kept in
     /// the program ([`FixedIndexes`]) or unloaded.
     pub fn index_on_heap(&self) -> usize {
-        match &self.index.0 {
+        let card = self.card.as_ref().map_or(0, |card| card.index_on_heap());
+        card + match &self.index.0 {
             Cow::Owned(index) => index.len() * 2,
             Cow::Borrowed(_) => 0,
         }
@@ -785,6 +867,24 @@ impl Catalog {
 }
 
 /// The key of index entry `at` (see the field `index` of `Catalog`).
+/// The `[meta]` section of `source` as written, from its header to the
+/// next section's.
+fn meta_text(source: &str) -> String {
+    let mut meta = String::new();
+    let mut inside = false;
+    for line in source.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') {
+            inside = trimmed == "[meta]";
+        }
+        if inside {
+            meta.push_str(line);
+            meta.push('\n');
+        }
+    }
+    meta
+}
+
 fn key_of<'a>(source: &'a str, escaped: &'a str, others: &[(Span, Span)], at: u32) -> &'a str {
     if at & OTHER != 0 {
         others

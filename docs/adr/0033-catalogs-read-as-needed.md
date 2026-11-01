@@ -1,0 +1,75 @@
+# 0033. Catalogs on the card read as needed
+
+- Status: Accepted (owner decision 40); amends plugin interface 5
+- Date: 2026-11-01
+
+## Context
+
+A language that comes as a data plugin (`ar`, all plugins' texts, some
+210 KB) is held whole in memory as a catalog: its text, an index of
+2 bytes a message and its unescaped strings. Languages not in use stay
+parked with their whole text. The X4 has 256 KiB of heap and starts
+with some 125 KiB (140 in German) taken. A catalog of that size does
+not fit, and those of every installed language cost memory for nothing.
+
+Plugins borrow messages from the `Translator` the kernel lends them
+(`Env::i18n`, `tr(&self, key) -> &str`), for as long as they hold it:
+while they draw or handle an event. Between those calls the kernel holds
+it alone.
+
+## Decision
+
+A catalog can stay on the card and be read as needed.
+
+- **A compiled catalog** (`*.ppcat`, `paperpaw-sign catalog` makes it
+  from an `.ini` catalog; `Catalog::compile`): a header, the `[meta]`
+  text, then the messages sorted by a 32-bit hash of their key (FNV-1a),
+  in blocks of at most 32 messages and 2 KiB, unescaped. A table of each
+  block's first hash and place follows the header.
+- **Opening it** (`Catalog::open`, on a `CatalogFile` that reads at a
+  place) reads the header, the meta and the block table: 8 bytes a block,
+  about 1 KB for 3,400 messages. It is checked whole (places in order and
+  inside the file, blocks no larger than allowed, hashes in order); one
+  that is not right is refused (`CatalogError::Corrupt`) and the language
+  falls back as if it were missing.
+- **Looking up** a key finds its block by the hash in memory and reads
+  that block (one read of at most 2 KiB), then keeps the message, or
+  that there is none, in the catalog's list of what it read. Further
+  lookups of the key find it there. The list only grows while the
+  `Translator` is lent out, so what a plugin borrowed stays where it is
+  (an append-only list of `OnceCell`s, no `unsafe`); the kernel empties
+  it (`Translator::forget_read`, with the `Translator` its own) when the
+  screen changes, and after an event once it holds more than 4 KiB.
+  Beyond 16 KiB in one call, messages are not read any more: the
+  language falls back for them.
+- **Failing to read** (a card pulled, a read error, a block that is not
+  right) gives no message: the next language of the chain (English,
+  built in) or the key stands in, and nothing panics.
+- **Languages not in use** keep their file and meta only (`unload`
+  drops the block table), not their text.
+- **What stays**: catalogs built into the firmware and plugins (in
+  flash, their indexes in the program, `FixedIndexes`), catalogs given
+  as text (`Registrar::add_translations`), and `.ini` catalogs on the
+  card (a user's own, at most 64 KiB) keep working as they did. A data
+  plugin's `i18n/*.ppcat` are opened from the card
+  (`Registrar::add_translation_file`).
+- **Covered English**: a catalog on the card does not count when the
+  kernel checks whether a language has all of English's messages (it
+  would read every block), so English stays: it is built in and costs
+  no heap.
+
+## Consequences
+
+- Plugin interface 5 changes before its release (the owner's second
+  re-bless): `paperpaw-i18n` gains `Catalog::open`, `Catalog::compile`,
+  `CatalogFile`, `CatalogError::Corrupt`, `Translator::forget_read` and
+  `Translator::read_bytes`, and `Catalog`'s shape grows. The kernel
+  gains `Registrar::add_translation_file`. Every plugin is built again.
+- A language of any size costs about 1 KB of index and the messages of
+  the screen shown (a few KiB), not its size.
+- The first lookup of a message costs a read from the card (a few
+  milliseconds on the X4); a screen of 30 new messages opens up to some
+  100 ms slower the first time. Pages of a book show few messages and
+  turn as fast as before.
+- `Catalog::keys` lists no keys of a catalog on the card (it would read
+  the whole file); tools that compare catalogs read the `.ini` files.
