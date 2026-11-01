@@ -458,8 +458,9 @@ pub enum SocketRead {
 /// Parameters of a socket's events (see [`Command::Connect`]) and of a
 /// broadcast's (see [`Command::Broadcast`]).
 pub mod socket_params {
-    /// What happened: [`CONNECTED`], [`RECEIVED`], [`SAVED`], [`CLOSED`]
-    /// or [`FAILED`]; for broadcasts [`ANSWER`] and [`DONE`].
+    /// What happened: [`CONNECTED`], [`RECEIVED`], [`SAVED`], [`CLOSED`],
+    /// [`FAILED`], [`SECURED`] or [`UNTRUSTED`]; for broadcasts [`ANSWER`]
+    /// and [`DONE`].
     pub const KIND: &str = "kind";
     pub const CONNECTED: &str = "connected";
     /// Text came, in [`TEXT`]; empty when the other side closed.
@@ -472,6 +473,13 @@ pub mod socket_params {
     pub const ANSWER: &str = "answer";
     /// No more answers to a broadcast will come.
     pub const DONE: &str = "done";
+    /// The socket is encrypted from now on (reserved).
+    pub const SECURED: &str = "secured";
+    /// The server's certificate is not trusted; its SHA-256 in
+    /// [`CERTIFICATE`] (reserved).
+    pub const UNTRUSTED: &str = "untrusted";
+    /// A certificate's SHA-256, hex.
+    pub const CERTIFICATE: &str = "certificate";
     pub const TEXT: &str = "text";
     pub const PATH: &str = "path";
     /// The address an answer came from, e.g. `192.168.1.20`.

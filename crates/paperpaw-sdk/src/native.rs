@@ -199,6 +199,14 @@ pub fn check_file(
     storage: &dyn Storage,
     path: &str,
 ) -> Result<(Header, Option<Signature>), Problem> {
+    checked_file(storage, path)
+}
+
+/// [`check_file`], for the marks an installer left ([`install::marks`](crate::install::marks)).
+pub(crate) fn checked_file(
+    storage: &dyn Storage,
+    path: &str,
+) -> Result<(Header, Option<Signature>), Problem> {
     let mut head = [0u8; HEADER_LEN];
     read_exact(storage, path, 0, &mut head)?;
     let header = Header::read(&head)?;
@@ -1045,7 +1053,7 @@ pub mod support {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use alloc::string::ToString;
 
     use super::*;
@@ -1319,7 +1327,7 @@ mod tests {
 
     /// A small plugin file of `Header`'s own tests: no code to run, only
     /// to check.
-    fn file() -> Vec<u8> {
+    pub(crate) fn file() -> Vec<u8> {
         let mut header = Header {
             chip: Chip::Esp32C3,
             fingerprint: 1,

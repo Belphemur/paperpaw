@@ -123,6 +123,15 @@ impl Capability {
     /// a router (transfer, the phone keyboard). Reserved: no shell says so
     /// yet.
     pub const HOTSPOT: Self = Self(1 << 14);
+    /// A pen that tells how it leans
+    /// ([`PointerEvent::tilt_x`](paperpaw_platform::PointerEvent::tilt_x)).
+    /// Reserved: no shell says so yet.
+    pub const PEN_TILT: Self = Self(1 << 15);
+    /// A pen seen above the screen before it touches
+    /// ([`PointerPhase::Hover`](paperpaw_platform::PointerPhase::Hover)).
+    /// Reserved: no shell says so yet, and the kernel passes it to no
+    /// screen.
+    pub const PEN_HOVER: Self = Self(1 << 16);
 }
 
 impl Capabilities {

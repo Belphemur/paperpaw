@@ -184,6 +184,16 @@ pub fn rotation_message(plugin: &str, old: &[u8; 32], new: &[u8; 32]) -> alloc::
     )
 }
 
+/// The statement that revokes `key`, the key of `plugin`'s author
+/// (`paperpaw_sdk::native::keys`): signed by that key itself or by the
+/// author's recovery key; these bytes, exactly.
+pub fn revocation_message(plugin: &str, key: &[u8; 32]) -> alloc::string::String {
+    alloc::format!(
+        "paperpaw key revocation 1\n{plugin}\n{}\n",
+        paperpaw_digest::hex::encode(key)
+    )
+}
+
 /// Signs `message` (a short statement, e.g. a key rotation) with the
 /// Ed25519 key made from `seed`.
 pub fn sign_message(message: &[u8], seed: &[u8; 32]) -> [u8; 64] {
@@ -210,6 +220,22 @@ mod tests {
     use super::*;
 
     const SEED: [u8; 32] = [3; 32];
+
+    /// A revocation is signed and checked as a rotation is, and the two
+    /// statements never read the same.
+    #[test]
+    fn a_revocation_is_a_statement_of_its_own() {
+        let key = public_key(&SEED);
+        let message = revocation_message("clock", &key);
+        let signature = sign_message(message.as_bytes(), &SEED);
+        assert!(verify_message(&key, message.as_bytes(), &signature));
+        assert!(!verify_message(
+            &key,
+            revocation_message("clocks", &key).as_bytes(),
+            &signature
+        ));
+        assert_ne!(message, rotation_message("clock", &key, &key));
+    }
 
     #[test]
     fn a_signature_holds_in_any_pieces() {
