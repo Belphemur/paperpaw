@@ -385,3 +385,45 @@ fn a_notes_lines_start_at_the_right_margin() {
     assert!(last < r_last || last <= r_last + 300, "{last} {r_last}");
     let _ = r_first;
 }
+
+#[test]
+fn a_chevron_turns_and_an_icon_stands_at_the_right() {
+    let h = Harness::new(Device::TOUCH);
+    let env = h.env();
+    let ltr = UiStyle::new(&env);
+    let rtl = ltr.with_rtl(true);
+    let row = Rect::new(0, 100, WIDTH, ltr.row());
+    let labels = |style: &UiStyle| {
+        let (described, mut frame) = describe(WIDTH, 800, |c| {
+            ui::Row::value("Title", "3 ›").draw(&mut ui::Ui::new(c, &env, style), row);
+        });
+        assert_eq!(drawn_outside(&mut frame, row), None);
+        described
+            .into_iter()
+            .filter(|d| d.role == Role::Text)
+            .map(|d| d.label)
+            .collect::<Vec<_>>()
+    };
+    assert!(labels(&ltr).contains(&String::from("3 ›")));
+    assert!(
+        labels(&rtl).contains(&String::from("‹ 3")),
+        "{:?}",
+        labels(&rtl)
+    );
+    // The rest of a row after its icon is the part away from the icon.
+    let icon = ui::icon_room(&env, &ltr, true);
+    if icon > 0 {
+        let rest = |style: &UiStyle| {
+            let mut frame = support::frame(WIDTH, 800);
+            ui::Ui::new(&mut frame.canvas(), &env, style).row_icon(
+                row,
+                icon,
+                Some("puzzle"),
+                paperpaw_sdk::Color::BLACK,
+            )
+        };
+        assert_eq!(rest(&ltr).x, row.x + icon);
+        assert_eq!(rest(&rtl).x, row.x);
+        assert_eq!(rest(&rtl).width, row.width - icon);
+    }
+}
