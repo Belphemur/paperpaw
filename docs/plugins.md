@@ -2089,8 +2089,9 @@ Arabic and Hebrew (with where their marks sit) from the fonts in
 and has its letters (at least those of `aenoAEO0` the face has), draws
 text asked that large, and the font size goes as far; a pack of another
 script's letters adds those letters only, in whatever sizes: the X4's firmware has
-Literata up to 32 px, and `tools/literata-packs.py` builds its larger
-sizes (and its bold italic face) as plugins for the font library.
+Literata's regular face up to 32 px, and `tools/literata-packs.py` builds its
+bold and italic faces (`literata-styles`, which the store fetches by itself
+where they are missing), its larger sizes and its bold italic face as plugins.
 Icon packs are such packs for the icon font: `tools/icons/pack.py` builds
 one with the Tabler icons named
 (`[extends] icons.ppfp = fonts-default.icons`).
@@ -2127,17 +2128,25 @@ bold = bold.ppfp
 ```
 
 A plugin may also bring a face of a family that is there without it,
-bound to its role: the X4's firmware has no Literata Bold Italic, which
-such a plugin brings back:
+bound to its role: the X4's firmware has Literata's regular face alone
+(no bold, italic or bold italic), which such plugins bring back (bold and
+italic in `literata-styles`, which the store fetches by itself at the first
+start where they are missing). Until they are there, bold and italic text
+is set in the regular face:
 
 ```ini
 [family]
 name = Literata
-bold-italic = literata-bold-italic.ppfp
+bold = literata-bold.ppfp
+italic = literata-italic.ppfp
 
 [fonts]
-core.font-reading-bold-italic = literata-bold-italic.bold-italic
+core.font-reading-bold = literata-styles.bold
+core.font-reading-italic = literata-styles.italic
 ```
+
+Packs that extend a face the plugin brings name it as
+`<plugin>.<style>` (`[extends] literata-bold-large.ppfp = literata-styles.bold`).
 
 A logo of its own takes the place of PaperPaw's (on the sleep screen,
 the About page and the logo widget): a picture in the folder, named in

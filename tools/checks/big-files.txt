@@ -7,4 +7,4 @@
 1891 plugins/format-epub/src/convert.rs
 1925 crates/paperpaw-sdk/src/widgets/grid/view.rs
 1643 crates/paperpaw-sdk/src/library/catalog.rs
-1721 plugins/reader/tests/reading.rs
+1661 plugins/reader/tests/reading.rs

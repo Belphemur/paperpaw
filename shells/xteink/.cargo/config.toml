@@ -54,7 +54,9 @@ ESP_BACKTRACE_CONFIG_BACKTRACE_FRAMES = "64"
 # (about 12 pt on its 220 dpi screen), not the 40 and 48 px of larger
 # screens.
 PAPERPAW_FONT_SIZES = "20,24,28,32,36"
-# Lean font packs: no Literata Bold Italic (some 386 KB; bold stands in
-# for it) and Literata's faces up to 32 px (36 px some 370 KB more); the
-# font library has both, so updates keep room in the slots.
+# Lean font packs: Literata's regular face alone (no bold, italic or bold
+# italic: some 531 + 386 KB; the data plugin `literata-styles` brings bold
+# and italic from the card, the store fetches it by itself, and regular
+# text stands in until then) and only up to 32 px (36 px some 370 KB
+# more); the font library has the rest, so updates keep room in the slots.
 PAPERPAW_FONT_LEAN = "1"

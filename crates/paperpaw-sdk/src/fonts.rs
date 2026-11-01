@@ -493,6 +493,7 @@ impl Fonts {
         {
             wanted.push(index);
         }
+        wanted.extend(self.role_faces());
         for (index, entry) in self.entries.iter_mut().enumerate() {
             let Some(path) = &entry.file else {
                 continue;
@@ -1487,6 +1488,7 @@ impl<'a> FontHandle<'a> {
 
 mod split;
 mod storage;
+mod wanted;
 
 #[cfg(test)]
 mod tests;

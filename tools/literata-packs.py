@@ -1,13 +1,15 @@
 """Builds the data plugins of Literata that the X4's firmware leaves out
-to keep room for updates, for the font library: its larger sizes (36, 40
-and 48 px) as packs that extend the built-in faces, and its bold italic
-face at every size, bound to the reading role. Both are read from the
-card a glyph at a time.
+to keep room for updates: its bold and italic faces (`literata-styles`,
+which the store fetches by itself where they are missing), its larger
+sizes (36, 40 and 48 px) as packs that extend the faces, and its bold
+italic face at every size, bound to the reading role. All are read from
+the card a glyph at a time.
 
 Usage:
     python tools/literata-packs.py OUT_DIR
 
-Writes OUT_DIR/literata-large and OUT_DIR/literata-bold-italic; copy a
+Writes OUT_DIR/literata-styles, OUT_DIR/literata-large and
+OUT_DIR/literata-bold-italic; copy a
 folder into the device's plugins folder (plugins/ on the X4's card). The
 release builds them so (tools/plugin-files/data.py) and offers them in
 the store; their versions, names and descriptions are in
@@ -24,17 +26,22 @@ sys.path.insert(0, str(ROOT / "tools" / "plugin-files"))
 import data  # noqa: E402
 FONTGEN = ROOT / "target/release/paperpaw-fontgen"
 FONTS = ROOT / "plugins/fonts-default/fonts"
+# The sections of the plugins' `plugin.ini` that name faces; the tests of
+# crates/paperpaw-app read the same files.
+DATA = ROOT / "tools/plugin-files"
 
 # Sizes the firmware leaves out of the reading faces (it keeps up to
-# 32 px, plugins/fonts-default/build.rs), and all sizes.
+# 32 px, plugins/fonts-default/build.rs), the sizes it keeps, and all.
 LARGE = "36,40,48"
+SMALL = "20,24,28,32"
 ALL = "20,24,28,32,36,40,48"
 
-# Pack, font file, weight, the built-in face it extends.
+# Pack of the larger sizes, font file, weight; the face each extends is
+# in literata-large.ini.
 FACES = [
-    ("literata", "Literata.ttf", 400, "fonts-default.literata"),
-    ("literata-bold", "Literata.ttf", 700, "fonts-default.literata-bold"),
-    ("literata-italic", "Literata-Italic.ttf", 400, "fonts-default.literata-italic"),
+    ("literata", "Literata.ttf", 400),
+    ("literata-bold", "Literata.ttf", 700),
+    ("literata-italic", "Literata-Italic.ttf", 400),
 ]
 
 
@@ -67,13 +74,19 @@ def main():
                    cwd=ROOT, check=True)
     base = Path(sys.argv[1])
 
+    out = base / "literata-styles"
+    shutil.rmtree(out, ignore_errors=True)
+    (out / "fonts").mkdir(parents=True)
+    pack("Literata.ttf", 700, SMALL, out / "fonts" / "literata-bold.ppfp")
+    pack("Literata-Italic.ttf", 400, SMALL, out / "fonts" / "literata-italic.ppfp")
+    plugin(out, "literata-styles", (DATA / "literata-styles.ini").read_text(encoding="utf-8"))
+
     out = base / "literata-large"
     shutil.rmtree(out, ignore_errors=True)
     (out / "fonts").mkdir(parents=True)
-    for name, file, weight, _ in FACES:
+    for name, file, weight in FACES:
         pack(file, weight, LARGE, out / "fonts" / f"{name}-large.ppfp")
-    extends = "\n".join(f"{name}-large.ppfp = {face}" for name, _, _, face in FACES)
-    plugin(out, "literata-large", f"[extends]\n{extends}\n")
+    plugin(out, "literata-large", (DATA / "literata-large.ini").read_text(encoding="utf-8"))
 
     out = base / "literata-bold-italic"
     shutil.rmtree(out, ignore_errors=True)

@@ -21,7 +21,8 @@ use paperpaw_sdk::{
 };
 
 /// The notices, by their translation keys, each taking `{name}`.
-const NOTICES: [&str; 11] = [
+const NOTICES: [&str; 12] = [
+    "store.styles.later",
     "store.installed",
     "store.updated",
     "store.failed",

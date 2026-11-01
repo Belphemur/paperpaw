@@ -1,7 +1,7 @@
 [package]
 name = "paperpaw-plugin-fonts-default"
 description = "PaperPaw default fonts: Literata for reading, Source Sans 3 for the UI"
-version = "1.0.1"
+version = "1.0.2"
 edition.workspace = true
 rust-version.workspace = true
 # The code is Apache-2.0; the bundled fonts are under the SIL Open Font
@@ -31,7 +31,9 @@ paperpaw-text = { workspace = true, features = ["outline"] }
 [dev-dependencies]
 # The tests look at what the plugin adds, as the kernel does.
 paperpaw-sdk = { workspace = true, features = ["kernel"] }
+paperpaw-graphics.workspace = true
 paperpaw-i18n.workspace = true
+paperpaw-platform.workspace = true
 paperpaw-text.workspace = true
 
 [lints]
