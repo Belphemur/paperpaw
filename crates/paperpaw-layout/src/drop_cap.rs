@@ -17,6 +17,12 @@ use crate::{
     word_sources,
 };
 
+/// Whether drop capitals are set: only where fonts can be drawn large
+/// (`drop-caps`, which the SDK's `outline` turns on). A device of bitmap
+/// fonts alone could never draw one, so its firmware leaves the code out
+/// and lays such blocks out as without, as it would anyway.
+pub(crate) const BUILT: bool = cfg!(feature = "drop-caps");
+
 /// The most lines a drop capital spans.
 pub(crate) const MAX_LINES: u8 = 5;
 /// The height of a capital letter, in ems of its text (a usual serif's,
@@ -151,6 +157,9 @@ pub(crate) fn fitted(
     capital: impl Fn(u8) -> Option<Cap>,
     wanted: u8,
 ) -> (SetLines, Option<Cap>) {
+    if !BUILT {
+        return (lay(None), None);
+    }
     let mut cap = capital(wanted);
     let mut lines = lay(cap);
     if let Some(spans) = cap

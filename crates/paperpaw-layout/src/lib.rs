@@ -1176,7 +1176,7 @@ pub fn layout_page(
             let x = placed_x(&levels, width, x, drawn);
             // The drop capital beside the first line and those after it,
             // its baseline theirs; the line without it.
-            let range = match cap.filter(|_| line.range.start == 0) {
+            let range = match cap.filter(|_| drop_cap::BUILT && line.range.start == 0) {
                 Some(cap) => {
                     // On a page too short for its lines (that it starts),
                     // as large as the lines it has there.
