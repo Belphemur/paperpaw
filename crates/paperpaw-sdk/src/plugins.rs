@@ -280,6 +280,17 @@ impl Plugins {
     #[cfg(any(test, feature = "kernel"))]
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn push(&mut self, info: PluginInfo) {
+        // An eighth more, not twice as many: a plugin installed after the
+        // start's room for one is used would hold the old list and one
+        // twice its size at once (24 KiB on the X4); this way 8 + 9 KiB,
+        // still few copies in all.
+        if self.list.len() == self.list.capacity() {
+            #[expect(
+                clippy::let_underscore_must_use,
+                reason = "without room for an eighth, push asks for what it needs"
+            )]
+            let _ = self.list.try_reserve_exact((self.list.len() / 8).max(1));
+        }
         self.list.push(info);
     }
 
@@ -340,7 +351,7 @@ mod tests {
     }
 
     /// A plugin installed after the start goes in without the list being
-    /// copied.
+    /// copied; later ones grow it by an eighth.
     #[test]
     fn the_list_keeps_room_for_one_more() {
         let mut plugins = Plugins::new();
@@ -351,6 +362,13 @@ mod tests {
         assert_eq!(plugins.list.capacity(), 41);
         plugins.push(info("b", PluginState::Running, true));
         assert_eq!(plugins.list.capacity(), 41);
+        // Then by an eighth, not twice as many.
+        plugins.push(info("c", PluginState::Running, true));
+        assert_eq!(plugins.list.capacity(), 41 + 5);
+        for _ in 0..8 {
+            plugins.push(info("d", PluginState::Running, true));
+        }
+        assert_eq!(plugins.list.capacity(), 46 + 5);
     }
 
     #[test]

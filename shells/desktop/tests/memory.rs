@@ -237,14 +237,19 @@ fn flow_stays_within_budget(
 }
 
 /// How far German may start above English's peak: its own peak is
-/// reading in its longer catalogs. Both started at 135.9 KiB while a
-/// start's key map was made beside the old one; since then (#8) English
-/// peaks at 129.9 KiB, German at 133.4.
-const GERMAN_START_EXTRA_KIB: f64 = 4.0;
+/// reading in its longer catalogs. Both started at 135.9 KiB while the
+/// plugin list doubled and a start's key map was made beside the old one;
+/// since then (#8) English peaks at 123.3 KiB, German at 133.4: what
+/// keeps German in check is [`GERMAN_START_CEILING_KIB`].
+const GERMAN_START_EXTRA_KIB: f64 = 11.0;
+/// And at most this, whatever English does: the 133.4 KiB German starts
+/// with since #8, and a little room.
+const GERMAN_START_CEILING_KIB: f64 = 134.5;
 
 /// The language catalogs are read in once the registries have given back
 /// what they reserved, not before: German (longer texts than English)
-/// starts within [`GERMAN_START_EXTRA_KIB`] of the peak of English.
+/// starts within [`GERMAN_START_EXTRA_KIB`] of the peak of English, and
+/// under [`GERMAN_START_CEILING_KIB`].
 #[test]
 fn starting_in_german_peaks_no_higher_than_in_english() {
     let peak = |language: &str| {
@@ -261,6 +266,10 @@ fn starting_in_german_peaks_no_higher_than_in_english() {
     assert!(
         german <= english + GERMAN_START_EXTRA_KIB,
         "start: peak {german} KiB in German, {english} KiB in English"
+    );
+    assert!(
+        german <= GERMAN_START_CEILING_KIB,
+        "start: peak {german} KiB in German, over {GERMAN_START_CEILING_KIB} KiB"
     );
 }
 
@@ -365,28 +374,39 @@ fn the_store_with_the_devices_tls_stays_within_the_x4_budget() {
 }
 
 /// What installing a plugin from the store may add on the X4 to the heap
-/// before it, at most: the plugin list keeps room for one more, the key
-/// map is made anew without the old one beside it (#8; 19.2 KiB before,
-/// 6.2 KiB after).
-const INSTALL_GROWTH_KIB: f64 = 10.0;
+/// before it, at most (#8). The first install of a session takes the room
+/// for one more plugin the start left (6.2 KiB in all; 19.2 when the list
+/// doubled), a second one grows the list by an eighth, old and new at
+/// once (11.6 KiB; 18.8 when it doubled). The key map is made anew without
+/// the old one beside it.
+const INSTALL_GROWTH_KIB: f64 = 13.0;
 
 /// The store on the X4 step by step (`step:` in the flow): its list, a
-/// group, a plugin's page, its install (download, check, install) and its
-/// screenshots, each its peak from the end of the step before. Each with
+/// group, a plugin's page, its install (download, check, install), its
+/// screenshots, and a second plugin's page and install in the same
+/// session, each its peak from the end of the step before. Each with
 /// what the device holds for the network beside it
 /// ([`STORE_DEVICE_EXTRA_KIB`]: the TLS handshake and session, the
 /// sockets and the Wi-Fi, which the emulator's own catalogue does not
-/// take) stays under the margin of the budget, and the install grows the
+/// take) stays under the margin of the budget, and each install grows the
 /// heap by [`INSTALL_GROWTH_KIB`] at most.
 #[test]
 fn each_step_of_the_store_stays_within_the_x4_budget() {
-    let steps = ["list", "group", "page", "install", "shots"];
+    let steps = [
+        "list", "group", "page", "install", "shots", "page2", "install2",
+    ];
     let parts = [
         "run:store.open,wait:3000",
         "run:core.down,run:core.down,run:core.confirm,wait:2000",
         "run:core.down,run:core.down,run:core.confirm,wait:3000",
         "run:core.confirm,wait:5000",
         "run:core.down,run:core.confirm,wait:3000",
+        // Home, the store again (now with a row for what is installed),
+        // the group *New* and its first plugin's page (`long-notes`).
+        "run:core.back,wait:500,run:store.open,wait:3000,\
+         run:core.down,run:core.down,run:core.confirm,wait:2000,\
+         run:core.confirm,wait:3000",
+        "run:core.confirm,wait:5000",
     ];
     let mut flow = String::from("wait:300,step:start");
     for (step, part) in steps.iter().zip(parts) {
@@ -398,11 +418,13 @@ fn each_step_of_the_store_stays_within_the_x4_budget() {
         .args(["--network", "fixtures", "--wifi", "online"])
         .args(["--heap-budget", "none", "--script", &flow]);
     let output = command.output().unwrap();
-    let installed = library.join("plugins/reading-aids/plugin.ini").exists();
+    let installed = ["reading-aids", "long-notes"]
+        .iter()
+        .all(|id| library.join(format!("plugins/{id}/plugin.ini")).exists());
     let _ = fs::remove_dir_all(&library);
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(output.status.success(), "{stdout}");
-    assert!(installed, "the plugin was not installed");
+    assert!(installed, "the plugins were not installed");
     // `step <name>: peak <KiB> KiB, live <KiB> KiB`
     let measured: Vec<(String, f64, f64)> = stdout
         .lines()
@@ -426,7 +448,7 @@ fn each_step_of_the_store_stays_within_the_x4_budget() {
             peak + STORE_DEVICE_EXTRA_KIB <= allowed,
             "store {name}: peak {peak} KiB + {STORE_DEVICE_EXTRA_KIB} KiB of the device, over {allowed} KiB"
         );
-        if name == "install" {
+        if name.starts_with("install") {
             assert!(
                 peak - before <= INSTALL_GROWTH_KIB,
                 "installing grew the heap by {:.1} KiB, more than {INSTALL_GROWTH_KIB} KiB",
