@@ -178,9 +178,11 @@ impl Translator {
         all
     }
 
+    paperpaw_table::shared! {
     /// The message for `key`, if a catalog has it.
     pub fn get(&self, key: &str) -> Option<&str> {
         self.ordered().find_map(|catalog| catalog.get(key))
+    } @ data::I18N_GET as for<'s> fn(&'s Self, &str) -> Option<&'s str>
     }
 
     /// The message for `key`, or `key` itself if no catalog has it.
@@ -190,11 +192,14 @@ impl Translator {
             .unwrap_or(key)
     }
 
+    paperpaw_table::shared! {
     /// The message for `key` with `{placeholders}` replaced by `args`.
     pub fn format(&self, key: &str, args: &[(&str, Arg<'_>)]) -> String {
         format::interpolate(self.tr(key), args)
+    } @ data::I18N_FORMAT
     }
 
+    paperpaw_table::shared! {
     /// Selects the plural form of `key` for `count`, then formats it.
     ///
     /// Looks up `key.<category>` (e.g. `library.books.few`) using each
@@ -214,6 +219,7 @@ impl Translator {
             }
         }
         String::from(key)
+    } @ data::I18N_PLURAL
     }
 
     fn ordered(&self) -> impl Iterator<Item = &Catalog> {

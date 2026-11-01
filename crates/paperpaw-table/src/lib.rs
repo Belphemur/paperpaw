@@ -39,6 +39,9 @@ impl Family {
     pub const GRAPHICS: Family = Family(3);
     /// Registering what a plugin contributes.
     pub const CONTRIBUTION: Family = Family(4);
+    /// Reading data: translations (`paperpaw_i18n`), settings, JSON, INI
+    /// (`paperpaw_config`) and XML.
+    pub const DATA: Family = Family(5);
 
     /// The family of number `n` (below [`FAMILIES`]).
     #[must_use]
@@ -277,7 +280,10 @@ fn table_of(family: Family) -> Table {
 /// `&self`, `&mut self`); a function with generics other than lifetimes,
 /// or `impl Trait` parameters, keeps a generic shell in the plugin that
 /// calls a shared non-generic one. `@ family::INDEX` names its place in
-/// [`index`].
+/// [`index`]. A method taking `&self` that returns something borrowed
+/// while it takes other references too writes the type of the function
+/// after it: `@ family::INDEX as for<'s> fn(&'s Self, &str) ->
+/// Option<&'s str>`.
 ///
 /// ```ignore
 /// paperpaw_table::shared! {
@@ -289,6 +295,33 @@ fn table_of(family: Family) -> Table {
 /// ```
 #[macro_export]
 macro_rules! shared {
+    // A method taking `&self` whose result borrows from it while other
+    // parameters are borrowed too: the type of the firmware's function is
+    // written out (`as for<'s> fn(&'s Self, &str) -> Option<&'s str>`),
+    // which the compiler cannot infer from the elided lifetimes.
+    ($(#[$meta:meta])* $vis:vis fn $name:ident $(<$($lt:lifetime),+>)?
+     (&$this:ident $(, $arg:ident : $ty:ty)* $(,)?) $(-> $ret:ty)? $body:block
+     @ $family:ident :: $index:ident as $call:ty) => {
+        $(#[$meta])*
+        $vis fn $name $(<$($lt),+>)? (&$this $(, $arg: $ty)*) $(-> $ret)? {
+            #[cfg(any(all(paperpaw_plugin, target_os = "none", target_arch = "riscv32"), paperpaw_table_host))]
+            {
+                // SAFETY: the firmware's table holds this very function,
+                // of the type written, at this index
+                // (`tools/shared-table.py`), and the loader checked the
+                // family's revision.
+                let call: $call = unsafe {
+                    $crate::slot(
+                        $crate::index::$family::FAMILY,
+                        $crate::index::$family::$index,
+                    )
+                };
+                call($this $(, $arg)*)
+            }
+            #[cfg(not(any(all(paperpaw_plugin, target_os = "none", target_arch = "riscv32"), paperpaw_table_host)))]
+            $body
+        }
+    };
     // A function.
     ($(#[$meta:meta])* $vis:vis fn $name:ident $(<$($lt:lifetime),+>)?
      ($($arg:ident : $ty:ty),* $(,)?) $(-> $ret:ty)? $body:block
@@ -425,5 +458,6 @@ mod tests {
         assert_eq!(Family::of(7).map(Family::number), Some(7));
         assert_eq!(Family::of(8), None);
         assert_eq!(Family::CONTRIBUTION.number(), 4);
+        assert_eq!(Family::DATA.number(), 5);
     }
 }

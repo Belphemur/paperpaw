@@ -35,7 +35,7 @@ SIG = CRATE / "table.sig"
 ADDRESSES = REPO / "crates" / "paperpaw-sdk" / "src" / "shared_table.rs"
 # Families 0 to 6 by number; 7 is kept for the chain to 8 and up
 # (paperpaw_table::FAMILIES).
-FAMILIES = ["text", "fonts", "ui", "graphics", "contribution"]
+FAMILIES = ["text", "fonts", "ui", "graphics", "contribution", "data"]
 assert len(FAMILIES) <= 7, "family 7 is kept for the chain"
 COUNT = 8
 
@@ -97,7 +97,9 @@ def late_appends(released, now):
 def declarations():
     """`(family, name) -> signature` of every `shared!` declaration."""
     found = {}
-    marker = re.compile(r"@\s*(\w+)\s*::\s*(\w+)")
+    # The end of a `shared!` body: `} @ family::INDEX` (not a binding
+    # such as `n @ Value::Int(_)`).
+    marker = re.compile(r"\}\s*@\s*(\w+)\s*::\s*(\w+)")
     for path in sorted(REPO.glob("crates/*/src/**/*.rs")):
         if CRATE in path.parents:
             continue

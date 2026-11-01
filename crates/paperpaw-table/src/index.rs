@@ -1,11 +1,11 @@
 // Made by tools/shared-table.py from shared.list: do not edit.
 
 /// The revision of each family (`shared.list`).
-pub const REVISIONS: crate::Revisions = [1, 0, 1, 0, 0, 0, 0, 0];
+pub const REVISIONS: crate::Revisions = [1, 0, 1, 0, 0, 1, 0, 0];
 /// The oldest revision of each family whose plugins still run.
-pub const OLDEST: crate::Revisions = [1, 0, 1, 0, 0, 0, 0, 0];
+pub const OLDEST: crate::Revisions = [1, 0, 1, 0, 0, 1, 0, 0];
 /// Eight hex digits naming the tables of this build, for logs.
-pub const HASH: &str = "b4d38751";
+pub const HASH: &str = "0d40015e";
 
 /// The text family's table.
 pub mod text {
@@ -237,4 +237,72 @@ pub mod contribution {
     pub const FAMILY: crate::Family = crate::Family::CONTRIBUTION;
     /// How many entries the table has.
     pub const COUNT: usize = 0;
+}
+
+/// The data family's table.
+pub mod data {
+    /// The family.
+    pub const FAMILY: crate::Family = crate::Family::DATA;
+    /// `paperpaw_i18n::Translator::get` (revision 1).
+    pub const I18N_GET: usize = 0;
+    /// `paperpaw_i18n::Translator::format` (revision 1).
+    pub const I18N_FORMAT: usize = 1;
+    /// `paperpaw_i18n::Translator::plural` (revision 1).
+    pub const I18N_PLURAL: usize = 2;
+    /// `paperpaw_i18n::Catalog::get` (revision 1).
+    pub const I18N_CATALOG_GET: usize = 3;
+    /// `crate::settings::Settings::get` (revision 1).
+    pub const SETTINGS_GET: usize = 4;
+    /// `crate::settings::Settings::scoped_value` (revision 1).
+    pub const SETTINGS_SCOPED_VALUE: usize = 5;
+    /// `crate::settings::Settings::text` (revision 1).
+    pub const SETTINGS_TEXT: usize = 6;
+    /// `paperpaw_json::object` (revision 1).
+    pub const JSON_OBJECT: usize = 7;
+    /// `paperpaw_json::text` (revision 1).
+    pub const JSON_TEXT: usize = 8;
+    /// `paperpaw_json::number` (revision 1).
+    pub const JSON_NUMBER: usize = 9;
+    /// `paperpaw_json::string` (revision 1).
+    pub const JSON_STRING: usize = 10;
+    /// `paperpaw_json::raw_member` (revision 1).
+    pub const JSON_RAW_MEMBER: usize = 11;
+    /// `paperpaw_json::unquote` (revision 1).
+    pub const JSON_UNQUOTE: usize = 12;
+    /// `paperpaw_json::string_array` (revision 1).
+    pub const JSON_STRING_ARRAY: usize = 13;
+    /// `paperpaw_json::stream::Parser::feed` (revision 1).
+    pub const JSON_STREAM_FEED: usize = 14;
+    /// `paperpaw_json::stream::Parser::finish` (revision 1).
+    pub const JSON_STREAM_FINISH: usize = 15;
+    /// `paperpaw_json::stream::read_file` (revision 1).
+    pub const JSON_READ_FILE: usize = 16;
+    /// `paperpaw_config::Parser::next` (revision 1).
+    pub const CONFIG_NEXT: usize = 17;
+    /// `paperpaw_config::Value::as_str` (revision 1).
+    pub const CONFIG_AS_STR: usize = 18;
+    /// `paperpaw_config::Value::as_i64` (revision 1).
+    pub const CONFIG_AS_I64: usize = 19;
+    /// `paperpaw_config::Value::as_u32` (revision 1).
+    pub const CONFIG_AS_U32: usize = 20;
+    /// `paperpaw_config::set` (revision 1).
+    pub const CONFIG_SET: usize = 21;
+    /// `paperpaw_config::remove` (revision 1).
+    pub const CONFIG_REMOVE: usize = 22;
+    /// `paperpaw_config::quote` (revision 1).
+    pub const CONFIG_QUOTE: usize = 23;
+    /// `paperpaw_xml::Tokenizer::parse` (revision 1).
+    pub const XML_PARSE: usize = 24;
+    /// `paperpaw_xml::Tokenizer::feed` (revision 1).
+    pub const XML_FEED: usize = 25;
+    /// `paperpaw_xml::Tokenizer::try_feed` (revision 1).
+    pub const XML_TRY_FEED: usize = 26;
+    /// `paperpaw_xml::Tokenizer::finish` (revision 1).
+    pub const XML_FINISH: usize = 27;
+    /// `paperpaw_xml::Attrs::get` (revision 1).
+    pub const XML_ATTRS_GET: usize = 28;
+    /// `paperpaw_xml::decode` (revision 1).
+    pub const XML_DECODE: usize = 29;
+    /// How many entries the table has.
+    pub const COUNT: usize = 30;
 }

@@ -103,11 +103,45 @@ pub(super) static UI: super::Addresses<52> = super::Addresses([
     crate::ui::list::list_step as *const (), // LIST_STEP
 ]);
 
+pub(super) static DATA: super::Addresses<30> = super::Addresses([
+    paperpaw_i18n::Translator::get as *const (), // I18N_GET
+    paperpaw_i18n::Translator::format as *const (), // I18N_FORMAT
+    paperpaw_i18n::Translator::plural as *const (), // I18N_PLURAL
+    paperpaw_i18n::Catalog::get as *const (), // I18N_CATALOG_GET
+    crate::settings::Settings::get as *const (), // SETTINGS_GET
+    crate::settings::Settings::scoped_value as *const (), // SETTINGS_SCOPED_VALUE
+    crate::settings::Settings::text as *const (), // SETTINGS_TEXT
+    paperpaw_json::object as *const (), // JSON_OBJECT
+    paperpaw_json::text as *const (), // JSON_TEXT
+    paperpaw_json::number as *const (), // JSON_NUMBER
+    paperpaw_json::string as *const (), // JSON_STRING
+    paperpaw_json::raw_member as *const (), // JSON_RAW_MEMBER
+    paperpaw_json::unquote as *const (), // JSON_UNQUOTE
+    paperpaw_json::string_array as *const (), // JSON_STRING_ARRAY
+    paperpaw_json::stream::Parser::feed as *const (), // JSON_STREAM_FEED
+    paperpaw_json::stream::Parser::finish as *const (), // JSON_STREAM_FINISH
+    paperpaw_json::stream::read_file as *const (), // JSON_READ_FILE
+    paperpaw_config::Parser::next as *const (), // CONFIG_NEXT
+    paperpaw_config::Value::as_str as *const (), // CONFIG_AS_STR
+    paperpaw_config::Value::as_i64 as *const (), // CONFIG_AS_I64
+    paperpaw_config::Value::as_u32 as *const (), // CONFIG_AS_U32
+    paperpaw_config::set as *const (), // CONFIG_SET
+    paperpaw_config::remove as *const (), // CONFIG_REMOVE
+    paperpaw_config::quote as *const (), // CONFIG_QUOTE
+    paperpaw_xml::Tokenizer::parse as *const (), // XML_PARSE
+    paperpaw_xml::Tokenizer::feed as *const (), // XML_FEED
+    paperpaw_xml::Tokenizer::try_feed as *const (), // XML_TRY_FEED
+    paperpaw_xml::Tokenizer::finish as *const (), // XML_FINISH
+    paperpaw_xml::Attrs::get as *const (), // XML_ATTRS_GET
+    paperpaw_xml::decode as *const (), // XML_DECODE
+]);
+
 /// The table of family number `n`, if the firmware shares it.
 pub(super) const fn of(n: usize) -> paperpaw_table::Table {
     match n {
         0 => paperpaw_table::Table(TEXT.0.as_ptr()),
         2 => paperpaw_table::Table(UI.0.as_ptr()),
+        5 => paperpaw_table::Table(DATA.0.as_ptr()),
         _ => paperpaw_table::Table::NONE,
     }
 }

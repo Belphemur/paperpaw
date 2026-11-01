@@ -54,7 +54,11 @@ mod tests {
             (Family::FONTS, paperpaw_table::index::fonts::COUNT),
             (Family::UI, paperpaw_table::index::ui::COUNT),
             (Family::GRAPHICS, paperpaw_table::index::graphics::COUNT),
-            (Family::CONTRIBUTION, paperpaw_table::index::contribution::COUNT),
+            (
+                Family::CONTRIBUTION,
+                paperpaw_table::index::contribution::COUNT,
+            ),
+            (Family::DATA, paperpaw_table::index::data::COUNT),
         ];
         for (family, count) in families {
             let t = table(family);

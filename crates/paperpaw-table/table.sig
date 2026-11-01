@@ -96,3 +96,33 @@ ui 1 LIST_MOVE_FOCUS: fn move_focus(&mut self, delta: isize, len: usize) -> List
 ui 1 LIST_ROW_RECT: fn row_rect(&self, slot: usize) -> Rect
 ui 1 LIST_HIT: fn hit(&self, point: Point, len: usize) -> Option<usize>
 ui 1 LIST_STEP: fn list_step(action: &crate::Id, page: isize) -> Option<isize>
+data 1 I18N_GET: fn get(&self, key: &str) -> Option<&str>
+data 1 I18N_FORMAT: fn format(&self, key: &str, args: &[(&str, Arg<'_>)]) -> String
+data 1 I18N_PLURAL: fn plural(&self, key: &str, count: i64, args: &[(&str, Arg<'_>)]) -> String
+data 1 I18N_CATALOG_GET: fn get(&self, key: &str) -> Option<&str>
+data 1 SETTINGS_GET: fn get(&self, id: &str) -> Option<&SettingValue>
+data 1 SETTINGS_SCOPED_VALUE: fn scoped_value(&self, id: &str) -> Option<&SettingValue>
+data 1 SETTINGS_TEXT: fn text(&self, id: &str) -> &str
+data 1 JSON_OBJECT: fn object(text: &str) -> Vec<(String, Value)>
+data 1 JSON_TEXT: fn text<'a>(members: &'a [(String, Value)], key: &str) -> Option<&'a str>
+data 1 JSON_NUMBER: fn number(members: &[(String, Value)], key: &str) -> Option<f64>
+data 1 JSON_STRING: fn string(text: &str) -> String
+data 1 JSON_RAW_MEMBER: fn raw_member<'a>(text: &'a str, key: &str) -> Option<&'a str>
+data 1 JSON_UNQUOTE: fn unquote(literal: &str) -> Option<String>
+data 1 JSON_STRING_ARRAY: fn string_array(literal: &str) -> Vec<String>
+data 1 JSON_STREAM_FEED: fn feed(&mut self, data: &[u8], emit: &mut dyn FnMut(Event<'_>))
+data 1 JSON_STREAM_FINISH: fn finish(&mut self, emit: &mut dyn FnMut(Event<'_>))
+data 1 JSON_READ_FILE: fn read_file(storage: &dyn Storage, path: &str, emit: &mut dyn FnMut(Event<'_>))
+data 1 CONFIG_NEXT: fn next(&mut self) -> Option<Self::Item>
+data 1 CONFIG_AS_STR: fn as_str(&self) -> Cow<'a, str>
+data 1 CONFIG_AS_I64: fn as_i64(&self) -> Option<i64>
+data 1 CONFIG_AS_U32: fn as_u32(&self) -> Option<u32>
+data 1 CONFIG_SET: fn set(source: &str, section: &str, key: &str, value: &str) -> String
+data 1 CONFIG_REMOVE: fn remove(source: &str, section: &str, key: &str) -> String
+data 1 CONFIG_QUOTE: fn quote(value: &str) -> Cow<'_, str>
+data 1 XML_PARSE: fn parse(data: &[u8], emit: &mut dyn FnMut(Token<'_>))
+data 1 XML_FEED: fn feed(&mut self, data: &[u8], emit: &mut dyn FnMut(Token<'_>))
+data 1 XML_TRY_FEED: fn try_feed( &mut self, data: &[u8], emit: &mut dyn FnMut(Token<'_>), ) -> Result<(), TryReserveError>
+data 1 XML_FINISH: fn finish(&mut self, emit: &mut dyn FnMut(Token<'_>))
+data 1 XML_ATTRS_GET: fn get(&self, name: &str) -> Option<Cow<'a, str>>
+data 1 XML_DECODE: fn decode(text: &str) -> Cow<'_, str>
