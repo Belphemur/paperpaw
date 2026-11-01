@@ -90,6 +90,9 @@ change the plugin SDK.
 
 ### Changed
 
+- The names of all Tabler icons take 35 KB less firmware: a name that begins the next one (`a-b` in `a-b-2`)
+  is kept only in it, and each name's place, length and character take 5 bytes instead of 8
+  (`tools/icons/subset.py`). `icons::names()` and `icons::char` give the same as before.
 - New reading setting "Hanging punctuation" (`core.hanging-punctuation`, off by default, in the layout settings): an
   opening quote that starts a line, and a stop, comma, hyphen or closing quote that ends a justified one, are set
   just outside the text, so its edges look straight (optical margin alignment). Lines break as before, so pages hold

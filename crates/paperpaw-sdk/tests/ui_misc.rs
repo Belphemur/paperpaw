@@ -85,6 +85,24 @@ fn every_icon_is_found_by_its_name() {
     }
 }
 
+/// The names and characters of Tabler Icons 3.35.0 as the table had them
+/// before it was packed (`name=U+code` a line, FNV-1a): the packing
+/// changes none.
+#[test]
+fn the_packed_table_holds_the_same_names_and_characters() {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    let mut count = 0;
+    for name in icons::names() {
+        let c = icons::char(name).unwrap_or_else(|| panic!("{name}"));
+        for byte in format!("{name}=U+{:04X}\n", u32::from(c)).bytes() {
+            hash = (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3);
+        }
+        count += 1;
+    }
+    assert_eq!(count, 5934);
+    assert_eq!(hash, 0x8a8d_e240_0cd5_330a);
+}
+
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(std::env::var("PROPTEST_CASES").ok().and_then(|n| n.parse().ok()).unwrap_or(256)))]
 
@@ -92,6 +110,21 @@ proptest! {
     /// none.
     #[test]
     fn any_name_is_looked_up_safely(name in "\\PC{0,30}") {
+        let found = icons::char(&name);
+        prop_assert_eq!(found.is_some(), icons::names().any(|n| n == name));
+    }
+
+    /// Names next to real ones (cut short or longer, as `a-b` is of
+    /// `a-b-2`, whose letters the table shares) are found exactly when
+    /// they are icons' names.
+    #[test]
+    fn names_next_to_real_ones_are_told_apart(
+        index in 0..5934usize,
+        cut in 0..40usize,
+        tail in "[a-z0-9-]{0,4}",
+    ) {
+        let real = icons::names().nth(index).unwrap();
+        let name = format!("{}{tail}", &real[..cut.min(real.len())]);
         let found = icons::char(&name);
         prop_assert_eq!(found.is_some(), icons::names().any(|n| n == name));
     }
