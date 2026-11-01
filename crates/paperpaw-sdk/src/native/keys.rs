@@ -144,7 +144,7 @@ pub enum RotationError {
     NoRecoveryKey,
     /// The signature is not the recovery key's over this rotation.
     BadSignature,
-    /// The new key is revoked, or the old one again.
+    /// The new key is the one known already.
     Refused,
     /// The new key could not be kept.
     NotKept,
@@ -160,7 +160,7 @@ pub fn check_rotation(
 ) -> Result<(), RotationError> {
     let old = super::known_author(storage, plugin).ok_or(RotationError::NoAuthor)?;
     let recovery = known_recovery(storage, plugin).ok_or(RotationError::NoRecoveryKey)?;
-    if *new == old || is_revoked(storage, new) {
+    if *new == old {
         return Err(RotationError::Refused);
     }
     let message = rotation_message(plugin, &old, new);
@@ -195,10 +195,11 @@ pub fn accept_rotation(
     }
 }
 
-/// The revoked keys: those of the revocations kept that hold.
-pub fn revoked(storage: &dyn Storage) -> Vec<[u8; 32]> {
+/// The revocations kept that hold: each says the key of its plugin's
+/// author, as pinned here, is revoked for that plugin.
+pub fn revoked(storage: &dyn Storage) -> Vec<Revocation> {
     match crate::files::load_for_update(storage, REVOKED, MAX_REVOKED_BYTES) {
-        Ok(Some(data)) => holding(storage, &data).into_iter().map(|r| r.key).collect(),
+        Ok(Some(data)) => holding(storage, &data),
         _ => Vec::new(),
     }
 }
@@ -236,9 +237,12 @@ fn revocations_in(data: &[u8]) -> Vec<Revocation> {
         .collect()
 }
 
-/// Whether `key` is revoked.
-pub fn is_revoked(storage: &dyn Storage, key: &[u8; 32]) -> bool {
-    revoked(storage).contains(key)
+/// Whether the key of `plugin`'s author, as pinned here, is revoked. Per
+/// plugin: a key revoked for one says nothing about another plugin its
+/// author signed (each has its own revocation), and a revocation holds
+/// only while the key it names is the plugin's author.
+pub fn is_revoked(storage: &dyn Storage, plugin: &str) -> bool {
+    revoked(storage).iter().any(|r| r.plugin == plugin)
 }
 
 /// Why revocations were not all kept ([`keep_revoked`]).
@@ -404,20 +408,11 @@ mod tests {
             accept_rotation(&bare, "clock", &NEW, &signature),
             Err(RotationError::NoRecoveryKey)
         );
-        // To a revoked key (another plugin's author's, revoked with its
-        // recovery key): refused, and the code stays named.
-        assert!(remember_first_install(
-            &storage,
-            "spare",
-            &NEW,
-            &public_key(&RECOVERY_SEED)
-        ));
+        // To the key known already: refused, and the code stays named.
+        let message = rotation_message("clock", &AUTHOR, &AUTHOR);
+        let same = sign_message(message.as_bytes(), &RECOVERY_SEED);
         assert_eq!(
-            keep_revoked(&storage, &[revocation("spare", NEW, &RECOVERY_SEED)]),
-            Ok(())
-        );
-        assert_eq!(
-            accept_rotation(&storage, "clock", &NEW, &signature),
+            accept_rotation(&storage, "clock", &AUTHOR, &same),
             Err(RotationError::Refused)
         );
         assert_eq!(super::super::known_author(&storage, "clock"), Some(AUTHOR));
@@ -520,6 +515,50 @@ mod tests {
         }
     }
 
+    /// The keys of the revocations that hold.
+    fn keys(storage: &dyn Storage) -> Vec<[u8; 32]> {
+        revoked(storage).into_iter().map(|r| r.key).collect()
+    }
+
+    /// Revoked per plugin: a key that signs two plugins, revoked for one,
+    /// leaves the other as it is, also once the first moves to a new key
+    /// (review M1 of #277). So a library that pins a victim's key for a
+    /// plugin of its own and revokes it there stops only its own.
+    #[test]
+    fn a_key_is_revoked_for_one_plugin_only() {
+        let storage = installed();
+        let seed = [2; 32];
+        let key = public_key(&seed);
+        for plugin in ["notes", "atlas"] {
+            assert!(remember_first_install(
+                &storage,
+                plugin,
+                &key,
+                &public_key(&RECOVERY_SEED)
+            ));
+        }
+        assert!(remember_first_install(
+            &storage,
+            "evil",
+            &key,
+            &public_key(&[8; 32])
+        ));
+        let evil = revocation("evil", key, &[8; 32]);
+        assert_eq!(keep_revoked(&storage, &[evil]), Ok(()));
+        assert!(is_revoked(&storage, "evil"));
+        assert!(!is_revoked(&storage, "notes") && !is_revoked(&storage, "atlas"));
+        assert_eq!(
+            keep_revoked(&storage, &[revocation("notes", key, &seed)]),
+            Ok(())
+        );
+        assert!(is_revoked(&storage, "notes") && !is_revoked(&storage, "atlas"));
+        let message = rotation_message("notes", &key, &NEW);
+        let signature = sign_message(message.as_bytes(), &RECOVERY_SEED);
+        assert_eq!(accept_rotation(&storage, "notes", &NEW, &signature), Ok(()));
+        assert!(!is_revoked(&storage, "notes") && !is_revoked(&storage, "atlas"));
+        assert!(is_revoked(&storage, "evil"));
+    }
+
     /// A revocation of `key` for `plugin`, signed with `seed`.
     fn revocation(plugin: &str, key: [u8; 32], seed: &[u8; 32]) -> Revocation {
         let message = revocation_message(plugin, &key);
@@ -555,8 +594,8 @@ mod tests {
             revocation("clock", AUTHOR, &RECOVERY_SEED),
         ];
         assert_eq!(keep_revoked(&storage, &real), Ok(()));
-        assert_eq!(revoked(&storage), [notes, AUTHOR]);
-        assert!(is_revoked(&storage, &AUTHOR) && !is_revoked(&storage, &NEW));
+        assert_eq!(keys(&storage), [notes, AUTHOR]);
+        assert!(is_revoked(&storage, "clock") && !is_revoked(&storage, "other"));
         // A later list without them does not take them off (review S1),
         // nor are they kept twice.
         assert_eq!(keep_revoked(&storage, &real[..1]), Ok(()));
@@ -580,7 +619,7 @@ mod tests {
         storage
             .write(REVOKED, alloc::format!("{forged}{real}").as_bytes())
             .unwrap();
-        assert_eq!(revoked(&storage), [AUTHOR]);
+        assert_eq!(keys(&storage), [AUTHOR]);
         // A plugin id a line cannot hold is not written.
         assert_eq!(revocation("a b", AUTHOR, &RECOVERY_SEED).line(), None);
     }
@@ -599,12 +638,12 @@ mod tests {
         let mut text = forged.repeat(MAX_REVOKED + 10);
         text.push_str(&real);
         storage.write(REVOKED, text.as_bytes()).unwrap();
-        assert_eq!(revoked(&storage), [AUTHOR]);
+        assert_eq!(keys(&storage), [AUTHOR]);
         assert_eq!(
             keep_revoked(&storage, &[revocation("notes", notes, &notes_seed)]),
             Ok(())
         );
-        assert_eq!(revoked(&storage), [AUTHOR, notes]);
+        assert_eq!(keys(&storage), [AUTHOR, notes]);
         let kept = crate::read_file(&storage, REVOKED, MAX_REVOKED_BYTES).unwrap();
         assert_eq!(revocations_in(&kept).len(), 2);
     }
@@ -632,8 +671,8 @@ mod tests {
         assert_eq!(keep_revoked(&storage, &many), Err(RevokedError::Full));
         let kept = revoked(&storage);
         assert_eq!(kept.len(), MAX_REVOKED);
-        assert!(is_revoked(&storage, &many[MAX_REVOKED - 1].key));
-        assert!(!is_revoked(&storage, &many[MAX_REVOKED].key));
+        assert!(is_revoked(&storage, &many[MAX_REVOKED - 1].plugin));
+        assert!(!is_revoked(&storage, &many[MAX_REVOKED].plugin));
     }
 
     /// A damaged line leaves the others revoked, and does not keep new
@@ -652,12 +691,12 @@ mod tests {
         text.extend_from_slice(&[0xff, 0xfe, b'\n']);
         text.extend_from_slice(b"clock 0909 0909\n");
         storage.write(REVOKED, &text).unwrap();
-        assert_eq!(revoked(&storage), [AUTHOR]);
+        assert_eq!(keys(&storage), [AUTHOR]);
         assert_eq!(
             keep_revoked(&storage, &[revocation("notes", notes, &notes_seed)]),
             Ok(())
         );
-        assert_eq!(revoked(&storage), [AUTHOR, notes]);
+        assert_eq!(keys(&storage), [AUTHOR, notes]);
         assert!(
             !crate::read_file(&storage, REVOKED, MAX_REVOKED_BYTES)
                 .unwrap()
