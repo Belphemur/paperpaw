@@ -12,6 +12,14 @@ change the plugin SDK.
   series (or the library), a rating of one to five (`4 / 5`, kept as a book field and shown as a badge on the
   book's row and on its information page) and whether the book counts as finished. Two settings in the reading
   group: *Show a screen at the end of a book* and *Mark the book as finished* (both on). It needs no SDK change.
+- Flash cards from the SD card (vocabulary 1.1.0): every CSV or TSV file in `/Flashcards/` is a deck named after
+  the file, and *Cards on the SD card* updates the decks from their files (cards match by an id column where the
+  file has a `#paperpaw:` line, else by their front; cards deleted from the file stay unless the deck's *Remove
+  missing cards* switch is on), or saves a deck back to its file (written to a `.part` file, the old one kept as
+  `_<name>.bak.<ext>`, a change made on the computer in between merged first). Decks also come in through *Edit
+  with your phone* (CSV, TSV, TXT or Anki `.apkg`), which the page, the help and the empty state now explain, and
+  with errors that name the problem: a wrong file type, a file that is not UTF-8 or has no cards, a full deck.
+  Files over 4 MiB or 20,000 lines are refused and a card holds at most 500 characters. No SDK change.
 - A release's `paperpaw-<device>-<version>-abi.txt` says the firmware's table for plugins after its
   fingerprint: `interface:`, `api:` (the table's size), `families:` and `min:` (each family's revision and the
   oldest it runs), read from the firmware's ELF file (`PAPERPAW_NATIVE_ABI`, `paperpaw-sign abi`). The store
@@ -30,6 +38,11 @@ change the plugin SDK.
   except around U+200B and the word joiner, emoji, and fullwidth characters. The line-break table is 4.8 KB of
   firmware (Unicode 17.0.0, `tools/linebreak-table.py`). Arabic shaping does not change: U+200B and U+2060..U+2064
   join nothing across them, as before.
+- The slider of the book text's size (settings and quick panel) has the sizes that look different as its positions,
+  evenly spaced; before, its track was the whole range, so the sizes a font pack skips made the knob move one step
+  here and two there.
+- Settings: the separate *Update* entry in the settings menu is gone; the *Updates* group shows the update page
+  first, with its state (*New*). A group page shows a plugin's actions before its settings.
 - New reading setting "Korean line breaks" (`core.korean-breaks`, `settings::KOREAN_BREAKS`): by syllable (default, as
   printed books) or by word. It applies to books in Korean only.
 - How an X4, X3, X4 Pro or X4 Classic starts, runs the trial of and
@@ -81,7 +94,7 @@ change the plugin SDK.
   `_` arm). `screen::Handled` stays as it is.
 - `TextStyle` of `paperpaw-document` is 32 bits (bits 24 to 27 a
   block's inline language); cached books and page indexes are made anew
-  (EPUB cache version 29, a new `paperpaw_layout::VERSION`).
+  (EPUB cache version 30, a new `paperpaw_layout::VERSION`).
 - `paperpaw-i18n`: `Catalog::digits()` returns the ten digits (`[char; 10]`),
   not a name; `[meta] digits` takes a CLDR numbering system's name or the
   ten digits themselves (`digits = ០១២៣៤៥៦៧៨៩`), so any system is data.
@@ -346,9 +359,6 @@ change the plugin SDK.
   say) gives that block's start, where a page laid out from there starts, not
   the position itself. Comparing it with a page's start or looking it up in a
   `PageIndex` then needs no more care.
-
-### Fixed
-
 - Choosing text with the buttons: the page buttons (the X4's side buttons) now move by line, as Up and Down do,
   not word by word, and Left from the first word of the page reaches the last word (Right from the last
   reaches the first), instead of stopping there.
