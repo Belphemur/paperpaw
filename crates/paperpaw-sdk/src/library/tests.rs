@@ -728,3 +728,62 @@ fn details_are_written_as_key_by_key() {
         }
     }
 }
+
+#[test]
+fn only_a_catalog_whose_header_ends_with_nothing_after_it_is_empty() {
+    let path = ".paperpaw/library/catalog.txt";
+    // Cannot be told: none, unreadable, empty, another version, no header.
+    assert!(!emptiness::is_empty(&MemoryStorage::new()));
+    let header = MemoryStorage::new().with(path, "\tcatalog\t2\t1\n");
+    assert!(!emptiness::is_empty(&Unreadable(header)));
+    for text in [
+        "",
+        "\tcatalog\t",
+        "\tcatalog\t3\t1\n",
+        "books/a.txt\tA\tB\n",
+        "x",
+    ] {
+        let storage = MemoryStorage::new().with(path, text);
+        assert!(!emptiness::is_empty(&storage), "{text:?}");
+    }
+    // A header that does not end in what is read, with or without more
+    // after it.
+    let long = format!("\tcatalog\t2\t{}", "1".repeat(200));
+    assert!(!emptiness::is_empty(&MemoryStorage::new().with(path, long)));
+    let long = format!("\tcatalog\t2\t1\n{}", " ".repeat(200));
+    assert!(!emptiness::is_empty(&MemoryStorage::new().with(path, long)));
+    // The header alone (a walk of a library with nothing in it), with or
+    // without its newline, then blank lines.
+    for text in [
+        "\tcatalog\t2\t1",
+        "\tcatalog\t2\t1\n",
+        "\tcatalog\t2\t7\n\n \n",
+    ] {
+        let storage = MemoryStorage::new().with(path, text);
+        assert!(emptiness::is_empty(&storage), "{text:?}");
+    }
+    // The first book, with or without a blank line before it.
+    for text in [
+        "\tcatalog\t2\t1\nbooks/a.txt\tA\tB\n",
+        "\tcatalog\t2\t1\n\nbooks/a.txt\tA\n",
+    ] {
+        let storage = MemoryStorage::new().with(path, text);
+        assert!(!emptiness::is_empty(&storage), "{text:?}");
+    }
+}
+
+#[test]
+fn the_log_counts_as_entries_when_it_holds_anything() {
+    let log = ".paperpaw/library/status.log";
+    assert!(!emptiness::log_has_entries(&MemoryStorage::new()));
+    // Cannot be read: as if it held some.
+    assert!(emptiness::log_has_entries(&Unreadable(
+        MemoryStorage::new().with(log, "1\n")
+    )));
+    assert!(!emptiness::log_has_entries(
+        &MemoryStorage::new().with(log, "")
+    ));
+    assert!(emptiness::log_has_entries(
+        &MemoryStorage::new().with(log, "1\t2\n")
+    ));
+}

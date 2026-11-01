@@ -40,7 +40,7 @@ const SEPARATOR: char = '\u{1f}';
 pub const MAX_FOUND: usize = 200;
 /// The start of the first line of a catalog of this format; its
 /// generation follows.
-const HEADER: &str = "\tcatalog\t2";
+pub(super) const HEADER: &str = "\tcatalog\t2";
 /// Lines the log holds before the kernel folds it into the catalog; read
 /// with it, 16 bytes a book.
 pub const MAX_LOG: usize = 256;
@@ -53,7 +53,7 @@ fn building_path() -> String {
     format!("{DIR}/catalog.tmp")
 }
 
-fn log_path() -> String {
+pub(super) fn log_path() -> String {
     format!("{DIR}/status.log")
 }
 
