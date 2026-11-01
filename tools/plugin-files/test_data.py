@@ -10,7 +10,7 @@ import unittest
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import data  # noqa: E402
 
-PACKS = ["script-arabic", "script-hebrew", "script-greek"]
+PACKS = ["script-arabic", "script-hebrew", "script-greek", "script-cyrillic"]
 
 
 class ScriptPacks(unittest.TestCase):

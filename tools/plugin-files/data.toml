@@ -78,3 +78,16 @@ name = "Greek letters"
 description = "Greek books in Literata, modern and with the older accents."
 de.name = "Griechische Schrift"
 de.description = "Bücher auf Griechisch in Literata, modern und mit den älteren Akzenten."
+
+[script-cyrillic]
+version = "1.0.0"
+group = "look"
+licence = "OFL-1.1"
+devices = ["x4", "x4-pro", "x4-classic"]
+off_by_default = true
+build = "tools/script-pack.py"
+inputs = ["plugins/fonts-default/fonts/Literata.ttf", "plugins/fonts-default/fonts/Literata-Italic.ttf", "tools/fontgen", "crates/paperpaw-text/src/charset.rs"]
+name = "Cyrillic letters"
+description = "Russian, Ukrainian, Bulgarian, Serbian and other Cyrillic books in Literata."
+de.name = "Kyrillische Schrift"
+de.description = "Bücher auf Russisch, Ukrainisch, Bulgarisch, Serbisch und anderen kyrillischen Sprachen in Literata."
