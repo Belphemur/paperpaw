@@ -12,7 +12,7 @@ use std::rc::Rc;
 
 use paperpaw_core::{HttpCall, HttpResponse, Io, Kernel};
 use paperpaw_platform::{ButtonState, InputEvent, Rotation};
-use paperpaw_plugin_readwise_reader::ReadwiseReader;
+use paperpaw_plugin_read_later_cloud::ReadLaterCloud;
 use paperpaw_sdk::secrets::{FILE, SecretChange, Secrets};
 use paperpaw_sdk::{
     DeviceInfo, DirEntry, DisplayInfo, InputCaps, Instant, MemoryClass, MemoryStorage, PixelFormat,
@@ -63,7 +63,7 @@ impl Storage for Shared {
 
 /// The library at the storage's top.
 const CONFIG: &str =
-    "[core]\nlibrary-folder =\n\n[keymap.global]\nbutton.fetch = readwise-reader.fetch\n";
+    "[core]\nlibrary-folder =\n\n[keymap.global]\nbutton.fetch = read-later-cloud.fetch\n";
 const TOKEN: &str = "T0ken-not-real";
 
 const LIST: &str = r#"{"count": 2, "nextPageCursor": null, "results": [
@@ -118,7 +118,7 @@ fn boot(storage: &Shared) -> Kernel {
         .storage(storage.clone())
         .user_config(CONFIG)
         .network(true)
-        .plugin(ReadwiseReader)
+        .plugin(ReadLaterCloud)
         .build()
         .unwrap();
     kernel.start(Instant(0));
@@ -127,7 +127,7 @@ fn boot(storage: &Shared) -> Kernel {
 
 fn storage_with_token() -> Shared {
     let mut secrets = Secrets::default();
-    secrets.apply(SecretChange::keep("readwise-reader.token", "", TOKEN));
+    secrets.apply(SecretChange::keep("read-later-cloud.token", "", TOKEN));
     Shared(Rc::new(
         MemoryStorage::new().with(FILE, secrets.encode().into_bytes()),
     ))
@@ -144,7 +144,7 @@ fn text(storage: &Shared, path: &str) -> String {
     String::from_utf8(storage.0.get(path).unwrap().to_vec()).unwrap()
 }
 
-const FILES: &str = ".paperpaw/plugins/readwise-reader";
+const FILES: &str = ".paperpaw/plugins/read-later-cloud";
 
 /// Fetches the two articles of [`LIST`]: the books exist.
 fn fetched() -> (Shared, Kernel) {
@@ -374,7 +374,7 @@ fn needs_the_token_and_a_network() {
         .storage(storage.clone())
         .user_config(CONFIG)
         .network(false)
-        .plugin(ReadwiseReader)
+        .plugin(ReadLaterCloud)
         .build()
         .unwrap();
     kernel.start(Instant(0));
@@ -413,8 +413,8 @@ fn another_token_lets_go_of_the_books() {
     // The account is told by a secret beside the token; the card holds
     // nothing made of the token.
     let secrets = secrets_of(&storage);
-    assert!(secrets.get("readwise-reader.account").is_some());
-    let marker = secrets.get("readwise-reader.account").unwrap().to_string();
+    assert!(secrets.get("read-later-cloud.account").is_some());
+    let marker = secrets.get("read-later-cloud.account").unwrap().to_string();
     assert!(!storage.0.exists(&format!("{FILES}/account.txt")));
     let mut all = String::new();
     for name in ["articles.txt", "finished.txt"] {
@@ -434,7 +434,7 @@ fn another_token_lets_go_of_the_books() {
     // the new token is the account.
     let mut secrets = secrets_of(&storage);
     secrets.apply(SecretChange::keep(
-        "readwise-reader.token",
+        "read-later-cloud.token",
         "",
         "other-token",
     ));
@@ -450,7 +450,9 @@ fn another_token_lets_go_of_the_books() {
     assert!(calls.is_empty());
     assert_eq!(books(&storage).len(), 2);
     assert_ne!(
-        secrets_of(&storage).get("readwise-reader.account").unwrap(),
+        secrets_of(&storage)
+            .get("read-later-cloud.account")
+            .unwrap(),
         marker
     );
     // And again: nothing is let go of any more.

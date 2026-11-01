@@ -108,9 +108,9 @@ pub const STORE_PLUGINS: [&str; 39] = [
     "news",
     "notes-overview",
     "profiles",
+    "read-later-cloud",
     "reading-goal",
     "readwise",
-    "readwise-reader",
     "rules",
     "stats",
     "translate",
@@ -160,8 +160,8 @@ pub static NETWORK_SETTINGS: &[paperpaw_core::NetworkSettings] = paperpaw_core::
     "kosync",
     "news",
     "opds",
+    "read-later-cloud",
     "readwise",
-    "readwise-reader",
     "stats",
     "store",
     "transfer",
@@ -300,7 +300,7 @@ fn offer_shipped_off(mut b: KernelBuilder, store: StorePlugins<'_>) -> KernelBui
     b = offered(
         b,
         shipped_off,
-        paperpaw_plugin_readwise_reader::ReadwiseReader,
+        paperpaw_plugin_read_later_cloud::ReadLaterCloud,
     );
     b = offered(b, shipped_off, paperpaw_plugin_joplin::Joplin);
     b = offered(b, shipped_off, paperpaw_plugin_wallabag::Wallabag);

@@ -183,9 +183,9 @@ dependencies = [
  "paperpaw-plugin-news",
  "paperpaw-plugin-notes-overview",
  "paperpaw-plugin-profiles",
+ "paperpaw-plugin-read-later-cloud",
  "paperpaw-plugin-reading-goal",
  "paperpaw-plugin-readwise",
- "paperpaw-plugin-readwise-reader",
  "paperpaw-plugin-rules",
  "paperpaw-plugin-stats",
  "paperpaw-plugin-translate",
@@ -378,6 +378,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "paperpaw-plugin-read-later-cloud"
+version = "1.0.0"
+dependencies = [
+ "paperpaw-sdk",
+]
+
+[[package]]
 name = "paperpaw-plugin-reading-goal"
 version = "1.0.4"
 dependencies = [
@@ -387,13 +394,6 @@ dependencies = [
 [[package]]
 name = "paperpaw-plugin-readwise"
 version = "1.0.3"
-dependencies = [
- "paperpaw-sdk",
-]
-
-[[package]]
-name = "paperpaw-plugin-readwise-reader"
-version = "1.0.0"
 dependencies = [
  "paperpaw-sdk",
 ]

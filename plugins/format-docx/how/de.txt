@@ -1,3 +1,3 @@
-Öffnet Word-Dokumente (.docx) als Bücher: Überschriften mit Inhaltsverzeichnis, Listen, Tabellen, Fett und Kursiv, Links und Bilder (JPEG, PNG, GIF).
+Öffnet DOCX-Dokumente (.docx) als Bücher: Überschriften mit Inhaltsverzeichnis, Listen, Tabellen, Fett und Kursiv, Links und Bilder (JPEG, PNG, GIF).
 
 Lege die Dateien in den Bibliotheksordner und öffne sie aus der Bibliothek. Titel und Autor stammen aus den Eigenschaften des Dokuments. Fußnoten, Kopf- und Fußzeilen sowie Kommentare werden nicht angezeigt.

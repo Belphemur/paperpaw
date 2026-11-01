@@ -92,10 +92,8 @@ pub(crate) const SUB: u8 = 32;
 
 impl Plugin for DocxFormat {
     fn manifest(&self) -> Manifest {
-        Manifest::new(PLUGIN, "Word documents", paperpaw_sdk::package_version!())
-            .description(
-                "Opens Word documents (.docx): text, headings, lists, tables and pictures.",
-            )
+        Manifest::new(PLUGIN, "DOCX documents", paperpaw_sdk::package_version!())
+            .description("Opens .docx files, as saved by Word and other programs.")
             .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)
     }

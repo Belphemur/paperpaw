@@ -134,14 +134,10 @@ static SCREENS: [FixedScreen; 1] = [FixedScreen::new(SCREEN, "calibre.title", |e
 
 impl Plugin for Calibre {
     fn manifest(&self) -> Manifest {
-        Manifest::new(
-            PLUGIN,
-            "Calibre connection",
-            paperpaw_sdk::package_version!(),
-        )
-        .description("Receive books from Calibre over the network, as its wireless device.")
-        .how(&HOW)
-        .uses(paperpaw_sdk::Uses::NETWORK)
+        Manifest::new(PLUGIN, "Wireless library", paperpaw_sdk::package_version!())
+            .description("Receives books over the network. Works as a wireless device for calibre.")
+            .how(&HOW)
+            .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {

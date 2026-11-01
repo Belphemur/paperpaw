@@ -180,16 +180,16 @@ fn the_plugins_chosen_are_installed_and_said_once() {
     for name in [
         "Reading statistics",
         "Home widgets",
-        "Calibre connection",
-        "KOReader sync",
+        "Wireless library",
+        "Progress sync",
     ] {
         assert!(shown.contains(name), "{shown}");
     }
     // *Done* there with nothing chosen too.
     assert!(shown.contains("| Done"), "{shown}");
     shopping.choose("Reading statistics");
-    shopping.choose("Calibre connection");
-    // Past KOReader sync to *Done*.
+    shopping.choose("Wireless library");
+    // Past the reading sync to *Done*.
     shopping.run(actions::DOWN);
     shopping.run(actions::DOWN);
     let shown = shopping.shown();
@@ -279,7 +279,7 @@ fn the_headers_arrow_adds_those_chosen_too() {
         .kernel
         .describe()
         .into_iter()
-        .find(|p| p.label.starts_with("Calibre"))
+        .find(|p| p.label.starts_with("Wireless"))
         .unwrap()
         .area;
     shopping.touch_at(i32::from(row.x) + 40, i32::from(row.y) + 20, false);
@@ -385,7 +385,10 @@ fn built_in_ones_are_switched_on() {
         shown.iter().any(|l| l.starts_with("Reading statistics")),
         "{shown:?}"
     );
-    assert!(!shown.iter().any(|l| l.starts_with("Calibre")), "{shown:?}");
+    assert!(
+        !shown.iter().any(|l| l.starts_with("Wireless")),
+        "{shown:?}"
+    );
     // Chosen, then *Done*.
     kernel.run_action(Instant(200), actions::CONFIRM);
     kernel.run_action(Instant(300), actions::DOWN);

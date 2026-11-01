@@ -15,7 +15,7 @@ use paperpaw_sdk::{
 use crate::{DONE, FETCH, SECRET};
 
 /// Typed on the keyboard; parameter `field`.
-pub const ENTERED: Event<Typed> = Event::new("readwise-reader.entered");
+pub const ENTERED: Event<Typed> = Event::new("read-later-cloud.entered");
 pub const FIELD: &str = "field";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,8 +29,8 @@ const ROWS: [Row; 2] = [Row::Token, Row::Fetch];
 impl Row {
     fn title(self) -> &'static str {
         match self {
-            Row::Token => "readwise-reader.token",
-            Row::Fetch => "readwise-reader.fetch",
+            Row::Token => "read-later-cloud.token",
+            Row::Fetch => "read-later-cloud.fetch",
         }
     }
 
@@ -56,7 +56,7 @@ pub fn entered(typed: &Typed, out: &mut Commands) {
     if !text.is_empty() {
         out.push(Command::set_secret(SecretChange::keep(
             SECRET,
-            "readwise-reader.secret",
+            "read-later-cloud.secret",
             text,
         )));
     }
@@ -90,7 +90,7 @@ impl SetupScreen {
                 display.width,
                 display.height.saturating_sub(note_top),
             ),
-            message: env.i18n().tr("readwise-reader.help").to_string(),
+            message: env.i18n().tr("read-later-cloud.help").to_string(),
             style,
             header,
         }
@@ -113,7 +113,7 @@ impl Screen for SetupScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let mut ui = ui::Ui::new(canvas, env, &style);
-        let title = env.i18n().tr("readwise-reader.title");
+        let title = env.i18n().tr("read-later-cloud.title");
         self.header.draw(&mut ui, title, None, None);
         self.list
             .draw(&mut ui, ROWS.len(), |ui, index, rect, focused| {

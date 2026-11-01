@@ -638,10 +638,10 @@ impl Plugin for Wallabag {
     fn manifest(&self) -> Manifest {
         Manifest::new(
             PLUGIN,
-            "Wallabag articles",
+            "Read-later articles (own server)",
             paperpaw_sdk::package_version!(),
         )
-        .description("Articles saved in Wallabag, fetched as books.")
+        .description("Fetches articles saved in wallabag, as books.")
         .how(&HOW)
         .uses(paperpaw_sdk::Uses::NETWORK)
     }

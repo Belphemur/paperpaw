@@ -1,6 +1,6 @@
 [package]
-name = "paperpaw-plugin-readwise-reader"
-description = "PaperPaw Readwise Reader: articles saved to read later, fetched as books"
+name = "paperpaw-plugin-read-later-cloud"
+description = "PaperPaw read-later articles (cloud): articles saved to read later, fetched as books"
 version = "1.0.0"
 edition.workspace = true
 rust-version.workspace = true

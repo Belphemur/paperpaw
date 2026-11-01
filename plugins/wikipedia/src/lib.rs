@@ -173,10 +173,14 @@ static SCREENS: [FixedScreen; 1] = [FixedScreen::new(
 
 impl Plugin for Wikipedia {
     fn manifest(&self) -> Manifest {
-        Manifest::new(PLUGIN, "Wikipedia lookup", paperpaw_sdk::package_version!())
-            .description("Looks words up online, beside the dictionaries.")
-            .how(&HOW)
-            .uses(paperpaw_sdk::Uses::NETWORK)
+        Manifest::new(
+            PLUGIN,
+            "Encyclopedia lookup",
+            paperpaw_sdk::package_version!(),
+        )
+        .description("Looks words up on Wikipedia. Not affiliated with the Wikimedia Foundation.")
+        .how(&HOW)
+        .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {

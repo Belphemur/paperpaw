@@ -1,5 +1,5 @@
-Calibre connection lets the device appear in Calibre on your computer as a wireless device. Calibre can then send books to it, list them and delete them. The books go into the library.
+Wireless library lets the device appear in Calibre on your computer as a wireless device. Calibre can then send books to it, list them and delete them. The books go into the library.
 
-Open Calibre connection from the Tools menu, with the device and the computer in the same Wi-Fi network. In Calibre choose Connect/share, then Start wireless device connection. When the device has found your computer it shows its name; tap Connect (with buttons, press Select). Calibre can add and delete books here, so connect only to your own computer. Closing the screen ends the connection.
+Open Wireless library from the Tools menu, with the device and the computer in the same Wi-Fi network. In Calibre choose Connect/share, then Start wireless device connection. When the device has found your computer it shows its name; tap Connect (with buttons, press Select). Calibre can add and delete books here, so connect only to your own computer. Closing the screen ends the connection.
 
 If Calibre is not found by itself, enter its computer's address in Settings, under Library, as Address in the Calibre part. If Calibre uses a port other than 9090, add it as :port, e.g. 192.168.1.20:9091.

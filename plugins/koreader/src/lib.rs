@@ -1013,7 +1013,7 @@ impl Plugin for KoReader {
     fn manifest(&self) -> Manifest {
         Manifest::new(
             PLUGIN,
-            "KOReader highlights",
+            "Highlights sharing",
             paperpaw_sdk::package_version!(),
         )
         .description("Shares bookmarks and highlights with KOReader for books read in both.")
