@@ -12,3 +12,7 @@ publish = false
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+# The names of all icons (the icons check).
+paperpaw-sdk.workspace = true

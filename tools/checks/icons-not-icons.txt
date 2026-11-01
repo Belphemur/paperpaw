@@ -1,0 +1,4 @@
+# String literals in plugins that are the name of a Tabler icon the icon
+# font does not hold, and are not used as an icon (see tests/icons.rs).
+line-height
+icons

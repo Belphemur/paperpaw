@@ -557,7 +557,7 @@ fn facts(
         .get(&plugin.id)
         .is_some_and(|info| info.problem == Some(PluginProblem::Revoked))
     {
-        facts.insert(0, ("x", i18n.tr("store.revoked").to_string()));
+        facts.insert(0, ("alert-triangle", i18n.tr("store.revoked").to_string()));
     }
     if plugin.official {
         facts.push(("paw", i18n.tr("store.official").to_string()));
