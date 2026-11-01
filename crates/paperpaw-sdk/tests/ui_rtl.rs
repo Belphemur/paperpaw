@@ -427,3 +427,84 @@ fn a_chevron_turns_and_an_icon_stands_at_the_right() {
         assert_eq!(rest(&rtl).width, row.width - icon);
     }
 }
+
+#[test]
+fn chips_run_from_the_right_and_left_goes_on() {
+    let h = Harness::new(Device::TOUCH);
+    let env = h.env();
+    let ltr = UiStyle::new(&env);
+    let rtl = ltr.with_rtl(true);
+    let area = Rect::new(0, 100, WIDTH, 200);
+    let labels = ["A", "B", "C", "D"];
+    let (l, r) = (
+        ui::Chips::new(&env, &ltr, area, labels),
+        ui::Chips::new(&env, &rtl, area, labels),
+    );
+    for i in 0..4 {
+        assert_eq!(r.cell(i).unwrap(), mirrored(l.cell(i).unwrap()), "chip {i}");
+    }
+    assert!(r.cell(0).unwrap().x > r.cell(1).unwrap().x);
+    assert_eq!(l.step(0, &actions::RIGHT), Some(1));
+    assert_eq!(r.step(0, &actions::LEFT), Some(1));
+    assert_eq!(r.step(1, &actions::RIGHT), Some(0));
+    assert_eq!(r.step(0, &actions::RIGHT), Some(0));
+    // A tap is on the chip drawn there.
+    let first = r.cell(0).unwrap();
+    assert_eq!(
+        r.hit(Point::new(i32::from(first.x) + 2, i32::from(first.y) + 2)),
+        Some(0)
+    );
+    // And they are drawn within the area.
+    let (_, mut frame) = describe(WIDTH, 800, |c| {
+        r.draw(&mut ui::Ui::new(c, &env, &rtl), 0, Some(1));
+    });
+    assert_eq!(drawn_outside(&mut frame, area), None);
+}
+
+#[test]
+fn a_date_pickers_first_field_is_at_the_right() {
+    let h = Harness::new(Device::TOUCH);
+    let env = h.env();
+    let ltr = UiStyle::new(&env);
+    let rtl = ltr.with_rtl(true);
+    let area = Rect::new(0, 100, WIDTH, ui::DatePicker::height(&ltr));
+    let date = paperpaw_sdk::time::Date::new(2026, 11, 1);
+    let (l, mut r) = (
+        ui::DatePicker::new(&ltr, area, date),
+        ui::DatePicker::new(&rtl, area, date),
+    );
+    let middle = i32::from(area.y) + i32::from(area.height) / 2;
+    let (near_left, near_right) = (Point::new(30, middle), Point::new(450, middle));
+    assert_eq!(l.hit(near_left), Some(ui::PickerPart::Value(0)));
+    assert_eq!(r.hit(near_right), Some(ui::PickerPart::Value(0)));
+    assert_eq!(r.hit(near_left), Some(ui::PickerPart::Value(2)));
+    // The left button goes on to the next field.
+    assert_eq!(r.focus(), 0);
+    let _ = r.on_action(&actions::DOWN);
+    let _ = r.on_action(&actions::LEFT);
+    assert_eq!(r.focus(), 1);
+    let _ = r.on_action(&actions::RIGHT);
+    assert_eq!(r.focus(), 0);
+}
+
+#[test]
+fn a_heading_starts_at_the_right_margin() {
+    let h = Harness::new(Device::TOUCH);
+    let env = h.env();
+    let ltr = UiStyle::new(&env);
+    let rtl = ltr.with_rtl(true);
+    let rect = Rect::new(0, 100, WIDTH, ltr.row() as u16);
+    let rows = rect.y..rect.bottom() as u16;
+    let ink = |style: &UiStyle| {
+        let mut frame = support::frame(WIDTH, 800);
+        ui::Ui::new(&mut frame.canvas(), &env, style).heading(rect, "Section");
+        ink_columns(&frame, rows.clone())
+    };
+    let ((first, _), (_, r_last)) = (ink(&ltr), ink(&rtl));
+    let (margin, bearing) = (ltr.margin(), 6);
+    assert!(first >= margin && first <= margin + bearing, "{first}");
+    assert!(
+        r_last + margin + bearing >= WIDTH && r_last < WIDTH - margin + 1,
+        "{r_last}"
+    );
+}

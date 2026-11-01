@@ -177,6 +177,22 @@ pub(crate) fn draw_heading(
         area.height,
     );
     let x = f32::from(rect.x) + style.margin as f32;
+    if style.is_rtl() {
+        // Starting at the right margin.
+        draw_label_out(
+            canvas,
+            &font,
+            style,
+            rect,
+            TextRole::SMALL,
+            style.small,
+            x,
+            text_area,
+            text,
+            style.ink(Ink::MUTED),
+        );
+        return;
+    }
     draw_label(
         canvas,
         &font,
