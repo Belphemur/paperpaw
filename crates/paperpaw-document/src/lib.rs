@@ -1006,6 +1006,23 @@ pub trait Document {
         None
     }
 
+    /// Decodes `image` (of one of its blocks) anew, larger than for its
+    /// page: its longer side at most `long` pixels, never larger than the
+    /// picture is (nor than 1600 pixels), into a file of its own beside
+    /// the one for the page, for a picture zoomed or shown on the whole
+    /// screen. `None` where the format cannot (a reader then enlarges the
+    /// one for the page) or the picture cannot be decoded. Asked when the
+    /// reader opens a picture, never while pages are laid out.
+    fn prepare_image_larger(
+        &self,
+        storage: &dyn Storage,
+        image: &ImageRef,
+        long: u32,
+    ) -> Option<ImageRef> {
+        let _ = (storage, image, long);
+        None
+    }
+
     /// The cover as a small gray image in storage, decoded on first use;
     /// `None` if the book has none (or the format no covers).
     fn cover(&self, storage: &dyn Storage) -> Result<Option<ImageRef>, DocumentError> {

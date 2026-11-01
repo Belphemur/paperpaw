@@ -75,6 +75,54 @@ fn a_replaced_epub_is_converted_and_its_pictures_decoded_anew() {
     assert_eq!(texts(&doc, &storage)[0], "Bravo");
 }
 
+/// A picture decoded anew for a zoom: a file of its own beside the one
+/// for the page, never larger than the picture, made once; gone with the
+/// book's other files when the book is replaced. A picture the book does
+/// not note is none.
+#[test]
+fn a_picture_is_decoded_larger_beside_the_one_for_its_page() {
+    let storage = MemoryStorage::new().with("b/book.epub", epub("Alpha"));
+    let doc = EpubDocument::open(&storage, "b/book.epub").unwrap();
+    let picture = doc
+        .block_at(&storage, Locator::new(0, 1))
+        .unwrap()
+        .and_then(|b| doc.block_at(&storage, Locator::new(0, b.end)).unwrap())
+        .filter(|b| b.kind == BlockKind::Image)
+        .and_then(|b| b.image)
+        .unwrap();
+    let page = doc
+        .prepare_image(&storage, &picture)
+        .unwrap_or(picture.clone());
+    let larger = doc.prepare_image_larger(&storage, &picture, 1200).unwrap();
+    assert_ne!(larger.path, page.path);
+    assert!(larger.path.contains("-1200."), "{}", larger.path);
+    assert!(storage.size(&larger.path).is_ok());
+    // The picture is small: no larger than it is.
+    assert!(larger.width <= 1200 && larger.height <= 1200);
+    assert_eq!((larger.width, larger.height), (page.width, page.height));
+    // Asked again: the same file.
+    assert_eq!(
+        doc.prepare_image_larger(&storage, &picture, 1200),
+        Some(larger.clone())
+    );
+    // Larger than pictures are decoded at most: capped.
+    let most = doc
+        .prepare_image_larger(&storage, &picture, 99_999)
+        .unwrap();
+    assert!(most.path.contains("-1600."), "{}", most.path);
+    // Not a picture of the book.
+    let stranger = paperpaw_sdk::document::ImageRef {
+        path: String::from("b/elsewhere/none.gray"),
+        width: 1,
+        height: 1,
+    };
+    assert_eq!(doc.prepare_image_larger(&storage, &stranger, 1200), None);
+    // Replaced: gone with the rest.
+    storage.write("b/book.epub", &epub("Bravo")).unwrap();
+    let _ = EpubDocument::open(&storage, "b/book.epub").unwrap();
+    assert!(storage.size(&larger.path).is_err());
+}
+
 #[test]
 fn chapters_converted_with_stylesheets_one_has_no_more_go() {
     let storage = MemoryStorage::new().with("b/book.epub", epub("Alpha"));

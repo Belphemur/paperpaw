@@ -39,6 +39,8 @@ change the plugin SDK.
 - SDK: subscriptions kept in the program, `FixedSubscription`, `Registrar::add_subscriptions` and `hears!` (a
   typed handler, as `Registrar::on` takes it, in a `static` list: one entry of the kernel's for the list);
   `Event::hear`, `Event::id_static`. The update plugin's seven subscriptions use them.
+- SDK: `Document::prepare_image_larger` decodes a picture anew, larger than for its page (its longer side up to
+  1600 pixels), for a zoom or a picture on the whole screen; EPUB books do, other formats say they cannot.
 - *All notes*, a new plugin (Tools): the books that have bookmarks or highlights with how many, a book's notes
   (a note opens the book there), and *Export as My Clippings.txt*, all notes in one file in Kindle's form
   (UTF-8 with a byte order mark, `Exports/My Clippings.txt` beside the library) that notes apps read. A book's
