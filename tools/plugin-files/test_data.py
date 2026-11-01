@@ -26,10 +26,15 @@ def ready():
 
 class Ready(unittest.TestCase):
     def test_none_of_them_is_offered(self):
-        self.assertFalse({"script-greek"} & set(data.plugins()))
+        self.assertFalse({"script-greek", "script-cyrillic"} & set(data.plugins()))
 
-    def test_the_greek_pack_is_ready(self):
-        fields = ready()["script-greek"]
+    def test_the_packs_of_literata_are_ready(self):
+        for plugin in ["script-greek", "script-cyrillic"]:
+            with self.subTest(plugin):
+                self.check(plugin)
+
+    def check(self, plugin):
+        fields = ready()[plugin]
         self.assertEqual(fields["version"], "1.0.0")
         self.assertEqual(fields["build"], "tools/script-pack.py")
         self.assertTrue(fields["off_by_default"])
@@ -40,7 +45,7 @@ class Ready(unittest.TestCase):
         for path in [fields["build"], *fields["inputs"]]:
             self.assertTrue((data.ROOT / path).exists(), path)
         # What the pack builder writes for it.
-        self.assertIn("id = script-greek\n", data.plugin_ini("script-greek", fields))
+        self.assertIn(f"id = {plugin}\n", data.plugin_ini(plugin, fields))
 
 
 if __name__ == "__main__":

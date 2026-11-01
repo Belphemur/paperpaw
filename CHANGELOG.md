@@ -21,6 +21,8 @@ change the plugin SDK.
   Extended), for books whose Greek shows as `?` on a device whose fonts hold Latin only. It is a data plugin
   that `tools/script-pack.py greek` builds, with no code and no interface change. Its entry in
   `tools/plugin-files/data.toml` is commented out until the owner decides to offer it in the store.
+- A Cyrillic letters pack, `script-cyrillic` (#60), the same way for Russian, Ukrainian, Bulgarian, Serbian and
+  other Cyrillic books (about 1.0 MiB on the card), commented out in `data.toml` with the others.
 
 ### Changed
 
