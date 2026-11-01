@@ -215,7 +215,7 @@ and the plugin manager says why.
   lives on a server: the plugin library's list (over HTTPS) gives every
   file's hash, and an author signs their own files with their own key
   (Ed25519, in their own CI). A device remembers the author's key at the
-  first install and refuses, without a clear warning, an update signed
+  first install and refuses, in plain words, an update signed
   by another, so a taken-over server cannot swap a known plugin quietly.
   It also names the file installed by its digest (in `.paperpaw`, out of
   the Wi-Fi transfer's reach) and loads only that file, so one put into
@@ -303,5 +303,5 @@ What the spike left open, as the implementation found it (2026-10-20):
   flasher's bundle remember the author's key (one file for both,
   `native::remember_author`). From the bundle, code signed by another
   author than the version installed is not installed and the plugin
-  manager says so (`Native::not_installed`): the reader decides in the
-  store, where they are warned.
+  manager says so (`Native::not_installed`). The store refuses it too
+  (`Refusal::KeyChanged`): nowhere can the reader accept a new key.

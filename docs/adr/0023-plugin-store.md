@@ -93,8 +93,8 @@ download written as it arrives, nothing unpacked in memory.
   digest, the author's signature): made for this firmware, and signed.
   At the first install the key must be the one the library names, and
   it is remembered for the plugin (`native::remember_author`); an update
-  signed by another waits, with a warning in plain words, until the
-  reader installs it anyway or not. Before the first code plugin the
+  signed by another is refused, with a message in plain words
+  (`Refusal::KeyChanged`); the reader cannot accept the new key. Before the first code plugin the
   store says once what code plugins are (full access to the device,
   safe mode when one goes wrong), and a plugin's page says it is one
   and which PaperPaw it is made for. Code plugins start at the next

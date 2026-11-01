@@ -92,9 +92,10 @@ are reported as [SECURITY.md](../SECURITY.md) says.
   files are signed with the project's plugin key. The store and a
   firmware update install a file only when it is made for this firmware
   and signed by the key the plugin library names for its author; the device remembers
-  that key at the first install. In the store, an update signed by
-  another waits until the reader, warned, installs it anyway; a firmware
-  update does not fetch it at all. From the web flasher and from a
+  that key at the first install. An update signed by another key is
+  refused, in the store, in a firmware update (which does not fetch it
+  at all) and from the web flasher, with no way for the reader to accept
+  the new key; the version installed stays. From the web flasher and from a
   computer the firmware also takes a file not signed (one's own build):
   from the flasher only for a plugin that has no author's key remembered
   yet, from a computer only once the reader said yes to its code on the

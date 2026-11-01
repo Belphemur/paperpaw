@@ -1,6 +1,6 @@
 //! A plugin file's author's signature (ADR 0024): authors sign their own
 //! files with their own key, and a device remembers the key at the first
-//! install and warns of an update signed by another. The signature is a
+//! install and refuses an update signed by another. The signature is a
 //! trailer at the file's end, so the file carries it wherever it goes
 //! (the store, the web flasher's bundle, a copy by hand):
 //!
