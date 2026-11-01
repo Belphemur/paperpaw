@@ -12,8 +12,11 @@ categories = ["no-std"]
 
 [dependencies]
 paperpaw-sdk.workspace = true
+paperpaw-sqlite.workspace = true
+paperpaw-zip.workspace = true
 
 [dev-dependencies]
+paperpaw-zip = { workspace = true, features = ["testing"] }
 paperpaw-i18n.workspace = true
 paperpaw-core.workspace = true
 paperpaw-platform.workspace = true

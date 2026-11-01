@@ -43,6 +43,7 @@ use core::ops::ControlFlow;
 
 use paperpaw_sdk::{Storage, StorageError};
 
+use crate::apkg;
 use crate::cards::{self, MAX_NAME, MAX_TEXT, Problem, Texts, clean};
 use crate::table::{self, Fault, Item, Layout};
 
@@ -64,7 +65,7 @@ const LEDGER_MAX: usize = 128 * 1024;
 /// Problems kept to be told.
 const MOST_PROBLEMS: usize = 20;
 const LEDGER_HEADER: &str = "paperpaw-sources 1";
-const EXTENSIONS: [&str; 3] = [".tsv", ".csv", ".txt"];
+const EXTENSIONS: [&str; 4] = [".tsv", ".csv", ".txt", ".apkg"];
 
 pub(crate) fn ledger_path() -> String {
     cards::path("sources.txt")
@@ -417,6 +418,13 @@ pub(crate) enum Outcome {
     TooLarge,
     /// A UTF-16 file (a spreadsheet's "Unicode text").
     Utf16,
+    /// An Anki deck (`.apkg`) with no notes, or no deck of Anki's.
+    NoNotes,
+    /// An Anki deck of the newest Anki, exported without its older format.
+    NewerAnki,
+    /// An Anki deck with more files, a larger database or more notes than
+    /// are read ([`apkg`]).
+    DeckTooLarge,
 }
 
 impl Outcome {
@@ -424,7 +432,13 @@ impl Outcome {
     fn is_the_file(self) -> bool {
         matches!(
             self,
-            Outcome::NoCards | Outcome::Crowded | Outcome::TooLarge | Outcome::Utf16
+            Outcome::NoCards
+                | Outcome::Crowded
+                | Outcome::TooLarge
+                | Outcome::Utf16
+                | Outcome::NoNotes
+                | Outcome::NewerAnki
+                | Outcome::DeckTooLarge
         )
     }
 }
@@ -486,6 +500,8 @@ pub(crate) enum Step {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Stage {
+    /// An Anki deck (`.apkg`) written as a text file, in one step.
+    Convert,
     /// The file hashed, a step at a time.
     Hash,
     /// Its lines counted, a step at a time.
@@ -507,6 +523,9 @@ enum Stage {
 struct Work {
     found: Found,
     path: String,
+    /// The size of the text that is read: the file's, or what an Anki
+    /// deck was written as.
+    text_size: u64,
     layout: Layout,
     stage: Stage,
     deck: u32,
@@ -615,8 +634,9 @@ impl Job {
         let total = self.todo.len().max(1);
         let name = self.todo.get(self.at).map_or("", |f| f.name.as_str());
         let within = self.work.as_ref().map_or(0, |w| match w.stage {
-            Stage::Hash => (50 * w.hashed / w.found.size.max(1)).min(50) as usize,
-            Stage::Count => (50 + 50 * w.resume.at / w.found.size.max(1)).min(100) as usize,
+            Stage::Convert => 0,
+            Stage::Hash => (50 * w.hashed / w.text_size.max(1)).min(50) as usize,
+            Stage::Count => (50 + 50 * w.resume.at / w.text_size.max(1)).min(100) as usize,
             Stage::Decide | Stage::Asked => 100,
             Stage::Merge => 100,
             Stage::Slice { round, slice } => {
@@ -659,6 +679,9 @@ impl Job {
 
     fn finish_with(&mut self, storage: &dyn Storage, outcome: Outcome) {
         if let Some(mut work) = self.work.take() {
+            if apkg::is_apkg(&work.found.name) {
+                apkg::tidy(storage);
+            }
             if outcome.is_the_file() {
                 note_failed(storage, &work.found);
             }
@@ -678,8 +701,10 @@ impl Job {
                 return Step::Done;
             };
             let path = alloc::format!("{}/{}", self.folder, found.name);
+            let deck = apkg::is_apkg(&found.name);
             self.work = Some(Work {
                 report: FileReport::new(&found.name, Outcome::Merged),
+                text_size: found.size,
                 found,
                 path,
                 layout: Layout {
@@ -697,7 +722,7 @@ impl Job {
                     start: 0,
                     line: 1,
                 },
-                stage: Stage::Hash,
+                stage: if deck { Stage::Convert } else { Stage::Hash },
                 deck: 0,
                 hash: FNV64,
                 hashed: 0,
@@ -714,6 +739,7 @@ impl Job {
         }
         let stage = self.work.as_ref().map_or(Stage::Finish, |w| w.stage);
         let done = match stage {
+            Stage::Convert => self.convert(storage),
             Stage::Hash => self.hash(storage),
             Stage::Count => self.count(storage),
             Stage::Decide => self.decide(storage),
@@ -735,6 +761,29 @@ impl Job {
         }
     }
 
+    /// An Anki deck written as text, whole: the notes are read from its
+    /// database page by page, so it takes time but no memory (see
+    /// [`apkg`]); the text is then merged as a file is, from its own
+    /// place.
+    fn convert(&mut self, storage: &dyn Storage) -> Result<(), Failure> {
+        let Some(work) = self.work.as_mut() else {
+            return Ok(());
+        };
+        match apkg::convert(storage, &work.path) {
+            Ok(_) => {}
+            Err(apkg::Fault::NoNotes) => return Err(Failure::Outcome(Outcome::NoNotes)),
+            Err(apkg::Fault::NewerAnki) => return Err(Failure::Outcome(Outcome::NewerAnki)),
+            Err(apkg::Fault::TooLarge | apkg::Fault::Memory) => {
+                return Err(Failure::Outcome(Outcome::DeckTooLarge));
+            }
+            Err(apkg::Fault::Storage) => return Err(Failure::Storage),
+        }
+        work.path = apkg::text_path();
+        work.text_size = storage.size(&work.path)?;
+        work.stage = Stage::Hash;
+        Ok(())
+    }
+
     /// The file hashed, [`STEP`] bytes at a time; at its end, a file with
     /// the content merged before is done, else its layout is looked at.
     fn hash(&mut self, storage: &dyn Storage) -> Result<(), Failure> {
@@ -742,7 +791,7 @@ impl Job {
             return Ok(());
         };
         let too_large = Failure::Outcome(Outcome::TooLarge);
-        if work.found.size > MAX_FILE {
+        if work.text_size > MAX_FILE {
             return Err(too_large);
         }
         let end = work.hashed + STEP;
@@ -1018,6 +1067,9 @@ impl Job {
         let Some(work) = self.work.take() else {
             return Ok(());
         };
+        if apkg::is_apkg(&work.found.name) {
+            apkg::tidy(storage);
+        }
         let written = sources(storage).and_then(|mut known| {
             known.sources.retain(|s| s.name != work.found.name);
             known.sources.push(Source {

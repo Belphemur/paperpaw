@@ -214,6 +214,9 @@ impl SdScreen {
             Outcome::NoCards => i18n.tr("vocabulary.sd.outcome.no-cards").into(),
             Outcome::TooLarge => i18n.tr("vocabulary.sd.outcome.too-large").into(),
             Outcome::Utf16 => i18n.tr("vocabulary.sd.outcome.utf16").into(),
+            Outcome::NoNotes => i18n.tr("vocabulary.sd.outcome.no-notes").into(),
+            Outcome::NewerAnki => i18n.tr("vocabulary.sd.outcome.newer-anki").into(),
+            Outcome::DeckTooLarge => i18n.tr("vocabulary.sd.outcome.deck-too-large").into(),
         };
         rows.push((title, note));
         if report.removal_held {
@@ -267,6 +270,7 @@ impl SdScreen {
             export::Outcome::TooLarge => i18n.tr("vocabulary.sd.save.too-large").into(),
             export::Outcome::Failed => i18n.tr("vocabulary.sd.save.failed").into(),
             export::Outcome::LeftOut => i18n.tr("vocabulary.sd.save.left-out").into(),
+            export::Outcome::AnkiFile => i18n.format("vocabulary.sd.save.anki-refused", &file),
         };
         let mut rows = alloc::vec![(report.deck.clone(), note)];
         if let Some(backup) = &report.backup

@@ -12,6 +12,13 @@ change the plugin SDK.
   series (or the library), a rating of one to five (`4 / 5`, kept as a book field and shown as a badge on the
   book's row and on its information page) and whether the book counts as finished. Two settings in the reading
   group: *Show a screen at the end of a book* and *Mark the book as finished* (both on). It needs no SDK change.
+- Flash cards from Anki decks on the card (#49, part 3): an Anki deck package (`.apkg`, exported with *Support older
+  Anki versions*) in `/Flashcards/` is a deck like a CSV or TSV file: the notes' first three fields (front, back,
+  example) become cards as plain text, without markup and sounds, and an update merges them as it does a text file's
+  lines. Scheduling and media are not read (ticket #26, Anki's own sync, is not part of this). The deck's database is
+  read page by page, so the heap needs no more than for a text file. A deck of the newest Anki format, one with
+  more than 4,000 files, a database over 16 MiB or more than 20,000 notes is told, not read. An Anki file is only
+  read: *Save to card* never writes over it. No SDK change.
 - A release's `paperpaw-<device>-<version>-abi.txt` says the firmware's table for plugins after its
   fingerprint: `interface:`, `api:` (the table's size), `families:` and `min:` (each family's revision and the
   oldest it runs), read from the firmware's ELF file (`PAPERPAW_NATIVE_ABI`, `paperpaw-sign abi`). The store

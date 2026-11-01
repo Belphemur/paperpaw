@@ -624,7 +624,7 @@ pub(crate) fn record_at(
 
 /// `html` as plain text: tags out (a line break is a space), the usual
 /// character references turned.
-fn plain(html: &str) -> String {
+pub(crate) fn plain(html: &str) -> String {
     let mut out = String::with_capacity(html.len());
     let mut in_tag = false;
     let mut tag = String::new();

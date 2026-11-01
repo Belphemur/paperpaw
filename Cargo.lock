@@ -2285,6 +2285,8 @@ dependencies = [
  "paperpaw-plugin-home",
  "paperpaw-plugin-sleep",
  "paperpaw-sdk",
+ "paperpaw-sqlite",
+ "paperpaw-zip",
  "proptest",
 ]
 
