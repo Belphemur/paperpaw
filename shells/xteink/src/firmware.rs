@@ -325,7 +325,7 @@ impl Firmware {
         let settings = self.kernel.settings();
         let level = settings.read(&device::FRONTLIGHT);
         let warmth = settings.read(&device::WARMTH);
-        let after = paperpaw_x4::light_timer::delay_ms(&settings.read(&device::LIGHT_OFF_AFTER));
+        let after = paperpaw_x4::light_timer::delay_ms(settings.read(&device::LIGHT_OFF_AFTER));
         let dark = self.state.light_timer.dark(now().0, after);
         if let Some(light) = self.light.as_mut() {
             if dark {
