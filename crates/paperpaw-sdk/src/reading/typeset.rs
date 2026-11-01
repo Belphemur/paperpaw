@@ -33,6 +33,11 @@ const EMBEDDED_LIMIT: usize = 8 * 1024 * 1024;
 
 /// Small capitals are this much of the text size.
 const SMALL_CAPS: f32 = 0.78;
+/// The reader's "Hanging punctuation" setting (the core plugin's), off
+/// where it is not defined: punctuation at the lines' ends set out into
+/// the margins ([`ScriptOptions::HANGING_PUNCTUATION`]).
+const HANGING_PUNCTUATION: crate::setting::Setting<bool> =
+    crate::setting::Setting::new("core.hanging-punctuation");
 
 /// Superscript and subscript are this much of the text size, raised or
 /// lowered by this much of it.
@@ -259,7 +264,11 @@ impl PageType {
         .lines_kept(widows, orphans)
         .book(book)
         .balanced(balanced)
-        .script_options(script_options(language, s.read(&settings::KOREAN_BREAKS)));
+        .script_options(script_options(
+            language,
+            s.read(&settings::KOREAN_BREAKS),
+            s.read(&HANGING_PUNCTUATION),
+        ));
 
         let display = env.device().display;
         let millimetres = |setting: &crate::setting::Setting<i64>| match whole_pages {
@@ -500,12 +509,18 @@ impl PageType {
 
 /// The options of the line breaker for a book in `language`: by word
 /// (`KEEP_ALL`) only for a Korean book whose reader chose it. The bit is
-/// never global: it would lay out Chinese and Japanese text badly.
-fn script_options(language: &str, korean: &str) -> ScriptOptions {
+/// never global: it would lay out Chinese and Japanese text badly. And
+/// hanging punctuation where the reader chose it (`hanging`).
+fn script_options(language: &str, korean: &str, hanging: bool) -> ScriptOptions {
     let primary = language.split(['-', '_']).next().unwrap_or("");
-    match primary.eq_ignore_ascii_case("ko") && korean == settings::KOREAN_BREAKS_WORD {
+    let options = match primary.eq_ignore_ascii_case("ko") && korean == settings::KOREAN_BREAKS_WORD
+    {
         true => ScriptOptions::KEEP_ALL,
         false => ScriptOptions::NONE,
+    };
+    match hanging {
+        true => options.with(ScriptOptions::HANGING_PUNCTUATION),
+        false => options,
     }
 }
 

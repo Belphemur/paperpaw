@@ -40,9 +40,12 @@ pub use paperpaw_text::Hyphenate;
 use paperpaw_text::{Line, wrap_lines_balanced_opts, wrap_lines_kerned_opts};
 
 use levels::BlockLevels;
+use measure::Measure;
 pub use pieces::PieceStarts;
 
+mod hanging;
 mod levels;
+mod measure;
 mod pieces;
 
 /// Largest extra space per word gap for justification, relative to the
@@ -194,7 +197,11 @@ impl ScriptOptions {
     /// Justified Arabic lines stretched by lengthening letters (kashida)
     /// rather than by wider gaps. Reserved.
     pub const KASHIDA: ScriptOptions = ScriptOptions(1);
-    /// Punctuation at a line's ends hung into the margin. Reserved.
+    /// Punctuation at a line's ends hung into the margin (optical margin
+    /// alignment): an opening quote that starts a line, a stop, comma,
+    /// hyphen or closing quote that ends a justified one. Lines break as
+    /// without it, so pages hold the same text; only left-to-right lines
+    /// hang, and a first line's indent keeps its quote.
     pub const HANGING_PUNCTUATION: ScriptOptions = ScriptOptions(1 << 1);
     /// Korean (and CJK) text broken only at spaces, between words, never
     /// inside a word of Hangul or of ideographs (CSS `word-break: keep-all`;
@@ -796,41 +803,6 @@ fn block_em(block: &Block, style: &Style) -> f32 {
     style.em * f32::from(book_size(block, style).unwrap_or(100)) / 100.0
 }
 
-/// Where a block's lines start and how wide they are: the first line
-/// (indented where the block starts, by half a line at most, perhaps
-/// hanging out into the book's margin) and the others, within the book's
-/// margins, each kept to a quarter of the width.
-#[derive(Debug, Clone, Copy)]
-struct Measure {
-    first: (f32, f32),
-    rest: (f32, f32),
-}
-
-impl Measure {
-    fn of(block: &Block, style: &Style, width: f32, indent: f32) -> Measure {
-        let (start, end) = match style.book.has(BookStyles::MARGINS) {
-            true => {
-                let em = block_em(block, style);
-                let side = |m: u16| (f32::from(m) / 100.0 * em).clamp(0.0, width / 4.0);
-                (side(block.margins.0), side(block.margins.1))
-            }
-            false => (0.0, 0.0),
-        };
-        let rest = (start, (width - start - end).max(1.0));
-        // Indented by half a line at most, so a narrow page keeps room.
-        let first_x = (start + indent).clamp(0.0, start + rest.1 / 2.0);
-        Measure {
-            first: (first_x, (width - end - first_x).max(1.0)),
-            rest,
-        }
-    }
-
-    /// Where line `n` starts and how wide it is.
-    fn line(&self, n: usize) -> (f32, f32) {
-        if n == 0 { self.first } else { self.rest }
-    }
-}
-
 /// The lines of `block` from byte `from` of its text on (a line's start),
 /// their ranges in its text, and where they are set: broken line by line
 /// from there, or (balanced) over the whole block, from where it starts
@@ -1289,6 +1261,17 @@ pub fn layout_page(
                 // falls rather than leaving an orphan here.
                 return ended(page, line_start(n));
             }
+            // Punctuation hung out of the measure, where asked for.
+            let (hang_start, hang_end) =
+                match style.script_options.has(ScriptOptions::HANGING_PUNCTUATION) {
+                    true => {
+                        let indented =
+                            line.range.start == 0 && !block.continues && block_indent > 0.0;
+                        hanging::hanging(cx, &block, base, line, &levels, align, indented)
+                    }
+                    false => (0.0, 0.0),
+                };
+            let (first_x, available) = (first_x - hang_start, available + hang_start + hang_end);
             let free = (available - line.width).max(0.0);
             let (x, word_spacing) = match align {
                 Align::Center => (first_x + free / 2.0, 0.0),

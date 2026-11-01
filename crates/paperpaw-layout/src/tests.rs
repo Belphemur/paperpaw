@@ -920,6 +920,7 @@ fn reserved_parts_are_built_whole() {
     assert!(LineBidi::new(3, LineBidi::REORDER | LineBidi::VERTICAL).is_rtl());
 }
 
+mod hanging;
 mod rtl;
 
 /// The bits of `ScriptOptions` reach the line breaking of paperpaw-text, and

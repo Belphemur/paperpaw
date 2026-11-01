@@ -2,7 +2,8 @@
 //! white (`core.smooth-text`), and how dark (`core.text-contrast`). A page
 //! of text without smooth letters asks for no refresh in grays on a panel
 //! of black and white; sharp letters have no grays; darker steps ink
-//! more; the defaults draw as before.
+//! more; the defaults draw as before. And where lines are set: hanging
+//! punctuation (`core.hanging-punctuation`) moves marks, never lines.
 
 #![allow(
     clippy::unwrap_used,
@@ -112,4 +113,44 @@ fn the_default_page_is_drawn_as_before_on_black_and_white() {
     let ink = |image: &[Vec<u8>]| image.iter().flatten().filter(|g| **g < 128).count();
     let darkest = page("[core]\ntext-contrast = core.text-contrast.darkest\n");
     assert!(ink(&darkest) > ink(&before));
+}
+
+/// A book of short words each ending in a comma, so justified lines end
+/// in one, with gaps narrow enough to fill the lines.
+fn commas(config: &str) -> Reading {
+    let mut text = String::new();
+    for _ in 0..12 {
+        for _ in 0..60 {
+            text.push_str("ab, ");
+        }
+        text.push_str("end.\n\n");
+    }
+    let mut reading = Reading::new(MONO, Shared::default(), BOOK, text.as_bytes(), config);
+    reading.open();
+    reading
+}
+
+#[test]
+fn hanging_punctuation_moves_marks_out_and_keeps_the_lines() {
+    let justified = "[core]\njustify = true\n";
+    let hanging = "[core]\njustify = true\nhanging-punctuation = true\n";
+    // Off by default.
+    let off = "[core]\njustify = true\nhanging-punctuation = false\n";
+    assert_eq!(commas(justified).snapshot(), commas(off).snapshot());
+    let (mut plain, mut hung) = (commas(justified), commas(hanging));
+    assert_ne!(plain.snapshot(), hung.snapshot());
+    // The same lines in the same rows: the page holds the same text.
+    let rows = |lines: &[Line]| lines.iter().map(|(rows, _)| *rows).collect::<Vec<_>>();
+    let (plain_lines, hung_lines) = (plain.lines(3), hung.lines(3));
+    assert!(plain_lines.len() > 5);
+    assert_eq!(rows(&plain_lines), rows(&hung_lines));
+    // The commas at the lines' ends past the edge the letters keep.
+    let right = |lines: &[Line]| {
+        lines
+            .iter()
+            .filter_map(|(_, words)| words.last())
+            .map(|w| w.1)
+            .max()
+    };
+    assert!(right(&hung_lines) > right(&plain_lines));
 }

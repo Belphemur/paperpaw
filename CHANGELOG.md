@@ -17,6 +17,11 @@ change the plugin SDK.
   oldest it runs), read from the firmware's ELF file (`PAPERPAW_NATIVE_ABI`, `paperpaw-sign abi`). The store
   and the web flasher use them to refuse a plugin that needs more than a firmware has; the first line is the
   fingerprint as before.
+- New reading setting "Hanging punctuation" (`core.hanging-punctuation`, off by default, in the layout settings): an
+  opening quote that starts a line, and a stop, comma, hyphen or closing quote that ends a justified one, are set
+  just outside the text, so its edges look straight (optical margin alignment). Lines break as before, so pages hold
+  the same text and kept page indexes stay valid; only left-to-right lines hang. The layout does what the reserved
+  `ScriptOptions::HANGING_PUNCTUATION` bit names; no SDK change.
 
 ### Changed
 
