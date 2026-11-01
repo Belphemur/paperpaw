@@ -160,6 +160,25 @@ fn an_empty_library_says_where_books_come_from() {
     }
 }
 
+/// Books copied onto the card while a catalog of no books stands (it was
+/// made when the library had none): they show the first time the library
+/// opens, not "No books here yet" until it is closed once.
+#[test]
+fn books_copied_in_beside_an_empty_catalog_show_at_the_first_opening() {
+    let _turn = turn();
+    for device in DEVICES {
+        let mut files = many(2);
+        files.push((
+            ".paperpaw/library/catalog.txt".into(),
+            b"\tcatalog\t2\t1\n".to_vec(),
+        ));
+        let mut app = library(device, "", &files);
+        app.wait(3000);
+        assert!(!app.shows("No books here yet"), "{}", app.described());
+        assert_eq!(rows(&mut app).len(), 2, "{}", app.described());
+    }
+}
+
 /// Used to panic: `Listing::page` underflowed for an empty folder (as the
 /// library showed again).
 /// A card the device cannot use (exFAT on an X4): no catalog ever comes,

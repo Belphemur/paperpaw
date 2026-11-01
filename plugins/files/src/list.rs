@@ -399,6 +399,14 @@ impl ListScreen {
             covered: false,
             fresh: true,
         };
+        // A catalog without books may be out of date (books copied onto
+        // the card with the library closed): the kernel walks it anew at
+        // the first show after a start, and tells the view either way
+        // (`CATALOG_CHANGED`); until then it says so, not that there are
+        // no books.
+        screen.collecting |= screen.index.items.is_empty()
+            && screen.index.archived == 0
+            && env.storage().list("", &mut |_| {}).is_ok();
         screen.refilter(env);
         screen
     }

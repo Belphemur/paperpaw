@@ -407,7 +407,8 @@ struct Catalog {
 /// memory (the X4), a walk waits while the library is open (shown, or
 /// under the screens it opened: finding, a shelf, a book's information),
 /// whose index takes the memory. Catching up, which takes little, goes on
-/// beside the library; a library with no catalog yet holds no index.
+/// beside the library; a library with no catalog yet, or a catalog without
+/// books, holds no index.
 fn waits(env: &Env<'_>, walk: bool) -> bool {
     let shown = env.stack().iter().rev().find(|entry| !entry.overlay);
     let reading = shown.is_some_and(|entry| entry.slot.as_ref() == Some(&slots::READER));
@@ -422,7 +423,9 @@ fn waits(env: &Env<'_>, walk: bool) -> bool {
             && matches!(
                 library::catalog::state(env.storage()),
                 library::catalog::State::Ready { .. }
-            ))
+            )
+            && !(library::emptiness::is_empty(env.storage())
+                && !library::emptiness::log_has_entries(env.storage())))
 }
 
 impl Catalog {
@@ -602,6 +605,12 @@ fn register_library(r: &mut Registrar) -> Result<(), RegisterError> {
                 library::catalog::state(env.storage()) == library::catalog::State::Missing;
             if !env.formats().is_empty() && (wanted.anew || missing || !catalog.walked.get()) {
                 catalog.want_walk(true, wanted.anew, out);
+            } else if library::emptiness::is_empty(env.storage()) {
+                // Walked since the start and listing nothing: not again
+                // (a walk costs a wake's time and battery on the X4), but
+                // the view that asked is told, so that it says there are
+                // no books rather than that they are being collected.
+                out.push(events::CATALOG_CHANGED.emit(()));
             }
         })?;
     }

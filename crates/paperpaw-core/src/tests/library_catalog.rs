@@ -215,3 +215,64 @@ fn books_moved_removed_or_changed_are_caught_up() {
     });
     assert_eq!(rating.as_deref(), Some("5"));
 }
+
+/// A catalog without books holds no index: on a small device the walk
+/// runs beside the library (books copied onto the card meanwhile show at
+/// once), where one with books, or with entries in its log, waits until
+/// the library is closed.
+#[test]
+fn an_empty_catalog_is_walked_beside_the_library_on_small_devices() {
+    let device = DEVICE.with_memory(paperpaw_platform::MemoryClass::Small);
+    let empty = || two_books().with(".paperpaw/library/catalog.txt", "\tcatalog\t2\t1\n");
+    let (mut kernel, log, now) = library_on(device, empty());
+    let effects = kernel.open_slot(Instant(now), slots::LIBRARY, Params::new());
+    let now = run(&mut kernel, now, effects);
+    assert!(paths(&kernel).is_empty());
+    want(&mut kernel, now, true);
+    assert_eq!(*log.borrow(), ["catalog"]);
+    assert_eq!(paths(&kernel), ["books/a.txt", "books/b.txt"]);
+    // Once it lists books, a walk asked while the library shows waits.
+    let (mut kernel, log, now) = library_on(device, empty());
+    let now = want(&mut kernel, now, true);
+    log.borrow_mut().clear();
+    let effects = kernel.open_slot(Instant(now), slots::LIBRARY, Params::new());
+    let now = run(&mut kernel, now, effects);
+    want(&mut kernel, now, true);
+    assert!(
+        log.borrow().is_empty(),
+        "walked beside a library with books"
+    );
+    // No book in the catalog, one in its log (waiting to be folded in):
+    // a view holds an index, so the walk waits.
+    let noted = empty().with(".paperpaw/library/status.log", "1\t2\n");
+    let (mut kernel, log, now) = library_on(device, noted);
+    let effects = kernel.open_slot(Instant(now), slots::LIBRARY, Params::new());
+    let now = run(&mut kernel, now, effects);
+    want(&mut kernel, now, true);
+    assert!(log.borrow().is_empty(), "walked beside a log with entries");
+    assert!(paths(&kernel).is_empty());
+    let effects = kernel.run_action(Instant(now), actions::BACK);
+    run(&mut kernel, now, effects);
+    assert_eq!(paths(&kernel), ["books/a.txt", "books/b.txt"]);
+}
+
+/// A library with nothing in it is walked once per start: asked again, the
+/// view is told (so that it stops saying books are being collected), but
+/// no new catalog is made.
+#[test]
+fn an_empty_library_is_not_walked_again_each_time_a_view_asks() {
+    let (mut kernel, log, now) = library(MemoryStorage::new());
+    let now = want(&mut kernel, now, false);
+    assert_eq!(*log.borrow(), ["catalog"]);
+    let generation = catalog::generation(kernel.storage());
+    assert!(generation.is_some());
+    // Shown again, twice: told, not walked (the generation stays).
+    let now = want(&mut kernel, now, false);
+    want(&mut kernel, now, false);
+    assert_eq!(log.borrow().len(), 3);
+    assert_eq!(catalog::generation(kernel.storage()), generation);
+    // Books copied in meanwhile are found where one asks anew.
+    kernel.storage().write("books/a.txt", b"one").unwrap();
+    want(&mut kernel, now, true);
+    assert_eq!(paths(&kernel), ["books/a.txt"]);
+}
