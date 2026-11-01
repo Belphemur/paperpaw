@@ -199,6 +199,9 @@ impl Wheels {
         let Some(font) = font else {
             return;
         };
+        // Numbers in the digits of the language shown.
+        let text = env.i18n().localize_digits(text);
+        let text = text.as_ref();
         let ink = style.focus_ink(focused);
         let small = style.size(TextRole::SMALL);
         let mark_width = if mark.is_empty() {

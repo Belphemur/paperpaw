@@ -24,7 +24,7 @@ pub(super) fn plain_setting_value(env: &Env<'_>, spec: &SettingSpec) -> String {
         Some(SettingValue::Bool(false)) => env.i18n().tr("core.off").to_string(),
         Some(SettingValue::Int(v)) => match &spec.extra().unit {
             Some(unit) => env.i18n().plural(unit, *v, &[]),
-            None => format!("{v}"),
+            None => env.i18n().localize_digits(&format!("{v}")).into_owned(),
         },
         // Kept with the secrets: dots where there is one.
         _ if spec.extra().secret => {
