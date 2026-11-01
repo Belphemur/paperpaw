@@ -104,11 +104,24 @@ are reported as [SECURITY.md](../SECURITY.md) says.
   (`native::keys::accept_rotation`), so neither a moderator nor a
   taken-over server can forge one. The code installed before the move is
   no longer named as installed: it may be what the stolen key signed, so
-  only an update by the new key runs. Keys the store says were
-  **revoked** (stolen; `.paperpaw/revoked-keys.txt`) stop their authors'
-  code: the kernel does not load it (`Revoked`); a key once revoked is
-  never taken off the list, whatever a later list says, and a damaged line
-  costs only its own key. From the web flasher and from a
+  only an update by the new key runs. Install marks never move a known
+  author to another key, and name code as installed only where the
+  author pinned then signed it. A **revocation** (a key stolen;
+  `.paperpaw/revoked-keys.txt`, `native::keys::keep_revoked`) is a
+  statement about one plugin and the key pinned as its author there,
+  signed by that key itself or by the plugin's recovery key
+  (`paperpaw-sign revocation`): the store only carries it, so neither the
+  library nor a taken-over server can revoke a key it does not hold. It
+  stops that plugin's code (the kernel does not load it, `Revoked`), not
+  other plugins the same key signed, which have revocations of their own.
+  One once kept stays, whatever a later list says; a line that does not
+  hold (unsigned, forged, about a key not pinned) counts for nothing, and
+  the kernel checks every line again where it reads the list. The
+  signatures guard against the library and the network, not against
+  plugins: a code plugin has all of the card (`Env::storage`), the
+  author, recovery and revocation lists in `.paperpaw/` too, so a signed
+  code plugin is trusted with the card, and no check inside the SDK's
+  functions keeps it out (see *What is not protected*). From the web flasher and from a
   computer the firmware also takes a file not signed (one's own build):
   from the flasher only for a plugin that has no author's key remembered
   yet, from a computer only once the reader said yes to its code on the
@@ -160,4 +173,6 @@ PaperPaw's is a trusted customisation and sees what the original would.
 
 - A lost or stolen device with its card: the passwords are only veiled.
 - Firmware flashed over USB by someone holding the device.
-- What a code plugin does with its rights, built in or installed.
+- What a code plugin does with its rights, built in or installed: it can
+  also change the lists of authors, recovery keys, revocations and code
+  installed in `.paperpaw/`.

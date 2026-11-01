@@ -108,9 +108,13 @@ for others, in one list:
   `Command::request_plugins`; the settings page says "set by …" from
   `Settings::default_from`; the plugin manager says what is missing
   (#72).
-- The store pins a recovery key at first install, hands rotations to
-  `accept_rotation`, keeps the library's revoked keys; the Workshop makes
-  and backs up the recovery key (#20, with the web side).
+- The store pins a recovery key at first install, checks rotations with
+  `check_rotation` and hands them to `accept_rotation` before it writes
+  the install marks, passes the library's signed revocations
+  (`keys::Revocation`) to `keep_revoked`; the Workshop makes and backs up
+  the recovery key (#20, with the web side). The signatures guard against
+  the library and the network, not against code plugins, which have the
+  whole card ([security model](../security-model.md#plugins)).
 - Offers to go online on background paths (weather, news, update
   check, kosync) send `Command::GoOnlineFor`; power settings follow
   `Capabilities::power` (#35).
@@ -130,8 +134,7 @@ for others, in one list:
   card show up (#59); `WifiState::Online::name` from mDNS (#32); the S3
   shells' USB mass storage behind a `usb-drive` feature (#32, owner
   decision on flash); Android reports `Battery::saver` and
-  `PowerControls::system_saver` (#35); the revoked-key list from the
-  store reaches the loader (#20).
+  `PowerControls::system_saver` (#35).
 
 **Kernel engineer, next phase (no interface change)**
 
