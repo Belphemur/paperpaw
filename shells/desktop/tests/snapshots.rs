@@ -180,6 +180,33 @@ const CASES: &[Case] = &[
         fixtures: false,
     },
     Case {
+        name: "x4-pictures-shown",
+        profile: "xteink-x4",
+        book: Some("books/pictures.epub"),
+        sets: &[],
+        script: "wait:300",
+        colour: 0,
+        fixtures: false,
+    },
+    Case {
+        name: "x4-pictures-caption",
+        profile: "xteink-x4",
+        book: Some("books/pictures.epub"),
+        sets: &["aids.pictures=aids.pictures.caption"],
+        script: "wait:300",
+        colour: 0,
+        fixtures: false,
+    },
+    Case {
+        name: "x4-pictures-hidden",
+        profile: "xteink-x4",
+        book: Some("books/pictures.epub"),
+        sets: &["aids.pictures=aids.pictures.hide"],
+        script: "wait:300",
+        colour: 0,
+        fixtures: false,
+    },
+    Case {
         name: "boox-settings",
         profile: "boox-go-7",
         book: None,
@@ -856,6 +883,9 @@ fn library(case: &Case) -> PathBuf {
     let mut sources = vec![root().join("samples/library/books"), fixtures.clone()];
     if case.name.contains("endbook") {
         sources.push(fixtures.with_file_name("fixtures-endbook"));
+    }
+    if case.name.contains("pictures") {
+        sources.push(fixtures.with_file_name("fixtures-pictures"));
     }
     for dir in sources {
         for entry in fs::read_dir(dir).unwrap() {

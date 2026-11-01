@@ -6,11 +6,16 @@
 //! - *Replace words*: pairs `from = to` separated by `;`, e.g. for old
 //!   spellings or names; whole words only, as written.
 //!
-//! Both are off at first and apply to every book.
+//! - *Pictures*: shown as the book has them, a short line in their place
+//!   (the picture's description), or left out.
+//!
+//! All are off at first and apply to every book.
 
 #![no_std]
 
 extern crate alloc;
+
+pub mod pictures;
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
@@ -19,7 +24,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::groups;
 use paperpaw_sdk::document::{Block, BlockKind, Run, TextStyle};
-use paperpaw_sdk::filters::TextFilterSpec;
+use paperpaw_sdk::filters::{FilterContext, TextFilterSpec};
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::{Env, Id, Manifest, Plugin, RegisterError, Registrar, SettingSpec};
 
@@ -28,6 +33,9 @@ pub const PLUGIN: Id = Id::new_static("aids");
 pub const BOLD_BEGINNINGS: Setting<bool> = Setting::new("aids.bold-beginnings");
 /// Setting: words to replace, `from = to; …`.
 pub const REPLACE: Setting<Text> = Setting::new("aids.replace");
+/// Setting: the pictures of books shown, as a caption, or left out
+/// (one of [`pictures::CHOICES`]).
+pub const PICTURES: Setting<Text> = Setting::new("aids.pictures");
 
 /// The pairs of a replacement list: `from = to` separated by `;`.
 fn pairs(list: &str) -> Vec<(String, String)> {
@@ -112,8 +120,8 @@ fn bold_beginnings(block: &mut Block) {
 #[derive(Debug, Default)]
 pub struct Aids;
 
-/// Bold word beginnings, and words replaced.
-static SETTINGS: [SettingSpec; 2] = [
+/// Bold word beginnings, words replaced, pictures.
+static SETTINGS: [SettingSpec; 3] = [
     SettingSpec::switch(
         BOLD_BEGINNINGS.static_str(),
         "aids.setting.bold-beginnings",
@@ -130,6 +138,14 @@ static SETTINGS: [SettingSpec; 2] = [
     .advanced()
     .kept_on_reset()
     .description("aids.setting.replace.help"),
+    SettingSpec::choice(
+        PICTURES.static_str(),
+        "aids.setting.pictures",
+        &pictures::CHOICES,
+        pictures::SHOW,
+        groups::READING_AIDS,
+    )
+    .description("aids.setting.pictures.help"),
 ];
 
 /// How it works, by language (see `Manifest::how`).
@@ -141,7 +157,7 @@ static HOW: [(&str, &str); 2] = [
 impl Plugin for Aids {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Reading aids", paperpaw_sdk::package_version!())
-            .description("Bold word beginnings, replaced words: text as you want it.")
+            .description("Bold word beginnings, replaced words, pictures: text as you want it.")
             .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)
     }
@@ -176,6 +192,15 @@ impl Plugin for Aids {
                     paperpaw_sdk::digest::fnv1a64(list)
                 }
             }),
+        ))?;
+        r.add_text_filter(TextFilterSpec::block(
+            Id::new_static("aids.pictures"),
+            "aids.setting.pictures",
+            Box::new(|env: &Env<'_>, cx: &FilterContext<'_>, block: &mut Block| {
+                let choice = env.settings().read(&PICTURES);
+                pictures::apply(choice, cx.path, env.i18n(), block)
+            }),
+            Box::new(|env: &Env<'_>| pictures::signature(env.settings().read(&PICTURES))),
         ))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;

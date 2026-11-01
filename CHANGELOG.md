@@ -58,6 +58,10 @@ change the plugin SDK.
 - Each release has `paperpaw-fontgen`, which makes bitmap font packs (and, with `--family`, a font plugin to copy to the
   card), built for Windows (x64), macOS (Apple silicon and Intel) and Linux (x64): `paperpaw-fontgen-<version>-<computer>.zip`,
   with its SHA-256 and a signature of its own, like the emulators.
+- *Pictures in books* (Settings › Reading › Reading aids, in the `aids` plugin): show them as the book has them
+  (as before), put a short line such as `[Picture: Rings of light]` in their place (the picture's description,
+  centred, italic), or leave them out. No picture is decoded for a picture not shown. Comics and other books
+  made of pictures (CBZ, XTC) are not changed. It needs no SDK change.
 
 ### Changed
 
