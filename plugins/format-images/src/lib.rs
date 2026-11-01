@@ -7,7 +7,7 @@
 //!   direction is not asked. The title is the file's name. The picture on
 //!   the first page is the book's cover.
 //! - **How:** the folder is listed once when a picture is opened (at most
-//!   [`MAX_PAGES`] pages, the first in order), and a picture is decoded a
+//!   `MAX_PAGES` pages, the first in order), and a picture is decoded a
 //!   few rows at a time when its page shows, into the plugin's folder
 //!   for the book, so one picture is in memory at most. A file that is no
 //!   picture, or that is too large, is a page with its name on it.
