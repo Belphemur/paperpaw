@@ -20,7 +20,7 @@ enum paperpaw_platform::display::RefreshMode { Mono, Fast, Partial, Gray, Full, 
 enum paperpaw_platform::display::Rotation { Deg0, Deg90, Deg180, Deg270 }
 enum paperpaw_platform::input::ButtonState { Pressed, Released }
 enum paperpaw_platform::input::InputEvent { Button { name: &'static str, state: paperpaw_platform::input::ButtonState }, Pointer(0: paperpaw_platform::input::PointerEvent) }
-enum paperpaw_platform::input::PointerPhase { Down, Move, Up, Cancel }
+enum paperpaw_platform::input::PointerPhase { Down, Move, Up, Cancel, Hover }
 enum paperpaw_platform::input::PointerTool { Finger, Pen, Eraser, Mouse }
 enum paperpaw_platform::pixel::PixelFormat { Mono1, Gray2, Gray4, Gray8, Rgb565, Rgb888, Other { code: u16, bits: u8 } }
 enum paperpaw_platform::storage::StorageError { NotFound, InvalidPath, Unsupported, Full, Io, TooLarge, InvalidData, Other(0: u16) }
@@ -32,7 +32,7 @@ struct paperpaw_platform::geometry::Point { x: i32, y: i32 }
 struct paperpaw_platform::geometry::Rect { x: u16, y: u16, width: u16, height: u16 }
 struct paperpaw_platform::input::InputCaps { buttons: bool, touch: bool, pen: bool, keys: &'static [&'static str] }
 struct paperpaw_platform::input::Instant(0: u64)
-struct paperpaw_platform::input::PointerEvent { id: u8, phase: paperpaw_platform::input::PointerPhase, point: paperpaw_platform::geometry::Point, tool: paperpaw_platform::input::PointerTool, pressure: u16 }
+struct paperpaw_platform::input::PointerEvent { id: u8, phase: paperpaw_platform::input::PointerPhase, point: paperpaw_platform::geometry::Point, tool: paperpaw_platform::input::PointerTool, pressure: u16, tilt_x: i8, tilt_y: i8 }
 struct paperpaw_platform::pixel::Color { r: u8, g: u8, b: u8 }
 struct paperpaw_platform::status::Battery { percent: u8, charging: bool, millivolts: core::option::Option<u16>, saver: bool }
 struct paperpaw_platform::status::SystemStatus { clock: core::option::Option<paperpaw_platform::status::WallClock>, battery: core::option::Option<paperpaw_platform::status::Battery>, values: [(&'static str, i64); 8] }

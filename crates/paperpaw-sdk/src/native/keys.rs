@@ -21,11 +21,23 @@
 //! revoked key itself or by the plugin's pinned recovery key, about the key
 //! pinned as that plugin's author here. The store hands them to
 //! [`keep_revoked`], which keeps those that hold, and none is ever taken
-//! off; the list is checked again where it is read (any plugin can write
-//! the card). So no plugin and no taken-over library can revoke another
-//! author's key. The kernel does not load the code of a plugin whose known
-//! author's key is among them
-//! ([`PluginProblem::Revoked`](crate::PluginProblem::Revoked)).
+//! off; the list is checked again where it is read. So no library can
+//! revoke a key it does not hold. A revocation is about one plugin: the
+//! kernel does not load that plugin's code
+//! ([`PluginProblem::Revoked`](crate::PluginProblem::Revoked)), and other
+//! plugins the same key signed have revocations of their own.
+//!
+//! **Threat model.** Installed plugins are trusted: every plugin has the
+//! whole card (owner decision 44: freedom over security; there is no
+//! sandbox), so nothing here guards against a plugin on the device. The
+//! author, recovery and revocation checks guard against outside attackers:
+//! a rogue or compromised library or catalogue, the network between it and
+//! the device, and forged or replayed statements. The kernel therefore
+//! believes no data from outside without a signature it checks itself: a
+//! rotation must be signed by the plugin's pinned recovery key, and a
+//! revocation by the revoked key itself or by that recovery key, for a key
+//! pinned on this device. It checks this both when it keeps an entry and
+//! when it reads its lists from the card. The store only carries bytes.
 
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -567,8 +579,8 @@ mod tests {
 
     /// A revocation holds where it is about the key pinned as the
     /// plugin's author and signed by that key or the recovery key; any
-    /// other is left out, so no plugin and no taken-over library can
-    /// revoke another author's key (#20, review of #277).
+    /// other is left out, so no taken-over library can revoke another
+    /// author's key (#20, review of #277).
     #[test]
     fn only_signed_revocations_of_the_pinned_author_are_kept() {
         let storage = installed();

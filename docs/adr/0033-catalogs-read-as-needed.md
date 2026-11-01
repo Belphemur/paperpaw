@@ -76,12 +76,15 @@ A catalog can stay on the card and be read as needed.
 
 ## The batch it landed in
 
-**Build from `ba270129` or later.** The bless (`26bdc02c`) changed the plugin
+**Build from `e5f4a41a` or later.** The bless (`26bdc02c`) changed the plugin
 fingerprint; shared bodies changed after it (digits, the right-to-left
 mirroring of the shared UI, Hangul composition), which a fingerprint of
-layouts and constants does not see. The table-compat baseline is
-`ba270129`: every store, test-card and Workshop build of this release comes
-from it or later, and builds of the commits between are thrown away.
+layouts and constants does not see. The pen and TLS reservations
+(`e5f4a41a`, #81) changed the fingerprint once more: `PointerEvent` kept its
+size, so the layout digest now also holds where its fields lie. The
+table-compat baseline is `e5f4a41a`: every store, test-card and Workshop
+build of this release comes from it or later, and builds of the commits
+before are thrown away.
 
 The owner put every queued interface change into the same re-bless of
 interface 5 (2026-11-01, branch `kernel/iface5-catalog-ondemand`): one
@@ -108,9 +111,11 @@ for others, in one list:
   `Command::request_plugins`; the settings page says "set by …" from
   `Settings::default_from`; the plugin manager says what is missing
   (#72).
-- The store pins a recovery key at first install, hands rotations to
-  `accept_rotation`, keeps the library's revoked keys; the Workshop makes
-  and backs up the recovery key (#20, with the web side).
+- The store pins a recovery key at first install, checks rotations with
+  `check_rotation` and hands them to `accept_rotation` before it writes
+  the install marks, passes the library's signed revocations
+  (`keys::Revocation`) to `keep_revoked`; the Workshop makes and backs up
+  the recovery key (#20, with the web side; threat model below).
 - Offers to go online on background paths (weather, news, update
   check, kosync) send `Command::GoOnlineFor`; power settings follow
   `Capabilities::power` (#35).
@@ -124,14 +129,25 @@ for others, in one list:
   first; about 100 `r.on` in all), move to `FixedWidget` and `hears!`
   lists; state they capture moves to statics or a service first.
 
+**Threat model** (#20). Installed plugins are trusted: every plugin has the
+whole card (owner decision 44: freedom over security; there is no
+sandbox), so nothing here guards against a plugin on the device. The
+author, recovery and revocation checks guard against outside attackers: a
+rogue or compromised library or catalogue, the network between it and the
+device, and forged or replayed statements. The kernel therefore believes
+no data from outside without a signature it checks itself: a rotation must
+be signed by the plugin's pinned recovery key, and a revocation by the
+revoked key itself or by that recovery key, for a key pinned on this
+device. It checks this both when it keeps an entry and when it reads its
+lists from the card. The store only carries bytes.
+
 **Firmware engineer**
 
 - The X4 shells call `KernelBuilder::font_dir` so packs loose on the
   card show up (#59); `WifiState::Online::name` from mDNS (#32); the S3
   shells' USB mass storage behind a `usb-drive` feature (#32, owner
   decision on flash); Android reports `Battery::saver` and
-  `PowerControls::system_saver` (#35); the revoked-key list from the
-  store reaches the loader (#20).
+  `PowerControls::system_saver` (#35).
 
 **Kernel engineer, next phase (no interface change)**
 

@@ -3460,6 +3460,11 @@ pub paperpaw_sdk::replies::SocketNotice::Received::text: alloc::string::String
 pub paperpaw_sdk::replies::SocketNotice::Saved
 pub paperpaw_sdk::replies::SocketNotice::Saved::path: alloc::string::String
 pub paperpaw_sdk::replies::SocketNotice::Saved::socket: paperpaw_sdk::Id
+pub paperpaw_sdk::replies::SocketNotice::Secured
+pub paperpaw_sdk::replies::SocketNotice::Secured::socket: paperpaw_sdk::Id
+pub paperpaw_sdk::replies::SocketNotice::Untrusted
+pub paperpaw_sdk::replies::SocketNotice::Untrusted::certificate: alloc::string::String
+pub paperpaw_sdk::replies::SocketNotice::Untrusted::socket: paperpaw_sdk::Id
 impl paperpaw_sdk::replies::SocketNotice
 pub fn paperpaw_sdk::replies::SocketNotice::socket(&self) -> &paperpaw_sdk::Id
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::SocketNotice
@@ -5922,6 +5927,11 @@ pub paperpaw_sdk::SocketNotice::Received::text: alloc::string::String
 pub paperpaw_sdk::SocketNotice::Saved
 pub paperpaw_sdk::SocketNotice::Saved::path: alloc::string::String
 pub paperpaw_sdk::SocketNotice::Saved::socket: paperpaw_sdk::Id
+pub paperpaw_sdk::SocketNotice::Secured
+pub paperpaw_sdk::SocketNotice::Secured::socket: paperpaw_sdk::Id
+pub paperpaw_sdk::SocketNotice::Untrusted
+pub paperpaw_sdk::SocketNotice::Untrusted::certificate: alloc::string::String
+pub paperpaw_sdk::SocketNotice::Untrusted::socket: paperpaw_sdk::Id
 impl paperpaw_sdk::replies::SocketNotice
 pub fn paperpaw_sdk::replies::SocketNotice::socket(&self) -> &paperpaw_sdk::Id
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::SocketNotice
@@ -6025,6 +6035,8 @@ pub const paperpaw_sdk::Capability::KEYBOARD: Self
 pub const paperpaw_sdk::Capability::LOOK_EXTRAS: Self
 pub const paperpaw_sdk::Capability::PAGE_KEYS: Self
 pub const paperpaw_sdk::Capability::PAGE_TURNER: Self
+pub const paperpaw_sdk::Capability::PEN_HOVER: Self
+pub const paperpaw_sdk::Capability::PEN_TILT: Self
 pub const paperpaw_sdk::Capability::RENDER_HOOK: Self
 pub const paperpaw_sdk::Capability::RENDER_REGIONS: Self
 pub const paperpaw_sdk::Capability::USB_DRIVE: Self
