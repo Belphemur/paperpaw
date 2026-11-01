@@ -20,6 +20,9 @@
 #![deny(clippy::let_underscore_must_use)]
 
 pub mod catalog;
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+pub mod emptiness;
 mod fingerprint;
 pub mod index;
 pub mod listing;
