@@ -27,6 +27,24 @@ pub struct SchemaEntry {
     pub sql: String,
 }
 
+/// A row [`Database::scan_bounded`] visits.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Row<'v> {
+    /// The row's values.
+    Values(&'v [Value]),
+    /// A row passed over: its payload (the record as stored) is this many
+    /// bytes, more than the scan's limit. Nothing of it was allocated and
+    /// its overflow pages were not read.
+    Oversized(u64),
+}
+
+/// A row as a scan reads it: its values, or the size of a payload past
+/// the limit.
+enum Record {
+    Values(Vec<Value>),
+    Oversized(u64),
+}
+
 /// An open database file.
 pub struct Database<'s> {
     storage: &'s dyn Storage,
@@ -109,7 +127,11 @@ impl<'s> Database<'s> {
     pub fn schema(&self) -> Result<Vec<SchemaEntry>, Error> {
         let mut entries = Vec::new();
         let mut failed = None;
-        self.rows(1, &mut |_, mut values| {
+        self.rows(1, usize::MAX, &mut |_, record| {
+            // Nothing is past no limit.
+            let Record::Values(mut values) = record else {
+                return true;
+            };
             let mut text = |i: usize| match values.get_mut(i) {
                 Some(Value::Text(text)) => core::mem::take(text),
                 _ => String::new(),
@@ -153,11 +175,39 @@ impl<'s> Database<'s> {
         root: u32,
         visit: &mut dyn FnMut(i64, &[Value]) -> bool,
     ) -> Result<(), Error> {
-        self.rows(root, &mut |id, values| visit(id, &values))
+        self.rows(root, usize::MAX, &mut |id, record| match record {
+            Record::Values(values) => visit(id, &values),
+            Record::Oversized(_) => true,
+        })
     }
 
-    /// [`Database::scan`], handing the values over.
-    fn rows(&self, root: u32, visit: &mut dyn FnMut(i64, Vec<Value>) -> bool) -> Result<(), Error> {
+    /// [`Database::scan`], but a row whose payload (the record as stored)
+    /// is more than `max_payload` bytes is visited as [`Row::Oversized`]:
+    /// nothing of it is allocated and its overflow pages are not read. A
+    /// row read takes about twice its payload while it is decoded, so one
+    /// huge row cannot fail the scan for want of memory.
+    ///
+    /// A payload larger than the file is still [`Error::Corrupt`].
+    pub fn scan_bounded(
+        &self,
+        root: u32,
+        max_payload: usize,
+        visit: &mut dyn FnMut(i64, Row<'_>) -> bool,
+    ) -> Result<(), Error> {
+        self.rows(root, max_payload, &mut |id, record| match record {
+            Record::Values(values) => visit(id, Row::Values(&values)),
+            Record::Oversized(size) => visit(id, Row::Oversized(size)),
+        })
+    }
+
+    /// The rows of the table at `root`, handing the values over; payloads
+    /// over `max_payload` bytes are not read.
+    fn rows(
+        &self,
+        root: u32,
+        max_payload: usize,
+        visit: &mut dyn FnMut(i64, Record) -> bool,
+    ) -> Result<(), Error> {
         let mut seen = Seen::new(self.pages)?;
         let mut buffer = zeroed(self.page_size)?;
         // The interior pages above the current one: page number, the child
@@ -177,7 +227,7 @@ impl<'s> Database<'s> {
                 number = node.child(page, 0)?;
                 continue;
             }
-            if !self.leaf(page, node, &mut seen, visit)? {
+            if !self.leaf(page, node, max_payload, &mut seen, visit)? {
                 return Ok(());
             }
             // Up to the next child not visited yet, read again from its
@@ -204,8 +254,9 @@ impl<'s> Database<'s> {
         &self,
         page: &[u8],
         node: Node,
+        max_payload: usize,
         seen: &mut Seen,
-        visit: &mut dyn FnMut(i64, Vec<Value>) -> bool,
+        visit: &mut dyn FnMut(i64, Record) -> bool,
     ) -> Result<bool, Error> {
         // The cells must fit in the page side by side, so overlapping ones
         // cannot multiply the work.
@@ -221,16 +272,30 @@ impl<'s> Database<'s> {
             if size > u64::from(self.pages) * self.usable as u64 {
                 return Err(Error::Corrupt("payload size"));
             }
+            let stored_size = size;
             let size = usize::try_from(size).map_err(|_| Error::OutOfMemory)?;
             let local = local_size(size, self.usable, true);
             let link = if local < size { 4 } else { 0 };
             room = room
                 .checked_sub(n + m + local + link)
                 .ok_or(Error::Corrupt("cell sizes"))?;
-            let payload = self.payload(&cell[n + m..], size, seen)?;
-            let values = decode(&payload)?;
-            drop(payload);
-            if !visit(rowid as i64, values) {
+            let record = if size > max_payload {
+                // What is in the page is checked as for a row read; the
+                // overflow chain is not followed.
+                let stored = cell
+                    .get(n + m..n + m + local + link)
+                    .ok_or(Error::Corrupt("payload"))?;
+                if let Some(&[a, b, c, d]) = stored.get(local..) {
+                    self.offset(u32::from_be_bytes([a, b, c, d]))?;
+                }
+                Record::Oversized(stored_size)
+            } else {
+                let payload = self.payload(&cell[n + m..], size, seen)?;
+                let values = decode(&payload)?;
+                drop(payload);
+                Record::Values(values)
+            };
+            if !visit(rowid as i64, record) {
                 return Ok(false);
             }
         }

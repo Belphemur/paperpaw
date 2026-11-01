@@ -24,6 +24,10 @@ change the plugin SDK.
   oldest it runs), read from the firmware's ELF file (`PAPERPAW_NATIVE_ABI`, `paperpaw-sign abi`). The store
   and the web flasher use them to refuse a plugin that needs more than a firmware has; the first line is the
   fingerprint as before.
+- `paperpaw-sqlite`: `Database::scan_bounded` reads a table like `scan`, but a row whose payload is more than a
+  given number of bytes comes as `Row::Oversized(size)`: nothing of it is allocated and its overflow pages are not
+  read. One huge row (a picture kept in a note) then no longer fails the whole table for want of memory. Not part
+  of the plugin interface.
 
 ### Changed
 

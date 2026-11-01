@@ -14,7 +14,7 @@ mod common;
 
 use common::{Memory, PAGE, read_rows, text, write_table};
 use paperpaw_platform::StorageError;
-use paperpaw_sqlite::{Database, Error, Value, decode_record};
+use paperpaw_sqlite::{Database, Error, Row, Value, decode_record};
 use proptest::prelude::*;
 
 /// A database whose table `t` is a single leaf, page 2.
@@ -326,6 +326,81 @@ fn a_looping_overflow_chain_is_corrupt_soon() {
     }
 }
 
+/// A row a bounded scan saw: its record, or its payload size.
+type Bounded = Result<Vec<u8>, u64>;
+
+/// The rows of `t` a scan bounded to `max_payload` bytes sees: each one's
+/// id and its record, or its payload size if it was passed over.
+fn read_bounded(storage: &Memory, max_payload: usize) -> Result<Vec<(i64, Bounded)>, Error> {
+    let db = Database::open(storage, "db")?;
+    let (_, root) = db.table("t")?;
+    let mut rows = Vec::new();
+    db.scan_bounded(root, max_payload, &mut |id, row| {
+        rows.push((
+            id,
+            match row {
+                Row::Values(values) => Ok(paperpaw_sqlite::encode_record(values)),
+                Row::Oversized(size) => Err(size),
+            },
+        ));
+        true
+    })?;
+    Ok(rows)
+}
+
+/// A bounded scan passes over a payload past its limit without reading
+/// its overflow chain, so a broken chain there goes unseen; but a payload
+/// longer than the file, or a first overflow page that is not there, is
+/// still corrupt, and a payload within the limit is read and checked.
+#[test]
+fn a_bounded_scan_still_refuses_corrupt_payload_sizes() {
+    let storage = Memory::with("db", overflowing(20_000, 0));
+    assert_eq!(
+        read_bounded(&storage, 1000),
+        Err(Error::Corrupt("payload size"))
+    );
+    let storage = Memory::with("db", overflowing(1 << 40, 0));
+    assert_eq!(
+        read_bounded(&storage, 1000),
+        Err(Error::Corrupt("payload size"))
+    );
+    // A chain that loops: passed over unread, or refused once read.
+    let storage = Memory::with("db", overflowing(TWO_OVERFLOW_PAGES, 3));
+    storage.budget.set(Some(10_000));
+    assert_eq!(
+        read_bounded(&storage, 1000),
+        Ok(vec![(1, Err(TWO_OVERFLOW_PAGES))])
+    );
+    assert!(storage.reads.get() < 10, "{} reads", storage.reads.get());
+    assert_eq!(
+        read_bounded(&storage, TWO_OVERFLOW_PAGES as usize),
+        Err(Error::Corrupt("page used twice"))
+    );
+    // The first overflow page is past the end of the file.
+    let mut file = overflowing(TWO_OVERFLOW_PAGES, 0);
+    file[2 * PAGE - 4..2 * PAGE].copy_from_slice(&77u32.to_be_bytes());
+    let storage = Memory::with("db", file);
+    assert_eq!(
+        read_bounded(&storage, 1000),
+        Err(Error::Corrupt("page number"))
+    );
+    // The last cell of the page claims more than the page holds after it.
+    let mut file = leaf_db();
+    let last = (0..3)
+        .map(|i| {
+            usize::from(u16::from_be_bytes([
+                file[PAGE + 8 + 2 * i],
+                file[PAGE + 9 + 2 * i],
+            ]))
+        })
+        .max()
+        .unwrap();
+    assert!(PAGE - last < 100);
+    file[PAGE + last] = 127;
+    let storage = Memory::with("db", file);
+    assert_eq!(read_bounded(&storage, 10), Err(Error::Corrupt("payload")));
+}
+
 /// A record whose header claims to be as large as a u64 can be.
 #[test]
 fn a_record_header_of_huge_size_is_malformed_not_a_panic() {
@@ -397,8 +472,9 @@ proptest! {
         {
             for entry in schema {
                 let _ = db.scan(entry.root, &mut |_, _| true);
+                let _ = db.scan_bounded(entry.root, 100, &mut |_, _| true);
             }
         }
-        prop_assert!(storage.reads.get() <= 10_001);
+        prop_assert!(storage.reads.get() <= 10_002);
     }
 }
