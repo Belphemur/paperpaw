@@ -13,6 +13,7 @@
 //! | `swipe:400:400:100:400` | swipe from one point to another |
 //! | `down:240:400`, `move:300:400`, `up:300:400` | a finger put down, moved and lifted, step by step (e.g. to look at a slider while it moves) |
 //! | `wait:500` | let 500 ms pass |
+//! | `size:1024x768` | the screen is made 1024×768 pixels, as a window of that size gives it (`--free-size`): every open screen is made anew |
 //! | `run:calibre.open` | run an action, as a button bound to it would |
 //! | `open:home.add-widget:kind=core.widgets.books` | open a screen with its parameters, as a plugin would |
 //! | `redraw` | draw the whole screen again, nothing on it changed |
@@ -105,6 +106,18 @@ fn run_step(device: &mut Device, step: &str) -> Result<(), String> {
                 params = params.with(key.to_string(), value);
             }
             device.open_screen(screen, params);
+        }
+        ["size", size] => {
+            let side = |s: &str| {
+                s.parse::<u32>()
+                    .map_err(|_| format!("`{size}` is not <width>x<height>"))
+            };
+            let (width, height) = size
+                .split_once('x')
+                .ok_or_else(|| format!("`{size}` is not <width>x<height>"))?;
+            let (width, height) = crate::resize::panel_size((side(width)?, side(height)?))
+                .ok_or_else(|| format!("`{size}` leaves no room for a screen"))?;
+            device.resize_to(width, height);
         }
         ["redraw"] => device.draw_again(),
         ["phone-joins"] => device.phone_joins(),

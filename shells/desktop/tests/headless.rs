@@ -340,6 +340,40 @@ fn turning_the_screen_trades_the_panels_width_and_height() {
     let _ = fs::remove_dir_all(&library);
 }
 
+/// A window that sets the size of the screen (`--free-size`; a headless
+/// run has the step `size:`): the panel has that size, within the sizes
+/// screens are made at, and the screens are made anew for it.
+#[test]
+fn the_size_step_sets_the_size_of_the_screen() {
+    let library = library("free-size");
+    let shot = library.join("shot.png");
+    let shot_arg = shot.to_str().unwrap();
+    let args = ["--set", "reader.open-last=false", "--screenshot", shot_arg];
+    let wide = run_in(&library, "xteink-x4", "size:1024x600", &args);
+    assert!(wide.ok, "{}", wide.stderr);
+    assert_eq!(size(&shot), (1024, 600));
+    assert_eq!(wide.screen(), "home.dashboard");
+    // A tablet's size on a phone's profile, then back to the panel's own.
+    let again = run_in(&library, "xteink-x4", "size:1024x600,size:480x800", &args);
+    assert!(again.ok, "{}", again.stderr);
+    assert_eq!(size(&shot), (480, 800));
+    // Too small a window is a screen of the smallest size.
+    let small = run_in(&library, "xteink-x4", "size:100x100", &args);
+    assert!(small.ok, "{}", small.stderr);
+    assert_eq!(size(&shot), (240, 240));
+    // Not a size.
+    for wrong in ["size:wide", "size:10x", "size:0x0"] {
+        let run = run_in(&library, "xteink-x4", wrong, &args);
+        assert!(!run.ok, "{wrong}");
+        assert!(
+            run.stderr.contains(&format!("step `{wrong}`")),
+            "{}",
+            run.stderr
+        );
+    }
+    let _ = fs::remove_dir_all(&library);
+}
+
 /// A plugin switched on in the plugin manager applies after the restart
 /// it offers: the emulated device builds its kernel anew, the plugin on.
 #[test]

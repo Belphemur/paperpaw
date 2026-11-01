@@ -26,7 +26,7 @@ shells/web/
 `python shells/web/build.py --serve` builds the module with the `web`
 profile, which is the release profile with symbols stripped. It then
 serves `www/` on `http://localhost:8000`. There, `frame.html` is a
-device alone, as in `frame.html?profile=boox-go-7&language=de&dark`.
+device alone, as in `frame.html?profile=boox-go-7&language=de&dark`; with `&free` the screen is as large as the window leaves room for (see "Free size" below).
 `index.html` is a page around it that loads a data plugin's folder and
 checks it.
 
@@ -66,7 +66,7 @@ loaded, `{ type: "error", error }` in place of `ready`. Before `start`, only
 
 | Message to the frame | Effect | Answer |
 |---|---|---|
-| `{ type: "start", profile, language, dark, buttons?, look?, plugins: [{ id, files: { path: bytes } }] }` | Starts a device (`xteink-x4`, `xteink-x4-pro`, `boox-go-7`, or another profile of the emulator); each plugin's files go into its storage under `plugins/<id>/`, as a card would have them; `buttons: false` leaves out the keys drawn, `look` colours the body and its keys (see below) | `{ device: { id, name, width, height, dpi, grays, color, touch, buttons, row, body, version } }` |
+| `{ type: "start", profile, language, dark, buttons?, look?, free?, plugins: [{ id, files: { path: bytes } }] }` | Starts a device (`xteink-x4`, `xteink-x4-pro`, `boox-go-7`, or another profile of the emulator); each plugin's files go into its storage under `plugins/<id>/`, as a card would have them; `buttons: false` leaves out the keys drawn, `look` colours the body and its keys (see below), `free: true` makes the screen as large as the window leaves room for (see "Free size") | `{ device: { id, name, width, height, dpi, grays, color, touch, buttons, row, body, version } }` |
 | `{ type: "files", id, files }` | Replaces a data plugin's files (whatever of it was on the card goes) and starts the device again (a few milliseconds); `files: {}` takes it off | `{}` |
 | `{ type: "input", event }` | `event`: `{ kind: "button", name, pressed }`, `{ kind: "button", name, hold }` (a long press, held `hold` ms), `{ kind: "key", key, pressed }` (the keyboard's keys as the desktop emulator maps them), `{ kind: "pointer", phase: "down" \| "move" \| "up" \| "cancel", x, y }` (the screen's pixels) | `{}` |
 | `{ type: "screenshot", profile?, dark?, asleep? }` | The panel as it shows, at the device's resolution; with `profile`, `dark` or `asleep`, what that device, night mode or the sleep screen would show with the same card, made apart (what is shown stays) | `{ png }` (bytes) |
@@ -216,6 +216,21 @@ calls `pp_plugins` first where a module has it; the frame and its
 messages stay the same, and `check` with `plugins: ["<id>"]` looks at
 the plugin as `paperpaw-dev check --plugin <id>` does (`lint`, `visual`,
 `reach`, `perf`).
+
+## Free size
+
+By default the canvas shows the device's panel at its own size, scaled to
+fit the window (each pixel a whole number of the screen's own where it
+fits): an e-ink panel is the size it is. With `free` (`frame.html?free`,
+or `free: true` in the `start` message) the window sets the size of the
+screen instead: the room it leaves, in CSS pixels, on a plain body
+(no device keys drawn), at the profile's density. Every open screen is made
+anew (`Kernel::resize`, as when the reader turns the screen) once the
+window has kept its size for 200 ms; the screen is kept within 240 and
+2400 pixels a side (`paperpaw_emulator::resize`). The device's `size()` and
+`pp_resize(width, height)` are the module's side of it; the profile's
+buttons are the keyboard's alone. It is for trying a screen that adapts,
+not for what a device looks like.
 
 ## The module
 

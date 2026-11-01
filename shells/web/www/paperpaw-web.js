@@ -166,6 +166,13 @@ export class PaperPawDevice {
     return next < 0 ? null : next;
   }
 
+  /// Makes the screen as large as a canvas of `width` x `height` pixels
+  /// (kept within the sizes screens are made at; see `size()` for what
+  /// it became): every open screen is made anew for it.
+  resize(width, height) {
+    this.#check(this.exports.pp_resize(Math.max(0, Math.round(width)), Math.max(0, Math.round(height))));
+  }
+
   /// The screen's size in pixels.
   size() {
     return [this.exports.pp_width(), this.exports.pp_height()];

@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use paperpaw_emulator::device::Device;
-use paperpaw_emulator::{budget, cable, device, headless, profiles, trace};
+use paperpaw_emulator::{budget, cable, device, headless, profiles, resize, trace};
 
 const USAGE: &str = "\
 PaperPaw emulator
@@ -35,6 +35,14 @@ OPTIONS:
     --set <key>=<value>   Override configuration, e.g. --set core.language=de
                           or --set slots.core.home=core.placeholder
     --headless            Run without a window
+    --free-size           The window sets the size of the screen (its logical
+                          pixels, at the device's density): every screen is
+                          made anew when the window has kept a size for a
+                          moment. Without it the device keeps its panel's size
+                          and the window only scales it, as an e-ink panel is.
+                          For trying screens that adapt: phones, tablets,
+                          landscape. A headless run has the script step
+                          `size:<width>x<height>`.
     --script <steps>      Input steps, e.g. \"page-forward,long:confirm,tap:100:200\"
     --screenshot <file>   Save a PNG of the panel after the script (headless)
     --library <dir>       Folder emulating the device storage
@@ -90,6 +98,8 @@ struct Options {
     heap_report: bool,
     /// The cable transfer on standard input and output.
     cable: bool,
+    /// The window sets the size of the screen (`--free-size`).
+    free_size: bool,
     /// Install the code plugins built for this computer on the card.
     trust_code: bool,
     /// Requests answered from the emulator's fixtures (`--network`).
@@ -198,7 +208,7 @@ fn run() -> Result<(), String> {
     let dir = options
         .screenshot_dir
         .unwrap_or_else(|| PathBuf::from("out"));
-    gui::run(device, dir, recorder, options.cable)
+    gui::run(device, dir, recorder, options.cable, options.free_size)
 }
 
 /// `--wifi`'s value: whether the device starts online.
@@ -310,6 +320,7 @@ fn parse_args(mut args: impl Iterator<Item = String>) -> Result<Option<Options>,
             }
             "--headless" => options.headless = true,
             "--cable" => options.cable = true,
+            "--free-size" => options.free_size = true,
             "--script" => options.script = Some(value("--script")?),
             "--screenshot" => options.screenshot = Some(PathBuf::from(value("--screenshot")?)),
             "--library" => options.library = Some(PathBuf::from(value("--library")?)),

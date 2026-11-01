@@ -252,6 +252,15 @@ public-domain books are included as EPUB and TXT. Put your own `.epub` and
 `.txt` files into
 `samples/library/books` or point `--library` at any folder.
 
+A window keeps its device's panel size and only scales it, as an e-ink panel
+is what it is. To try a screen that adapts (a phone, a tablet, landscape),
+`--free-size` lets the window set the size of the screen instead: its
+logical pixels at the profile's density, between 240 and 2400 on a side,
+every screen made anew once the window has kept a size for 200 ms. The
+profile's buttons and heap budget stay (`--heap-budget none` for a large
+size). A headless run has the script step `size:1024x768`, and the web
+emulator `frame.html?free` (see `docs/web-emulator.md`).
+
 The emulator enforces each device's heap budget on the kernel. So memory
 problems show up on the desktop before they show up on hardware.
 `--heap-budget none` shows the real peak. `--trace-alloc 1024` lists the

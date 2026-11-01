@@ -25,7 +25,8 @@ use crate::epd::Epd;
 use crate::lights::Lights;
 use crate::plugin::{AndroidPlugin, Frontlight};
 use crate::private::Private;
-use crate::{access, keys, pixels, status};
+use crate::screen::Content;
+use crate::{access, insets, keys, pixels, status};
 
 /// Where the device's shared storage appears in PaperPaw's storage.
 const SHARED: &str = "storage";
@@ -46,8 +47,12 @@ const SYSTEM_FONTS: &str = "fonts";
 /// The running app once the window size is known.
 struct Running {
     kernel: Kernel,
-    /// The whole screen, as the window shows it.
+    /// The whole screen, as the window shows it: what the system leaves of
+    /// the window (`content`).
     frame: Framebuffer,
+    /// Where the screen lies in the window, the system's insets off (see
+    /// `screen`): the window's whole size where it has none.
+    content: Content,
     wake_at: Option<Instant>,
     /// The kernel asked to be built again (e.g. plugins were switched).
     restart: bool,
@@ -134,7 +139,13 @@ fn android_main(app: AndroidApp) {
                             if let Some(epd) = epd.as_mut() {
                                 epd.set(RefreshMode::Full);
                             }
-                            present(window, &running.frame, running.kernel.colors(), None);
+                            present(
+                                window,
+                                &running.frame,
+                                &running.content,
+                                running.kernel.colors(),
+                                None,
+                            );
                         }
                     }
                 }
@@ -142,26 +153,46 @@ fn android_main(app: AndroidApp) {
                 | MainEvent::WindowResized { .. }
                 | MainEvent::ConfigChanged { .. } => {
                     if let (Some(window), Some(running)) = (&window, running.as_mut()) {
-                        // Turned: the same screens, made anew for the new size.
-                        let size = (window.width(), window.height());
-                        let frame = (
-                            i32::from(running.frame.width()),
-                            i32::from(running.frame.height()),
+                        // Turned, or another window (a split screen) or other
+                        // insets: the same screens, made anew for the size the
+                        // system leaves.
+                        let window_size = (
+                            u32::try_from(window.width()).unwrap_or(0),
+                            u32::try_from(window.height()).unwrap_or(0),
                         );
-                        if size != frame
+                        let content = Content::of(window_size, insets::read(&app));
+                        let frame = (
+                            u32::from(running.frame.width()),
+                            u32::from(running.frame.height()),
+                        );
+                        let moved = content != running.content;
+                        if (content.width, content.height) != frame
                             && let (Ok(width), Ok(height)) =
-                                (u16::try_from(size.0), u16::try_from(size.1))
+                                (u16::try_from(content.width), u16::try_from(content.height))
                             && let Ok(new) = Framebuffer::new(width, height, running.frame.format())
                         {
                             running.frame = new;
+                            running.content = content;
                             let effects = running.kernel.resize(now(), width, height);
                             apply(running, effects);
                             running.changed_rows = None;
                             if let Some(epd) = epd.as_mut() {
                                 epd.set(RefreshMode::Full);
                             }
+                        } else if moved {
+                            // The same size, somewhere else: shown again.
+                            running.content = content;
+                            if let Some(epd) = epd.as_mut() {
+                                epd.set(RefreshMode::Full);
+                            }
                         }
-                        present(window, &running.frame, running.kernel.colors(), None);
+                        present(
+                            window,
+                            &running.frame,
+                            &running.content,
+                            running.kernel.colors(),
+                            None,
+                        );
                     }
                 }
                 MainEvent::Resume { .. } => {
@@ -216,7 +247,7 @@ fn android_main(app: AndroidApp) {
                 // What PaperPaw takes is handled, also when it brings no
                 // event (a held key's repeats): Android would otherwise act
                 // on it too, e.g. change the volume.
-                let Some(events) = input(event) else {
+                let Some(events) = input(event, &state.content) else {
                     return InputStatus::Unhandled;
                 };
                 for event in events {
@@ -322,7 +353,13 @@ fn android_main(app: AndroidApp) {
                 if let Some(epd) = epd.as_mut() {
                     epd.set(RefreshMode::Full);
                 }
-                present(window, &running.frame, running.kernel.colors(), None);
+                present(
+                    window,
+                    &running.frame,
+                    &running.content,
+                    running.kernel.colors(),
+                    None,
+                );
             }
             unshown = false;
         }
@@ -360,7 +397,16 @@ fn start_kernel(
     lights: Option<Lights>,
     now: Instant,
 ) -> Option<Running> {
-    let (width, height) = (window.width(), window.height());
+    // The system's bars and cutout are not part of the screen: the kernel
+    // is told of what is left (see `screen`).
+    let content = Content::of(
+        (
+            u32::try_from(window.width()).unwrap_or(0),
+            u32::try_from(window.height()).unwrap_or(0),
+        ),
+        insets::read(app),
+    );
+    let (width, height) = (content.width, content.height);
     let dpi = app.config().density().unwrap_or(160);
     // Gray for monochrome e-ink, colour (for pictures) elsewhere.
     let screen = crate::access::with_activity(app, |env, _| {
@@ -482,6 +528,12 @@ fn start_kernel(
     // from Play may load no code from files), switched off for a new
     // reader until wanted; for one who ran PaperPaw before, as they were.
     let ran_before = paperpaw_app::ran_before(&storage);
+    // The interface's text size for the screen's size, for a new reader
+    // only: one who ran PaperPaw before keeps what they had, and any
+    // reader's own choice stays.
+    let first_ui_size = (!ran_before).then(|| {
+        crate::screen::ui_size(content.width, content.height, u32::from(device.display.dpi))
+    });
     let mut builder = Kernel::builder(device)
         .clock(micros)
         .random(random)
@@ -509,6 +561,9 @@ fn start_kernel(
             ),
         None => builder.storage(storage),
     };
+    if let Some(size) = first_ui_size {
+        builder = builder.setting_default(&settings::UI_SIZE, size);
+    }
     // The system language, unless the user chose another one.
     if let Some(language) = app.config().language() {
         builder = builder.setting_default(&settings::LANGUAGE, language.into());
@@ -544,6 +599,7 @@ fn start_kernel(
     let mut running = Running {
         kernel,
         frame,
+        content,
         wake_at: None,
         restart: false,
         shared_storage,
@@ -687,45 +743,77 @@ fn show(window: &NativeWindow, epd: Option<&mut Epd>, state: &mut Running) {
         epd.set(mode);
     }
     let rows = state.changed_rows.take();
-    present(window, &state.frame, state.kernel.colors(), rows);
+    present(
+        window,
+        &state.frame,
+        &state.content,
+        state.kernel.colors(),
+        rows,
+    );
 }
 
 /// Copies the frame into the window, in the colours of the settings: the
 /// `rows` that changed, or all of them. The window keeps the others (it
-/// may ask for more, e.g. for a new buffer).
+/// may ask for more, e.g. for a new buffer). The frame lies where the
+/// system's insets leave room (`content`); the rest of the window is black,
+/// painted with every whole frame.
 fn present(
     window: &NativeWindow,
     frame: &Framebuffer,
+    content: &Content,
     colors: [[u8; 3]; 2],
     rows: Option<Range<u16>>,
 ) {
-    let (width, height) = (i32::from(frame.width()), i32::from(frame.height()));
+    let (width, height) = (window.width(), window.height());
     if let Err(e) =
         window.set_buffers_geometry(width, height, Some(HardwareBufferFormat::R8G8B8A8_UNORM))
     {
         log::warn!("window geometry: {e}");
         return;
     }
-    let rows = rows.unwrap_or(0..frame.height());
-    let mut bounds = ndk::native_window::Rect {
-        left: 0,
-        top: i32::from(rows.start),
-        right: width,
-        bottom: i32::from(rows.end),
+    let whole = rows.is_none();
+    let frame_rows = rows.unwrap_or(0..frame.height());
+    let (rows, _) = content.in_buffer(&frame_rows, 0);
+    let to_i32 = |n: usize| i32::try_from(n).unwrap_or(i32::MAX);
+    let mut bounds = if whole {
+        ndk::native_window::Rect {
+            left: 0,
+            top: 0,
+            right: width,
+            bottom: height,
+        }
+    } else {
+        ndk::native_window::Rect {
+            left: i32::try_from(content.x).unwrap_or(0),
+            top: to_i32(rows.start),
+            right: i32::try_from(content.x + content.width).unwrap_or(width),
+            bottom: to_i32(rows.end),
+        }
     };
     let Ok(mut buffer) = window.lock(Some(&mut bounds)) else {
         return;
     };
-    // The rows the window asks for.
-    let rows =
-        usize::try_from(bounds.top).unwrap_or(0)..usize::try_from(bounds.bottom).unwrap_or(0);
+    // The rows the window asks for, as the frame's.
     let stride = buffer.stride();
+    let asked =
+        usize::try_from(bounds.top).unwrap_or(0)..usize::try_from(bounds.bottom).unwrap_or(0);
+    let top = content.y as usize;
+    let frame_rows = asked.start.saturating_sub(top)..asked.end.saturating_sub(top);
     let Some(bytes) = buffer.bytes() else {
         return;
     };
+    if whole && !content.is_window((width as u32, height as u32)) {
+        // Around the screen: black.
+        for pixel in bytes.chunks_exact_mut(4).take(stride * asked.end) {
+            for (slot, value) in pixel.iter_mut().zip([0, 0, 0, 0xff]) {
+                slot.write(value);
+            }
+        }
+    }
+    let (_, shift) = content.in_buffer(&(0..0), stride);
     let tint = pixels::tint(colors);
-    pixels::to_rgba(&frame.view(), rows, stride, &tint, |at, rgba| {
-        if let Some(pixel) = bytes.get_mut(at..at + 4) {
+    pixels::to_rgba(&frame.view(), frame_rows, stride, &tint, |at, rgba| {
+        if let Some(pixel) = bytes.get_mut(at + shift..at + shift + 4) {
             for (slot, value) in pixel.iter_mut().zip(rgba) {
                 slot.write(value);
             }
@@ -734,7 +822,7 @@ fn present(
 }
 
 /// Translates an Android input event; `None` leaves it to Android.
-fn input(event: &AndroidInput<'_>) -> Option<Vec<InputEvent>> {
+fn input(event: &AndroidInput<'_>, content: &Content) -> Option<Vec<InputEvent>> {
     match event {
         AndroidInput::KeyEvent(key) => {
             let name = keys::button(u32::from(key.key_code()))?;
@@ -763,11 +851,18 @@ fn input(event: &AndroidInput<'_>) -> Option<Vec<InputEvent>> {
             Some(
                 pointers
                     .into_iter()
-                    .map(|pointer| {
-                        InputEvent::Pointer(PointerEvent::new(
+                    .filter_map(|pointer| {
+                        // A finger down where the system's bars are is
+                        // theirs; one that began on the screen and goes
+                        // past its edge ends there.
+                        let (x, y) = match phase {
+                            PointerPhase::Down => content.point(pointer.x(), pointer.y())?,
+                            _ => content.point_held(pointer.x(), pointer.y()),
+                        };
+                        Some(InputEvent::Pointer(PointerEvent::new(
                             pointer.pointer_id().clamp(0, 255) as u8,
                             phase,
-                            Point::new(pointer.x() as i32, pointer.y() as i32),
+                            Point::new(x, y),
                             match pointer.tool_type() {
                                 ToolType::Stylus => PointerTool::Pen,
                                 ToolType::Eraser => PointerTool::Eraser,
@@ -775,7 +870,7 @@ fn input(event: &AndroidInput<'_>) -> Option<Vec<InputEvent>> {
                                 _ => PointerTool::Finger,
                             },
                             (pointer.pressure().clamp(0.0, 1.0) * 1000.0) as u16,
-                        ))
+                        )))
                     })
                     .collect(),
             )

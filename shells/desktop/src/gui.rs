@@ -19,6 +19,7 @@ use crate::budget;
 use crate::device::Device;
 use crate::headless;
 use crate::record::Recorder;
+use crate::resize::Settle;
 
 const BACKGROUND: u32 = 0x0030_3030;
 /// Frame interval while an animation runs.
@@ -46,6 +47,7 @@ pub fn run(
     screenshot_dir: PathBuf,
     recorder: Option<Recorder<std::fs::File>>,
     cable: bool,
+    free_size: bool,
 ) -> Result<(), String> {
     let event_loop = EventLoop::new().map_err(|e| e.to_string())?;
     let mut app = App {
@@ -58,6 +60,8 @@ pub fn run(
         cursor: PhysicalPosition::new(0.0, 0.0),
         pointer_down: false,
         animating: false,
+        free_size: free_size.then(Settle::default),
+        epoch: StdInstant::now(),
         error: None,
     };
     event_loop.run_app(&mut app).map_err(|e| e.to_string())?;
@@ -81,6 +85,11 @@ struct App {
     /// Whether the last frame was part of an animation, so the frame after
     /// its end is drawn too.
     animating: bool,
+    /// Where the window sets the size of the screen (`--free-size`): the
+    /// size it has had for a moment is made (see `resize`).
+    free_size: Option<Settle>,
+    /// What the window's sizes are timed from.
+    epoch: StdInstant,
     error: Option<String>,
 }
 
@@ -158,6 +167,39 @@ impl App {
             1000,
         )));
         self.after_input();
+    }
+
+    /// The window's size in the screen's pixels: logical, so that the
+    /// screen is as large to the eye on a dense display as on another.
+    fn window_size(&self) -> Option<(u32, u32)> {
+        let window = self.window.as_ref()?;
+        let size = window.inner_size().to_logical::<f64>(window.scale_factor());
+        Some((size.width.round() as u32, size.height.round() as u32))
+    }
+
+    fn millis(&self) -> u64 {
+        self.epoch.elapsed().as_millis() as u64
+    }
+
+    /// With `--free-size`: the window has another size; the screen follows
+    /// once it has kept it for a moment.
+    fn window_resized(&mut self) {
+        let (now, size) = (self.millis(), self.window_size());
+        if let (Some(settle), Some(size)) = (&mut self.free_size, size) {
+            settle.asked(now, size);
+        }
+    }
+
+    /// With `--free-size`: makes the screen the size the window has kept.
+    fn follow_window(&mut self) {
+        let now = self.millis();
+        let Some(settle) = &mut self.free_size else {
+            return;
+        };
+        if let Some((width, height)) = settle.due(now) {
+            self.device.resize_to(width, height);
+            self.after_input();
+        }
     }
 
     fn after_input(&mut self) {
@@ -245,6 +287,10 @@ impl ApplicationHandler for App {
             Ok((window, surface)) => {
                 self.window = Some(window);
                 self.surface = Some(surface);
+                let size = (self.device.panel.width(), self.device.panel.height());
+                if let Some(settle) = &mut self.free_size {
+                    settle.is_now(size);
+                }
                 self.device.start();
                 self.after_input();
             }
@@ -258,7 +304,10 @@ impl ApplicationHandler for App {
                 self.device.shut_down();
                 event_loop.exit();
             }
-            WindowEvent::Resized(_) => self.after_input(),
+            WindowEvent::Resized(_) => {
+                self.window_resized();
+                self.after_input();
+            }
             WindowEvent::RedrawRequested => {
                 if let Err(error) = self.redraw() {
                     self.fail(event_loop, error);
@@ -349,6 +398,7 @@ impl ApplicationHandler for App {
                 self.after_input();
             }
         }
+        self.follow_window();
         self.device.tick_if_due();
         if self.cable.is_some() {
             crate::cable::send(&self.device.take_cable_lines());
@@ -378,6 +428,12 @@ impl ApplicationHandler for App {
             || self.cable.is_some()
         {
             let at = StdInstant::now() + Duration::from_millis(100);
+            deadline = Some(deadline.map_or(at, |d| d.min(at)));
+        }
+        // A size the window has not kept long enough yet.
+        let now = self.millis();
+        if let Some(wait) = self.free_size.as_ref().and_then(|settle| settle.wait(now)) {
+            let at = StdInstant::now() + Duration::from_millis(wait);
             deadline = Some(deadline.map_or(at, |d| d.min(at)));
         }
         if let Some(wake) = self.device.next_wake() {

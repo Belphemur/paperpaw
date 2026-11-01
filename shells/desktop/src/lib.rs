@@ -26,6 +26,7 @@ pub mod private;
 pub mod profiles;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod registry;
+pub mod resize;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod stdio;
 pub mod trace;

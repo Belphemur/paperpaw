@@ -319,6 +319,16 @@ pub extern "C" fn pp_advance(now_ms: f64) -> f64 {
     if status == STOPPED { -2.0 } else { next }
 }
 
+/// The screen made as large as a canvas of `width`×`height` pixels, as a
+/// page that follows its window wants it; every open screen is made anew.
+#[unsafe(no_mangle)]
+pub extern "C" fn pp_resize(width: u32, height: u32) -> u32 {
+    with(|emulator| {
+        emulator.resize(width, height);
+        Ok(())
+    })
+}
+
 /// The screen's width in pixels.
 #[unsafe(no_mangle)]
 pub extern "C" fn pp_width() -> u32 {

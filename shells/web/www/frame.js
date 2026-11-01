@@ -28,6 +28,9 @@ let last = null;
 let plugins = {};
 let timer = null;
 let drawing = false;
+/// The window sets the size of the screen (see `followWindow`), not the
+/// device's panel.
+let free = false;
 /// The recorded answers and whether the page fetches the rest: kept for
 /// every device made after (a restart after a trap too).
 let network = { fixtures: [], mode: "fixtures" };
@@ -99,8 +102,8 @@ const PLAIN = { bezel: [6, 6, 6, 6], keys: [] };
 /// would make strokes look bolder or vanish.
 function fit() {
   const ratio = window.devicePixelRatio || 1;
-  const body = info?.body ?? PLAIN;
-  const [top, right, bottom, left] = margins({ keys: drawn.size ? body.keys : [] });
+  const body = free ? PLAIN : (info?.body ?? PLAIN);
+  const [top, right, bottom, left] = margins({ keys: drawn.size && !free ? body.keys : [] });
   const below = row.hidden ? 0 : row.offsetHeight + 20;
   const room = [window.innerWidth - 24 - left - right, window.innerHeight - 24 - top - bottom - below];
   // The body for each of the device's pixels across: its bezels are
@@ -109,7 +112,8 @@ function fit() {
   const wide = canvas.width * (1 + (bl + br) / 100);
   const high = canvas.height + (canvas.width * (bt + bb)) / 100;
   const scale = Math.min((room[0] * ratio) / wide, (room[1] * ratio) / high);
-  const whole = scale >= 1 ? Math.floor(scale) : scale;
+  // A free size is made for the room: one screen pixel to a CSS pixel.
+  const whole = free ? ratio : scale >= 1 ? Math.floor(scale) : scale;
   const [width, height] = [(canvas.width * whole) / ratio, (canvas.height * whole) / ratio];
   canvas.style.width = `${width}px`;
   canvas.style.height = `${height}px`;
@@ -120,7 +124,32 @@ function fit() {
   place(drawn, width + bezel[1] + bezel[3], height + bezel[0] + bezel[2], bezel);
 }
 
-window.addEventListener("resize", () => canvas.width && fit());
+window.addEventListener("resize", () => {
+  if (canvas.width) fit();
+  if (free) followWindow();
+});
+
+/// Where the page's window sets the size of the screen (`free`, see
+/// `start`): the screen as large as the room the window leaves, in CSS
+/// pixels, bezel of a plain body taken off. Made once the window has kept
+/// its size for SETTLE_MS (as the emulator's own window does,
+/// shells/desktop/src/resize.rs): every open screen is made anew for it.
+const SETTLE_MS = 200;
+let settling = null;
+function followWindow() {
+  clearTimeout(settling);
+  settling = setTimeout(() => {
+    if (!device || !free) return;
+    const [bt, br, bb, bl] = PLAIN.bezel;
+    const room = [window.innerWidth - 24, window.innerHeight - 24 - (row.hidden ? 0 : row.offsetHeight + 20)];
+    const width = Math.floor(room[0] / (1 + (bl + br) / 100));
+    const height = Math.floor(room[1] - (width * (bt + bb)) / 100);
+    if (width > 0 && height > 0) {
+      guarded(() => device.resize(width, height));
+      requestDraw();
+    }
+  }, SETTLE_MS);
+}
 
 /// Draws what the panel shows, and keeps drawing while it changes.
 function draw() {
@@ -293,12 +322,14 @@ function boot(how, given) {
   buttons(how.buttons ?? true);
   if (canvas.width) fit();
   step();
+  if (free) followWindow();
 }
 
 /// Starts a device: the files go to `plugins/<id>/` on its card.
-async function start({ profile, language, dark, buttons, look, plugins: given = [] }) {
+async function start({ profile, language, dark, buttons, look, free: sized = false, plugins: given = [] }) {
   device = await loading;
   apply(look);
+  free = sized;
   last = { profile, language, dark, buttons };
   boot(last, Object.fromEntries(given.map((plugin) => [plugin.id, plugin.files])));
   return { device: info };
@@ -453,12 +484,14 @@ loading.then(
 );
 
 // Opened on its own (not in a frame): a device to try, from the address
-// (`frame.html?profile=boox-go-7&language=de&dark`).
+// (`frame.html?profile=boox-go-7&language=de&dark`; `&free` makes the screen
+// as large as the window leaves room for).
 if (window.parent === window) {
   const query = new URLSearchParams(location.search);
   start({
     profile: query.get("profile") ?? "xteink-x4",
     language: query.get("language") ?? "en",
     dark: query.has("dark"),
+    free: query.has("free"),
   }).catch((error) => console.error("paperpaw:", error));
 }

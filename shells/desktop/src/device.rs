@@ -208,6 +208,9 @@ pub struct Device {
     asleep: bool,
     /// How the screen is turned (see `Kernel::rotation`).
     rotation: Rotation,
+    /// The size a window gave the screen (`resize_to`), in place of the
+    /// profile's: the screen keeps it when turned.
+    size: Option<(u16, u16)>,
     /// The texts being spoken (emulated), in order: number and when each
     /// ends.
     speech: std::collections::VecDeque<(u32, Instant)>,
@@ -313,6 +316,7 @@ impl Device {
             wifi_online: WIFI_ONLINE.load(std::sync::atomic::Ordering::Relaxed),
             asleep: false,
             rotation,
+            size: None,
             wall: None,
             clock: if simulated_time {
                 Clock::Simulated(0)
@@ -816,20 +820,49 @@ impl Device {
             }
         }
         self.report_warnings();
-        // Turned: the same screens, made anew for the turned size.
+        // Turned: the same screens, made anew for the turned size (a size
+        // a window gave stays).
         if self.kernel.rotation() != self.rotation {
             self.rotation = self.kernel.rotation();
             let display = turned(self.profile.device, self.rotation).display;
-            if let Ok(controller) = Framebuffer::new(display.width, display.height, display.format)
-            {
-                self.controller = controller;
-                self.panel = Panel::new(display.width, display.height, display.color);
-                let now = self.now();
-                let effects =
-                    budget::track(|| self.kernel.resize(now, display.width, display.height));
-                self.execute(effects);
-            }
+            let (width, height) = self.size.unwrap_or((display.width, display.height));
+            self.remake_panel(width, height);
         }
+    }
+
+    /// The screen has `width`×`height` pixels, as a window of that size
+    /// gives it (`resize`): every open screen is made anew for it, as for a
+    /// turned screen, and the whole screen is drawn again. The device's
+    /// density, buttons and heap budget stay. Where the size is the
+    /// screen's, nothing happens.
+    pub fn resize_to(&mut self, width: u16, height: u16) {
+        if (self.panel.width(), self.panel.height()) != (width, height) {
+            self.size = Some((width, height));
+            self.remake_panel(width, height);
+        }
+    }
+
+    /// A panel and its controller's memory of `width`×`height`, and the
+    /// kernel told. Where the kernel keeps the old size (no memory for the
+    /// new frame), so does the panel.
+    fn remake_panel(&mut self, width: u16, height: u16) {
+        let display = turned(self.profile.device, self.rotation).display;
+        let Ok(controller) = Framebuffer::new(width, height, display.format) else {
+            return;
+        };
+        self.controller = controller;
+        self.panel = Panel::new(width, height, display.color);
+        let now = self.now();
+        let effects = budget::track(|| self.kernel.resize(now, width, height));
+        let kept = self.kernel.device().display;
+        if (kept.width, kept.height) != (width, height)
+            && let Ok(controller) = Framebuffer::new(kept.width, kept.height, display.format)
+        {
+            self.controller = controller;
+            self.panel = Panel::new(kept.width, kept.height, display.color);
+            self.size = None;
+        }
+        self.execute(effects);
     }
 
     /// Speech, emulated: the text is logged and takes as long as it would
@@ -1073,6 +1106,33 @@ mod tests {
         assert_eq!(device.next_wake(), None);
         device.asleep = false;
         assert_eq!(device.next_wake(), Some(Instant(0)));
+        drop(device);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn a_window_sets_the_size_of_the_screen() {
+        let _one = ONE_AT_A_TIME
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let (mut device, root) = device("resize");
+        assert_eq!((device.panel.width(), device.panel.height()), (480, 800));
+        // A wider window: panel and kernel have its size, and the whole
+        // screen is drawn for it.
+        device.resize_to(900, 600);
+        assert_eq!((device.panel.width(), device.panel.height()), (900, 600));
+        let shown = device.kernel.device().display;
+        assert_eq!((shown.width, shown.height), (900, 600));
+        assert_eq!(device.panel.compose().len(), 900 * 600);
+        // The density and the buttons are the profile's.
+        assert_eq!(shown.dpi, device.profile.device.display.dpi);
+        // The same size again changes nothing.
+        let screen = device.kernel.active_screen().map(ToString::to_string);
+        device.resize_to(900, 600);
+        assert_eq!(
+            device.kernel.active_screen().map(ToString::to_string),
+            screen
+        );
         drop(device);
         let _ = std::fs::remove_dir_all(root);
     }

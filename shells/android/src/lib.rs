@@ -17,6 +17,7 @@
 pub mod keys;
 pub mod pixels;
 pub mod private;
+pub mod screen;
 
 #[cfg(target_os = "android")]
 mod access;
@@ -26,6 +27,8 @@ mod app;
 mod clipboard;
 #[cfg(target_os = "android")]
 mod epd;
+#[cfg(target_os = "android")]
+mod insets;
 #[cfg(target_os = "android")]
 mod lights;
 #[cfg(target_os = "android")]

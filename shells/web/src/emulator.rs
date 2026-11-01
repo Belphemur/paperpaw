@@ -320,6 +320,20 @@ impl Emulator {
         }
     }
 
+    /// The screen is made as large as a canvas of `width`×`height` pixels
+    /// (the page's free size: see [`paperpaw_emulator::resize`]), kept
+    /// within the sizes screens are made at: every open screen is made
+    /// anew for it. Nothing before the device started, or where the size is
+    /// the screen's.
+    pub fn resize(&mut self, width: u32, height: u32) {
+        if let (Some(device), Some((width, height))) = (
+            self.device.as_mut(),
+            paperpaw_emulator::resize::panel_size((width, height)),
+        ) {
+            device.resize_to(width, height);
+        }
+    }
+
     /// What the panel shows now, four bytes a pixel (RGBA), row by row:
     /// its grays as the panel shows them, a full refresh flashing, in the
     /// tones of e-ink on a gray panel ([`eink`]).
