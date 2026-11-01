@@ -172,7 +172,11 @@ with that before the betas of 0.5:
   fails in a shared body is the plugin's request: before the families,
   both happened in the plugin's own copy, and so they still count. A bug
   of the firmware that only one plugin's calls reach is then also that
-  plugin's to the reader, which is the lesser harm.
+  plugin's to the reader, which is the lesser harm. This covers more
+  than the `shared!` entries: the firmware's objects a plugin calls
+  through its table, such as its `dyn Storage` (a fault of the FAT code
+  reached through one plugin's reads switches off that plugin, not all of
+  them). The plugin is looked for in the 64 innermost calls.
 - **Cache revisions can increase without changing the interface.** The
   exact `paperpaw_layout::VERSION: u32` constant identifies the layout
   algorithm in page-index keys. Raising it keeps indexes made by the old
