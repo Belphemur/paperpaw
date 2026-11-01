@@ -230,14 +230,30 @@ refused too. Store, test-card and Workshop builds from commits before `e5f4a41a`
   text keeps to, with CJK punctuation, compatibility jamo and full-width forms, drawn from Nanum Myeongjo (SIL OFL
   1.1; the pack is not named after it, as its licence reserves the name). One face in seven sizes, 8.2 MiB on the
   card, for books whose Korean shows as `?` on a device whose fonts hold Latin only. It is a data plugin that
-  `tools/script-pack.py korean` builds from the repository, with no code and no interface change. Its entry in
-  `tools/plugin-files/data.toml` is commented out until the owner decides to offer it in the store; its keyboard
+  `tools/script-pack.py korean` builds from the repository, with no code and no interface change. It is listed in
+  `tools/plugin-files/data.toml` for the store (publishing waits for the release); its keyboard
   layout (two-set Hangul, `tools/plugin-files/keyboards/korean.txt`) comes with it.
 - A second Korean pack, `script-korean-extra` (#61): the other 8,822 of the 11,172 Hangul syllables (rare ones outside
   KS X 1001), about 30 MiB on the card and no flash. It only adds letters to `script-korean`, so it needs no interface
-  change; `tools/script-pack.py korean-extra` builds it (`tools/fontgen/sets/hangul-rest.txt`). Its entry in
-  `tools/plugin-files/data.toml` is commented out like the Korean pack's, and the reader is to offer it only for a
-  book that uses such syllables, with its size.
+  change; `tools/script-pack.py korean-extra` builds it (`tools/fontgen/sets/hangul-rest.txt`). It is listed in
+  `tools/plugin-files/data.toml` like the Korean pack, and the reader offers it only for a book that uses such
+  syllables, with its size.
+- The Arabic user interface (#33): `language-ar`, a data plugin of one catalog (`i18n/ar.ppcat`, ADR 0033) with all
+  3,197 messages of the kernel and the plugins translated (`tools/plugin-files/languages/ar.ini`; `tools/language-pack.py`
+  checks it and builds the plugin). The language packs `script-arabic`, `script-hebrew`, `script-greek`,
+  `script-cyrillic`, `script-korean` and `script-korean-extra` are listed for the store; nothing is published before
+  the release.
+- Author keys (#20), store side: a plugin's recovery key, named by the library, is pinned with its author's key at
+  the first install; an update signed by another key is taken if the library carries rotations (`rotations`, in
+  order) the recovery key signed, which the kernel checks, and refused (`KeyChanged`) otherwise. The library's
+  `revoked_keys` (`{plugin, key, signature}`) go to the kernel, which keeps those that hold; a plugin it stopped says
+  so on its store page, with *Remove*.
+- The transfer screens show the device's name in the network (`paperpaw.local`) beside its address where the shell
+  gives one; the QR code keeps the numeric address.
+- Downloads of the store, the update, the news and font lists and Readwise Reader are limited to the size the library
+  names (`max_file`), so a manipulated server cannot make a plugin read an unbounded body.
+- The icon font has `alert-triangle` (+320 bytes), and a check (`tools/checks`, icons) fails where a plugin names a
+  Tabler icon the font lacks; the *Unreviewed* line of the store had been drawn without its icon.
 - A data plugin's entry in `tools/plugin-files/data.toml` may have `how` and `de.how`: its *How it works* text.
 
 ### Changed
