@@ -211,7 +211,7 @@ impl<F: Flash> Updates<F> {
                     since: 0,
                 });
             }
-            Some(Start::Kept | Start::Failed) | None => {}
+            Some(Start::Kept | Start::Failed { .. }) | None => {}
         }
         let updates = Self {
             flash,

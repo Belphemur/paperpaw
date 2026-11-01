@@ -42,6 +42,7 @@ pub mod display;
 pub mod ds3231;
 pub mod generation;
 pub mod gt911;
+pub mod install_note;
 pub mod nvs;
 pub mod ota;
 pub mod otp;

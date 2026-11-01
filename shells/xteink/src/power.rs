@@ -55,6 +55,35 @@ pub mod at {
     pub const RADIO_STARTED: u32 = 23;
     pub const RADIO_SCAN: u32 = 24;
     pub const RADIO_CONNECT: u32 = 25;
+    /// The start, step by step (`main::prepare`): what a note on the card
+    /// says of a first start that did not get through (`install_note`).
+    pub const START: u32 = 30;
+    pub const START_OTA: u32 = 31;
+    pub const START_BOARD: u32 = 32;
+    pub const START_CARD: u32 = 33;
+    pub const START_KERNEL: u32 = 34;
+}
+
+/// What a place is called, for the log and the note on the card.
+pub fn place_name(place: u32) -> &'static str {
+    match place {
+        0 => "none (power on, or the start did not note one)",
+        at::LOOP => "main loop",
+        at::NAP_IDLE => "light sleep",
+        at::WOKEN => "woken",
+        at::BUTTONS_READ => "buttons",
+        at::INPUT => "input",
+        at::TICK => "tick",
+        at::SHOWING => "refreshing the screen",
+        at::STATUS => "status",
+        at::START => "start: before the update check",
+        at::START_OTA => "start: update checked, board next",
+        at::START_BOARD => "start: board ready, card next",
+        at::START_CARD => "start: card mounted, kernel next",
+        at::START_KERNEL => "start: kernel built",
+        20..=25 => "radio",
+        _ => "other",
+    }
 }
 
 /// Notes being at `place` (one of [`at`]).

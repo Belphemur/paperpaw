@@ -372,6 +372,7 @@ fn start() -> Firmware {
     if let Some(at) = bundle {
         native::bundle::forget(&flash, at);
     }
+    power::mark(power::at::START_KERNEL);
     info!(
         "startup: kernel ready in {} ms",
         (micros() - building) / 1000
@@ -428,6 +429,7 @@ fn prepare() -> Ready {
     #[cfg(feature = "remote")]
     bench::run();
     power::note_start();
+    power::mark(power::at::START);
     let (place, naps, reason) = power::last_run();
     info!("PaperPaw starting (reset: {reason:?}, last at {place}, naps {naps})");
     // Before anything that could fail or hang, the board too: an update
@@ -440,8 +442,9 @@ fn prepare() -> Ready {
         esp_bootloader_esp_idf::partitions::FlashStorage::new(flash),
     ));
     let ota = ota::Ota::start(flash.clone());
-    // Taken only now: an update undone above restarts into the firmware
-    // before it, which keeps the message of the update's panic.
+    power::mark(power::at::START_OTA);
+    // Taken only now: an update that failed its trial goes back after its
+    // note (`install_note`), which has the update's panic message.
     let panicked = crash::take_last();
     if let Some(message) = &panicked {
         warn!("the last run panicked: {message}");
@@ -454,6 +457,7 @@ fn prepare() -> Ready {
     // firmware reads it.
     #[cfg(feature = "x4-classic")]
     let board = Board::take(p, probe::factory_controller(&flash));
+    power::mark(power::at::START_BOARD);
     let (storage, card_trouble) = match card::mount(board.card) {
         Ok(storage) => (storage, None),
         Err(trouble) => (Box::new(NoStorage) as Box<dyn Storage>, Some(trouble)),
@@ -462,6 +466,8 @@ fn prepare() -> Ready {
     // is written to it.
     #[cfg(feature = "x3")]
     let ota = x3_panel_or_back(ota, &board.display, storage.as_ref());
+    power::mark(power::at::START_CARD);
+    install_note(ota.as_ref(), storage.as_ref(), panicked.as_deref());
     // What the card keeps under PaperPaw's old name, moved before anything
     // is written to its folder (the kernel does it again, finding nothing).
     paperpaw_sdk::data::take_over_old_name(storage.as_ref());
@@ -601,6 +607,65 @@ fn x3_panel_or_back(
         }
     }
     ota
+}
+
+/// The name of this device in the note on the card.
+const DEVICE_NAME: &str = if cfg!(feature = "x3") {
+    "Xteink X3"
+} else if cfg!(feature = "x4-pro") {
+    "Xteink X4 Pro"
+} else if cfg!(feature = "x4-classic") {
+    "Xteink X4 Classic"
+} else {
+    "Xteink X4"
+};
+
+/// The note of an update on trial (`paperpaw_x4::install_note`), for the
+/// reader whose first start does not get through: the firmware before it
+/// (CrossPoint) takes its place back and says nothing, and a USB-locked
+/// device has no log. An update on trial writes "started" (the file is
+/// there if PaperPaw got as far as the card; it goes when the trial is
+/// over), and a start that finds the last one did not end cleanly writes
+/// the reason and the place it ended, then goes back.
+///
+/// The way back never waits for this: the failed update is marked bad
+/// before (`Ota::start`), so a hang or a crash here ends in the same
+/// restart (the start watchdog, a panic). Nothing but the card is touched.
+fn install_note(ota: Option<&ota::Ota>, storage: &dyn Storage, panicked: Option<&str>) {
+    use paperpaw_x4::install_note::{FILE, InstallNote, Kind};
+    let Some(ota) = ota else {
+        return;
+    };
+    let failed = ota.failed_trial();
+    if failed.is_none() && !ota.on_trial() {
+        return;
+    }
+    // Not again at every start of the same trial.
+    if failed.is_none() && storage.exists(FILE) {
+        return;
+    }
+    let (place, _, reason) = power::last_run();
+    let reset = alloc::format!("{reason:?}");
+    let note = InstallNote {
+        kind: if failed.is_some() {
+            Kind::Failed { panic: panicked }
+        } else {
+            Kind::Started
+        },
+        device: DEVICE_NAME,
+        version: env!("PAPERPAW_VERSION"),
+        ran_ms: failed.unwrap_or_else(|| ota.ran_before()),
+        reset: &reset,
+        place: power::place_name(place),
+    };
+    let text = alloc::format!("{note}");
+    match storage.write(FILE, text.as_bytes()) {
+        Ok(()) => info!("card: the install note was written ({} bytes)", text.len()),
+        Err(e) => warn!("card: the install note was not written: {e:?}"),
+    }
+    if failed.is_some() {
+        ota.go_back();
+    }
 }
 
 /// How this start treats code plugins (ADR 0024).

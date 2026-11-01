@@ -85,7 +85,7 @@ impl ota::Flash for Chip {
 }
 
 /// Updates on this device.
-pub struct Ota(Updates<Chip>);
+pub struct Ota(Updates<Chip>, Option<u32>);
 
 impl Ota {
     /// Looks at what started and why (see `paperpaw_x4::updates`): an
@@ -108,19 +108,23 @@ impl Ota {
             .plugins(Plugins::read_static(&PLUGINS).unwrap_or_default());
         let (updates, start) =
             Updates::start(Chip(shared), &slots, running, this, BOARD_TAG).ok()?;
+        let mut failed = None;
         match start {
             Some(Start::Kept) => info!("OTA: started {running}"),
             Some(Start::Undone) => warn!("OTA: the update did not start, {running} is back"),
             Some(Start::Trial { ran }) => {
                 info!("OTA: an update on trial in {running}, {ran} ms run before");
             }
-            Some(Start::Failed) => {
-                warn!("OTA: the update failed on trial: back to the one before");
-                esp_hal::system::software_reset();
+            Some(Start::Failed { ran }) => {
+                // Marked bad already: whatever happens now, the bootloader
+                // passes over this firmware at its next start. It goes back
+                // once the card has the note (`main`, `failed_trial`).
+                warn!("OTA: the update failed on trial ({ran} ms run before): going back");
+                failed = Some(ran);
             }
             None => warn!("OTA: could not mark the start of {running}"),
         }
-        Some(Self(updates))
+        Some(Self(updates, failed))
     }
 
     /// An update on trial that cannot work on this device (an X3 whose
@@ -135,6 +139,32 @@ impl Ota {
             Err(_) => warn!("OTA: {why}: could not mark the update as bad"),
         }
         esp_hal::system::software_reset();
+    }
+
+    /// This start found the update's trial had not ended cleanly (the
+    /// milliseconds it ran before): the update is marked bad and the start
+    /// goes back to the firmware before it ([`Ota::go_back`]) after it left
+    /// its note.
+    pub fn failed_trial(&self) -> Option<u32> {
+        self.1
+    }
+
+    /// The trial is over: the note of its start (`main::install_note`) has
+    /// done its work.
+    pub fn trial_over(storage: &dyn paperpaw_platform::Storage) {
+        let _ = storage.remove(paperpaw_x4::install_note::FILE);
+    }
+
+    /// Milliseconds the update on trial ran in earlier starts (0: none, or
+    /// not on trial).
+    pub fn ran_before(&self) -> u32 {
+        let left = self.trial_left(0).unwrap_or(paperpaw_x4::updates::TRIAL_MS);
+        u32::try_from(paperpaw_x4::updates::TRIAL_MS.saturating_sub(left)).unwrap_or(u32::MAX)
+    }
+
+    /// Restarts into the firmware before, after a failed trial.
+    pub fn go_back(&self) -> ! {
+        esp_hal::system::software_reset()
     }
 
     /// Whether the running firmware is on trial.
