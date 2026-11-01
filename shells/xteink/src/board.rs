@@ -196,12 +196,36 @@ impl Board {
             adc.enable_pin_with_cal::<_, AdcCalBasic<ADC1<'_>>>(p.GPIO1, Attenuation::_11dB);
         let side = adc.enable_pin_with_cal::<_, AdcCalBasic<ADC1<'_>>>(p.GPIO2, Attenuation::_11dB);
         let cell = adc.enable_pin_with_cal::<_, AdcCalCurve<ADC1<'_>>>(p.GPIO0, Attenuation::_11dB);
-        let keys = Keys {
+        // Where the ladders' offset comes from (#66): the eFuse's, or a
+        // measurement against ground where the eFuse holds none.
+        {
+            use esp_hal::analog::adc::AdcCalScheme;
+            use esp_hal::efuse::{AdcCalibUnit, rtc_calib_init_code, rtc_calib_version};
+            crate::input::note_adc(
+                rtc_calib_version(),
+                rtc_calib_init_code(AdcCalibUnit::ADC1, Attenuation::_11dB),
+                front.cal_scheme.adc_cal(),
+                side.cal_scheme.adc_cal(),
+            );
+        }
+        let mut keys = Keys {
             adc: Adc::new(p.ADC1, adc),
             front,
             side,
             cell,
         };
+        // The first readings, nothing pressed (the sampler is not running
+        // yet): the first and the last of a few, 5 ms apart.
+        {
+            let (_, first) = keys.read(false);
+            let mut last = first;
+            for _ in 0..4 {
+                Delay::new().delay_millis(5);
+                last = keys.read(false).1;
+            }
+            crate::input::note_levels(first, last);
+            log::info!("{}", crate::input::adc_note().trim_end());
+        }
 
         Self {
             power_latch,

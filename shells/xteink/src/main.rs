@@ -475,6 +475,8 @@ fn prepare() -> Ready {
     let ota = x3_panel_or_back(ota, &board.display, storage.as_ref());
     power::mark(power::at::START_CARD);
     install_note(ota.as_ref(), storage.as_ref(), panicked.as_deref());
+    #[cfg(feature = "x4")]
+    adc_note(storage.as_ref());
     // What the card keeps under PaperPaw's old name, moved before anything
     // is written to its folder (the kernel does it again, finding nothing).
     paperpaw_sdk::data::take_over_old_name(storage.as_ref());
@@ -638,6 +640,19 @@ const DEVICE_NAME: &str = if cfg!(feature = "x3") {
 /// The way back never waits for this: the failed update is marked bad
 /// before (`Ota::start`), so a hang or a crash here ends in the same
 /// restart (the start watchdog, a panic). Nothing but the card is touched.
+#[cfg(feature = "x4")]
+/// What the ADC's start said, on the card for a reader without a cable
+/// (the diagnostic build of #66): written when it differs.
+fn adc_note(storage: &dyn Storage) {
+    let text = input::adc_note();
+    let file = "paperpaw-adc-note.txt";
+    if storage.size(file).ok() != Some(text.len() as u64)
+        && let Err(e) = storage.write(file, text.as_bytes())
+    {
+        log::warn!("card: the adc note was not written: {e:?}");
+    }
+}
+
 fn install_note(ota: Option<&ota::Ota>, storage: &dyn Storage, panicked: Option<&str>) {
     use paperpaw_x4::install_note::{FILE, InstallNote, Kind, is_started};
     let Some(ota) = ota else {

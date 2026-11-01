@@ -415,6 +415,55 @@ fn battery() -> (u8, u16) {
     }
 }
 
+/// Where the ADC's offset came from and what the ladders read when it was
+/// set up, for the log and the note on the card (GH #47 follow-up, #66):
+/// the eFuse's calibration version, its init code (`u32::MAX`: none, the
+/// offset was measured against ground), the offsets in use for the front
+/// and side ladders, and the first and last of a few readings of both.
+#[cfg(feature = "x4")]
+static ADC_NOTE: [AtomicU32; 6] = [const { AtomicU32::new(0) }; 6];
+
+/// Notes how the ADC was calibrated.
+#[cfg(feature = "x4")]
+pub fn note_adc(version: u8, init_code: Option<u16>, front: u16, side: u16) {
+    ADC_NOTE[0].store(u32::from(version), Ordering::Relaxed);
+    ADC_NOTE[1].store(init_code.map_or(u32::MAX, u32::from), Ordering::Relaxed);
+    ADC_NOTE[2].store(u32::from(front) << 16 | u32::from(side), Ordering::Relaxed);
+}
+
+/// Notes the first and the last of the ladders' readings at start (each
+/// front << 16 | side).
+#[cfg(feature = "x4")]
+pub fn note_levels(first: u32, last: u32) {
+    ADC_NOTE[3].store(first, Ordering::Relaxed);
+    ADC_NOTE[4].store(last, Ordering::Relaxed);
+    ADC_NOTE[5].store(1, Ordering::Relaxed);
+}
+
+/// What the ADC's start said, as a text for the log and the card.
+#[cfg(feature = "x4")]
+pub fn adc_note() -> alloc::string::String {
+    let word = |i: usize| ADC_NOTE[i].load(Ordering::Relaxed);
+    let (offsets, first, last) = (word(2), word(3), word(4));
+    let init = match word(1) {
+        u32::MAX => alloc::string::String::from("none (the offset was measured against ground)"),
+        code => alloc::format!("{code}"),
+    };
+    alloc::format!(
+        "adc: eFuse calibration version {}, init code {init}; offsets in use front {} side {}; \
+         first readings front {} side {}; a little later front {} side {} (nothing pressed reads above 3900); \
+         readings taken: {}\n",
+        word(0),
+        offsets >> 16,
+        offsets & 0xFFFF,
+        first >> 16,
+        first & 0xFFFF,
+        last >> 16,
+        last & 0xFFFF,
+        if word(5) == 1 { "yes" } else { "no" },
+    )
+}
+
 /// A fresh reading of the battery's charge in percent, `None` if it could
 /// not be read: never the last one kept, which a failing reading would
 /// leave in place for good (a sleeping reader must notice a battery it
