@@ -25,6 +25,9 @@ change the plugin SDK.
 - The store and the plugin manager name the web flasher for more plugin room only where the X4's shell says a
   full flash gives more (a smaller layout than PaperPaw's own, as after an SD install from CrossPoint), no longer
   guessed from the room's size. SDK: `CodeRoom::larger`, `CodeRoom::in_slot` (kernel feature).
+- *Automatic* power wears *Saving* while the system's own battery saver is on (where the shell reports it). SDK:
+  `Capabilities::power` (`PowerControls`: what the shell changes by the level, so settings show only what
+  applies), `KernelBuilder::power`, `Battery::saver`.
 - *All notes*, a new plugin (Tools): the books that have bookmarks or highlights with how many, a book's notes
   (a note opens the book there), and *Export as My Clippings.txt*, all notes in one file in Kindle's form
   (UTF-8 with a byte order mark, `Exports/My Clippings.txt` beside the library) that notes apps read. A book's

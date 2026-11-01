@@ -61,6 +61,9 @@ pub struct Capabilities {
     /// where the system decides (Android) or that never switches off (the
     /// emulator).
     pub power_off: bool,
+    /// What the shell changes by the power level (ADR 0025): the power
+    /// settings show only what applies here.
+    pub power: crate::power::PowerControls,
     /// More of what the device can do, by [`Capability`] (new ones come as
     /// constants, without a new plugin interface).
     pub(crate) more: u64,

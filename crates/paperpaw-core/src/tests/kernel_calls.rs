@@ -202,6 +202,17 @@ fn plugins_switch_the_device_off_where_the_shell_can() {
 }
 
 #[test]
+fn plugins_see_what_the_shell_changes_by_the_power_level() {
+    let kernel = Kernel::builder(DEVICE).build().unwrap();
+    assert!(!kernel.shared.env(Instant(0)).caps().power.any());
+    let mut controls = paperpaw_sdk::power::PowerControls::default();
+    controls.buttons = true;
+    let kernel = Kernel::builder(DEVICE).power(controls).build().unwrap();
+    let power = kernel.shared.env(Instant(0)).caps().power;
+    assert!(power.any() && power.buttons && !power.cpu_clock && !power.system_saver);
+}
+
+#[test]
 fn plugins_hear_how_long_the_device_slept() {
     let mut kernel = Kernel::builder(DEVICE).build().unwrap();
     kernel.start(Instant(0));

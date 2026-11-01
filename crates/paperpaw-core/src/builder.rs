@@ -355,6 +355,15 @@ impl KernelBuilder {
         self
     }
 
+    /// What the shell changes by the power level
+    /// ([`Capabilities::power`](paperpaw_sdk::Capabilities::power)), read
+    /// from [`Kernel::power`]; without, nothing beyond what every device
+    /// does.
+    pub fn power(mut self, controls: paperpaw_sdk::power::PowerControls) -> Self {
+        self.0.caps.power = controls;
+        self
+    }
+
     /// The shell turns the screen as the setting
     /// [`settings::ROTATION`](paperpaw_sdk::builtin::settings::ROTATION)
     /// says (see [`Kernel::rotation`]); without, it is not offered.
