@@ -26,10 +26,15 @@ use paperpaw_sdk::{
 
 /// A device with `touch` or buttons alone, `width` pixels wide.
 const fn device(touch: bool, width: u16) -> DeviceInfo {
+    sized(touch, width, 800)
+}
+
+/// The same `height` pixels high.
+const fn sized(touch: bool, width: u16, height: u16) -> DeviceInfo {
     DeviceInfo::new(
         "test",
         "Test device",
-        DisplayInfo::new(width, 800, 220, PixelFormat::Gray4, Rotation::Deg0, None),
+        DisplayInfo::new(width, height, 220, PixelFormat::Gray4, Rotation::Deg0, None),
         InputCaps::new(true, touch, false, &[]),
         MemoryClass::Small,
     )
@@ -617,4 +622,46 @@ fn alloc_free(col: u8, row: u8) -> String {
         "core.left",
     ];
     format!("tool:{} {col}/{row} 1x1", tools[usize::from(row * 4 + col)])
+}
+
+/// The page every device starts with (clock, the card to the library),
+/// with the time known: upright and turned on its side (the X4's 480 by 800
+/// and 800 by 480) the card that leads to the library is on the first page
+/// with the clock, both on the screen.
+#[test]
+fn the_clock_and_the_start_card_share_the_first_page_turned_on_its_side() {
+    for (width, height) in [(480, 800), (800, 480)] {
+        let mut home = Home::on(sized(false, width, height), "");
+        // 10:41 in the morning.
+        let clock = paperpaw_sdk::WallClock::new(Instant(home.now), 1_760_438_460_000, Some(0));
+        let status = paperpaw_sdk::SystemStatus::new(
+            Some(clock),
+            Some(paperpaw_platform::Battery::new(80, false, None)),
+        );
+        let effects = home.kernel.set_status(Instant(home.now), status);
+        home.settle(effects);
+
+        let texts = home.texts();
+        let time = texts.iter().find(|(t, _)| t.contains(':'));
+        let card = texts.iter().find(|(t, _)| t == "Start reading");
+        assert!(
+            time.is_some() && card.is_some(),
+            "{width}x{height}: {texts:?}"
+        );
+    }
+}
+
+/// With the clock two rows high on a grid of three, the card to the
+/// library takes the row that is left, flat, instead of going missing.
+#[test]
+fn the_start_card_takes_the_one_row_left_beside_a_tall_clock() {
+    let mut home = Home::on(
+        sized(false, 800, 480),
+        "columns = 3\nrows = 3\npage-1 = home.clock 0/0 3x2, home.continue\n",
+    );
+    let texts = home.texts();
+    let card = texts.iter().find(|(t, _)| t == "Start reading");
+    let (_, at) = card.unwrap_or_else(|| panic!("no card in {texts:?}"));
+    // In the last row, the screen's lower part.
+    assert!(at.y >= 240 && at.y + at.height <= 480, "{at:?}");
 }

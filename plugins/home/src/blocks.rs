@@ -852,6 +852,13 @@ impl Widget for Card {
         card_height(env, width)
     }
 
+    /// A flat card: the title in one line, and the progress and the
+    /// caption where they fit (see [`CardParts::of`]). So that a screen
+    /// turned on its side, with the clock above it, still has room for it.
+    fn min_height(&self, env: &Env<'_>, width: u16) -> u16 {
+        card_height(env, width) / 2
+    }
+
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         let book = self.book.as_ref();
         if self.area == Some(area) {
