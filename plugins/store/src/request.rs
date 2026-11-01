@@ -12,14 +12,28 @@
 //! (`+id` installed, `-id` not). A dialog closed without an answer (the
 //! reader went back) is *Not now*: the one who asked is not told, as no
 //! download starts.
+//!
+//! Who asks is what a plugin names itself: nothing here trusts it more than
+//! that. Any plugin can also send the event itself, past the kernel's
+//! checks, so the store re-applies them: at most
+//! [`MAX_REQUESTED_PLUGINS`] ids, each once, none already on the device;
+//! the dialog names the plugins by the store's own listing (an id the
+//! listing lacks is not offered), never by what the request says; the
+//! same request again while its dialog or download is going on is one
+//! request (it is answered once), and one the reader just declined is
+//! answered *Not now* at once for [`DECLINED_MS`], without a new dialog.
 
+use alloc::rc::Rc;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use core::cell::RefCell;
 
 use paperpaw_sdk::builtin::events::{self, PluginsAnswered, PluginsRequested};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::Confirmed;
-use paperpaw_sdk::{Arg, Commands, Env, Id, RegisterError, Registrar, ask, files};
+use paperpaw_sdk::{
+    Arg, Commands, Env, Id, Instant, MAX_REQUESTED_PLUGINS, RegisterError, Registrar, ask, files,
+};
 
 use crate::PLUGIN;
 use crate::catalog::{Entry, Index};
@@ -28,10 +42,40 @@ use crate::queue;
 /// The reader's answer to the dialog.
 const ANSWERED: Event<Confirmed> = Event::new("store.request-answered");
 
+/// How long a request the reader declined is not asked again (the one
+/// who asked is told *Not now* at once meanwhile).
+pub(crate) const DECLINED_MS: u64 = 60_000;
+
+/// The last request shown: who asked, for what, when, and whether the
+/// reader declined it.
+type Last = Rc<RefCell<Option<(Id, Vec<String>, Instant, bool)>>>;
+
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    r.on(events::PLUGINS_REQUESTED, requested)?;
-    r.on(ANSWERED, confirmed)?;
+    let last: Last = Rc::new(RefCell::new(None));
+    let asked = last.clone();
+    r.on(events::PLUGINS_REQUESTED, move |env, request, out| {
+        requested(env, request, out, &asked);
+    })?;
+    r.on(ANSWERED, move |env, answered, out| {
+        confirmed(env, answered, out, &last);
+    })?;
     Ok(())
+}
+
+/// The ids asked for as the store takes them: each once, none on the
+/// device already, at most [`MAX_REQUESTED_PLUGINS`] (what the kernel
+/// checks too, which a plugin that sends the event itself skips).
+fn wanted_of(env: &Env<'_>, request: &PluginsRequested) -> Vec<String> {
+    let mut wanted: Vec<String> = Vec::new();
+    for id in request.ids().take(MAX_REQUESTED_PLUGINS.saturating_mul(4)) {
+        if wanted.len() >= MAX_REQUESTED_PLUGINS {
+            break;
+        }
+        if env.plugins().get(id.as_str()).is_none() && !wanted.iter().any(|w| w == id.as_str()) {
+            wanted.push(id.to_string());
+        }
+    }
+    wanted
 }
 
 fn path() -> String {
@@ -127,13 +171,26 @@ fn names(list: &[(String, Option<Entry>)]) -> String {
 
 /// Plugins asked for: the dialog, or at once the answer where nothing can
 /// be fetched.
-fn requested(env: &Env<'_>, request: &PluginsRequested, out: &mut Commands) {
+fn requested(env: &Env<'_>, request: &PluginsRequested, out: &mut Commands, last: &Last) {
     let by = request.by.clone();
-    let wanted: Vec<String> = request.ids().map(|id| id.to_string()).collect();
-    // One request at a time: a dialog left open (went back from) or a
-    // download going on makes another say *Not now* for itself. A dialog
-    // closed without an answer left its request: it is taken as closed
-    // where nothing is fetched.
+    let wanted = wanted_of(env, request);
+    // Nothing to fetch (all are on the device): nothing is missing.
+    if wanted.is_empty() {
+        return answer(out, by, (&[], &[]), false, String::new());
+    }
+    // What was just shown for the same is the same request: declined a
+    // moment ago, it is not asked again (and *Not now* for it at once);
+    // its dialog still open or its download going on, it is the one.
+    let same = last.borrow().as_ref().and_then(|(who, ids, at, declined)| {
+        (*who == by && *ids == wanted && env.now().since(*at) < DECLINED_MS).then_some(*declined)
+    });
+    match same {
+        Some(true) => return answer(out, by, (&[], &wanted), true, String::new()),
+        Some(false) if open(env).is_some() => return,
+        _ => {}
+    }
+    // One request at a time: another says *Not now* for itself. A dialog closed without an answer
+    // left its request: it is taken as closed where nothing is fetched.
     if open(env).is_some() {
         if queue::requested_waiting(env) {
             return answer(out, by, (&[], &wanted), true, String::new());
@@ -179,6 +236,7 @@ fn requested(env: &Env<'_>, request: &PluginsRequested, out: &mut Commands) {
             None => id.clone(),
         })
         .collect();
+    *last.borrow_mut() = Some((by.clone(), ids.clone(), env.now(), false));
     let key = alloc::format!("store.request.by.{by}");
     let question = i18n
         .get(&key)
@@ -196,11 +254,12 @@ fn requested(env: &Env<'_>, request: &PluginsRequested, out: &mut Commands) {
 
 /// The reader's word on the dialog: the plugins are fetched, or the one
 /// who asked is told *Not now*.
-fn confirmed(env: &Env<'_>, answered: &Confirmed, out: &mut Commands) {
+fn confirmed(env: &Env<'_>, answered: &Confirmed, out: &mut Commands, last: &Last) {
     let Some((by, ids)) = open(env) else {
         return;
     };
     if !answered.yes {
+        *last.borrow_mut() = Some((by.clone(), ids.clone(), env.now(), true));
         close(env);
         return answer(out, by, (&[], &ids), true, String::new());
     }

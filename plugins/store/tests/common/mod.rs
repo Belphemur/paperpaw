@@ -268,6 +268,11 @@ impl Shopping {
         (shopping, answers)
     }
 
+    /// Time passing, `millis` of it.
+    pub fn wait(&mut self, millis: u64) {
+        self.now += millis;
+    }
+
     /// Plugins asked for by the reader, as the kernel sends them to the
     /// store.
     pub fn ask(&mut self, ids: &str) {

@@ -189,3 +189,62 @@ fn a_plugin_the_library_does_not_have_is_missing_quietly() {
     let shown = shopping.shown();
     assert!(!shown.contains("Download"), "{shown}");
 }
+
+/// What a plugin sends itself, past the kernel's checks, is cut down as
+/// the kernel does: each id once, none already on the device, at most 32.
+#[test]
+fn what_is_asked_is_taken_once_without_what_is_there_and_at_most_32() {
+    let (mut shopping, answers) = Shopping::asked_for(&list(), true);
+    // The store is on the device; the Greek letters are asked for twice.
+    shopping.ask("store script-greek script-greek");
+    let shown = shopping.shown();
+    assert_eq!(shown.matches("Greek letters").count(), 1, "{shown}");
+    assert!(told(&answers).is_empty());
+    shopping.choose("Not now");
+    assert_eq!(told(&answers).len(), 1);
+
+    // Only what is there: nothing is missing and no dialog opens.
+    let (mut shopping, answers) = Shopping::asked_for(&list(), true);
+    shopping.ask("store fonts-browser");
+    assert_eq!(
+        told(&answers),
+        [(String::new(), String::new(), false, String::new())]
+    );
+    assert!(!shopping.shown().contains("Download"));
+
+    // 40 plugins the library lacks, then one it has: the cap cuts the
+    // list at 32, the Greek letters (the 41st) are not asked for.
+    let (mut shopping, answers) = Shopping::asked_for(&list(), true);
+    let many: Vec<String> = (0..40).map(|n| format!("none-{n}")).collect();
+    shopping.ask(&format!("{} script-greek", many.join(" ")));
+    let told = told(&answers);
+    assert_eq!(told.len(), 1, "{told:?}");
+    assert_eq!(told[0].1.split(' ').count(), 32, "{told:?}");
+    assert!(!told[0].1.contains("script-greek"), "{told:?}");
+    assert!(!shopping.shown().contains("Download"));
+}
+
+/// The same request again while its dialog is open is the one request;
+/// one the reader just declined is told *Not now* at once, without a
+/// dialog, until a minute has passed.
+#[test]
+fn the_same_request_again_is_one_and_a_declined_one_waits_a_minute() {
+    let (mut shopping, answers) = Shopping::asked_for(&list(), true);
+    shopping.ask("script-greek");
+    shopping.ask("script-greek");
+    shopping.ask("script-greek");
+    shopping.choose("Not now");
+    // One dialog, one answer.
+    assert_eq!(told(&answers).len(), 1);
+    // Asked again at once: told at once, no dialog.
+    shopping.ask("script-greek");
+    let again = told(&answers);
+    assert_eq!(again.len(), 2, "{again:?}");
+    assert!(again[1].2, "declined: {again:?}");
+    assert!(!shopping.shown().contains("Download"));
+    // A minute later the reader is asked again.
+    shopping.wait(61_000);
+    shopping.ask("script-greek");
+    assert!(shopping.shown().contains("Download"));
+    assert_eq!(told(&answers).len(), 2);
+}
