@@ -115,7 +115,7 @@ Workshop builds from those commits are thrown away.
   run (`PluginProblem::Revoked`, `keys::keep_revoked`, which only adds). A revocation is a statement
   (`keys::Revocation`, `paperpaw-sign revocation`) signed by the revoked key itself or by the plugin's recovery
   key, about the key pinned as its author on the device; any other is left out, and the list is checked again where
-  it is read, so no plugin and no taken-over library can revoke another author's key. A revocation stops that plugin
+  it is read, so no taken-over library can revoke another author's key (installed plugins are trusted: they have the card). A revocation stops that plugin
   alone (`keys::is_revoked(storage, plugin)`), not others the same key signed. The recovery key is pinned only with
   the first install, and code installed before a rotation does not run until an update by the new key: install marks
   never move a known author to another key, and name code as installed only where the author pinned then signed it. The store

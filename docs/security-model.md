@@ -116,12 +116,12 @@ are reported as [SECURITY.md](../SECURITY.md) says.
   other plugins the same key signed, which have revocations of their own.
   One once kept stays, whatever a later list says; a line that does not
   hold (unsigned, forged, about a key not pinned) counts for nothing, and
-  the kernel checks every line again where it reads the list. The
-  signatures guard against the library and the network, not against
-  plugins: a code plugin has all of the card (`Env::storage`), the
-  author, recovery and revocation lists in `.paperpaw/` too, so a signed
-  code plugin is trusted with the card, and no check inside the SDK's
-  functions keeps it out (see *What is not protected*). From the web flasher and from a
+  the kernel checks every line again where it reads the list (it came
+  from the library). These signatures guard against outside attackers (a
+  rogue or compromised library, the network, forged or replayed
+  statements), not against plugins: installed plugins are trusted with
+  the whole card (owner decision 44, no sandbox), the author, recovery
+  and revocation lists in `.paperpaw/` too (see *What is not protected*). From the web flasher and from a
   computer the firmware also takes a file not signed (one's own build):
   from the flasher only for a plugin that has no author's key remembered
   yet, from a computer only once the reader said yes to its code on the

@@ -112,9 +112,7 @@ for others, in one list:
   `check_rotation` and hands them to `accept_rotation` before it writes
   the install marks, passes the library's signed revocations
   (`keys::Revocation`) to `keep_revoked`; the Workshop makes and backs up
-  the recovery key (#20, with the web side). The signatures guard against
-  the library and the network, not against code plugins, which have the
-  whole card ([security model](../security-model.md#plugins)).
+  the recovery key (#20, with the web side; threat model below).
 - Offers to go online on background paths (weather, news, update
   check, kosync) send `Command::GoOnlineFor`; power settings follow
   `Capabilities::power` (#35).
@@ -127,6 +125,18 @@ for others, in one list:
   handlers that capture nothing (wifi, kosync, stats, rules, joplin
   first; about 100 `r.on` in all), move to `FixedWidget` and `hears!`
   lists; state they capture moves to statics or a service first.
+
+**Threat model** (#20). Installed plugins are trusted: every plugin has the
+whole card (owner decision 44: freedom over security; there is no
+sandbox), so nothing here guards against a plugin on the device. The
+author, recovery and revocation checks guard against outside attackers: a
+rogue or compromised library or catalogue, the network between it and the
+device, and forged or replayed statements. The kernel therefore believes
+no data from outside without a signature it checks itself: a rotation must
+be signed by the plugin's pinned recovery key, and a revocation by the
+revoked key itself or by that recovery key, for a key pinned on this
+device. It checks this both when it keeps an entry and when it reads its
+lists from the card. The store only carries bytes.
 
 **Firmware engineer**
 
