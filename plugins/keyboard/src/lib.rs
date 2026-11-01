@@ -369,6 +369,9 @@ struct KeyboardScreen {
     /// under a finger ([`TOUCH_GAP_TENTHS`]); chosen with buttons, where
     /// the focus fills a key, a pixel ([`BUTTONS_SEAM`]).
     seam: u16,
+    /// The room at the sides of the keys' visible edges: small, so that the
+    /// keys get the width ([`keys::side_margin`]).
+    side: u16,
     /// The shape of the keys where they are tapped ([`KEY_SHAPE`]).
     shape: String,
 }
@@ -396,7 +399,14 @@ impl KeyboardScreen {
         // As many units in a row as leave a letter (2 units) its least
         // width.
         let unit = (least_letter(env, &style, touch, scale) / 2).max(1);
-        let most = (u32::from(display.width) - 2 * u32::from(style.margin())) / unit;
+        let seam = if touch {
+            let half = env.metrics().tenth_mm(TOUCH_GAP_TENTHS) / 2;
+            half.max(ui::button_border(&style)) as u16
+        } else {
+            BUTTONS_SEAM
+        };
+        let side = keys::side_margin(&style, seam);
+        let most = (u32::from(display.width) - 2 * u32::from(side)) / unit;
         let letters = &layouts[current.get()].1;
         // As high as the layer with the most rows needs, so that turning
         // to the other keeps the keys where they are.
@@ -412,12 +422,12 @@ impl KeyboardScreen {
         // Keys that are tapped have the height of their shape and size.
         // Chosen with buttons, they are a row high.
         let widest = rows.iter().map(|row| units(row)).max().unwrap_or(20).max(1);
-        let letter = (u32::from(display.width) - 2 * u32::from(style.margin())) * 2 / widest;
+        let letter = (u32::from(display.width) - 2 * u32::from(side)) * 2 / widest;
         let gap = style.gap() / 2;
         // The last row's keys keep the side margin from the bottom edge
         // (tapped, they fill their place but for the seam).
         let (key_height, room) = if touch {
-            let room = (style.margin()).saturating_sub(ui::button_border(&style) as u16);
+            let room = side.saturating_sub(ui::button_border(&style) as u16);
             let around = field_height + gap * 2 + room;
             (
                 tapped_height(env, &style, letter, count as u16, around),
@@ -468,12 +478,8 @@ impl KeyboardScreen {
             key_height: keys_height / count as u16,
             most,
             touch,
-            seam: if touch {
-                let half = env.metrics().tenth_mm(TOUCH_GAP_TENTHS) / 2;
-                half.max(ui::button_border(&style)) as u16
-            } else {
-                BUTTONS_SEAM
-            },
+            seam,
+            side,
             shape: env.settings().read(&KEY_SHAPE).to_string(),
         };
         screen.buttons = screen.field_buttons(env);
@@ -587,7 +593,7 @@ impl KeyboardScreen {
         }
         .max(1);
         // The keys' visible edges on the margins.
-        let outside = u32::from(self.style.margin()).saturating_sub(self.key_inset());
+        let outside = u32::from(self.side).saturating_sub(self.key_inset());
         let width = u32::from(self.keys.width) - 2 * outside;
         let x0 = u32::from(self.keys.x) + outside;
         let before = total.saturating_sub(own) / 2 + units(&keys[..index]);

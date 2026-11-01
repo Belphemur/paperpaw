@@ -167,9 +167,14 @@ fn round_keys_take_about_30_40_and_50_percent() {
             // Where the keys are as small as a finger allows, the
             // keyboard is as low as it can be.
             let floored = step(&parts) == least && share > near;
+            // Wide as the screen lets them be, the keys of the largest size
+            // may reach half the screen before a half of the screen's height
+            // is theirs: the cap counts the field and the gaps, this
+            // height leaves some out.
+            let capped = near == 50 && (46..=50).contains(&share);
             assert!(
-                floored || share.abs_diff(near) <= 2,
-                "{} {size}: {share} %",
+                floored || capped || share.abs_diff(near) <= 2,
+                "{} {size}: {share} % (near {near})",
                 device.id
             );
         }
@@ -191,6 +196,20 @@ fn medium_is_the_keyboard_as_before() {
 /// Keys chosen with buttons: the rows stay a computer keyboard's at
 /// every size (qwertyuiop, asdfghjkl, zxcvbnm whole), and the size makes
 /// the keys higher.
+#[test]
+fn the_keys_use_nearly_the_whole_width() {
+    // A thin margin at both sides (a thirtieth of the screen at most; the
+    // other screens keep an eighth or so), tapped or chosen with buttons.
+    for device in [X4, X4_PRO, BOOX] {
+        let width = device.display.width;
+        let parts = keyboard(device, "");
+        let (q, p) = (key(&parts, "q").area, key(&parts, "p").area);
+        assert!(q.x > 0 && q.x <= width / 30, "{} q at {}", device.id, q.x);
+        let right = width - (p.x + p.width);
+        assert!(right <= width / 30, "{} p ends {right} short", device.id);
+    }
+}
+
 #[test]
 fn with_buttons_the_size_makes_keys_higher_in_whole_rows() {
     // The letters' rows, by the top of their keys.
