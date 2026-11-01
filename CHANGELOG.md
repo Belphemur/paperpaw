@@ -114,7 +114,8 @@ Workshop builds from those commits are thrown away.
   `accept_rotation`; `install::Marks::recovery`), and the code of an author whose key the store revoked does not
   run (`PluginProblem::Revoked`, `keys::keep_revoked`, which only adds). The recovery key is pinned only with the
   first install, and code installed before a rotation does not run until an update by the new key. The store
-  does not offer either yet.
+  does not offer either yet; it calls `keys::keep_revoked` with its library's list and `keys::accept_rotation`
+  with a statement that came with an update (both plugin-facing; the recovery key arrives with the install marks).
 - Layout `VERSION` 11: books cached before are laid out anew once, so drop capitals and the new list markers show
   in them too. SDK, for real tables: `BlockKind::TableRow`, `Block::table` (`TableRow`, `TableCell`, `MAX_COLUMNS`:
   a row's cells, the table's column weights, header, first and last row) and `Page::rules` (`PageRule`: thin lines
