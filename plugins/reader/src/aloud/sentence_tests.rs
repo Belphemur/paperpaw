@@ -21,7 +21,8 @@ proptest! {
     #[test]
     fn a_sentence_ends_at_its_first_end(words in words(), from in 0usize..220) {
         let words: Vec<&str> = words.iter().map(String::as_str).collect();
-        prop_assume!(from < words.len());
+        prop_assume!(!words.is_empty());
+        let from = from % words.len();
         let end = sentence_end(&words, from);
         prop_assert!(end > from && end <= words.len());
         prop_assert!(end - from <= MAX_WORDS);
