@@ -493,6 +493,26 @@ impl PageScreen {
     }
 }
 
+/// The line with the version and what it takes to download (a built-in
+/// plugin has nothing to download).
+fn version_line(env: &Env<'_>, plugin: &Entry) -> String {
+    let i18n = env.i18n();
+    if plugin.switched_off(env) {
+        return i18n.format(
+            "store.version-built-in",
+            &[("version", Arg::Str(&plugin.version))],
+        );
+    }
+    let size = files::size(plugin.size, i18n.tr("store.decimal"));
+    i18n.format(
+        "store.version",
+        &[
+            ("version", Arg::Str(&plugin.version)),
+            ("size", Arg::Str(&size)),
+        ],
+    )
+}
+
 /// The facts below the summary, each with its icon: whether it has code
 /// (and so full access) or is data alone, whether its build was checked
 /// against its source, by whom and since when they publish, its version,
@@ -562,22 +582,7 @@ fn facts(
             i18n.format("store.author-key", &[("key", Arg::Str(&short))]),
         ));
     }
-    let size = files::size(plugin.size, i18n.tr("store.decimal"));
-    let mut version = if plugin.switched_off(env) {
-        // Nothing to download: it is built in.
-        i18n.format(
-            "store.version-built-in",
-            &[("version", Arg::Str(&plugin.version))],
-        )
-    } else {
-        i18n.format(
-            "store.version",
-            &[
-                ("version", Arg::Str(&plugin.version)),
-                ("size", Arg::Str(&size)),
-            ],
-        )
-    };
+    let mut version = version_line(env, plugin);
     if !plugin.licence.is_empty() {
         version.push_str(" · ");
         version.push_str(&i18n.format("store.licence", &[("licence", Arg::Str(&plugin.licence))]));
