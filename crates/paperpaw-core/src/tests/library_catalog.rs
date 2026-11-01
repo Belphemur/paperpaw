@@ -4,6 +4,9 @@
 //! walk.
 
 use super::*;
+use alloc::rc::Rc;
+use core::cell::Cell;
+use paperpaw_platform::{DirEntry, Storage, StorageError};
 use paperpaw_sdk::builtin::{events, params};
 use paperpaw_sdk::document::DocumentError;
 use paperpaw_sdk::event::EventData;
@@ -275,4 +278,90 @@ fn an_empty_library_is_not_walked_again_each_time_a_view_asks() {
     kernel.storage().write("books/a.txt", b"one").unwrap();
     want(&mut kernel, now, true);
     assert_eq!(paths(&kernel), ["books/a.txt"]);
+}
+
+/// A card whose writes to the library's folder fail while `full` is set,
+/// as a full card's do.
+struct Card {
+    inner: MemoryStorage,
+    full: Rc<Cell<bool>>,
+}
+
+impl Card {
+    fn check(&self, path: &str) -> Result<(), StorageError> {
+        if self.full.get() && path.starts_with(".paperpaw/library") {
+            Err(StorageError::Io)
+        } else {
+            Ok(())
+        }
+    }
+}
+
+impl Storage for Card {
+    fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
+        self.inner.read_at(path, offset, buf)
+    }
+    fn size(&self, path: &str) -> Result<u64, StorageError> {
+        self.inner.size(path)
+    }
+    fn write(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+        self.check(path)?;
+        self.inner.write(path, data)
+    }
+    fn append(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+        self.check(path)?;
+        self.inner.append(path, data)
+    }
+    fn list(&self, dir: &str, visit: &mut dyn FnMut(DirEntry<'_>)) -> Result<(), StorageError> {
+        self.inner.list(dir, visit)
+    }
+    fn remove(&self, path: &str) -> Result<(), StorageError> {
+        self.inner.remove(path)
+    }
+    fn rename(&self, from: &str, to: &str) -> Result<(), StorageError> {
+        self.check(to)?;
+        self.inner.rename(from, to)
+    }
+    fn create_dir(&self, path: &str) -> Result<(), StorageError> {
+        self.check(path)?;
+        self.inner.create_dir(path)
+    }
+}
+
+/// A walk that fails (the card is full) tells the views all the same, so
+/// that none keeps saying the books are being collected; it is tried again
+/// after a while, and tells once more when it works.
+#[test]
+fn a_walk_that_fails_tells_the_views_and_is_tried_again() {
+    let full = Rc::new(Cell::new(true));
+    let log = log();
+    let card = Card {
+        inner: two_books(),
+        full: full.clone(),
+    };
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(LibraryPlugin { log: log.clone() })
+        .storage(card)
+        .build()
+        .unwrap();
+    let effects = kernel.start(Instant(0));
+    let now = run(&mut kernel, 0, effects);
+    let now = want(&mut kernel, now, false);
+    assert!(paths(&kernel).is_empty());
+    assert!(!log.borrow().is_empty(), "the views were not told");
+    // The card has room again: the next attempt (after the wait) makes
+    // the catalog, and tells once more.
+    full.set(false);
+    let told = log.borrow().len();
+    let mut now = now;
+    for _ in 0..40 {
+        if !paths(&kernel).is_empty() {
+            break;
+        }
+        now += 60_000;
+        let effects = kernel.tick(Instant(now));
+        now = run(&mut kernel, now, effects);
+    }
+    assert_eq!(paths(&kernel), ["books/a.txt", "books/b.txt"]);
+    assert!(log.borrow().len() > told);
 }
