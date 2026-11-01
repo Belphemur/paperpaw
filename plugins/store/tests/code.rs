@@ -424,6 +424,7 @@ fn the_installed_list_names_the_bigger_room_of_a_full_install_on_the_stock_layou
         );
         if said {
             assert!(shown.contains("about 2.9 MB"), "{shown}");
+            assert!(shown.contains("used. A full install"), "{shown}");
         }
     }
 }

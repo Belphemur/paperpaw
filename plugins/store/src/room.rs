@@ -107,7 +107,7 @@ impl Room {
         let mut line = parts.join(" · ");
         if let Some(flash) = self.flash(env) {
             if !line.is_empty() {
-                line.push(' ');
+                line.push_str(". ");
             }
             line.push_str(&flash);
         }
