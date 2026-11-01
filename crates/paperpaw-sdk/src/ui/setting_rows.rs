@@ -185,10 +185,11 @@ impl ValueLines {
     }
 }
 
+paperpaw_table::shared! {
 /// The lines of a row's title beside a control `beside` pixels wide (a
 /// value, a switch; 0 for none) in a row `width` wide: one where it fits,
 /// else its words wrapped, in the text size; and a line's height.
-pub(super) fn title_lines(
+pub(crate) fn title_lines(
     font: &FontHandle<'_>,
     style: &UiStyle,
     width: u16,
@@ -203,6 +204,7 @@ pub(super) fn title_lines(
         return (alloc::vec![0..title.len()], line);
     }
     (font.wrap(style.text, title, room), line)
+} @ ui::SETTING_TITLE_LINES
 }
 
 /// The height of a row `width` wide with `title` and `value` (as
@@ -224,6 +226,7 @@ pub(crate) fn value_row_height(
     row.max(lines.height() + style.margin as u16)
 }
 
+paperpaw_table::shared! {
 /// The height of a noted row `width` wide with `title`, `value` and
 /// `note` (as [`draw_noted_row`] draws it): a noted row as high as its
 /// note needs ([`UiStyle::noted_row_for`]), taller where the title takes
@@ -246,6 +249,7 @@ pub(crate) fn noted_row_height(
     let lines = ValueLines::new(&font, style, width, title, value);
     let band = title_area(style, Rect::new(0, 0, width, base)).height;
     base + lines.height().saturating_sub(band)
+} @ ui::SETTING_NOTED_ROW_HEIGHT
 }
 
 /// The height of a row `width` wide with a switch, `title` and `note` (as
@@ -304,11 +308,12 @@ pub fn note_fits(env: &Env<'_>, style: &UiStyle, width: u16, note: &str) -> bool
     font.wrap(style.small, note, width).len() <= NOTE_LINES
 }
 
+paperpaw_table::shared! {
 /// Draws the note of a row from `below` down to the end of `rect`: in
 /// small gray text (light on a focused row), wrapped to [`NOTE_LINES`],
 /// or to more in a row higher than [`UiStyle::noted_row`] by them (see
 /// [`UiStyle::noted_row_for`]).
-pub(super) fn draw_note_below(
+pub(crate) fn draw_note_below(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     style: &UiStyle,
@@ -366,16 +371,18 @@ pub(super) fn draw_note_below(
         note
     };
     canvas.describe(Role::Text, said, at);
+} @ ui::SETTING_DRAW_NOTE_BELOW
 }
 
+paperpaw_table::shared! {
 /// Draws a row: `title` on the left, `value` right-aligned.
 #[allow(
     clippy::too_many_arguments,
     reason = "its inputs are separate things; a struct of them would serve this call alone"
 )]
-#[expect(
+#[allow(
     clippy::too_many_lines,
-    reason = "grew by the role each label now names; split it when it is next changed"
+    reason = "grew by the role each label now names; split it when it is next changed (`allow`: clippy does not measure functions inside `shared!`)"
 )]
 pub(crate) fn draw_value_row(
     canvas: &mut Canvas<'_>,
@@ -546,6 +553,7 @@ pub(crate) fn draw_value_row(
         &title_text,
         color,
     );
+} @ ui::SETTING_DRAW_VALUE_ROW
 }
 
 /// How wide a part of `rect` from its left to `end` is: the place a

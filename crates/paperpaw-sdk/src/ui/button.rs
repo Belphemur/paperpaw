@@ -82,6 +82,7 @@ pub(crate) fn draw_button(
     draw_button_said(canvas, env, style, rect, label, on, on, focused);
 }
 
+paperpaw_table::shared! {
 /// [`draw_button`], filled where `filled`, said to be on where `on`: a
 /// key filled to show the focus is not on.
 #[expect(
@@ -110,6 +111,7 @@ pub(crate) fn draw_button_said(
         return;
     };
     button_label(canvas, style, &font, rect, label, ink);
+} @ ui::BUTTON_DRAW_SAID
 }
 
 /// A button that cannot be used now (e.g. a menu entry shown faint): its
@@ -165,9 +167,10 @@ pub(crate) fn draw_icon_button_said(
     button_frame(canvas, style, rect, filled, focused).unwrap_or(Color::BLACK)
 }
 
+paperpaw_table::shared! {
 /// A button's background, border and focus frame; the ink for what goes
 /// on it.
-pub(super) fn button_frame(
+pub(crate) fn button_frame(
     canvas: &mut Canvas<'_>,
     style: &UiStyle,
     rect: Rect,
@@ -185,6 +188,7 @@ pub(super) fn button_frame(
     };
     framed(canvas, style, rect, (back, Color::BLACK), focused);
     Some(ink)
+} @ ui::BUTTON_FRAME
 }
 
 /// A button's background and border in `colors`, and its focus frame.
@@ -260,6 +264,7 @@ fn label_lines(
     (font.wrap(style.small, label, room.max(1.0)), line)
 }
 
+paperpaw_table::shared! {
 /// The height of a button `width` wide for `label`, its word whole: a
 /// button's in a row that can be touched ([`Segments::height`]), a line
 /// higher for each more line a word too long for one takes.
@@ -270,6 +275,7 @@ pub fn button_height_for(env: &Env<'_>, style: &UiStyle, width: u16, label: &str
     };
     let (lines, line) = label_lines(&font, style, f32::from(width), label);
     base + line * (lines.len().max(1) as u16 - 1)
+} @ ui::BUTTON_HEIGHT_FOR
 }
 
 /// The height of a button's slot in a column of buttons `width` wide, one
@@ -291,10 +297,11 @@ pub fn button_in_slot(style: &UiStyle, slot: Rect) -> Rect {
     Rect::new(slot.x, slot.y + (row - base) / 2, slot.width, base + extra)
 }
 
+paperpaw_table::shared! {
 /// A button's word, centred: on more lines where it is too long for one
 /// and the button is high enough ([`button_height_for`]), else shortened
 /// to fit.
-pub(super) fn button_label(
+pub(crate) fn button_label(
     canvas: &mut Canvas<'_>,
     style: &UiStyle,
     font: &FontHandle<'_>,
@@ -358,6 +365,7 @@ pub(super) fn button_label(
         &label,
         ink,
     );
+} @ ui::BUTTON_LABEL
 }
 
 #[cfg(test)]

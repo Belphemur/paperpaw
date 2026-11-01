@@ -46,15 +46,25 @@ mod tests {
     use super::*;
 
     /// Every family with revisions has a table of one non-null address for
-    /// each index of `paperpaw_table::index`.
+    /// each index of `paperpaw_table::index`; one without has none.
     #[test]
-    fn the_text_table_is_whole() {
-        let t = table(Family::TEXT);
-        assert!(!t.0.is_null());
-        for i in 0..paperpaw_table::index::text::COUNT {
-            // SAFETY: within the table.
-            assert!(!unsafe { *t.0.add(i) }.is_null(), "entry {i}");
+    fn the_tables_are_whole() {
+        let families = [
+            (Family::TEXT, paperpaw_table::index::text::COUNT),
+            (Family::FONTS, paperpaw_table::index::fonts::COUNT),
+            (Family::UI, paperpaw_table::index::ui::COUNT),
+            (Family::GRAPHICS, paperpaw_table::index::graphics::COUNT),
+            (Family::CONTRIBUTION, paperpaw_table::index::contribution::COUNT),
+        ];
+        for (family, count) in families {
+            let t = table(family);
+            let revision = paperpaw_table::REVISIONS[family.number()];
+            assert_eq!(t.0.is_null(), revision == 0, "family {}", family.number());
+            assert_eq!(count == 0, revision == 0, "family {}", family.number());
+            for i in 0..count {
+                // SAFETY: within the table.
+                assert!(!unsafe { *t.0.add(i) }.is_null(), "entry {i}");
+            }
         }
-        assert_eq!(table(Family::FONTS).0, Table::NONE.0);
     }
 }

@@ -1,11 +1,11 @@
 // Made by tools/shared-table.py from shared.list: do not edit.
 
 /// The revision of each family (`shared.list`).
-pub const REVISIONS: crate::Revisions = [1, 0, 0, 0, 0, 0, 0, 0];
+pub const REVISIONS: crate::Revisions = [1, 0, 1, 0, 0, 0, 0, 0];
 /// The oldest revision of each family whose plugins still run.
-pub const OLDEST: crate::Revisions = [1, 0, 0, 0, 0, 0, 0, 0];
+pub const OLDEST: crate::Revisions = [1, 0, 1, 0, 0, 0, 0, 0];
 /// Eight hex digits naming the tables of this build, for logs.
-pub const HASH: &str = "c147d9f0";
+pub const HASH: &str = "b4d38751";
 
 /// The text family's table.
 pub mod text {
@@ -115,8 +115,112 @@ pub mod fonts {
 pub mod ui {
     /// The family.
     pub const FAMILY: crate::Family = crate::Family::UI;
+    /// `crate::ui::style::UiStyle::new` (revision 1).
+    pub const STYLE_NEW: usize = 0;
+    /// `crate::ui::style::UiStyle::noted_row` (revision 1).
+    pub const STYLE_NOTED_ROW: usize = 1;
+    /// `crate::ui::style::draw_focus` (revision 1).
+    pub const STYLE_DRAW_FOCUS: usize = 2;
+    /// `crate::ui::style::draw_separator` (revision 1).
+    pub const STYLE_DRAW_SEPARATOR: usize = 3;
+    /// `crate::ui::shows` (revision 1).
+    pub const UI_SHOWS: usize = 4;
+    /// `crate::ui::text::icon` (revision 1).
+    pub const TEXT_ICON: usize = 5;
+    /// `crate::ui::text::draw_icon` (revision 1).
+    pub const TEXT_DRAW_ICON: usize = 6;
+    /// `crate::ui::text::icon_width` (revision 1).
+    pub const TEXT_ICON_WIDTH: usize = 7;
+    /// `crate::ui::text::draw_icon_at` (revision 1).
+    pub const TEXT_DRAW_ICON_AT: usize = 8;
+    /// `crate::ui::text::heading_height` (revision 1).
+    pub const TEXT_HEADING_HEIGHT: usize = 9;
+    /// `crate::ui::text::draw_heading` (revision 1).
+    pub const TEXT_DRAW_HEADING: usize = 10;
+    /// `crate::ui::text::icon_room` (revision 1).
+    pub const TEXT_ICON_ROOM: usize = 11;
+    /// `crate::ui::text::draw_row_icon` (revision 1).
+    pub const TEXT_DRAW_ROW_ICON: usize = 12;
+    /// `crate::ui::text::tr_input` (revision 1).
+    pub const TEXT_TR_INPUT: usize = 13;
+    /// `crate::ui::text::draw_label` (revision 1).
+    pub const TEXT_DRAW_LABEL: usize = 14;
+    /// `crate::ui::text::draw_label_in` (revision 1).
+    pub const TEXT_DRAW_LABEL_IN: usize = 15;
+    /// `crate::ui::text::draw_text` (revision 1).
+    pub const TEXT_DRAW_TEXT: usize = 16;
+    /// `crate::ui::text::put_run` (revision 1).
+    pub const TEXT_PUT_RUN: usize = 17;
+    /// `crate::ui::text::cap_baseline` (revision 1).
+    pub const TEXT_CAP_BASELINE: usize = 18;
+    /// `crate::ui::text::draw_label_on` (revision 1).
+    pub const TEXT_DRAW_LABEL_ON: usize = 19;
+    /// `crate::ui::text::fit_pair` (revision 1).
+    pub const TEXT_FIT_PAIR: usize = 20;
+    /// `crate::ui::text::message_height` (revision 1).
+    pub const TEXT_MESSAGE_HEIGHT: usize = 21;
+    /// `crate::ui::text::draw_message` (revision 1).
+    pub const TEXT_DRAW_MESSAGE: usize = 22;
+    /// `crate::ui::text::note_line_height` (revision 1).
+    pub const TEXT_NOTE_LINE_HEIGHT: usize = 23;
+    /// `crate::ui::text::draw_note_line` (revision 1).
+    pub const TEXT_DRAW_NOTE_LINE: usize = 24;
+    /// `crate::ui::text::fit` (revision 1).
+    pub const TEXT_FIT: usize = 25;
+    /// `crate::ui::text::empty_height` (revision 1).
+    pub const TEXT_EMPTY_HEIGHT: usize = 26;
+    /// `crate::ui::text::draw_empty` (revision 1).
+    pub const TEXT_DRAW_EMPTY: usize = 27;
+    /// `crate::ui::button::draw_button_said` (revision 1).
+    pub const BUTTON_DRAW_SAID: usize = 28;
+    /// `crate::ui::button::button_frame` (revision 1).
+    pub const BUTTON_FRAME: usize = 29;
+    /// `crate::ui::button::button_label` (revision 1).
+    pub const BUTTON_LABEL: usize = 30;
+    /// `crate::ui::button::button_height_for` (revision 1).
+    pub const BUTTON_HEIGHT_FOR: usize = 31;
+    /// `crate::ui::header::Header::new` (revision 1).
+    pub const HEADER_NEW: usize = 32;
+    /// `crate::ui::header::Header::draw` (revision 1).
+    pub const HEADER_DRAW: usize = 33;
+    /// `crate::ui::header::Header::tap` (revision 1).
+    pub const HEADER_TAP: usize = 34;
+    /// `crate::ui::header::draw_arrow` (revision 1).
+    pub const HEADER_DRAW_ARROW: usize = 35;
+    /// `crate::ui::row::Row::height` (revision 1).
+    pub const ROW_HEIGHT: usize = 36;
+    /// `crate::ui::row::Row::draw` (revision 1).
+    pub const ROW_DRAW: usize = 37;
+    /// `crate::ui::row::Row::hit` (revision 1).
+    pub const ROW_HIT: usize = 38;
+    /// `crate::ui::label::Label::height` (revision 1).
+    pub const LABEL_HEIGHT: usize = 39;
+    /// `crate::ui::label::Label::draw_from` (revision 1).
+    pub const LABEL_DRAW_FROM: usize = 40;
+    /// `crate::ui::setting_rows::title_lines` (revision 1).
+    pub const SETTING_TITLE_LINES: usize = 41;
+    /// `crate::ui::setting_rows::noted_row_height` (revision 1).
+    pub const SETTING_NOTED_ROW_HEIGHT: usize = 42;
+    /// `crate::ui::setting_rows::draw_note_below` (revision 1).
+    pub const SETTING_DRAW_NOTE_BELOW: usize = 43;
+    /// `crate::ui::setting_rows::draw_value_row` (revision 1).
+    pub const SETTING_DRAW_VALUE_ROW: usize = 44;
+    /// `crate::ui::list::ListView::set_focus` (revision 1).
+    pub const LIST_SET_FOCUS: usize = 45;
+    /// `crate::ui::list::ListView::focus_change` (revision 1).
+    pub const LIST_FOCUS_CHANGE: usize = 46;
+    /// `crate::ui::list::ListView::paging` (revision 1).
+    pub const LIST_PAGING: usize = 47;
+    /// `crate::ui::list::ListView::move_focus` (revision 1).
+    pub const LIST_MOVE_FOCUS: usize = 48;
+    /// `crate::ui::list::ListView::row_rect` (revision 1).
+    pub const LIST_ROW_RECT: usize = 49;
+    /// `crate::ui::list::ListView::hit` (revision 1).
+    pub const LIST_HIT: usize = 50;
+    /// `crate::ui::list::list_step` (revision 1).
+    pub const LIST_STEP: usize = 51;
     /// How many entries the table has.
-    pub const COUNT: usize = 0;
+    pub const COUNT: usize = 52;
 }
 
 /// The graphics family's table.

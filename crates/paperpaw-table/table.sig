@@ -44,3 +44,55 @@ text 1 CACHE_NEW: fn new(capacity: usize) -> GlyphCache
 text 1 FONTS_FAILED_READS: fn failed_reads(&self) -> u32
 text 1 HANDLE_MEASURE_IN: fn measure_in(&self, size: f32, text: &str, around: &paperpaw_text::Around) -> f32
 text 1 HANDLE_DRAW_IN: fn draw_in( &self, canvas: &mut Canvas<'_>, size: f32, x: f32, baseline: i32, text: &str, color: Color, look: (u16, paperpaw_text::ToneCurve), around: &paperpaw_text::Around, ) -> f32
+ui 1 STYLE_NEW: fn new(env: &Env<'_>) -> Self
+ui 1 STYLE_NOTED_ROW: fn noted_row(&self) -> u32
+ui 1 STYLE_DRAW_FOCUS: fn draw_focus(canvas: &mut Canvas<'_>, style: &UiStyle, rect: Rect)
+ui 1 STYLE_DRAW_SEPARATOR: fn draw_separator(canvas: &mut Canvas<'_>, style: &UiStyle, rect: Rect, indent: u16)
+ui 1 UI_SHOWS: fn shows(canvas: &Canvas<'_>, rect: Rect) -> bool
+ui 1 TEXT_ICON: fn icon<'f>(env: &Env<'f>, name: &str) -> Option<(FontHandle<'f>, char)>
+ui 1 TEXT_DRAW_ICON: fn draw_icon( canvas: &mut Canvas<'_>, env: &Env<'_>, name: &str, size: f32, x: f32, area: Rect, color: Color, ) -> f32
+ui 1 TEXT_ICON_WIDTH: fn icon_width(env: &Env<'_>, name: &str, size: f32) -> f32
+ui 1 TEXT_DRAW_ICON_AT: fn draw_icon_at( canvas: &mut Canvas<'_>, env: &Env<'_>, name: &str, size: f32, at: (i32, i32), color: Color, ) -> bool
+ui 1 TEXT_HEADING_HEIGHT: fn heading_height(env: &Env<'_>, style: &UiStyle) -> u16
+ui 1 TEXT_DRAW_HEADING: fn draw_heading( canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, rect: Rect, text: &str, )
+ui 1 TEXT_ICON_ROOM: fn icon_room(env: &Env<'_>, style: &UiStyle, any: bool) -> u16
+ui 1 TEXT_DRAW_ROW_ICON: fn draw_row_icon( canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, rect: Rect, room: u16, icon: Option<&str>, ink: Color, ) -> Rect
+ui 1 TEXT_TR_INPUT: fn tr_input<'a>(env: &Env<'a>, key: &'a str) -> &'a str
+ui 1 TEXT_DRAW_LABEL: fn draw_label( canvas: &mut Canvas<'_>, font: &FontHandle<'_>, size: f32, x: f32, area: Rect, text: &str, color: Color, ) -> f32
+ui 1 TEXT_DRAW_LABEL_IN: fn draw_label_in( canvas: &mut Canvas<'_>, font: &FontHandle<'_>, style: &UiStyle, role: TextRole, size: f32, x: f32, area: Rect, text: &str, color: Color, ) -> f32
+ui 1 TEXT_DRAW_TEXT: fn draw_text( canvas: &mut Canvas<'_>, font: &FontHandle<'_>, look: Option<(&UiStyle, TextRole)>, size: f32, x: f32, area: Rect, text: &str, color: Color, ) -> f32
+ui 1 TEXT_PUT_RUN: fn put_run( canvas: &mut Canvas<'_>, font: &FontHandle<'_>, look: Option<(&UiStyle, TextRole)>, size: f32, x: f32, baseline: i32, area: Rect, text: &str, color: Color, ) -> f32
+ui 1 TEXT_CAP_BASELINE: fn cap_baseline(font: &FontHandle<'_>, band: Rect, size: f32) -> i32
+ui 1 TEXT_DRAW_LABEL_ON: fn draw_label_on( canvas: &mut Canvas<'_>, font: &FontHandle<'_>, look: Option<(&UiStyle, TextRole)>, size: f32, x: f32, area: Rect, baseline: i32, text: &str, color: Color, ) -> f32
+ui 1 TEXT_FIT_PAIR: fn fit_pair( font: &FontHandle<'_>, size: f32, title: &str, value: &str, width: f32, gap: f32, ) -> (String, String, f32)
+ui 1 TEXT_MESSAGE_HEIGHT: fn message_height(env: &Env<'_>, style: &UiStyle, width: u16, text: &str) -> u16
+ui 1 TEXT_DRAW_MESSAGE: fn draw_message( canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect, text: &str, )
+ui 1 TEXT_NOTE_LINE_HEIGHT: fn note_line_height(env: &Env<'_>, style: &UiStyle, width: u16, text: &str) -> u16
+ui 1 TEXT_DRAW_NOTE_LINE: fn draw_note_line( canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect, text: &str, )
+ui 1 TEXT_FIT: fn fit(font: &FontHandle<'_>, size: f32, text: &str, width: f32) -> String
+ui 1 TEXT_EMPTY_HEIGHT: fn empty_height(env: &Env<'_>, style: &UiStyle, width: u16, title: &str, text: &str) -> u16
+ui 1 TEXT_DRAW_EMPTY: fn draw_empty( canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect, icon: &str, title: &str, text: &str, )
+ui 1 BUTTON_DRAW_SAID: fn draw_button_said( canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, rect: Rect, label: &str, filled: bool, on: bool, focused: bool, )
+ui 1 BUTTON_FRAME: fn button_frame( canvas: &mut Canvas<'_>, style: &UiStyle, rect: Rect, on: bool, focused: bool, ) -> Option<Color>
+ui 1 BUTTON_LABEL: fn button_label( canvas: &mut Canvas<'_>, style: &UiStyle, font: &FontHandle<'_>, rect: Rect, label: &str, ink: Color, )
+ui 1 BUTTON_HEIGHT_FOR: fn button_height_for(env: &Env<'_>, style: &UiStyle, width: u16, label: &str) -> u16
+ui 1 HEADER_NEW: fn new(env: &Env<'_>, style: &UiStyle, back: bool) -> Self
+ui 1 HEADER_DRAW: fn draw( &self, ui: &mut super::Ui<'_>, title: &str, note: Option<&str>, page: Option<Paging>, )
+ui 1 HEADER_TAP: fn tap( &self, env: &Env<'_>, style: &UiStyle, point: Point, page: Option<Paging>, ) -> Option<crate::Id>
+ui 1 HEADER_DRAW_ARROW: fn draw_arrow( canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, at: (i32, i32), icon: &str, left: bool, color: Color, )
+ui 1 ROW_HEIGHT: fn height(&self, env: &Env<'_>, style: &UiStyle, width: u16) -> u16
+ui 1 ROW_DRAW: fn draw(&self, ui: &mut Ui<'_>, rect: Rect)
+ui 1 ROW_HIT: fn hit(&self, env: &Env<'_>, style: &UiStyle, rect: Rect, point: Point) -> Option<RowPart>
+ui 1 LABEL_HEIGHT: fn height(&self, env: &Env<'_>, style: &UiStyle, width: u16) -> u16
+ui 1 LABEL_DRAW_FROM: fn draw_from(&self, ui: &mut Ui<'_>, x: f32, area: Rect) -> f32
+ui 1 SETTING_TITLE_LINES: fn title_lines( font: &FontHandle<'_>, style: &UiStyle, width: u16, beside: f32, title: &str, ) -> (Vec<core::ops::Range<usize>>, u16)
+ui 1 SETTING_NOTED_ROW_HEIGHT: fn noted_row_height( env: &Env<'_>, style: &UiStyle, width: u16, title: &str, value: &str, note: &str, ) -> u16
+ui 1 SETTING_DRAW_NOTE_BELOW: fn draw_note_below( canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, rect: Rect, below: u16, focused: bool, note: &str, )
+ui 1 SETTING_DRAW_VALUE_ROW: fn draw_value_row( canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, rect: Rect, focused: bool, title: &str, value: &str, )
+ui 1 LIST_SET_FOCUS: fn set_focus(&mut self, index: usize) -> ListChange
+ui 1 LIST_FOCUS_CHANGE: fn focus_change(&self) -> ListChange
+ui 1 LIST_PAGING: fn paging(&self, len: usize) -> Option<super::Paging>
+ui 1 LIST_MOVE_FOCUS: fn move_focus(&mut self, delta: isize, len: usize) -> ListChange
+ui 1 LIST_ROW_RECT: fn row_rect(&self, slot: usize) -> Rect
+ui 1 LIST_HIT: fn hit(&self, point: Point, len: usize) -> Option<usize>
+ui 1 LIST_STEP: fn list_step(action: &crate::Id, page: isize) -> Option<isize>
