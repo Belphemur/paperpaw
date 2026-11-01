@@ -62,10 +62,18 @@ impl LightTimer {
         }
     }
 
-    /// Whether the light is off at `now` (ms), the choice being
-    /// `after_ms` (see [`delay_ms`]). Off once that long passed without
-    /// input; on again with the choice *Never*.
-    pub fn dark(&mut self, now: u64, after_ms: Option<u64>) -> bool {
+    /// Whether the light is off for want of input at `now` (ms), the
+    /// choice being `after_ms` (see [`delay_ms`]) and `lit` whether the
+    /// light is set to shine at all (a level above 0). Off once that long
+    /// passed without input; on again with the choice *Never*. A light
+    /// that is set off has nothing to bring back: no press is held back
+    /// for it, and the time counts from the moment it is set to shine.
+    pub fn dark(&mut self, now: u64, after_ms: Option<u64>, lit: bool) -> bool {
+        if !lit {
+            self.dark = false;
+            self.last = now;
+            return false;
+        }
         match after_ms {
             None => self.dark = false,
             Some(after) if now.saturating_sub(self.last) >= after => self.dark = true,
@@ -187,16 +195,16 @@ mod tests {
     #[test]
     fn the_light_goes_off_after_the_time_without_input() {
         let mut timer = LightTimer::new(1_000);
-        assert!(!timer.dark(30_999, delay_ms(S30)));
-        assert!(timer.dark(31_000, delay_ms(S30)));
+        assert!(!timer.dark(30_999, delay_ms(S30), true));
+        assert!(timer.dark(31_000, delay_ms(S30), true));
         // And stays off, with no input.
-        assert!(timer.dark(500_000, delay_ms(S30)));
+        assert!(timer.dark(500_000, delay_ms(S30), true));
     }
 
     #[test]
     fn never_keeps_the_light_on_and_passes_everything() {
         let mut timer = LightTimer::new(0);
-        assert!(!timer.dark(10_000_000, None));
+        assert!(!timer.dark(10_000_000, None, true));
         assert!(timer.pass(10_000_000, &press(buttons::CONFIRM)));
         assert!(timer.pass(10_000_050, &release(buttons::CONFIRM)));
     }
@@ -206,30 +214,30 @@ mod tests {
         let mut timer = LightTimer::new(0);
         assert!(timer.pass(20_000, &press(buttons::PAGE_FORWARD)));
         assert!(timer.pass(20_100, &release(buttons::PAGE_FORWARD)));
-        assert!(!timer.dark(49_000, delay_ms(S30)));
-        assert!(timer.dark(50_100, delay_ms(S30)));
+        assert!(!timer.dark(49_000, delay_ms(S30), true));
+        assert!(timer.dark(50_100, delay_ms(S30), true));
     }
 
     #[test]
     fn the_press_that_brings_the_light_back_turns_no_page() {
         let mut timer = LightTimer::new(0);
-        assert!(timer.dark(60_000, delay_ms(S30)));
+        assert!(timer.dark(60_000, delay_ms(S30), true));
         // The press only lights; so does its release.
         assert!(!timer.pass(61_000, &press(buttons::PAGE_FORWARD)));
-        assert!(!timer.dark(61_000, delay_ms(S30)));
+        assert!(!timer.dark(61_000, delay_ms(S30), true));
         assert!(!timer.pass(61_120, &release(buttons::PAGE_FORWARD)));
         // The next press is an ordinary one.
         assert!(timer.pass(62_000, &press(buttons::PAGE_FORWARD)));
         assert!(timer.pass(62_100, &release(buttons::PAGE_FORWARD)));
         // The time counts from the last input.
-        assert!(!timer.dark(91_000, delay_ms(S30)));
-        assert!(timer.dark(92_100, delay_ms(S30)));
+        assert!(!timer.dark(91_000, delay_ms(S30), true));
+        assert!(timer.dark(92_100, delay_ms(S30), true));
     }
 
     #[test]
     fn a_button_held_through_the_wake_up_stays_held_back() {
         let mut timer = LightTimer::new(0);
-        assert!(timer.dark(40_000, delay_ms(S30)));
+        assert!(timer.dark(40_000, delay_ms(S30), true));
         assert!(!timer.pass(40_000, &press(buttons::CONFIRM)));
         // Another button pressed meanwhile is an ordinary one.
         assert!(timer.pass(40_200, &press(buttons::BACK)));
@@ -242,9 +250,9 @@ mod tests {
     #[test]
     fn a_touch_that_brings_the_light_back_is_held_back_to_its_end() {
         let mut timer = LightTimer::new(0);
-        assert!(timer.dark(40_000, delay_ms(S30)));
+        assert!(timer.dark(40_000, delay_ms(S30), true));
         assert!(!timer.pass(40_000, &touch(PointerPhase::Down)));
-        assert!(!timer.dark(40_000, delay_ms(S30)));
+        assert!(!timer.dark(40_000, delay_ms(S30), true));
         assert!(!timer.pass(40_050, &touch(PointerPhase::Move)));
         assert!(!timer.pass(40_100, &touch(PointerPhase::Up)));
         for phase in [PointerPhase::Down, PointerPhase::Move, PointerPhase::Up] {
@@ -255,7 +263,7 @@ mod tests {
     #[test]
     fn a_touch_cancelled_ends_the_holding_back() {
         let mut timer = LightTimer::new(0);
-        assert!(timer.dark(40_000, delay_ms(S30)));
+        assert!(timer.dark(40_000, delay_ms(S30), true));
         assert!(!timer.pass(40_000, &touch(PointerPhase::Down)));
         assert!(!timer.pass(40_020, &touch(PointerPhase::Cancel)));
         assert!(timer.pass(41_000, &touch(PointerPhase::Down)));
@@ -264,15 +272,15 @@ mod tests {
     #[test]
     fn the_power_button_neither_lights_nor_is_held_back() {
         let mut timer = LightTimer::new(0);
-        assert!(timer.dark(40_000, delay_ms(S30)));
+        assert!(timer.dark(40_000, delay_ms(S30), true));
         assert!(timer.pass(40_000, &press(buttons::POWER)));
-        assert!(timer.dark(40_000, delay_ms(S30)));
+        assert!(timer.dark(40_000, delay_ms(S30), true));
         assert!(timer.pass(40_500, &release(buttons::POWER)));
-        assert!(timer.dark(41_000, delay_ms(S30)));
+        assert!(timer.dark(41_000, delay_ms(S30), true));
         // With the light on it is no sign of reading either.
         let mut timer = LightTimer::new(0);
         assert!(timer.pass(20_000, &press(buttons::POWER)));
-        assert!(timer.dark(30_000, delay_ms(S30)));
+        assert!(timer.dark(30_000, delay_ms(S30), true));
     }
 
     #[test]
@@ -281,17 +289,46 @@ mod tests {
         // before the light went off): the kernel needs its release.
         let mut timer = LightTimer::new(0);
         assert!(timer.pass(1_000, &press(buttons::LEFT)));
-        assert!(timer.dark(40_000, delay_ms(S30)));
+        assert!(timer.dark(40_000, delay_ms(S30), true));
         assert!(timer.pass(40_000, &release(buttons::LEFT)));
-        assert!(timer.dark(40_000, delay_ms(S30)));
+        assert!(timer.dark(40_000, delay_ms(S30), true));
+    }
+
+    #[test]
+    fn a_light_that_is_set_off_holds_nothing_back() {
+        let mut timer = LightTimer::new(0);
+        // Level 0 with the timer set: never dark, so no press is eaten.
+        assert!(!timer.dark(100_000, delay_ms(S30), false));
+        assert!(timer.pass(100_000, &press(buttons::PAGE_FORWARD)));
+        assert!(timer.pass(100_100, &release(buttons::PAGE_FORWARD)));
+        assert!(!timer.dark(10_000_000, delay_ms(S30), false));
+        assert!(timer.pass(10_000_000, &press(buttons::CONFIRM)));
+    }
+
+    #[test]
+    fn a_light_set_off_while_dark_and_on_again_counts_from_then() {
+        let mut timer = LightTimer::new(0);
+        assert!(timer.dark(40_000, delay_ms(S30), true));
+        // Set to 0 (a rule, say): nothing is dark any more.
+        assert!(!timer.dark(50_000, delay_ms(S30), false));
+        assert!(timer.pass(50_100, &press(buttons::CONFIRM)));
+        assert!(timer.pass(50_200, &release(buttons::CONFIRM)));
+        // Set to shine again: the first press is an ordinary one, and the
+        // time runs from when it was set.
+        assert!(!timer.dark(300_000, delay_ms(S30), false));
+        assert!(!timer.dark(300_001, delay_ms(S30), true));
+        assert!(timer.pass(300_002, &press(buttons::CONFIRM)));
+        assert!(timer.pass(300_003, &release(buttons::CONFIRM)));
+        assert!(!timer.dark(329_000, delay_ms(S30), true));
+        assert!(timer.dark(330_100, delay_ms(S30), true));
     }
 
     #[test]
     fn choosing_never_while_off_brings_the_light_back() {
         let mut timer = LightTimer::new(0);
-        assert!(timer.dark(40_000, delay_ms(S30)));
-        assert!(!timer.dark(40_000, delay_ms(NEVER)));
+        assert!(timer.dark(40_000, delay_ms(S30), true));
+        assert!(!timer.dark(40_000, delay_ms(NEVER), true));
         // Chosen again, the time counts from the last input, long ago.
-        assert!(timer.dark(40_001, delay_ms(S30)));
+        assert!(timer.dark(40_001, delay_ms(S30), true));
     }
 }

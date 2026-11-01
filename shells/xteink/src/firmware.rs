@@ -326,7 +326,8 @@ impl Firmware {
         let level = settings.read(&device::FRONTLIGHT);
         let warmth = settings.read(&device::WARMTH);
         let after = paperpaw_x4::light_timer::delay_ms(settings.read(&device::LIGHT_OFF_AFTER));
-        let dark = self.state.light_timer.dark(now().0, after);
+        let lit = level > 0 && self.light.is_some();
+        let dark = self.state.light_timer.dark(now().0, after, lit);
         if let Some(light) = self.light.as_mut() {
             if dark {
                 light.off();
@@ -334,7 +335,7 @@ impl Firmware {
                 light.show(level, warmth);
             }
         }
-        level > 0 && !dark && self.light.is_some()
+        lit && !dark
     }
 
     /// Whether the kernel hears `event`: not the press (and touch) that
