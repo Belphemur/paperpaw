@@ -319,7 +319,12 @@ macro_rules! shared {
                 call($this $(, $arg)*)
             }
             #[cfg(not(any(all(paperpaw_plugin, target_os = "none", target_arch = "riscv32"), paperpaw_table_host)))]
-            $body
+            {
+                // The type written is this method's: a wrong one does not
+                // build (a plugin would call the slot with it).
+                let _: $call = Self::$name;
+                $body
+            }
         }
     };
     // A function.

@@ -5,10 +5,34 @@
 //! the plugin called `Api::panic` itself; a CPU fault in the plugin's own
 //! code (esp-hal reports every fault of the RISC-V chips with a `panic!`
 //! from its exception handler, which knows nothing of the plugin's flag);
-//! or the firmware's code that a plugin called (a shared function) panicked.
-//! The first two are the plugin's, which safe mode then switches off
-//! alone; the third is the firmware's bug, and the plugin is only named as
-//! the caller.
+//! or the firmware's code that a plugin called panicked or faulted: a
+//! shared function (its parsers of JSON, INI and XML read what the plugin
+//! hands them), an allocation that failed there, or another call into the
+//! firmware. Each is blamed on the innermost plugin whose code is on the
+//! stack ([`blame`]), so that safe mode switches off that plugin alone
+//! (ADR 0026, "A crash in shared code is the calling plugin's"); the
+//! message says which of the two it was.
+
+/// Whose crash it is, of the innermost plugin whose code is on the stack.
+/// Both are the plugin's: safe mode switches it off.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Blame {
+    /// It panicked or faulted in its own code.
+    Own,
+    /// The firmware's code it called panicked or faulted: a shared
+    /// function, an allocation there, a call through its table. The
+    /// message says `[shared code, called from <plugin>]`.
+    Caller,
+}
+
+/// Whose crash it is ([`is_plugins_own`] takes the same arguments).
+pub fn blame(from_plugin: bool, from_exception: bool, fault_in_plugin: bool) -> Blame {
+    if is_plugins_own(from_plugin, from_exception, fault_in_plugin) {
+        Blame::Own
+    } else {
+        Blame::Caller
+    }
+}
 
 /// Whether the panic is the plugin's own. `from_plugin`: it called
 /// `Api::panic`. `from_exception`: the panic comes from the CPU's
@@ -43,16 +67,34 @@ mod tests {
     }
 
     #[test]
-    fn a_fault_in_the_firmwares_code_is_not_the_plugins() {
+    fn a_fault_in_the_firmwares_code_is_not_the_plugins_own() {
         // A shared function a plugin called, or the firmware's own code.
         assert!(!is_plugins_own(false, true, false));
     }
 
     #[test]
-    fn a_panic_in_shared_code_is_not_the_plugins_even_with_a_stale_pc() {
+    fn a_panic_in_shared_code_is_not_the_plugins_own_even_with_a_stale_pc() {
         // No exception: `mepc` is whatever an old trap left and says nothing.
         assert!(!is_plugins_own(false, false, true));
         assert!(!is_plugins_own(false, false, false));
+    }
+
+    #[test]
+    fn a_crash_in_the_code_a_plugin_called_is_blamed_on_the_caller() {
+        // A panic in a shared function (a parser, a failed allocation):
+        // no flag, no exception.
+        assert_eq!(blame(false, false, false), Blame::Caller);
+        // A fault in the firmware's code it called.
+        assert_eq!(blame(false, true, false), Blame::Caller);
+        // A stale `mepc` in a plugin without an exception changes nothing.
+        assert_eq!(blame(false, false, true), Blame::Caller);
+    }
+
+    #[test]
+    fn its_own_panic_and_fault_stay_its_own() {
+        assert_eq!(blame(true, false, false), Blame::Own);
+        assert_eq!(blame(false, true, true), Blame::Own);
+        assert_eq!(blame(true, true, false), Blame::Own);
     }
 
     #[test]

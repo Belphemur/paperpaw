@@ -45,6 +45,10 @@ rustflags = ["-C", "force-frame-pointers"]
 
 [env]
 ESP_LOG = "info"
+# Calls a panic's backtrace captures (10 by default): the crash file
+# keeps 16, and the plugin to blame is looked for in all (`crash.rs`).
+# 256 bytes of the panicking stack.
+ESP_BACKTRACE_CONFIG_BACKTRACE_FRAMES = "64"
 # Font packs: code and data share the 8 MB of flash the chip maps and an
 # app partition's 7.9 MB (and an update's download), so up to 36 px
 # (about 12 pt on its 220 dpi screen), not the 40 and 48 px of larger
