@@ -666,7 +666,9 @@ fn install_note(ota: Option<&ota::Ota>, storage: &dyn Storage, panicked: Option<
                 started: is_started(&head[..read]),
             }
         } else {
-            Kind::Started
+            Kind::Started {
+                by_bootloader: ota.marked_by_bootloader(),
+            }
         },
         device: DEVICE_NAME,
         version: env!("PAPERPAW_VERSION"),

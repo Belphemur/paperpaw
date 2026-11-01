@@ -33,8 +33,10 @@ pub fn is_started(head: &[u8]) -> bool {
 /// What the note says.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind<'a> {
-    /// The first start of an update on trial.
-    Started,
+    /// The first start of an update on trial. `by_bootloader`: the
+    /// bootloader had marked the start as pending itself (it has app
+    /// rollback), which the firmware took as the start, not a failure.
+    Started { by_bootloader: bool },
     /// A later start found the trial of the last one did not end cleanly.
     Failed {
         /// The panic message of the last run, if it ended in one.
@@ -65,7 +67,7 @@ pub struct InstallNote<'a> {
 impl fmt::Display for InstallNote<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.kind {
-            Kind::Started => {
+            Kind::Started { .. } => {
                 writeln!(f, "{STARTED_LINE}")?;
                 writeln!(
                     f,
@@ -130,6 +132,17 @@ impl fmt::Display for InstallNote<'_> {
             "Run before / gelaufen vorher: {} ms; reset / Neustart: {}; last place / letzter Ort: {}",
             self.ran_ms, self.reset, self.place
         )?;
+        if let Kind::Started { by_bootloader } = self.kind {
+            let (yes, ja) = if by_bootloader {
+                ("yes", "ja")
+            } else {
+                ("no", "nein")
+            };
+            writeln!(
+                f,
+                "Bootloader marked this start as pending itself / Bootloader hat diesen Start selbst als offen markiert: {yes} / {ja}"
+            )?;
+        }
         if let Kind::Failed { panic, started } = self.kind {
             let (yes, ja) = if started {
                 ("yes", "ja")
@@ -168,7 +181,10 @@ mod tests {
 
     #[test]
     fn a_started_note_says_it_is_on_trial_in_both_languages() {
-        let text = note(Kind::Started).to_string();
+        let text = note(Kind::Started {
+            by_bootloader: false,
+        })
+        .to_string();
         assert!(text.contains("on trial"), "{text}");
         assert!(text.contains("auf Probe"), "{text}");
         assert!(text.contains("PaperPaw 0.5.0-beta.12"), "{text}");
@@ -178,7 +194,10 @@ mod tests {
 
     #[test]
     fn a_started_note_is_told_from_a_failed_one_by_its_first_line() {
-        let started = note(Kind::Started).to_string();
+        let started = note(Kind::Started {
+            by_bootloader: true,
+        })
+        .to_string();
         let failed = note(Kind::Failed {
             panic: None,
             started: false,
@@ -188,6 +207,8 @@ mod tests {
         assert!(!is_started(failed.as_bytes()));
         assert!(!is_started(b""));
         assert!(!is_started(b"some other file"));
+        assert!(started.contains("pending itself"), "{started}");
+        assert!(started.contains(": yes / ja"), "{started}");
     }
 
     #[test]
@@ -225,7 +246,12 @@ mod tests {
         })
         .to_string();
         assert!(text.contains("Panic: src/x.rs:1:2 oops"), "{text}");
-        let started = format!("{}", note(Kind::Started));
+        let started = format!(
+            "{}",
+            note(Kind::Started {
+                by_bootloader: false
+            })
+        );
         assert!(!started.contains("Panic:"));
     }
 

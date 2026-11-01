@@ -9,7 +9,9 @@
 //! (`tests/update_path.rs`).
 //!
 //! The bootloader espflash brings does not undo updates itself, so the
-//! firmware does: a new firmware's first start marks it as on trial
+//! firmware does (a stock bootloader with app rollback marks a new image
+//! `PendingVerify` itself at its first start; the firmware tells that
+//! from its own mark of a trial, `ota::Start::Marked`): a new firmware's first start marks it as on trial
 //! (`PendingVerify`) as early as the shell can, before the kernel is built
 //! (what the shell builds before it, the firmware's description, cannot
 //! fail), and it is marked as
@@ -205,7 +207,7 @@ impl<F: Flash> Updates<F> {
         let mut undone = false;
         match start {
             Some(Start::Undone) => undone = true,
-            Some(Start::Trial { ran }) => {
+            Some(Start::Trial { ran } | Start::Marked { ran }) => {
                 trial = Some(Trial {
                     before: u64::from(ran),
                     since: 0,

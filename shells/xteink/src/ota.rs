@@ -85,7 +85,7 @@ impl ota::Flash for Chip {
 }
 
 /// Updates on this device.
-pub struct Ota(Updates<Chip>, Option<u32>);
+pub struct Ota(Updates<Chip>, Option<u32>, bool);
 
 impl Ota {
     /// Looks at what started and why (see `paperpaw_x4::updates`): an
@@ -109,11 +109,20 @@ impl Ota {
         let (updates, start) =
             Updates::start(Chip(shared), &slots, running, this, BOARD_TAG).ok()?;
         let mut failed = None;
+        let mut marked = false;
         match start {
             Some(Start::Kept) => info!("OTA: started {running}"),
             Some(Start::Undone) => warn!("OTA: the update did not start, {running} is back"),
             Some(Start::Trial { ran }) => {
                 info!("OTA: an update on trial in {running}, {ran} ms run before");
+            }
+            Some(Start::Marked { ran }) => {
+                // The bootloader (with app rollback) marked the start as
+                // pending itself: the update's first start, on trial.
+                info!(
+                    "OTA: an update on trial in {running}, marked pending by the bootloader, {ran} ms run before"
+                );
+                marked = true;
             }
             Some(Start::Failed { ran }) => {
                 // Marked bad already: whatever happens now, the bootloader
@@ -124,7 +133,7 @@ impl Ota {
             }
             None => warn!("OTA: could not mark the start of {running}"),
         }
-        Some(Self(updates, failed))
+        Some(Self(updates, failed, marked))
     }
 
     /// An update on trial that cannot work on this device (an X3 whose
@@ -160,6 +169,12 @@ impl Ota {
     pub fn ran_before(&self) -> u32 {
         let left = self.trial_left(0).unwrap_or(paperpaw_x4::updates::TRIAL_MS);
         u32::try_from(paperpaw_x4::updates::TRIAL_MS.saturating_sub(left)).unwrap_or(u32::MAX)
+    }
+
+    /// The bootloader marked this start `PendingVerify` itself (it has app
+    /// rollback): the trial's first start, not a failure of one.
+    pub fn marked_by_bootloader(&self) -> bool {
+        self.2
     }
 
     /// Restarts into the firmware before, after a failed trial.
