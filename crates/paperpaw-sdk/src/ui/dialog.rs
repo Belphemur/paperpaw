@@ -367,10 +367,20 @@ impl Dialog {
     /// by side or one below the other. `None` for other actions.
     pub fn step(&self, focus: usize, action: &Id) -> Option<usize> {
         let last = self.buttons.len().checked_sub(1)?;
-        if [actions::LEFT, actions::UP, actions::PREVIOUS].contains(action) {
-            Some(focus.saturating_sub(1))
-        } else if [actions::RIGHT, actions::DOWN, actions::NEXT].contains(action) {
-            Some((focus + 1).min(last))
+        // Side by side the first button is at the right where the UI runs
+        // right to left (see `lay_out`): left is then on towards the last.
+        let mirrored = !self.stacked
+            && last > 0
+            && self.buttons.first().map(|b| b.x) > self.buttons.get(last).map(|b| b.x);
+        let (back, on) = (focus.saturating_sub(1), (focus + 1).min(last));
+        if [actions::UP, actions::PREVIOUS].contains(action) {
+            Some(back)
+        } else if [actions::DOWN, actions::NEXT].contains(action) {
+            Some(on)
+        } else if action == &actions::LEFT {
+            Some(if mirrored { on } else { back })
+        } else if action == &actions::RIGHT {
+            Some(if mirrored { back } else { on })
         } else {
             None
         }
@@ -407,7 +417,12 @@ impl Dialog {
             let mut stack = super::Stack::new(row, margin);
             self.labels.iter().map(|_| stack.take(button)).collect()
         } else {
+            // The first at the start side: the right one where the UI runs
+            // right to left.
             super::columns(row, self.labels.len(), margin)
+                .into_iter()
+                .map(|button| style.flip(row, button))
+                .collect()
         };
         self.top = self.top.min(self.last_top());
     }
@@ -466,10 +481,11 @@ impl Dialog {
                     }
                     let line = &self.lines[i - self.title.len()];
                     let row = Rect::new(self.area.x, y, self.area.width, self.text_line);
-                    super::draw_label_in(
+                    super::draw_label_out(
                         canvas,
                         &font,
                         style,
+                        row,
                         super::TextRole::BODY,
                         text_size,
                         f32::from(row.x),
@@ -481,17 +497,16 @@ impl Dialog {
                 }
             }
             if self.scrolls() {
-                // Where the lines shown are in the whole, at the right.
+                // Where the lines shown are in the whole, at the right (the left
+                // where the UI runs right to left).
                 let rows = (self.title.len() + self.lines.len()) as u32;
                 let bar = (style.line.max(1) * 2) as u16;
                 let whole = u32::from(self.area.height);
                 let length = (whole * shown as u32 / rows.max(1)).max(u32::from(bar) * 4) as u16;
                 let at = self.area.y + (whole * self.top as u32 / rows.max(1)) as u16;
                 let x = (self.panel.x + self.panel.width).saturating_sub(bar + style.gap as u16);
-                canvas.fill(
-                    Rect::new(x, at, bar, length.min(self.area.height)),
-                    style.ink(super::Ink::MUTED),
-                );
+                let place = Rect::new(x, at, bar, length.min(self.area.height));
+                canvas.fill(style.flip(self.panel, place), style.ink(super::Ink::MUTED));
             }
         }
         // The buttons are there (and told) without a font too.
