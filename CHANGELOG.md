@@ -8,6 +8,13 @@ change the plugin SDK.
 
 ### Added
 
+- A language can come compiled from the card and be read as it is needed (ADR 0033): a data plugin's
+  `i18n/<lang>.ppcat` (made with `paperpaw-sign catalog <lang>.ini <lang>.ppcat`, data formats 4) keeps its
+  messages on the card, about a kilobyte of memory for 3,400 messages, and the messages of the screen shown;
+  an Arabic interface of all plugins (some 210 KB) fits the X4. A pulled card or a damaged file falls back to
+  English. SDK: `Catalog::compile`, `Catalog::open`, `CatalogFile`, `Translator::forget_read`,
+  `Registrar::add_translation_file`; plugin interface 5 is written anew for it (every plugin is built again),
+  `DATA_FORMATS` is 4.
 - *All notes*, a new plugin (Tools): the books that have bookmarks or highlights with how many, a book's notes
   (a note opens the book there), and *Export as My Clippings.txt*, all notes in one file in Kindle's form
   (UTF-8 with a byte order mark, `Exports/My Clippings.txt` beside the library) that notes apps read. A book's
