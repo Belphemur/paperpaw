@@ -13,6 +13,9 @@ pub(super) struct Book {
     pub(super) document: Box<dyn Document>,
     /// The book's language, or the UI language if it declares none.
     pub(super) language: String,
+    /// The key of the notice to say, once, that the book's letters need a
+    /// pack from the store (see `script_hint`).
+    pub(super) script_hint: Option<&'static str>,
     pub(super) typography: Typography,
     pub(super) page: Page,
     /// The words of the page, once measured (see [`Book::words`]).
@@ -215,11 +218,11 @@ impl Book {
             .fonts()
             .role(fonts::READING.as_str())
             .ok_or_else(|| env.i18n().tr("reader.no-font").to_string())?;
-        let language = document
-            .metadata()
-            .language
-            .clone()
-            .unwrap_or_else(|| env.i18n().language().to_string());
+        let declared = document.metadata().language.clone();
+        let script_hint = declared
+            .as_deref()
+            .and_then(|tag| super::script_hint::missing(env, &font, tag));
+        let language = declared.unwrap_or_else(|| env.i18n().language().to_string());
         let typography = typography(env, &font, &language, document.whole_pages());
         let dir = book_dir(path);
         move_old_annotations(env.storage(), &dir, path);
@@ -253,6 +256,7 @@ impl Book {
             title,
             document,
             language,
+            script_hint,
             typography,
             marks: Vec::new(),
             found: None,

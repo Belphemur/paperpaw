@@ -7,6 +7,7 @@ mod hands_free;
 mod linking;
 mod marks;
 mod sample;
+mod script_hint;
 mod selecting;
 mod typography;
 mod words;
@@ -483,7 +484,7 @@ impl Screen for ReaderScreen {
         {
             cx.request_redraw_area(area);
         }
-        if let Ok(book) = &self.book {
+        if let Ok(book) = &mut self.book {
             // The book's own settings ("Only this book") while it is open.
             cx.command(Command::SetScope(Some(format!(
                 "{}/settings.ini",
@@ -491,6 +492,10 @@ impl Screen for ReaderScreen {
             ))));
             if !book.web() {
                 cx.command(events::BOOK_OPENED.emit(book.reading(cx.env())));
+            }
+            // The pack of its letters, if the font lacks them (said once).
+            if let Some(key) = book.script_hint.take() {
+                script_hint::say(cx, key);
             }
             // The book shows: its hints may, the first time.
             cx.command(paperpaw_sdk::help::ready(&crate::SCREEN));
