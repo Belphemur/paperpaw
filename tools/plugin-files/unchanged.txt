@@ -11,8 +11,13 @@
 # literata-large, literata-bold-italic, the two fontgen commits below (`--family`,
 # rustfmt): the same tools/literata-packs.py run at origin/iface5 (60752ff6) and
 # with them writes the same 12 files, with the same SHA-256 each (2026-11-01).
+# literata-large, literata-bold-italic, fc160311 (script-korean-extra: a test in
+# paperpaw-fontgen's main.rs and a charset file under tools/fontgen/sets, no code
+# the build runs): tools/literata-packs.py run with fontgen built before and after
+# writes the same 12 files, with the same SHA-256 each (2026-11-01).
 8a3084724bdb639dd88ed84bb47e1845fe276ecb literata-large, literata-bold-italic  # fonts: Arabic and Hebrew packs for the card (#33)
 a94233faf735d163900faed459cf73decda595e0 literata-large, literata-bold-italic  # text: character sets out of the interface (#60, #61, D2)
 7c007eab75aef80723fc6a69177a032fc68ef199 literata-large, literata-bold-italic  # text: character sets after design review #93 (D2 N1-N3)
 2ba37332 literata-large, literata-bold-italic  # fonts: Your own fonts, and paperpaw-fontgen --family (#59)
 2796ca5e literata-large, literata-bold-italic  # fontgen: rustfmt
+fc160311 literata-large, literata-bold-italic  # script-korean-extra: fontgen's test and the Hangul set files only
