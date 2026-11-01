@@ -17,6 +17,19 @@ use core::fmt;
 /// Where the note is: the card's top level.
 pub const FILE: &str = "paperpaw-install-note.txt";
 
+/// The first line of a note of the first start: a later start tells it
+/// from a note of an earlier install (see [`is_started`]).
+const STARTED_LINE: &str = "paperpaw-install-note: started";
+/// The first line of the note of a failed start.
+const FAILED_LINE: &str = "paperpaw-install-note: failed";
+
+/// Whether the text read from the start of the note file is a note of a
+/// first start (and not an older note of a failed install, or any other
+/// file of that name).
+pub fn is_started(head: &[u8]) -> bool {
+    head.starts_with(STARTED_LINE.as_bytes())
+}
+
 /// What the note says.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind<'a> {
@@ -53,6 +66,7 @@ impl fmt::Display for InstallNote<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.kind {
             Kind::Started => {
+                writeln!(f, "{STARTED_LINE}")?;
                 writeln!(
                     f,
                     "PaperPaw {} started on this {} for the first time. It is on trial: it must run for 30 seconds,",
@@ -89,6 +103,7 @@ impl fmt::Display for InstallNote<'_> {
                 )?;
             }
             Kind::Failed { .. } => {
+                writeln!(f, "{FAILED_LINE}")?;
                 writeln!(
                     f,
                     "PaperPaw {} did not stay on this {}: its first start did not end cleanly (a crash, a reset or a power loss",
@@ -159,6 +174,20 @@ mod tests {
         assert!(text.contains("PaperPaw 0.5.0-beta.12"), "{text}");
         assert!(text.contains("Xteink X4"), "{text}");
         assert!(!text.contains("did not stay"), "{text}");
+    }
+
+    #[test]
+    fn a_started_note_is_told_from_a_failed_one_by_its_first_line() {
+        let started = note(Kind::Started).to_string();
+        let failed = note(Kind::Failed {
+            panic: None,
+            started: false,
+        })
+        .to_string();
+        assert!(is_started(started.as_bytes()));
+        assert!(!is_started(failed.as_bytes()));
+        assert!(!is_started(b""));
+        assert!(!is_started(b"some other file"));
     }
 
     #[test]

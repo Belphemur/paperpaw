@@ -52,6 +52,7 @@ pub mod partitions;
 pub mod probe;
 pub mod provision;
 pub mod remote;
+pub mod rtc_guard;
 pub mod sent;
 pub mod sleeping;
 pub mod slept;

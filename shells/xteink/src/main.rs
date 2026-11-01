@@ -445,7 +445,14 @@ fn prepare() -> Ready {
     power::mark(power::at::START_OTA);
     // Taken only now: an update that failed its trial goes back after its
     // note (`install_note`), which has the update's panic message.
-    let panicked = crash::take_last();
+    // A start that goes back (a failed trial) leaves the message where it
+    // is: the firmware it goes back to reads it as its own.
+    let going_back = ota.as_ref().is_some_and(|ota| ota.failed_trial().is_some());
+    let panicked = if going_back {
+        crash::last()
+    } else {
+        crash::take_last()
+    };
     if let Some(message) = &panicked {
         warn!("the last run panicked: {message}");
     }
@@ -632,7 +639,7 @@ const DEVICE_NAME: &str = if cfg!(feature = "x3") {
 /// before (`Ota::start`), so a hang or a crash here ends in the same
 /// restart (the start watchdog, a panic). Nothing but the card is touched.
 fn install_note(ota: Option<&ota::Ota>, storage: &dyn Storage, panicked: Option<&str>) {
-    use paperpaw_x4::install_note::{FILE, InstallNote, Kind};
+    use paperpaw_x4::install_note::{FILE, InstallNote, Kind, is_started};
     let Some(ota) = ota else {
         return;
     };
@@ -640,17 +647,23 @@ fn install_note(ota: Option<&ota::Ota>, storage: &dyn Storage, panicked: Option<
     if failed.is_none() && !ota.on_trial() {
         return;
     }
-    // Not again at every start of the same trial.
-    if failed.is_none() && storage.exists(FILE) {
+    // The first start of a trial writes the note (over an older one of an
+    // earlier install); the starts that go on with it, after a sleep, do
+    // not write it again.
+    if failed.is_none() && ota.ran_before() > 0 {
         return;
     }
     let (place, _, reason) = power::last_run();
     let reset = alloc::format!("{reason:?}");
     let note = InstallNote {
         kind: if failed.is_some() {
+            // Whether the note of the first start is there (and not an
+            // older note of an earlier install).
+            let mut head = [0u8; 64];
+            let read = storage.read_at(FILE, 0, &mut head).unwrap_or(0);
             Kind::Failed {
                 panic: panicked,
-                started: storage.exists(FILE),
+                started: is_started(&head[..read]),
             }
         } else {
             Kind::Started

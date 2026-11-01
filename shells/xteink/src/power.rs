@@ -20,7 +20,7 @@ static LOW_POWER: Mutex<RefCell<Option<LowPower<'static>>>> = Mutex::new(RefCell
 /// Where the firmware was last (see [`mark`]), kept through a reset: after
 /// a watchdog's reset it tells where it hung.
 #[esp_hal::ram(unstable(rtc_fast, persistent))]
-static mut WHERE: u32 = 0;
+static mut WHERE: [u32; 3] = [0; 3];
 
 /// Light sleeps, kept through a reset (for trying them over USB, which
 /// they cut off).
@@ -67,7 +67,7 @@ pub mod at {
 /// What a place is called, for the log and the note on the card.
 pub fn place_name(place: u32) -> &'static str {
     match place {
-        0 => "none (power on, or the start did not note one)",
+        0 => "unknown (a power-up, or the firmware before left nothing of its own)",
         at::LOOP => "main loop",
         at::NAP_IDLE => "light sleep",
         at::WOKEN => "woken",
@@ -89,13 +89,18 @@ pub fn place_name(place: u32) -> &'static str {
 /// Notes being at `place` (one of [`at`]).
 pub fn mark(place: u32) {
     // SAFETY: one core, written only here and read once at start-up.
-    unsafe { core::ptr::addr_of_mut!(WHERE).write_volatile(place) };
+    unsafe {
+        core::ptr::addr_of_mut!(WHERE).write_volatile(paperpaw_x4::rtc_guard::seal_place(place))
+    };
 }
 
 /// Notes how the last run ended; call once at start-up.
 pub fn note_start() {
     // SAFETY: as in `mark`.
-    let place = unsafe { core::ptr::addr_of!(WHERE).read_volatile() };
+    // Not sealed (a power-up, the firmware before): no place, 0.
+    let place =
+        paperpaw_x4::rtc_guard::place(unsafe { core::ptr::addr_of!(WHERE).read_volatile() })
+            .unwrap_or(0);
     // SAFETY: as in `mark`.
     let naps = unsafe { core::ptr::addr_of!(NAPS).read_volatile() };
     unsafe { core::ptr::addr_of_mut!(NAPS).write_volatile(0) };
