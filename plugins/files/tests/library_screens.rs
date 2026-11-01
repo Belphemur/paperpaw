@@ -179,6 +179,82 @@ fn books_copied_in_beside_an_empty_catalog_show_at_the_first_opening() {
     }
 }
 
+/// A card that is full for the catalog: reads go on, but nothing can be
+/// written under the library's own folder.
+struct FullForCatalog(Shared);
+
+impl FullForCatalog {
+    fn full(path: &str) -> bool {
+        path.starts_with(".paperpaw/library")
+    }
+}
+
+impl paperpaw_platform::Storage for FullForCatalog {
+    fn read_at(
+        &self,
+        path: &str,
+        offset: u64,
+        buf: &mut [u8],
+    ) -> Result<usize, paperpaw_platform::StorageError> {
+        self.0.read_at(path, offset, buf)
+    }
+    fn size(&self, path: &str) -> Result<u64, paperpaw_platform::StorageError> {
+        self.0.size(path)
+    }
+    fn write(&self, path: &str, data: &[u8]) -> Result<(), paperpaw_platform::StorageError> {
+        if Self::full(path) {
+            return Err(paperpaw_platform::StorageError::Io);
+        }
+        self.0.write(path, data)
+    }
+    fn append(&self, path: &str, data: &[u8]) -> Result<(), paperpaw_platform::StorageError> {
+        if Self::full(path) {
+            return Err(paperpaw_platform::StorageError::Io);
+        }
+        self.0.append(path, data)
+    }
+    fn list(
+        &self,
+        dir: &str,
+        visit: &mut dyn FnMut(paperpaw_platform::DirEntry<'_>),
+    ) -> Result<(), paperpaw_platform::StorageError> {
+        self.0.list(dir, visit)
+    }
+    fn remove(&self, path: &str) -> Result<(), paperpaw_platform::StorageError> {
+        self.0.remove(path)
+    }
+    fn exists(&self, path: &str) -> bool {
+        self.0.exists(path)
+    }
+    fn rename(&self, from: &str, to: &str) -> Result<(), paperpaw_platform::StorageError> {
+        if Self::full(to) {
+            return Err(paperpaw_platform::StorageError::Io);
+        }
+        self.0.rename(from, to)
+    }
+    fn create_dir(&self, path: &str) -> Result<(), paperpaw_platform::StorageError> {
+        if Self::full(path) {
+            return Err(paperpaw_platform::StorageError::Io);
+        }
+        self.0.create_dir(path)
+    }
+}
+
+/// The catalog cannot be made (the card is full, say): the library, which
+/// said the books were being collected, stops saying so once the walk
+/// failed, and does not wait for ever.
+#[test]
+fn a_walk_that_fails_does_not_leave_the_library_collecting() {
+    let _turn = turn();
+    for device in DEVICES {
+        let storage = FullForCatalog(storage_of("", &many(2)));
+        let mut app = App::new(device, Shared(std::rc::Rc::new(storage)));
+        app.run(actions::LIBRARY);
+        app.wait(3000);
+        assert!(!app.shows("Collecting"), "{}", app.described());
+    }
+}
+
 /// Used to panic: `Listing::page` underflowed for an empty folder (as the
 /// library showed again).
 /// A card the device cannot use (exFAT on an X4): no catalog ever comes,

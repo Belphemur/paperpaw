@@ -735,7 +735,7 @@ impl ListScreen {
         // the books' version the index is of: else the index anew first.
         let service = library::service(env);
         if !service.is_current(env, &self.index) {
-            self.rebuild(env);
+            self.rebuild(env, false);
             return;
         }
         let keys: Vec<u64> = self
@@ -973,8 +973,10 @@ impl ListScreen {
     }
 
     /// The catalog was made anew: the index from it, the place kept.
-    fn rebuild(&mut self, env: &Env<'_>) {
-        self.collecting = collecting(env);
+    /// `told`: the kernel said it is done, made or not (a full or
+    /// unreadable card), so books are no longer being collected.
+    fn rebuild(&mut self, env: &Env<'_>, told: bool) {
+        self.collecting = !told && collecting(env);
         let keep = self.focused_book();
         // The old index goes first: never two at once.
         self.index = Index::default();
@@ -1269,7 +1271,7 @@ impl Screen for ListScreen {
                 self.gone.clear();
                 self.collecting = false;
             } else {
-                self.rebuild(&env);
+                self.rebuild(&env, true);
                 cx.request_redraw();
                 cx.request_refresh(RefreshMode::Partial);
                 cx.wake_at(env.now());

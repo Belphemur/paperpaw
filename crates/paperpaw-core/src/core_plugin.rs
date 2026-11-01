@@ -524,6 +524,7 @@ impl Catalog {
                 Ok(started) => *job = Some(started),
                 Err(error) => {
                     self.give_back(walk);
+                    out.push(events::CATALOG_CHANGED.emit(()));
                     return Step::Failed(alloc::format!("catalog: {error:?}"));
                 }
             }
@@ -545,9 +546,13 @@ impl Catalog {
                 }
             }
             Err(error) => {
-                // The old catalog stays; tried again after a while.
+                // The old catalog stays; tried again after a while. The
+                // views are told, so that none keeps saying books are
+                // being collected (it is not that, but a card that cannot
+                // be written, read or is full).
                 *job = None;
                 self.give_back(walk);
+                out.push(events::CATALOG_CHANGED.emit(()));
                 Step::Failed(alloc::format!("catalog: {error:?}"))
             }
         }
