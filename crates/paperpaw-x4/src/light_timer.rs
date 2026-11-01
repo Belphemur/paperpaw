@@ -81,6 +81,8 @@ impl LightTimer {
         match *event {
             InputEvent::Button { name, state } => self.button(now, name, state),
             InputEvent::Pointer(pointer) => self.touch(now, pointer.phase),
+            // Input of a kind added later: the kernel hears it.
+            _ => true,
         }
     }
 
