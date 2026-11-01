@@ -435,29 +435,51 @@ fn a_bad_entry_does_not_cost_the_good_ones_beside_it() {
     assert!(is_revoked(&shopping.storage, "clock"));
 }
 
-#[test]
-fn a_long_list_is_read_in_parts_and_cut_at_what_the_kernel_keeps() {
-    let author = public_key(&AUTHOR);
-    let mut entries: Vec<String> = (0..300)
+/// `count` well formed entries, each of a plugin that is not here.
+fn junk(count: usize) -> Vec<String> {
+    (0..count)
         .map(|n| {
             let seed = [(n % 250 + 1) as u8; 32];
             let key = public_key(&seed);
             let plugin = format!("p{n}");
             revocation(&plugin, &key, &revoking(&seed, &plugin, &key))
         })
-        .collect();
+        .collect()
+}
+
+#[test]
+fn entries_for_plugins_not_here_take_no_place_from_those_that_are() {
+    let author = public_key(&AUTHOR);
+    let mut entries = junk(300);
     entries.push(revocation(
         "clock",
         &author,
         &revoking(&AUTHOR, "clock", &author),
     ));
-    // Past the cut, the kernel would drop it anyway.
-    let shopping = list_revoking(&entries[299..]);
-    assert!(is_revoked(&shopping.storage, "clock"));
     let shopping = list_revoking(&entries);
-    // No plugin of them is installed: only the clock's could hold, and
-    // it came after the cut of 256.
-    assert_eq!(revoked(&shopping.storage).len(), 0);
+    assert!(is_revoked(&shopping.storage, "clock"));
+    assert_eq!(revoked(&shopping.storage).len(), 1);
+}
+
+#[test]
+fn a_list_is_read_only_so_far() {
+    let author = public_key(&AUTHOR);
+    let mut entries = junk(4096);
+    entries.push(revocation(
+        "clock",
+        &author,
+        &revoking(&AUTHOR, "clock", &author),
+    ));
+    let shopping = list_revoking(&entries);
+    assert!(!is_revoked(&shopping.storage, "clock"));
+}
+
+#[test]
+fn a_revocation_listed_twice_is_one() {
+    let author = public_key(&AUTHOR);
+    let entry = revocation("clock", &author, &revoking(&AUTHOR, "clock", &author));
+    let shopping = list_revoking(&[entry.clone(), entry]);
+    assert_eq!(revoked(&shopping.storage).len(), 1);
 }
 
 #[test]
