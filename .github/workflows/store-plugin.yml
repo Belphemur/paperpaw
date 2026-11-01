@@ -110,12 +110,12 @@ jobs:
         run: |
           base="${BASE#v}"
           dir="$RUNNER_TEMP/base"
-          # The X4 Classic has the X4 Pro's chip: its plugins are the
-          # Pro's, fingerprint and all, and a release names the Pro's only.
-          abi="$DEVICE"
-          [[ "$DEVICE" == x4-classic ]] && abi=x4-pro
-          gh release download "$BASE" -R "$GITHUB_REPOSITORY" -D "$dir" -p "paperpaw-$abi-$base-abi.txt"
-          echo "FINGERPRINT=$(awk 'NR == 1 { print $1 }' "$dir/paperpaw-$abi-$base-abi.txt")" >> "$GITHUB_ENV"
+          # Each device's own: the X4 Classic has the X4 Pro's chip and so
+          # far its fingerprint (its plugin files are byte for byte the
+          # Pro's), but a release names it for the Classic too, and build.sh
+          # fails on a file that does not have the device's own.
+          gh release download "$BASE" -R "$GITHUB_REPOSITORY" -D "$dir" -p "paperpaw-$DEVICE-$base-abi.txt"
+          echo "FINGERPRINT=$(awk 'NR == 1 { print $1 }' "$dir/paperpaw-$DEVICE-$base-abi.txt")" >> "$GITHUB_ENV"
           if [[ "$DEVICE" != x4 ]]; then
             gh release download "$BASE" -R "$GITHUB_REPOSITORY" -D "$dir" \
               -p "paperpaw-xtensa-std-$base.tar.gz" -p "paperpaw-xtensa-std-$base.tar.gz.sha256"
