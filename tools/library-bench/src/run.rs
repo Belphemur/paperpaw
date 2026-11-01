@@ -27,6 +27,7 @@ pub(super) fn all(env: &Env<'_>, more: Option<&str>) {
     if let Some(more) = more {
         add(env, more);
     }
+    split(env);
 }
 
 /// The catalog walked to its end.
@@ -201,4 +202,76 @@ fn add(env: &Env<'_>, more: &str) {
         }
         Err(e) => println!("adding books failed: {e}"),
     }
+}
+
+/// The library's files and the caches of books laid out as earlier
+/// versions kept them (one folder each), then moved into the folders
+/// split by keys as the kernel does once ([`library::split`]).
+fn split(env: &Env<'_>) {
+    let storage = env.storage();
+    let (moved, took) = measure(|| unsplit(env));
+    report(
+        "earlier layout made (not timed on a device)",
+        &took,
+        &format!("{moved} moved back"),
+    );
+    let (done, took) = measure(|| {
+        let mut split = library::split::Split::new();
+        let mut steps = 0u64;
+        while !split.step(storage, env.book_data()).ok()? {
+            steps += 1;
+        }
+        Some((steps, split.moved()))
+    });
+    let note = match done {
+        Some((steps, moved)) => format!("{steps} steps, {moved} moved or removed"),
+        None => String::from("failed"),
+    };
+    report("split: earlier layout moved once", &took, &note);
+}
+
+/// Moves what is kept in the parts of keys back into the folder itself:
+/// details and covers into the folders earlier versions had; how many.
+fn unsplit(env: &Env<'_>) -> usize {
+    let storage = env.storage();
+    let mut folders: Vec<(String, String)> = vec![
+        (
+            String::from(".paperpaw/library/details"),
+            String::from(".paperpaw/library/books"),
+        ),
+        (
+            String::from(".paperpaw/library/thumbs"),
+            String::from(".paperpaw/library/covers"),
+        ),
+    ];
+    for data in env.book_data() {
+        if data.kind == library::BookDataKind::Cache {
+            folders.push((data.folder.to_string(), data.folder.to_string()));
+        }
+    }
+    let mut moved = 0;
+    for (new, old) in &folders {
+        let _ = storage.create_dir(old);
+        let mut parts = Vec::new();
+        let _ = storage.list(new, &mut |e| {
+            if e.is_dir && e.name.len() == 2 {
+                parts.push(e.name.to_string());
+            }
+        });
+        for part in parts {
+            let dir = format!("{new}/{part}");
+            let mut names = Vec::new();
+            let _ = storage.list(&dir, &mut |e| names.push(e.name.to_string()));
+            for name in names {
+                if storage
+                    .rename(&format!("{dir}/{name}"), &format!("{old}/{name}"))
+                    .is_ok()
+                {
+                    moved += 1;
+                }
+            }
+            let _ = storage.remove_dir_all(&dir);
+        }
+    }
+    moved
 }

@@ -208,9 +208,12 @@ thread_local! {
 /// What a path is: the books' details, their covers, the catalog and the
 /// rest of the library's own files, the books, others.
 fn kind(path: &str) -> &'static str {
-    if path.starts_with(".paperpaw/library/books") {
+    if path.starts_with(".paperpaw/library/details") || path.starts_with(".paperpaw/library/books")
+    {
         "details"
-    } else if path.starts_with(".paperpaw/library/covers") {
+    } else if path.starts_with(".paperpaw/library/thumbs")
+        || path.starts_with(".paperpaw/library/covers")
+    {
         "covers"
     } else if path.starts_with(".paperpaw/library") {
         "library files"
