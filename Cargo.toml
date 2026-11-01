@@ -38,6 +38,7 @@ members = [
     "plugins/fonts-default",
     "plugins/fonts-browser",
     "plugins/store",
+    "plugins/format-mobi",
     "plugins/format-txt",
     "plugins/format-epub",
     "plugins/format-xtc",
@@ -161,6 +162,7 @@ paperpaw-plugin-help = { path = "plugins/help", version = "1.0.1" }
 paperpaw-plugin-reading-goal = { path = "plugins/reading-goal", version = "1.0.3" }
 paperpaw-plugin-end-of-book = { path = "plugins/end-of-book", version = "1.0.0" }
 paperpaw-plugin-notes-overview = { path = "plugins/notes-overview", version = "1.0.0" }
+paperpaw-plugin-format-mobi = { path = "plugins/format-mobi", version = "1.0.0" }
 paperpaw-plugin-wifi = { path = "plugins/wifi", version = "1.0.1" }
 paperpaw-plugin-bluetooth = { path = "plugins/bluetooth", version = "1.0.1" }
 paperpaw-plugin-power = { path = "plugins/power", version = "1.0.1" }

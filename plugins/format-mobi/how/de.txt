@@ -1,0 +1,5 @@
+Mobipocket-Bücher (.mobi, .azw) öffnen sich aus der Bibliothek wie jedes Buch, ohne Einrichtung. Titel, Autoren, Sprache und Cover stammen aus dem Buch, die Inhaltsliste entsteht aus seinen Überschriften.
+
+Das Buch wird beim ersten Öffnen umgewandelt, bei einem langen dauert das einige Sekunden; danach öffnet es sofort. Text, Überschriften, Fett und Kursiv, Links und Bilder werden angezeigt.
+
+Bücher mit DRM (die meisten aus einem Shop gekauften) lassen sich nicht öffnen, ebenso wenig Bücher mit Huffman-Kompression oder in der neueren KF8-Form (.azw3): PaperPaw sagt das beim Öffnen. Eine Kopie als EPUB, etwa mit Calibre gemacht, öffnet sich immer.

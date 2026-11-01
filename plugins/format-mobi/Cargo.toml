@@ -1,0 +1,21 @@
+[package]
+name = "paperpaw-plugin-format-mobi"
+description = "PaperPaw Mobipocket format: .mobi and .azw books without DRM, PalmDOC compression"
+version = "1.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+categories = ["no-std", "text-processing"]
+
+[dependencies]
+paperpaw-sdk.workspace = true
+
+[dev-dependencies]
+paperpaw-i18n.workspace = true
+proptest.workspace = true
+
+[lints]
+workspace = true

@@ -85,6 +85,7 @@ pub const STORE_PLUGINS: [&str; 35] = [
     "calibre",
     "end-of-book",
     "fonts-browser",
+    "format-mobi",
     "hyphenation-da",
     "hyphenation-de",
     "hyphenation-es",
@@ -217,6 +218,7 @@ pub fn install_with(
         b = offered(b, store, paperpaw_plugin_reading_goal::ReadingGoal);
         b = offered(b, store, paperpaw_plugin_end_of_book::EndOfBook);
         b = offered(b, store, paperpaw_plugin_notes_overview::NotesOverview);
+        b = offered(b, store, paperpaw_plugin_format_mobi::MobiFormat);
         b = offered(b, store, paperpaw_plugin_battery::Battery);
         b = offer_hyphenation(b, store);
     }
