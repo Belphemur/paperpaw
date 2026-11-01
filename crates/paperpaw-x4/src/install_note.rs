@@ -115,11 +115,19 @@ impl fmt::Display for InstallNote<'_> {
             "Run before / gelaufen vorher: {} ms; reset / Neustart: {}; last place / letzter Ort: {}",
             self.ran_ms, self.reset, self.place
         )?;
-        if let Kind::Failed {
-            panic: Some(message),
-        } = self.kind
-        {
-            writeln!(f, "Panic: {}", message.trim_end())?;
+        if let Kind::Failed { panic, started } = self.kind {
+            let (yes, ja) = if started {
+                ("yes", "ja")
+            } else {
+                ("no", "nein")
+            };
+            writeln!(
+                f,
+                "Note of the first start found / Notiz des ersten Starts gefunden: {yes} / {ja}"
+            )?;
+            if let Some(message) = panic {
+                writeln!(f, "Panic: {}", message.trim_end())?;
+            }
         }
         Ok(())
     }
