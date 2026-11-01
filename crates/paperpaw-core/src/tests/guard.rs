@@ -103,3 +103,30 @@ fn nothing_shows_above_a_guarding_screen_but_its_own() {
     assert_eq!(kernel.active_screen(), Some(&OTHER));
     assert!(kernel.notice.is_some());
 }
+
+/// Locked, no plugin asks for plugins: that leads to an install, which
+/// changes how the device is set up. Unlocked, the store hears it.
+#[test]
+fn no_plugins_are_asked_for_while_locked() {
+    let locked = Rc::new(Cell::new(true));
+    let log = log();
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(GuardPlugin(locked.clone()))
+        .plugin(super::plugins_loaded::Store {
+            log: log.clone(),
+            installs: true,
+        })
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    kernel.open_screen(Instant(1), LOCK, Params::new());
+    let asks = || Command::request_plugins(OTHER, [Id::new_static("vocabulary")]);
+    kernel.apply(asks());
+    kernel.run_commands();
+    assert!(log.borrow().is_empty(), "{:?}", log.borrow());
+
+    kernel.run_action(Instant(2), actions::CONFIRM);
+    kernel.apply(asks());
+    kernel.run_commands();
+    assert_eq!(*log.borrow(), ["g.other asks vocabulary"]);
+}
