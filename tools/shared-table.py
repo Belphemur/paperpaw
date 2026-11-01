@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """Writes, from crates/paperpaw-table/shared.list, the index of the
 firmware's shared function tables (crates/paperpaw-table/src/index.rs)
-the signature of every entry (crates/paperpaw-table/table.sig) and the
+the signature of every entry (crates/paperpaw-table/table.sig), the
 firmware's addresses of them (crates/paperpaw-sdk/src/shared_table.rs), as
-the `shared!` declarations in the crates' sources give them.
+the `shared!` declarations in the crates' sources give them, and a digest
+of each entry's body and of the functions of its crate it calls
+(crates/paperpaw-table/table.body): `--check` fails where a body changed
+and the digests were not written anew in the same commit, so that every
+change plugins built before would run shows (ADR 0026).
 
     python3 tools/shared-table.py           # writes both files
     python3 tools/shared-table.py --check   # fails where one is not current
@@ -32,6 +36,7 @@ CRATE = REPO / "crates" / "paperpaw-table"
 LIST = CRATE / "shared.list"
 INDEX = CRATE / "src" / "index.rs"
 SIG = CRATE / "table.sig"
+BODY = CRATE / "table.body"
 ADDRESSES = REPO / "crates" / "paperpaw-sdk" / "src" / "shared_table.rs"
 # Families 0 to 6 by number; 7 is kept for the chain to 8 and up
 # (paperpaw_table::FAMILIES).
@@ -118,6 +123,182 @@ def declarations():
                 sys.exit(f"{path}: {key[0]}::{key[1]} declared twice")
             found[key] = signature
     return found
+
+
+# A name defined more often than this in a crate (`new`, `get`, `len`) is
+# not followed into its functions: which one a call means is not known
+# from the text, and following all of them would make every hash change
+# with any change in the crate.
+MAX_SAME_NAME = 2
+CALL = re.compile(r"(?<![\w.:])(?:\.\s*)?([a-z_][a-z0-9_]*)\s*(?:::<[^()]*?>)?\s*\(")
+METHOD = re.compile(r"\.\s*([a-z_][a-z0-9_]*)\s*(?:::<[^()]*?>)?\s*\(")
+PATHCALL = re.compile(r"::\s*([a-z_][a-z0-9_]*)\s*(?:::<[^()]*?>)?\s*\(")
+KEYWORDS = {"if", "while", "match", "for", "return", "loop", "in", "as", "fn", "let", "move", "unsafe"}
+# Methods of `core` and `alloc` (iterators, options, slices, strings,
+# numbers) that a crate may also name a function of its own: a call of
+# them is mostly the standard one.
+STANDARD = set("""
+all any by_ref chain chars char_indices bytes clamp cloned collect copied count cycle enumerate
+filter filter_map find find_map first flat_map flatten fold for_each fuse inspect last map
+map_while max max_by max_by_key min min_by min_by_key next nth partition peekable position
+product rev rposition scan skip skip_while step_by sum take take_while unzip zip
+and_then as_deref as_mut as_ref expect filter is_none is_some is_some_and is_none_or map_or
+map_or_else ok ok_or ok_or_else or or_else unwrap unwrap_or unwrap_or_default unwrap_or_else
+xor zip get get_mut iter iter_mut len is_empty push pop insert remove retain truncate extend
+contains starts_with ends_with split split_once splitn rsplit trim trim_start trim_end lines
+strip_prefix strip_suffix to_string to_owned into from clone eq ne cmp partial_cmp
+abs pow sqrt floor ceil round signum saturating_sub saturating_add checked_sub checked_add
+wrapping_add wrapping_sub min_value max_value as_str as_bytes with_capacity reserve clear
+binary_search sort sort_by sort_by_key windows chunks join concat repeat replace parse
+to_lowercase to_uppercase is_char_boundary rfind find_char hash write write_str fmt
+""".split())
+
+
+def block_end(text, i):
+    """The index after the block whose `{` is at `text[i]`: strings,
+    characters and comments skipped."""
+    depth, n = 0, len(text)
+    while i < n:
+        c = text[i]
+        if text.startswith("//", i):
+            i = text.find("\n", i)
+            if i < 0:
+                return n
+            continue
+        if text.startswith("/*", i):
+            i = text.find("*/", i) + 2
+            continue
+        raw = re.match(r'r(#*)"', text[i:i + 8]) if c == "r" and not (text[i - 1].isalnum() or text[i - 1] == "_") else None
+        if raw:
+            end = '"' + raw.group(1)
+            i = text.index(end, i + len(raw.group(0))) + len(end)
+            continue
+        if c == '"':
+            j = i + 1
+            while text[j] != '"':
+                j += 2 if text[j] == "\\" else 1
+            i = j + 1
+            continue
+        if c == "'":
+            m = re.match(r"'(\\.[^']*|[^\\'])'", text[i:])
+            if m:
+                i += len(m.group(0))
+                continue
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return i + 1
+        i += 1
+    return n
+
+
+def normal(code):
+    """`code` without comments and with its spaces made one: a change of
+    formatting or of a comment is no change of the body."""
+    code = re.sub(r"(?m)//.*$", "", code)
+    code = re.sub(r"/\*.*?\*/", "", code, flags=re.S)
+    return " ".join(code.split())
+
+
+def crate_functions(crate):
+    """`name -> [(file, body), ...]` of every function of `crate` (its
+    `src`)."""
+    found = {}
+    head = re.compile(r"\bfn\s+([a-z_][a-z0-9_]*)\b")
+    for path in sorted(crate.glob("src/**/*.rs")):
+        text = path.read_text(encoding="utf-8")
+        for m in head.finditer(text):
+            body = text.find("{", m.end())
+            semi = text.find(";", m.end())
+            if body < 0 or (0 <= semi < body):
+                continue
+            found.setdefault(m.group(1), []).append(
+                (path, normal(text[body:block_end(text, body)])))
+    return found
+
+
+def called(body):
+    """The names `body` calls: functions, methods and paths' last parts."""
+    names = set()
+    for pattern in (CALL, METHOD, PATHCALL):
+        names.update(m.group(1) for m in pattern.finditer(body))
+    return names - KEYWORDS - STANDARD
+
+
+def bodies():
+    """`(family, name) -> (crate, file, body)` of every `shared!` declaration:
+    the body as written, from its `{` to the `}` before `@`."""
+    found = {}
+    marker = re.compile(r"\}\s*@\s*(\w+)\s*::\s*(\w+)")
+    for path in sorted(REPO.glob("crates/*/src/**/*.rs")):
+        if CRATE in path.parents:
+            continue
+        text = re.sub(r"(?m)^\s*//.*$", "", path.read_text(encoding="utf-8"))
+        if "shared!" not in text:
+            continue
+        crate = path.relative_to(REPO).parents[-3]
+        for m in marker.finditer(text):
+            head = text.rfind("fn ", 0, m.start())
+            body = text.find("{", head)
+            if head < 0 or body < 0 or body > m.start():
+                continue
+            found[(m.group(1), m.group(2))] = (REPO / crate, path, text[body:m.start() + 1])
+    return found
+
+
+def reach(functions, file, body):
+    """The bodies of the functions `body` (in `file`) reaches by calls,
+    from `functions` (`crate_functions`): a name defined in the file of
+    the code that calls it means that file's functions, another one those
+    of the crate where it has at most `MAX_SAME_NAME`."""
+    reached, todo, seen = set(), [(file, normal(body))], set()
+    while todo:
+        at, code = todo.pop()
+        for callee in sorted(called(code)):
+            defs = functions.get(callee, [])
+            local = [d for d in defs if d[0] == at]
+            if local:
+                defs = local
+            elif len(defs) > MAX_SAME_NAME:
+                continue
+            for d in defs:
+                if d not in seen:
+                    seen.add(d)
+                    reached.add(d[1])
+                    todo.append(d)
+    return reached
+
+
+def body_hashes(entries):
+    """Twelve hex digits per entry: a digest of its body and of the
+    functions of its crate it reaches (`reach`)."""
+    found = bodies()
+    crates = {}
+    out = {}
+    for family, _, name, _ in entries:
+        crate, file, body = found[(family, name)]
+        if crate not in crates:
+            crates[crate] = crate_functions(crate)
+        reached = reach(crates[crate], file, body)
+        text = normal(body) + "\n" + "\n".join(sorted(reached))
+        out[(family, name)] = hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
+    return out
+
+
+def table_body(entries):
+    hashes = body_hashes(entries)
+    out = ["# A digest of each shared function's body and of the functions of",
+           "# its crate that it calls, in the order of shared.list",
+           "# (tools/shared-table.py). Plugins built before run these bodies: a",
+           "# line that changes is a change they see, so its commit says which",
+           "# case of ADR 0026 (\"Shared functions run the firmware's body\") it is",
+           "# and appends a `bump` line to shared.list where that says so. Not",
+           "# part of the plugin interface (never blessed)."]
+    for family, revision, name, _ in entries:
+        out.append(f"{family} {revision} {name}: {hashes[(family, name)]}")
+    return "\n".join(out) + "\n"
 
 
 def table_hash(entries, bumps, found):
@@ -209,13 +390,23 @@ def main():
         sys.exit(f"shared.list and the sources differ: listed, not declared: "
                  f"{missing}; declared, not listed: {extra}")
     files = {INDEX: index_rs(entries, bumps, table_hash(entries, bumps, found)), SIG: table_sig(entries, found),
-             ADDRESSES: addresses_rs(entries)}
+             ADDRESSES: addresses_rs(entries), BODY: table_body(entries)}
     if "--check" in sys.argv:
         stale = [p for p, text in files.items()
                  if not p.exists() or p.read_text(encoding="utf-8") != text]
         if stale:
+            hint = ""
+            if BODY in stale:
+                before = BODY.read_text(encoding="utf-8").splitlines() if BODY.exists() else []
+                changed = sorted(set(files[BODY].splitlines()) - set(before))
+                hint = "\nChanged: " + ", ".join(line.split(":")[0] for line in changed if not line.startswith("#"))
+                hint += ("\nA shared function's body changed (table.body): plugins built "
+                        "before run it. Say in the commit which case of ADR 0026 "
+                        "(\"Shared functions run the firmware's body\") it is, append a "
+                        "`bump` line to shared.list where that says so, and write the "
+                        "files anew.")
             sys.exit("not current, write them with python3 tools/shared-table.py: "
-                     + ", ".join(str(p.relative_to(REPO)) for p in stale))
+                     + ", ".join(str(p.relative_to(REPO)) for p in stale) + hint)
         return
     for path, text in files.items():
         path.write_text(text, encoding="utf-8")

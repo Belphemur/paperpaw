@@ -124,7 +124,9 @@ These keep PaperPaw small, portable and extensible. Reviews check them.
    plugins built before: a change to its body is free, or needs a
    `bump` line in `shared.list` in the same commit, as
    [ADR 0026](docs/adr/0026-plugin-interface-version.md) decides
-   ("Shared functions run the firmware's body"); its reviewer says which.
+   ("Shared functions run the firmware's body"). `python3
+   tools/shared-table.py` writes `table.body` anew, CI fails where it is
+   not current, and the commit message says which case it is.
 9. **The SDK is designed to grow without breaking**: a change to it
    follows [docs/sdk-design.md](docs/sdk-design.md), whose checks run
    with the workspace's tests.

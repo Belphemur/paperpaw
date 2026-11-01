@@ -157,8 +157,12 @@ with that before the betas of 0.5:
      (appended at the next revision) turns it into case 2.
 
   A changed signature, an entry removed or moved, or a type's layout
-  is never a bump: those raise the interface. Reviewers of a change to a
-  file with `shared!` in it say which of the three it is.
+  is never a bump: those raise the interface. `tools/shared-table.py`
+  keeps a digest of each entry's body and of the functions of its crate
+  that it calls (`crates/paperpaw-table/table.body`), and CI fails where
+  one changed without the file written anew: so every such change shows
+  in its commit, which says which of the three it is, and reviewers
+  check that.
 - **Cache revisions can increase without changing the interface.** The
   exact `paperpaw_layout::VERSION: u32` constant identifies the layout
   algorithm in page-index keys. Raising it keeps indexes made by the old
