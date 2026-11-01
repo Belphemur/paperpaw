@@ -327,7 +327,7 @@ fn details(env: &Env<'_>, info: &PluginInfo, origin: Option<Origin>) -> String {
         // Switched off by safe mode, or only held back at this start.
         let key = match problem {
             PluginProblem::SafeMode if !info.enabled => "plugin-manager.code.safe-mode-off",
-            _ => problem_key(problem),
+            _ => problem_key(env, problem),
         };
         Some(i18n.tr(key).to_string())
     } else if info.manifest.id == PLUGIN && info.required_for.is_empty() {
@@ -435,12 +435,29 @@ fn not_installed_notice(env: &Env<'_>, not_installed: &[NotInstalled]) -> Option
     Some(env.i18n().format(key, &[("name", Arg::Str(&names))]))
 }
 
+/// Whether the room for code is the X4's flash room in the stock layout,
+/// where the web flasher gives much more (the room has no field to say
+/// so: the X4 Pro's and Classic's is shared memory, and other devices'
+/// has no limit on the number of plugins).
+fn stock_flash(env: &Env<'_>) -> bool {
+    env.native()
+        .and_then(|_| paperpaw_sdk::native::code_room(env.storage()))
+        .is_some_and(|room| is_stock_flash(&room))
+}
+
+/// [`stock_flash`] for `room`: about 0.6 MiB in the stock layout, 2.3 MB in
+/// PaperPaw's own.
+fn is_stock_flash(room: &paperpaw_sdk::native::CodeRoom) -> bool {
+    !room.shared && room.max_plugins.is_some() && room.total < 1 << 20
+}
+
 /// Why a code plugin does not run, as said below its name.
-fn problem_key(problem: PluginProblem) -> &'static str {
+fn problem_key(env: &Env<'_>, problem: PluginProblem) -> &'static str {
     match problem {
         PluginProblem::OtherBuild => "plugin-manager.code.other-build",
         PluginProblem::Damaged => "plugin-manager.code.damaged",
         PluginProblem::Mismatch => "plugin-manager.code.mismatch",
+        PluginProblem::NoRoom if stock_flash(env) => "plugin-manager.code.no-room-flash",
         PluginProblem::NoRoom => "plugin-manager.code.no-room",
         PluginProblem::Unsupported => "plugin-manager.code.unsupported",
         PluginProblem::SafeMode => "plugin-manager.code.safe-mode",
@@ -655,6 +672,21 @@ mod tests {
         let de = Catalog::parse(include_str!("../i18n/de.ini")).unwrap();
         let issues = check::compare(&en, &de);
         assert!(issues.is_empty(), "{issues:?}");
+    }
+
+    #[test]
+    fn the_flasher_is_named_only_where_it_gives_more_room() {
+        use paperpaw_sdk::native::CodeRoom;
+        const KIB: u64 = 1024;
+        let flash = |kib: u64| CodeRoom::new(kib * KIB, 0, 4096).with_plugins(0, Some(16));
+        // The X4 in the stock layout, and PaperPaw's own.
+        assert!(is_stock_flash(&flash(640)));
+        assert!(!is_stock_flash(&flash(2300)));
+        assert!(is_stock_flash(&flash(1023)));
+        assert!(!is_stock_flash(&flash(1024)));
+        // Shared memory (X4 Pro, Classic) and no limit on the number.
+        assert!(!is_stock_flash(&flash(640).shared()));
+        assert!(!is_stock_flash(&CodeRoom::new(640 * KIB, 0, 4096)));
     }
 
     #[test]
