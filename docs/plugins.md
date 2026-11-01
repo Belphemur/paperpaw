@@ -2093,6 +2093,25 @@ Icon packs are such packs for the icon font: `tools/icons/pack.py` builds
 one with the Tabler icons named
 (`[extends] icons.ppfp = fonts-default.icons`).
 
+A font of your own, for the X4 and the other devices that draw packs
+only, is made on a computer with `paperpaw-fontgen`:
+
+```sh
+paperpaw-fontgen --family "My Font" --regular MyFont-Regular.ttf \
+    --bold MyFont-Bold.ttf --italic MyFont-Italic.ttf plugins
+```
+
+It writes `plugins/font-my-font` (a `plugin.ini` with the family and a
+pack for each face; only the regular one is needed, the others are drawn in
+it), says how large each pack is and how many of the characters asked for
+(`--chars latin,cyrillic,greek`, else Latin) the font has, and warns where
+it has none. Copy the folder into the card's `plugins` folder and choose the
+font in *Settings > Reading > Font*. Devices that draw font files read a
+`.ttf` or `.otf` copied into the `fonts` folder (on Android
+`PaperPaw/fonts` of the shared storage) instead. The fonts browser's
+*Your own fonts* entry, beside *More fonts* where a font is chosen, says
+this in the reader's language.
+
 A family needs a name and a face, a family of its own a regular face;
 its faces are packs, drawn on every device and read a glyph at a time,
 or font files, drawn where scalable fonts are, a variable font at its

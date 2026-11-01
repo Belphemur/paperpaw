@@ -5,7 +5,8 @@
 //! Nothing of a font is built in: devices that draw scalable fonts get
 //! its font files, the others (the X4) font packs made for them, read a
 //! glyph at a time from the storage. *More fonts* is offered where the
-//! reading font and the status lines' font are chosen.
+//! reading font and the status lines' font are chosen, and *Your own
+//! fonts*, which shows how to read with a font file of one's own.
 
 #![no_std]
 
@@ -23,13 +24,15 @@ use alloc::boxed::Box;
 use paperpaw_sdk::builtin::{events, groups, settings};
 use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::{
-    Command, FixedAction, FixedScreen, Id, Manifest, MenuEntry, Params, Plugin, RegisterError,
+    Command, Env, FixedAction, FixedScreen, Id, Manifest, MenuEntry, Params, Plugin, RegisterError,
     Registrar, SettingSpec,
 };
 
 pub const PLUGIN: Id = Id::new_static("fonts-browser");
 /// Opens the list of fonts.
 pub const OPEN: Id = Id::new_static("fonts-browser.open");
+/// Shows how to read with a font of one's own.
+pub const OWN: Id = Id::new_static("fonts-browser.own");
 const LIST_SCREEN: Id = Id::new_static("fonts-browser.list");
 const FONT_SCREEN: Id = Id::new_static("fonts-browser.font");
 
@@ -55,14 +58,41 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
-static ACTIONS: [FixedAction; 1] = [FixedAction::new(OPEN, "fonts-browser.more")
-    .handler(|_, _, out| out.push(Command::OpenScreen(LIST_SCREEN, Params::new())))];
-/// After the fonts to choose from, where they are chosen.
-static ENTRIES: [MenuEntry; 2] = [
-    MenuEntry::new(Id::new_static(settings::READING_FONT.static_str()), OPEN),
-    MenuEntry::new(Id::new_static(settings::STATUS_FONT.static_str()), OPEN),
+static ACTIONS: [FixedAction; 2] = [
+    FixedAction::new(OPEN, "fonts-browser.more")
+        .handler(|_, _, out| out.push(Command::OpenScreen(LIST_SCREEN, Params::new()))),
+    FixedAction::new(OWN, "fonts-browser.own").handler(show_own),
 ];
-static ICONS: [(Id, &str); 1] = [(OPEN, "typography")];
+/// After the fonts to choose from, where they are chosen.
+static ENTRIES: [MenuEntry; 4] = [
+    MenuEntry::new(Id::new_static(settings::READING_FONT.static_str()), OPEN),
+    MenuEntry::new(Id::new_static(settings::READING_FONT.static_str()), OWN),
+    MenuEntry::new(Id::new_static(settings::STATUS_FONT.static_str()), OPEN),
+    MenuEntry::new(Id::new_static(settings::STATUS_FONT.static_str()), OWN),
+];
+static ICONS: [(Id, &str); 2] = [(OPEN, "typography"), (OWN, "folder-open")];
+
+/// Opens the part of the plugin's help (its *How it works*) that says how
+/// to read with a font file of one's own, from after its heading on, as a
+/// page.
+fn show_own(env: &Env<'_>, _: &Params, out: &mut paperpaw_sdk::Commands) {
+    let i18n = env.i18n();
+    let heading = i18n.tr("fonts-browser.own.heading");
+    let text = env
+        .plugins()
+        .get(PLUGIN.as_str())
+        .and_then(|info| info.how(i18n))
+        .and_then(|how| {
+            how.find(heading)
+                .map(|at| alloc::string::String::from(how[at + heading.len()..].trim_start()))
+        })
+        .map(|how| alloc::format!("{}\n\n{how}\n", i18n.tr("fonts-browser.own")));
+    let file = alloc::format!("{}/own.txt", Env::plugin_dir(PLUGIN.as_str()));
+    match text.map(|text| paperpaw_sdk::readers::show_text(env.storage(), &file, &text)) {
+        Some(Ok(open)) => out.push(open),
+        _ => out.push(Command::Notify(i18n.tr("fonts-browser.how-failed").into())),
+    }
+}
 
 static SCREENS: [FixedScreen; 2] = [
     FixedScreen::new(FONT_SCREEN, "fonts-browser.title", |env, params| {

@@ -17,6 +17,12 @@ change the plugin SDK.
   oldest it runs), read from the firmware's ELF file (`PAPERPAW_NATIVE_ABI`, `paperpaw-sign abi`). The store
   and the web flasher use them to refuse a plugin that needs more than a firmware has; the first line is the
   fingerprint as before.
+- Your own fonts (#59): *Your own fonts*, beside *More fonts* where the reading font and the status lines' font
+  are chosen, shows how to read with a font file of one's own, per device, in English and German (it works
+  without a network). `paperpaw-fontgen --family "My Font" --regular a.ttf [--bold b.ttf] [--italic i.ttf]
+  [--bold-italic bi.ttf] <folder>` makes the whole font plugin for the X4 and X4 Pro, which read font packs
+  only: `<folder>/font-my-font` with its `plugin.ini` and a pack per face, to copy into the card's `plugins`
+  folder; it prints how large each pack is and how many of the characters asked for the font has. No SDK change.
 
 ### Changed
 

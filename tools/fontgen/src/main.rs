@@ -11,6 +11,13 @@ paperpaw-fontgen: build PaperPaw bitmap font packs
 
 USAGE:
     paperpaw-fontgen <font.ttf|otf> <output.ppfp> [OPTIONS]
+    paperpaw-fontgen --family <name> --regular <font> [--bold <font>]
+        [--italic <font>] [--bold-italic <font>] <folder> [OPTIONS]
+
+The second form makes a whole font plugin of your own: the folder
+`<folder>/font-<name>` with a pack for each face (a face you leave out is
+drawn in the regular one), to copy into the `plugins` folder of the device's
+card. Then choose it in Settings, under Reading, as Font.
 
 OPTIONS:
     --sizes <px,...>      Pixel sizes to render (default: 20,24,28,32,36,40,48)
@@ -44,8 +51,19 @@ fn main() -> ExitCode {
     }
 }
 
+/// The faces of a family, as the plugin's `[family]` names them, with the
+/// weight each is drawn at where its font is a variable one.
+const STYLES: [(&str, f32); 4] = [
+    ("regular", 400.0),
+    ("bold", 700.0),
+    ("italic", 400.0),
+    ("bold-italic", 700.0),
+];
+
 fn run(args: Vec<String>) -> Result<(), String> {
     let mut positional = Vec::new();
+    let mut family: Option<String> = None;
+    let mut faces: [Option<String>; 4] = [None, None, None, None];
     let mut sizes = vec![20.0, 24.0, 28.0, 32.0, 36.0, 40.0, 48.0];
     let mut axes: Vec<(String, f32)> = Vec::new();
     let mut sets = vec![String::from("latin"), String::from("ligatures")];
@@ -67,6 +85,12 @@ fn run(args: Vec<String>) -> Result<(), String> {
                     })
                     .collect::<Result<_, _>>()?;
             }
+            "--family" => family = Some(args.next().ok_or("--family requires a name")?),
+            "--regular" | "--bold" | "--italic" | "--bold-italic" => {
+                let style = arg.trim_start_matches('-');
+                let at = STYLES.iter().position(|(s, _)| *s == style).unwrap_or(0);
+                faces[at] = Some(args.next().ok_or(format!("{arg} requires a font file"))?);
+            }
             "--chars" => {
                 let list = args.next().ok_or("--chars requires a value")?;
                 sets = list.split(',').map(|s| s.trim().to_string()).collect();
@@ -85,6 +109,13 @@ fn run(args: Vec<String>) -> Result<(), String> {
             _ => positional.push(arg),
         }
     }
+    if let Some(name) = family {
+        let [folder] = positional.as_slice() else {
+            return Err(format!("expected one output folder\n\n{}", usage()));
+        };
+        let ranges = ranges_of(&sets)?;
+        return family_plugin(&name, &faces, folder, &sizes, &ranges, &axes);
+    }
     let [input, output] = positional.as_slice() else {
         return Err(format!(
             "expected an input and an output file\n\n{}",
@@ -96,8 +127,22 @@ fn run(args: Vec<String>) -> Result<(), String> {
     let variations: Vec<(&str, f32)> = axes.iter().map(|(t, v)| (t.as_str(), *v)).collect();
     let font =
         paperpaw_text::OutlineFont::new(data, &variations).map_err(|e| format!("{input}: {e}"))?;
+    let ranges = ranges_of(&sets)?;
+    let chars = paperpaw_text::charset::chars(&ranges);
+    let pack = paperpaw_text::build_pack(&font, &sizes, chars);
+    std::fs::write(output, &pack).map_err(|e| format!("{output}: {e}"))?;
+    println!(
+        "{output}: {} sizes, {:.1} KiB",
+        sizes.len(),
+        pack.len() as f64 / 1024.0
+    );
+    Ok(())
+}
+
+/// The code points of character `sets`: names, code points or `@FILE`.
+fn ranges_of(sets: &[String]) -> Result<Vec<std::ops::RangeInclusive<char>>, String> {
     let mut ranges = Vec::new();
-    for set in &sets {
+    for set in sets {
         if let Some(named) = paperpaw_text::charset::named(set) {
             ranges.extend_from_slice(named);
         } else if let Some(points) = paperpaw_text::charset::code_points(set) {
@@ -108,15 +153,93 @@ fn run(args: Vec<String>) -> Result<(), String> {
             return Err(format!("unknown character set `{set}`"));
         }
     }
-    let chars = paperpaw_text::charset::chars(&ranges);
-    let pack = paperpaw_text::build_pack(&font, &sizes, chars);
-    std::fs::write(output, &pack).map_err(|e| format!("{output}: {e}"))?;
+    Ok(ranges)
+}
+
+/// A name as a plugin's id: lower case letters and digits, one `-` between.
+fn slug(name: &str) -> String {
+    let mut id = String::new();
+    for c in name.chars() {
+        if c.is_ascii_alphanumeric() {
+            id.push(c.to_ascii_lowercase());
+        } else if !id.ends_with('-') && !id.is_empty() {
+            id.push('-');
+        }
+    }
+    id.trim_end_matches('-').to_string()
+}
+
+/// Makes the plugin of a family of your own: `<folder>/font-<name>`.
+fn family_plugin(
+    name: &str,
+    faces: &[Option<String>; 4],
+    folder: &str,
+    sizes: &[f32],
+    ranges: &[std::ops::RangeInclusive<char>],
+    axes: &[(String, f32)],
+) -> Result<(), String> {
+    let id = slug(name);
+    if id.is_empty() || name.contains(['\n', '\r']) {
+        return Err(format!("the name `{name}` needs letters (a to z) or digits"));
+    }
+    let Some(regular) = faces[0].as_deref() else {
+        return Err("a family needs a regular face: add --regular <font>".into());
+    };
+    let dir = std::path::Path::new(folder).join(format!("font-{id}"));
+    let fonts = dir.join("fonts");
+    std::fs::create_dir_all(&fonts).map_err(|e| format!("{}: {e}", fonts.display()))?;
+    let chars = paperpaw_text::charset::chars(ranges);
+    let mut ini = format!(
+        "[plugin]\nid = font-{id}\nname = {name}\n\
+         description = Your own font, made with paperpaw-fontgen.\nversion = 1.0.0\n\n\
+         [family]\nname = {name}\n"
+    );
+    let mut total = 0;
+    for ((style, weight), file) in STYLES.iter().zip(faces) {
+        let Some(file) = file else { continue };
+        let data = std::fs::read(file).map_err(|e| format!("{file}: {e}"))?;
+        let mut variations = vec![("wght", *weight)];
+        variations.extend(axes.iter().map(|(t, v)| (t.as_str(), *v)));
+        let font = paperpaw_text::OutlineFont::new(data, &variations)
+            .map_err(|e| format!("{file}: {e} (a TrueType or OpenType font is needed)"))?;
+        let pack = paperpaw_text::build_pack(&font, sizes, chars.clone());
+        let path = fonts.join(format!("{style}.ppfp"));
+        std::fs::write(&path, &pack).map_err(|e| format!("{}: {e}", path.display()))?;
+        ini.push_str(&format!("{style} = {style}.ppfp\n"));
+        total += pack.len();
+        println!("{style}: {:.1} KiB", pack.len() as f64 / 1024.0);
+        if *style == "regular" {
+            coverage(&font, ranges, regular);
+        }
+    }
+    std::fs::write(dir.join("plugin.ini"), ini).map_err(|e| format!("plugin.ini: {e}"))?;
     println!(
-        "{output}: {} sizes, {:.1} KiB",
-        sizes.len(),
-        pack.len() as f64 / 1024.0
+        "{}: {:.1} MiB. Copy the folder into the plugins folder of the card, restart, and choose\n\
+         `{name}` in Settings, under Reading, as Font.",
+        dir.display(),
+        total as f64 / 1_048_576.0
     );
     Ok(())
+}
+
+/// Says how much of the characters asked for the font has, for the book's
+/// letters: `file` has none of them where its font lacks the script.
+fn coverage(
+    font: &paperpaw_text::OutlineFont,
+    ranges: &[std::ops::RangeInclusive<char>],
+    file: &str,
+) {
+    let all: Vec<char> = paperpaw_text::charset::chars(ranges).collect();
+    let has = all.iter().filter(|&&c| font.has_char(c)).count();
+    println!(
+        "{file}: has {has} of the {} characters asked for",
+        all.len()
+    );
+    if has == 0 {
+        println!(
+            "warning: none of them: the pack will draw nothing; --chars names the letters a book needs"
+        );
+    }
 }
 
 /// The code points a file lists (`U+AC00` or `U+AC00-AC01`, separated by
@@ -145,6 +268,40 @@ fn listed(path: &str) -> Result<Vec<std::ops::RangeInclusive<char>>, String> {
 mod tests {
     #![allow(clippy::unwrap_used, reason = "tests")]
     use super::*;
+
+    #[test]
+    fn a_family_of_your_own_is_a_plugin_folder() {
+        assert_eq!(slug("My Font 2!"), "my-font-2");
+        assert_eq!(slug("  --Ünï  "), "n");
+        let font = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../plugins/fonts-default/fonts/Literata.ttf"
+        );
+        let out = std::env::temp_dir().join(format!("fontgen-family-{}", std::process::id()));
+        let run_with = |args: &[&str]| {
+            let mut all: Vec<String> = args.iter().map(|a| (*a).to_string()).collect();
+            all.push(out.to_string_lossy().into_owned());
+            all.extend(["--sizes", "20", "--chars", "latin"].map(String::from));
+            run(all)
+        };
+        // A regular face is needed.
+        assert!(
+            run_with(&["--family", "Mine"])
+                .unwrap_err()
+                .contains("regular")
+        );
+        assert!(run_with(&["--family", "!!", "--regular", font]).is_err());
+        run_with(&["--family", "My Font", "--regular", font, "--bold", font]).unwrap();
+        let dir = out.join("font-my-font");
+        let ini = std::fs::read_to_string(dir.join("plugin.ini")).unwrap();
+        assert!(ini.starts_with("[plugin]\nid = font-my-font\nname = My Font\n"));
+        assert!(
+            ini.ends_with("[family]\nname = My Font\nregular = regular.ppfp\nbold = bold.ppfp\n")
+        );
+        assert!(dir.join("fonts/bold.ppfp").is_file());
+        assert!(!dir.join("fonts/italic.ppfp").exists());
+        std::fs::remove_dir_all(out).ok();
+    }
 
     #[test]
     fn set_files_say_their_format() {

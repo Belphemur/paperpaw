@@ -3,3 +3,17 @@ More fonts lists fonts from a font library on the internet, each name set in its
 You find it at the end of the list of fonts where the reading font is chosen, in Settings, under Reading, as Font; the status lines have the same entry for their font. Tap a font (with buttons, press Select) to see it larger with a sample sentence, then choose Download. You can leave the page while it downloads. When it is done, choose Read with (the font's name), or Use for the status lines. Update fetches a newer version, Remove deletes the font from the device.
 
 It needs Wi-Fi.
+
+YOUR OWN FONTS
+
+Next to More fonts, the same list has Your own fonts, which shows this part of the help. A font of your own is a .ttf or .otf file, for example from Google Fonts.
+
+On Android and other devices that draw font files: copy the file into the fonts folder (on Android: PaperPaw/fonts in the shared storage), restart PaperPaw and choose the font in Settings, under Reading, as Font.
+
+On the Xteink X4 and X4 Pro: these readers read font packs, not font files, because font files would not fit in their memory. Make a pack on a computer with paperpaw-fontgen, for each style you have (regular is needed):
+
+paperpaw-fontgen --family "My Font" --regular MyFont-Regular.ttf --bold MyFont-Bold.ttf --italic MyFont-Italic.ttf plugins
+
+This makes the folder plugins/font-my-font. Copy it into the plugins folder on the memory card, restart, and choose My Font as Font. A pack of one style is about half a megabyte for Latin letters; styles you leave out are drawn in the regular one. The tool says how many of the letters you ask for the font has (--chars latin,cyrillic,greek adds scripts): a font without the letters of your book cannot show them, so look for one that covers its script.
+
+Fonts from More fonts work the same way and need no computer.

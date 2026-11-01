@@ -14,7 +14,7 @@ use std::rc::Rc;
 
 use paperpaw_core::{HttpCall, HttpResponse, Io, Kernel};
 use paperpaw_platform::Rotation;
-use paperpaw_plugin_fonts_browser::{FontsBrowser, OPEN};
+use paperpaw_plugin_fonts_browser::{FontsBrowser, OPEN, OWN};
 use paperpaw_sdk::builtin::{actions, settings};
 use paperpaw_sdk::{
     DeviceInfo, DirEntry, DisplayInfo, Id, InputCaps, Instant, MemoryClass, MemoryStorage,
@@ -410,4 +410,42 @@ fn a_download_cut_off_by_a_restart_is_dropped() {
         shown.iter().all(|label| !label.contains("0 / 2")),
         "{shown:?}"
     );
+}
+
+/// *Your own fonts* shows the part of the help about fonts of one's own,
+/// in the language of the reader, without the rest of it.
+#[test]
+fn your_own_fonts_shows_how_to_read_with_a_font_file() {
+    for (language, title, begins, absent) in [
+        (
+            "en",
+            "Your own fonts",
+            "Next to More fonts",
+            "More fonts lists",
+        ),
+        (
+            "de",
+            "Eigene Schriften",
+            "Neben Mehr Schriften",
+            "Mehr Schriften listet",
+        ),
+    ] {
+        let storage = Shared::default();
+        storage
+            .write(
+                "paperpaw.ini",
+                format!("[core]\nlanguage = {language}\n").as_bytes(),
+            )
+            .unwrap();
+        let mut kernel = started(&storage);
+        kernel.run_action(Instant(100), OWN);
+        let path = ".paperpaw/plugins/fonts-browser/own.txt";
+        let mut bytes = vec![0; usize::try_from(storage.size(path).unwrap()).unwrap()];
+        storage.read_at(path, 0, &mut bytes).unwrap();
+        let text = String::from_utf8(bytes).unwrap();
+        assert!(text.starts_with(title), "{text}");
+        assert!(text.contains(begins), "{text}");
+        assert!(!text.contains(absent), "{text}");
+        assert!(text.contains("paperpaw-fontgen --family"), "{text}");
+    }
 }
