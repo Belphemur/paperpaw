@@ -20,6 +20,8 @@ change the plugin SDK.
   again by itself. SDK: `events::CATALOG_FAILED`.
 - SDK: `WifiState::Online` says the name the device answers to in the network (`name`, e.g. `paperpaw.local`,
   where the shell gives one), and `WifiState::reach` gives the name or else the address for a page to show.
+- SDK: `HttpRequest::max_file` caps what one download (`save_to`) may write; a longer answer fails and nothing
+  is kept, so a plugin's download cannot fill the card (at most 64 MiB, as before).
 - *All notes*, a new plugin (Tools): the books that have bookmarks or highlights with how many, a book's notes
   (a note opens the book there), and *Export as My Clippings.txt*, all notes in one file in Kindle's form
   (UTF-8 with a byte order mark, `Exports/My Clippings.txt` beside the library) that notes apps read. A book's

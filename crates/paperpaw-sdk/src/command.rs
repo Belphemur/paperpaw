@@ -93,6 +93,10 @@ pub struct HttpOptions {
     /// 1 MiB on others); at most 1 MiB. Large answers go to a file
     /// ([`HttpRequest::save_to`]).
     pub max_body: Option<usize>,
+    /// The largest file a download ([`HttpRequest::save_to`]) may write,
+    /// in bytes: a longer answer fails ([`HttpError::Refused`](crate::HttpError))
+    /// and the file stays as it was. `None`: 64 MiB, the most any may.
+    pub max_file: Option<u64>,
 }
 
 /// The options of a request that sets none.
@@ -100,6 +104,7 @@ static NO_OPTIONS: HttpOptions = HttpOptions {
     timeout: None,
     want_headers: Vec::new(),
     max_body: None,
+    max_file: None,
 };
 
 impl HttpRequest {
@@ -256,6 +261,14 @@ impl HttpRequest {
     /// Keeping at most this many bytes of the answer's body in memory.
     pub fn max_body(mut self, bytes: usize) -> Self {
         self.options_mut().max_body = Some(bytes);
+        self
+    }
+
+    /// Saving a file of at most this many bytes ([`save_to`](Self::save_to)):
+    /// a longer answer fails and nothing is written, so a download cannot
+    /// fill the card.
+    pub fn max_file(mut self, bytes: u64) -> Self {
+        self.options_mut().max_file = Some(bytes);
         self
     }
 }
