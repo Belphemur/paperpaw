@@ -55,7 +55,10 @@ impl Revocations {
     /// The entry is complete: kept for handing over if it is well formed,
     /// is of a plugin here whose author's key it names, and is new. The
     /// kernel checks the signature; a bad entry is left out on its own.
-    pub(crate) fn entry_done(&mut self, storage: &dyn Storage) {
+    /// `here` says in memory whether a plugin is on the device, so the
+    /// authors file is read only for those, not once for each entry of a
+    /// long list.
+    pub(crate) fn entry_done(&mut self, storage: &dyn Storage, here: &dyn Fn(&str) -> bool) {
         let entry = (
             bytes::<32>(&self.key),
             bytes::<64>(&self.signature),
@@ -70,6 +73,7 @@ impl Revocations {
         if self.read > MAX_READ
             || self.pending.len() >= MAX_REVOKED
             || plugin.is_empty()
+            || !here(&plugin)
             || known_author(storage, &plugin) != Some(key)
             || self.pending.iter().any(|r| r.plugin == plugin)
         {
