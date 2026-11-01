@@ -63,6 +63,38 @@ SETS = {
 }
 
 
+# Keyboard layouts a pack brings (tools/plugin-files/keyboards/<set>.txt, the
+# lines of the keyboard's point `keyboard.layouts`), and their names.
+NAMES = {
+    "keyboard.layout.ar": ("Arabic", "Arabisch"),
+    "keyboard.layout.fa": ("Persian", "Persisch"),
+    "keyboard.layout.ur": ("Urdu", "Urdu"),
+    "keyboard.layout.he": ("Hebrew", "Hebräisch"),
+}
+
+
+def layouts(out, sets):
+    """Writes the layouts of `sets` as `points/keyboard.layouts.txt`, and
+    their names to the plugin's translations."""
+    lines = []
+    for name in sets:
+        file = ROOT / "tools/plugin-files/keyboards" / f"{name}.txt"
+        if file.exists():
+            lines += [l for l in file.read_text(encoding="utf-8").splitlines() if l.strip()]
+    if not lines:
+        return
+    (out / "points").mkdir(parents=True, exist_ok=True)
+    (out / "points/keyboard.layouts.txt").write_text("\n".join(lines) + "\n", encoding="utf-8",
+                                                    newline="\n")
+    ids = [l.split(";")[0].strip() for l in lines if not l.startswith("#")]
+    for n, lang in enumerate(["en", "de"]):
+        path = out / "i18n" / f"{lang}.ini"
+        if path.exists():
+            names = "".join(f"{i} = {NAMES[i][n]}\n" for i in ids)
+            path.write_text(path.read_text(encoding="utf-8") + names, encoding="utf-8",
+                            newline="\n")
+
+
 def build(base, sets):
     """Writes the plugin of `sets` to `base`/script-<sets>."""
     faces, licence, font = SETS[sets[0]][1:]
@@ -89,6 +121,7 @@ def build(base, sets):
                 f"name = {title} letters\n"
                 f"description = {title} letters in {font}, for devices whose fonts lack them.\n"
                 "version = 0.1.0\n")
+    layouts(out, sets)
     (out / "plugin.ini").write_text(f"{head}\n[extends]\n{extends}\n", encoding="utf-8",
                                     newline="\n")
     shutil.copy(licence, out / "fonts" / licence.name)

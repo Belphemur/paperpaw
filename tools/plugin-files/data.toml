@@ -41,30 +41,30 @@ de.description = "Fett-kursiver Buchtext in Literata, wo sonst Fett dafür steht
 # that is ready): tools/script-pack.py builds them for the release.
 
 [script-arabic]
-version = "1.0.0"
+version = "1.1.0"
 group = "look"
 licence = "OFL-1.1"
 devices = ["x4", "x4-pro", "x4-classic"]
 off_by_default = true
 build = "tools/script-pack.py"
-inputs = ["tools/fonts/NotoNaskhArabic.ttf", "tools/fontgen", "crates/paperpaw-text/src/marks.rs"]
+inputs = ["tools/fonts/NotoNaskhArabic.ttf", "tools/fontgen", "crates/paperpaw-text/src/marks.rs", "tools/plugin-files/keyboards/arabic.txt"]
 name = "Arabic letters"
-description = "Arabic, Persian and Urdu books in Noto Naskh Arabic, with their vowel marks."
+description = "Arabic, Persian and Urdu books in Noto Naskh Arabic, with their vowel marks, and keyboards for typing them."
 de.name = "Arabische Schrift"
-de.description = "Bücher auf Arabisch, Persisch und Urdu in Noto Naskh Arabic, mit ihren Vokalzeichen."
+de.description = "Bücher auf Arabisch, Persisch und Urdu in Noto Naskh Arabic, mit ihren Vokalzeichen, und Tastaturen dafür."
 
 [script-hebrew]
-version = "1.0.0"
+version = "1.1.0"
 group = "look"
 licence = "OFL-1.1"
 devices = ["x4", "x4-pro", "x4-classic"]
 off_by_default = true
 build = "tools/script-pack.py"
-inputs = ["tools/fonts/NotoSerifHebrew.ttf", "tools/fontgen", "crates/paperpaw-text/src/marks.rs"]
+inputs = ["tools/fonts/NotoSerifHebrew.ttf", "tools/fontgen", "crates/paperpaw-text/src/marks.rs", "tools/plugin-files/keyboards/hebrew.txt"]
 name = "Hebrew letters"
-description = "Hebrew books in Noto Serif Hebrew, with their points."
+description = "Hebrew books in Noto Serif Hebrew, with their points, and a keyboard for typing it."
 de.name = "Hebräische Schrift"
-de.description = "Bücher auf Hebräisch in Noto Serif Hebrew, mit ihren Punkten."
+de.description = "Bücher auf Hebräisch in Noto Serif Hebrew, mit ihren Punkten, und eine Tastatur dafür."
 
 [script-greek]
 version = "1.0.0"

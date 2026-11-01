@@ -1,0 +1,6 @@
+# Keyboard layouts the Arabic letters pack brings (points/keyboard.layouts.txt):
+# `id; code; letter rows; letters typed by holding another`. The id is also the
+# translation key of the layout's name (script-pack.py writes the names).
+keyboard.layout.ar; AR; ذضصثقفغعهخحجد شسيبلاتنمكط ئءؤرىةوزظ; ا=أإآ ي=ىئ و=ؤ ه=ة ء=ئؤ
+keyboard.layout.fa; FA; ضصثقفغعهخحجچ شسیبلاتنمکگ ظطزرذدپوژ; ا=آأ ی=ئ ک=ك ه=ة و=ؤ ء=ئؤ
+keyboard.layout.ur; UR; قوعرتےءیہپ اسدفگحجکل زشچطبنم خصضظغثذژ; ت=ٹ د=ڈ ر=ڑ ن=ں ہ=ھۃ ا=آأ ی=ئ ے=ۓ ک=ك

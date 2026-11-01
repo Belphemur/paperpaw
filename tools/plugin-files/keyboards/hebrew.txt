@@ -1,0 +1,2 @@
+# The keyboard layout the Hebrew letters pack brings (see arabic.txt).
+keyboard.layout.he; HE; קראטוןםפ שדגכעיחלךף זסבהנמצתץ

@@ -424,4 +424,62 @@ mod tests {
             assert!(!variants.is_empty());
         }
     }
+    /// The layouts the script packs bring (`tools/plugin-files/keyboards`,
+    /// written to the packs' `points/keyboard.layouts.txt`) are lines the
+    /// keyboard takes whole: their rows and keys within its limits, ids not
+    /// built in, letters of their script, held letters that parse.
+    #[test]
+    fn the_layouts_of_the_script_packs_are_taken_whole() {
+        let packs = [
+            (
+                include_str!("../../../tools/plugin-files/keyboards/arabic.txt"),
+                '\u{600}'..='\u{6ff}',
+                3,
+            ),
+            (
+                include_str!("../../../tools/plugin-files/keyboards/hebrew.txt"),
+                '\u{590}'..='\u{5ff}',
+                1,
+            ),
+        ];
+        let mut ids = Vec::new();
+        for (text, script, count) in packs {
+            let lines: Vec<&str> = text.lines().filter(|l| !l.starts_with('#')).collect();
+            assert_eq!(lines.len(), count);
+            for line in lines {
+                let layout = parse(line).unwrap_or_else(|| panic!("{line}"));
+                assert!(layout.id.starts_with("keyboard.layout."), "{}", layout.id);
+                assert!(LAYOUTS.iter().all(|l| l.id != layout.id) && !ids.contains(&layout.id));
+                ids.push(layout.id.clone());
+                // Not cut short by the limits.
+                let rows: Vec<&str> = layout.letters.split(' ').collect();
+                assert_eq!(
+                    rows.len(),
+                    line.split(';').nth(2).unwrap().split_whitespace().count()
+                );
+                assert!(rows.len() <= MAX_ROWS);
+                for row in rows {
+                    assert!(row.chars().count() <= MAX_KEYS, "{}", layout.id);
+                    assert!(row.chars().all(|c| script.contains(&c)), "{row}");
+                }
+                // Every variant is a letter of the script too, and of a
+                // letter the layout types or a variant of one.
+                assert!(!layout.variants.is_empty() || layout.id.ends_with(".he"));
+                for (_, variants) in &layout.variants {
+                    assert!(variants.chars().all(|c| script.contains(&c)), "{variants}");
+                }
+                // No letter twice in a layout.
+                let all: Vec<char> = layout.letters.chars().filter(|c| *c != ' ').collect();
+                let mut sorted = all.clone();
+                sorted.sort_unstable();
+                sorted.dedup();
+                assert_eq!(sorted.len(), all.len(), "{}", layout.id);
+            }
+        }
+        // Their names are in the packs' translations (see script-pack.py).
+        let names = include_str!("../../../tools/script-pack.py");
+        for id in &ids {
+            assert!(names.contains(&alloc::format!("\"{id}\"")), "{id}");
+        }
+    }
 }

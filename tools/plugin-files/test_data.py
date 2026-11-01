@@ -21,7 +21,7 @@ class ScriptPacks(unittest.TestCase):
         listed = data.plugins()
         for pack in PACKS:
             fields = listed[pack]
-            self.assertEqual(fields["version"], "1.0.0")
+            self.assertRegex(fields["version"], r"^1\.\d+\.\d+$")
             self.assertEqual(fields["build"], "tools/script-pack.py")
             self.assertTrue(fields["off_by_default"])
             self.assertEqual(fields["licence"], "OFL-1.1")
