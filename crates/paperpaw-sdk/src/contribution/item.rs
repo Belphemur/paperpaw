@@ -198,6 +198,9 @@ pub enum Contribution {
     },
     /// A translation catalog (see `paperpaw-i18n`).
     Translations(Cow<'static, str>),
+    /// A compiled translation catalog on the storage, read as needed
+    /// (see [`Registrar::add_translation_file`](crate::Registrar::add_translation_file)).
+    TranslationFile(String),
     /// A look for the parts of screens (see [`Registrar::set_ui_look`](crate::Registrar::set_ui_look)).
     #[non_exhaustive]
     UiLook {
@@ -280,7 +283,7 @@ impl Contribution {
             Contribution::ToPoint { .. } => "to-point",
             Contribution::Point(_) => "point",
             Contribution::EventDeclared(_) => "event",
-            Contribution::Translations(_) => "translations",
+            Contribution::Translations(_) | Contribution::TranslationFile(_) => "translations",
             Contribution::UiLook { .. } => "ui-look",
             Contribution::Extended { .. } => "extended",
             Contribution::RenderHook(_) => "render-hook",

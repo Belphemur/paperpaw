@@ -688,6 +688,7 @@ impl BuilderParts {
             holds: crate::awake::Holds::default(),
             preview_owner: None,
             next_serial: 0,
+            read_top: None,
             task: None,
             tasks: Vec::new(),
             config_unreadable: false,

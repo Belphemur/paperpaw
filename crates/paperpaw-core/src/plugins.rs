@@ -101,13 +101,17 @@ impl Kernel {
         if RESERVED_IDS.contains(&id.as_str()) {
             return self.register_plugin(plugin, manifest);
         }
-        let mut registrar = Registrar::new(id);
+        let mut registrar = Registrar::new(id.clone());
         if plugin.register(&mut registrar).is_ok() {
             for contribution in registrar.into_contributions() {
-                if let Contribution::Translations(source) = contribution
-                    && let Ok(catalog) = registry::catalog(source)
-                {
-                    self.shared.translator.add(catalog);
+                match contribution {
+                    Contribution::Translations(source) => {
+                        if let Ok(catalog) = registry::catalog(source) {
+                            self.shared.translator.add(catalog);
+                        }
+                    }
+                    Contribution::TranslationFile(path) => self.add_translation_file(&id, path),
+                    _ => {}
                 }
             }
         }
@@ -237,6 +241,9 @@ impl Kernel {
         self.keys.when.append(&mut staging.keymaps_when);
         for catalog in staging.catalogs.drain(..) {
             self.shared.translator.add(catalog);
+        }
+        for path in staging.catalog_files.drain(..) {
+            self.add_translation_file(plugin, path);
         }
         for font in staging.fonts.drain(..) {
             // Cannot fail: checked above.
@@ -555,6 +562,26 @@ impl Kernel {
                 }
             }
             None => self.warn(source, None, format!("{path}: not a font")),
+        }
+    }
+
+    /// Opens the compiled catalog `path` (`Registrar::add_translation_file`)
+    /// and adds it; one that cannot be opened is reported.
+    pub(crate) fn add_translation_file(&mut self, plugin: &Id, path: String) {
+        let file =
+            crate::catalog_file::StoredCatalog::new(self.shared.storage.clone(), path.clone());
+        match file.map(|file| paperpaw_i18n::Catalog::open(alloc::rc::Rc::new(file))) {
+            Some(Ok(catalog)) => self.shared.translator.add(catalog),
+            Some(Err(error)) => self.warn(
+                WarningSource::Plugin(plugin.clone()),
+                None,
+                format!("{path}: {error}"),
+            ),
+            None => self.warn(
+                WarningSource::Plugin(plugin.clone()),
+                None,
+                format!("{path}: not found"),
+            ),
         }
     }
 

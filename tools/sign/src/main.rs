@@ -2,8 +2,9 @@
 //! `paperpaw-update`), makes signing keys and shows what an update file
 //! holds; makes native plugin files (`.ppn`, see `paperpaw-native`) from
 //! linked plugins, signs them as their author and shows what they hold;
-//! and checks that crates keep no mutable statics, as a plugin's copy of
-//! the SDK must not.
+//! checks that crates keep no mutable statics, as a plugin's copy of
+//! the SDK must not; and compiles translation catalogs to be read from
+//! the card as needed (`.ppcat`, ADR 0033).
 //!
 //! A device installs updates signed with PaperPaw's key, and those signed
 //! with a key its reader chose to trust (their own builds). A plugin file
@@ -72,6 +73,10 @@ USAGE:
         moving (writable data, undefined symbols, addresses built into
         instructions, relative reaches out of the plugin). With --key,
         signs it as sign-plugin does.
+    paperpaw-sign catalog <catalog.ini> <catalog.ppcat>
+        Compiles a translation catalog to be read from the card as
+        needed (ADR 0033): a data plugin's i18n/*.ppcat. Fails where it
+        is no catalog, or a key or message is too long.
     paperpaw-sign plugin <plugin.ppn>
         Shows what a plugin file holds, and its author if it is signed
         (failing if the signature does not hold).
@@ -132,6 +137,7 @@ fn run(args: Vec<String>) -> Result<(), String> {
         ["abi", elf] => firmware::abi(elf),
         ["pack", elf, out] => plugin::pack(elf, out, None),
         ["pack", elf, out, "--key", key] => plugin::pack(elf, out, Some(key)),
+        ["catalog", source, out] => catalog(source, out),
         ["plugin", file] => plugin::show(file),
         ["sign-plugin", file] => plugin::sign(file, None),
         ["sign-plugin", file, "--key", key] => plugin::sign(file, Some(key)),
@@ -149,6 +155,15 @@ fn run(args: Vec<String>) -> Result<(), String> {
         }
         _ => Err(format!("unexpected arguments\n\n{USAGE}")),
     }
+}
+
+/// `catalog`: the catalog `source` compiled into `out`.
+fn catalog(source: &str, out: &str) -> Result<(), String> {
+    let text = std::fs::read_to_string(source).map_err(|e| format!("{source}: {e}"))?;
+    let compiled = paperpaw_i18n::Catalog::compile(&text).map_err(|e| format!("{source}: {e}"))?;
+    std::fs::write(out, &compiled).map_err(|e| format!("{out}: {e}"))?;
+    println!("{out}: {} bytes", compiled.len());
+    Ok(())
 }
 
 /// `check-publish`: the problems, one a line; fails on an error.

@@ -110,6 +110,8 @@ pub(crate) struct DataPlugin {
     folder: String,
     /// Taken by `register`, which runs once.
     translations: RefCell<Vec<String>>,
+    /// Compiled catalogs (`i18n/*.ppcat`): their paths, read as needed.
+    catalog_files: RefCell<Vec<String>>,
     keymap: RefCell<Option<String>>,
     styles: RefCell<Option<String>>,
     /// Where the files read as it registers are.
@@ -188,6 +190,9 @@ impl Plugin for DataPlugin {
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         for source in self.translations.take() {
             r.add_translations(Cow::Owned(source))?;
+        }
+        for path in self.catalog_files.take() {
+            r.add_translation_file(path)?;
         }
         if let Some(css) = self.styles.take() {
             r.add_stylesheet(Cow::Owned(css))?;
@@ -632,13 +637,19 @@ fn load(shared: &Rc<dyn Storage>, path: &str, folder: &str) -> Result<DataPlugin
     let mut translations = Vec::new();
     let catalogs = format!("{path}/i18n");
     let mut files: Vec<String> = Vec::new();
+    let mut compiled: Vec<String> = Vec::new();
     let _ = storage.list(&catalogs, &mut |entry| {
         // `DE.INI` too: a file copied from a memory card may have it so.
         if !entry.is_dir && paperpaw_sdk::files::has_extension(entry.name, "ini") {
             files.push(entry.name.to_string());
         }
+        // Read as needed, so not counted (ADR 0033).
+        if !entry.is_dir && paperpaw_sdk::files::has_extension(entry.name, "ppcat") {
+            compiled.push(format!("{catalogs}/{}", entry.name));
+        }
     });
     files.sort_unstable();
+    compiled.sort_unstable();
     let mut translations_left = MAX_TRANSLATIONS;
     for file in files {
         let path = format!("{catalogs}/{file}");
@@ -674,6 +685,7 @@ fn load(shared: &Rc<dyn Storage>, path: &str, folder: &str) -> Result<DataPlugin
         manifest,
         folder: path.to_string(),
         translations: RefCell::new(translations),
+        catalog_files: RefCell::new(compiled),
         keymap: RefCell::new(keymap),
         styles: RefCell::new(styles),
         storage: Some(shared.clone()),
@@ -744,6 +756,7 @@ pub(crate) fn font_folder(storage: &dyn Storage, dirs: &[String]) -> Option<Data
         // Folders the shell names; not removed by PaperPaw.
         folder: String::new(),
         translations: RefCell::new(Vec::new()),
+        catalog_files: RefCell::new(Vec::new()),
         keymap: RefCell::new(None),
         styles: RefCell::new(None),
         storage: None,

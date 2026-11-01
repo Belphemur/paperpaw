@@ -39,9 +39,9 @@ A catalog can stay on the card and be read as needed.
   `Translator` is lent out, so what a plugin borrowed stays where it is
   (an append-only list of `OnceCell`s, no `unsafe`); the kernel empties
   it (`Translator::forget_read`, with the `Translator` its own) when the
-  screen changes, and after an event once it holds more than 4 KiB.
-  Beyond 16 KiB in one call, messages are not read any more: the
-  language falls back for them.
+  screen on top changes, and after a call once it holds more than
+  12 KiB. Beyond 16 KiB (`MAX_READ`), messages are not read any more
+  until then: the language falls back for them.
 - **Failing to read** (a card pulled, a read error, a block that is not
   right) gives no message: the next language of the chain (English,
   built in) or the key stands in, and nothing panics.

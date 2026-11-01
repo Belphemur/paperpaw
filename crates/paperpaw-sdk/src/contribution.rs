@@ -991,6 +991,16 @@ impl Registrar {
         self.add_checked(Contribution::Translations(source))
     }
 
+    /// Adds a compiled translation catalog on the storage (`.ppcat`, made
+    /// by `paperpaw-sign catalog` from an `.ini` catalog): its messages
+    /// stay there and are read as they are needed, so a language of any
+    /// size takes about a kilobyte of memory (ADR 0033). One that cannot
+    /// be opened is reported and its language falls back.
+    pub fn add_translation_file(&mut self, path: impl Into<String>) -> Result<(), RegisterError> {
+        let path = path.into();
+        self.add_checked(Contribution::TranslationFile(path))
+    }
+
     /// Changes the default of any plugin's setting, written as in
     /// `paperpaw.ini` (e.g. a theme's text size). Device defaults and the
     /// user's choice still win; unknown settings are reported once all

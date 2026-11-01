@@ -257,7 +257,20 @@ impl Kernel {
         self.keep_notes();
         // The next call is the reader's only if it says so.
         self.shared.reader = false;
+        self.forget_read_messages();
         effects
+    }
+
+    /// Forgets the messages read from catalogs on the card (ADR 0033),
+    /// none lent out now: when the screen on top changed, and once they
+    /// near the most that is read.
+    fn forget_read_messages(&mut self) {
+        let top = self.stack.last().map(|s| s.serial);
+        let full = self.shared.translator.read_bytes() > paperpaw_i18n::MAX_READ / 4 * 3;
+        if top != self.read_top || full {
+            self.shared.translator.forget_read();
+            self.read_top = top;
+        }
     }
 
     pub(crate) fn run_commands(&mut self) {

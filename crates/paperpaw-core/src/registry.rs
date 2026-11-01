@@ -378,6 +378,8 @@ pub(crate) struct Staging {
     /// Key maps that apply while a switch (the id) is on.
     pub(crate) keymaps_when: Vec<(Id, Cow<'static, str>)>,
     pub(crate) catalogs: Vec<Catalog>,
+    /// Compiled catalogs on the storage, opened as they are applied.
+    pub(crate) catalog_files: Vec<alloc::string::String>,
     pub(crate) fonts: Vec<FontSpec>,
     pub(crate) font_files: Vec<(Id, alloc::string::String)>,
     pub(crate) font_extensions: Vec<(Id, alloc::string::String, Id)>,
@@ -637,6 +639,7 @@ pub(crate) fn stage(
             Contribution::Point(point) => staging.points.push(*point),
             Contribution::EventDeclared(event) => staging.events.push(*event),
             Contribution::Translations(source) => staging.catalogs.push(catalog(source)?),
+            Contribution::TranslationFile(path) => staging.catalog_files.push(path),
             Contribution::UiLook {
                 painters, priority, ..
             } => staging.ui_looks.push((painters, priority)),

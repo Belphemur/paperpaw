@@ -41,6 +41,7 @@ mod awake;
 mod bluetooth;
 mod builder;
 mod card;
+mod catalog_file;
 mod chrome;
 mod code_plugin;
 mod commands;
@@ -317,6 +318,9 @@ pub struct Kernel {
     tasks: Vec<(Id, Vec<KeptScreen>)>,
     /// The `serial` of the screen opened next.
     next_serial: u32,
+    /// The screen on top when the messages read from the card were last
+    /// forgotten (`forget_read_messages`).
+    read_top: Option<u32>,
     /// `paperpaw.ini` is there but could not be read at start: the user
     /// is told once the first screen shows.
     config_unreadable: bool,
