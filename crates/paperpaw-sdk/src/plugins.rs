@@ -318,6 +318,15 @@ impl Plugins {
         self.list.iter_mut().find(|p| p.manifest.id.as_str() == id)
     }
 
+    /// Room for `additional` more plugins, asked for once before they
+    /// register: the list then never grows by doubling at the start (the
+    /// start's peak on small devices).
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+    pub fn reserve(&mut self, additional: usize) {
+        self.list.reserve_exact(additional);
+    }
+
     #[cfg(any(test, feature = "kernel"))]
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn shrink_to_fit(&mut self) {

@@ -110,6 +110,15 @@ impl Translator {
         }
     }
 
+    /// Room for the catalogs `plugins` more plugins bring in the
+    /// languages chosen (about one a language each), asked for once before
+    /// they are added: the list then never grows by doubling at the start.
+    pub fn reserve(&mut self, plugins: usize) {
+        let languages = self.chain().len();
+        self.catalogs
+            .reserve_exact(plugins.saturating_mul(languages));
+    }
+
     /// Releases unused capacity once all catalogs are added: English
     /// catalogs the language chosen covers drop their index.
     pub fn shrink_to_fit(&mut self) {

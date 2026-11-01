@@ -796,6 +796,12 @@ impl Kernel {
         // The device's name the default of its setting.
         let name = paperpaw_sdk::device_name::default_name(&self.shared.device);
         let core: Box<dyn Plugin> = Box::new(CorePlugin(name));
+        // Their lists asked for once, at their size: the start's peak is
+        // not the lists doubled (each plugin is listed, and brings about
+        // one catalog in each language chosen).
+        let count = plugins.len() + 1;
+        self.shared.plugins.reserve(count);
+        self.shared.translator.reserve(count);
         for plugin in core::iter::once(core).chain(plugins) {
             self.add_plugin(plugin.as_ref(), &disabled);
         }
