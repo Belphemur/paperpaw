@@ -233,6 +233,7 @@ impl Kernel {
             self.sleep_due(),
             shot,
             self.network_deadline(),
+            self.online_ends(),
             self.bluetooth_deadline(),
             self.escape_due(),
         ]
@@ -394,7 +395,8 @@ impl Kernel {
             | Command::CancelWork(..)
             | Command::CancelHttp(_)
             | Command::Wear(_)
-            | Command::GoOnline) => self.apply_work(command),
+            | Command::GoOnline
+            | Command::GoOnlineFor(_)) => self.apply_work(command),
             Command::Restart => self.restart = true,
             Command::LoadPlugin(folder) => self.load_plugin(&folder),
             Command::RemovePlugin(id) => self.remove_plugin(&id),

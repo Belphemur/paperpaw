@@ -10,6 +10,11 @@
 //! the network (it says so as it would without one). Either way it is
 //! not offered again on that screen.
 //!
+//! Outside a screen of the network (a widget's *Update now*, a plugin's
+//! own offer for what its background work would bring) the reader's
+//! choice is [`Command::GoOnlineFor`]: the network for a while, whatever
+//! shows.
+//!
 //! ```ignore
 //! if self.offer.shows(env) {
 //!     self.offer.draw(&mut ui, area);

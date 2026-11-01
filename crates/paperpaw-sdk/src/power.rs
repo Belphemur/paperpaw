@@ -58,6 +58,11 @@ impl PowerControls {
     }
 }
 
+/// The longest the reader goes online for with
+/// [`Command::GoOnlineFor`](crate::Command::GoOnlineFor): what Offline
+/// held back runs within it.
+pub const MAX_ONLINE_FOR: Duration = Duration::from_secs(10 * 60);
+
 /// The longest a [`WakeHold`] lasts: one wanted longer is renewed before
 /// it ends, so that a hold forgotten cannot empty the battery.
 pub const MAX_HOLD: Duration = Duration::from_secs(30 * 60);

@@ -843,6 +843,13 @@ pub enum Command {
     /// [`power`](crate::power)): the network for the screen sending it
     /// until it closes; work held back runs on the same connection.
     GoOnline,
+    /// The reader chose *Go online* where the mode is Offline outside a
+    /// screen of the network (a widget's *Update now*, a plugin's own
+    /// offer for what its background work would bring): the network for
+    /// at most this long (at most [`MAX_ONLINE_FOR`](crate::power::MAX_ONLINE_FOR)),
+    /// whatever screen shows; work held back runs as in Saving, then the
+    /// radio goes off once nothing needs it. Only on the reader's input.
+    GoOnlineFor(core::time::Duration),
     /// Wears a power mode: its level for plugins and declared work, its
     /// values over the reader's own (see [`power`](crate::power)). Sent
     /// by the plugin that chooses the mode.

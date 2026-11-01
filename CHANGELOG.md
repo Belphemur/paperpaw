@@ -46,6 +46,9 @@ change the plugin SDK.
 - SDK: hooks for showing the card to a computer as a USB drive (the X4 Pro's hardware can):
   `Capability::USB_DRIVE`, `Command::UsbDrive`, `events::USB_DRIVE_ENDED`; kernel: `Effects::usb_drive`,
   `Kernel::usb_drive_ended`, `KernelBuilder::capability`. No shell offers it yet.
+- In *Offline* a plugin can offer *Go online* outside its network screens too (a widget's *Update now*): SDK
+  `Command::GoOnlineFor` (the network for a while, at most `power::MAX_ONLINE_FOR`, ten minutes; held work runs
+  as in Saving), taken only from the reader's input.
 - *All notes*, a new plugin (Tools): the books that have bookmarks or highlights with how many, a book's notes
   (a note opens the book there), and *Export as My Clippings.txt*, all notes in one file in Kindle's form
   (UTF-8 with a byte order mark, `Exports/My Clippings.txt` beside the library) that notes apps read. A book's
