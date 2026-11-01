@@ -25,7 +25,12 @@ use crate::{
 /// A paragraph is cut at the next space after this many bytes of text.
 const HARD: usize = 8000;
 /// Text with no space is cut here.
-const HARDEST: usize = 16_000;
+const HARDEST: usize = 4000;
+/// A paragraph with more runs of its own style is cut here.
+const MOST_RUNS: usize = 512;
+/// Pictures that are blocks of their own, at most (the rest leave their
+/// alternative text).
+const MOST_SHOWN: usize = 300;
 
 // The styles of the text, as the cache stores them.
 const STYLE_BOLD: u16 = 1;
@@ -95,6 +100,8 @@ pub(crate) struct Writer<'a> {
     alt: String,
     /// Where the pictures are in the archive, in the order they are shown.
     pub(crate) pictures: Vec<String>,
+    /// How many pictures are blocks of their own.
+    shown: usize,
     toc: usize,
     tables: u32,
     /// Nothing of the table's cell is written yet.
@@ -136,6 +143,7 @@ impl<'a> Writer<'a> {
             pending: Vec::new(),
             alt: String::new(),
             pictures: Vec::new(),
+            shown: 0,
             toc: 0,
             tables: 0,
             cell_start: false,
@@ -244,6 +252,9 @@ impl<'a> Writer<'a> {
         if style != self.run_style {
             self.close_run();
             self.run_style = style;
+            if self.runs.len() >= MOST_RUNS {
+                self.flush(true);
+            }
         }
         self.cell_start = false;
         for c in text.chars() {
@@ -351,12 +362,14 @@ impl<'a> Writer<'a> {
             }
             None => None,
         };
+        let index = index.filter(|_| self.shown < MOST_SHOWN);
         let Some(index) = index else {
             if !alt.is_empty() {
                 self.append(&format!("[{alt}]"));
             }
             return;
         };
+        self.shown += 1;
         self.open_paragraph();
         let continued = self.continued || !self.text.is_empty();
         self.flush(true);
