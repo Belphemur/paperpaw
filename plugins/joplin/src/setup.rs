@@ -154,6 +154,10 @@ pub(crate) struct SetupScreen {
     service: Service,
     /// How the last sending went, or how many books wait.
     message: String,
+    /// Offline mode: the offer to go online, and whether *Send* waits for
+    /// it.
+    online: ui::offline::OfflineOffer,
+    waiting: bool,
 }
 
 impl SetupScreen {
@@ -182,9 +186,31 @@ impl SetupScreen {
             status,
             service: Service::of(env),
             message: waiting(env),
+            online: ui::offline::OfflineOffer::new(),
+            waiting: false,
             style,
             header,
         }
+    }
+
+    /// Whether the offer to go online shows in place of the rows.
+    fn offering(&self, env: &Env<'_>) -> bool {
+        self.waiting && self.online.shows(env)
+    }
+
+    /// What the reader chose on the offer: the books are sent, or told to
+    /// need the network.
+    fn offered(&mut self, chosen: Option<ui::offline::Offer>, cx: &mut Cx<'_, '_>) {
+        let Some(chosen) = chosen else {
+            return;
+        };
+        self.waiting = false;
+        match chosen {
+            ui::offline::Offer::Online => cx.command(Command::run(SEND)),
+            _ => self.message = cx.env().i18n().tr("joplin.no-network").to_string(),
+        }
+        cx.request_redraw();
+        cx.request_refresh(RefreshMode::Fast);
     }
 
     fn rows(&self) -> &'static [Row] {
@@ -205,7 +231,19 @@ impl SetupScreen {
                 cx.request_redraw();
                 cx.request_refresh(RefreshMode::Fast);
             }
-            Row::Send => cx.command(Command::run(SEND)),
+            Row::Send => {
+                // Offline mode: asked first, once, where books wait.
+                if env.caps().network
+                    && !kept::waiting(env.storage()).is_empty()
+                    && self.online.shows(&env)
+                {
+                    self.waiting = true;
+                    cx.request_redraw();
+                    cx.request_refresh(RefreshMode::Fast);
+                } else {
+                    cx.command(Command::run(SEND));
+                }
+            }
             _ => {
                 let initial = row.setting().map_or("", |s| env.settings().read(&s));
                 let question =
@@ -245,6 +283,16 @@ impl Screen for SetupScreen {
         let mut ui = ui::Ui::new(canvas, env, &style);
         let title = env.i18n().tr("joplin.title");
         self.header.draw(&mut ui, title, None, None);
+        if self.offering(env) {
+            let top = self.list.area().y;
+            let area = Rect::new(
+                0,
+                top,
+                env.device().display.width,
+                env.device().display.height.saturating_sub(top),
+            );
+            return self.online.draw(&mut ui, area);
+        }
         let rows = self.rows();
         self.list
             .draw(&mut ui, rows.len(), |ui, index, rect, focused| {
@@ -263,6 +311,11 @@ impl Screen for SetupScreen {
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
+        if *action != actions::BACK && self.offering(cx.env()) {
+            let chosen = self.online.on_action(action, cx).done();
+            self.offered(chosen, cx);
+            return Handled::Yes;
+        }
         if *action == actions::CONFIRM {
             self.activate(self.focused(), cx);
             return Handled::Yes;
@@ -284,6 +337,11 @@ impl Screen for SetupScreen {
         }
         if let Some(action) = self.header.tap(cx.env(), &self.style, gesture.start, None) {
             cx.command(Command::run(action));
+            return Handled::Yes;
+        }
+        if self.offering(cx.env()) {
+            let chosen = self.online.on_gesture(&gesture, cx).done();
+            self.offered(chosen, cx);
             return Handled::Yes;
         }
         let Some(index) = self.list.hit(gesture.start, self.rows().len()) else {

@@ -208,6 +208,10 @@ struct Summary {
     lines: Vec<(usize, usize)>,
     top: usize,
     asked: bool,
+    /// Offline mode: the offer to go online, and whether the summary
+    /// waits for it.
+    online: ui::offline::OfflineOffer,
+    waiting: bool,
 }
 
 impl Summary {
@@ -227,6 +231,8 @@ impl Summary {
             lines: Vec::new(),
             top: 0,
             asked: false,
+            online: ui::offline::OfflineOffer::new(),
+            waiting: false,
         };
         // The summary given (by the dictionary's panel, which has it):
         // not fetched again.
@@ -257,6 +263,47 @@ impl Summary {
             }
         }
         self.text = text;
+    }
+
+    /// Whether the offer to go online shows in place of the text.
+    fn offering(&self, env: &Env<'_>) -> bool {
+        self.waiting && self.online.shows(env)
+    }
+
+    /// Where the offer goes: under the header.
+    fn offer_area(&self) -> Rect {
+        let header = self.header();
+        Rect::new(
+            self.region.x,
+            header.y + header.height,
+            self.region.width,
+            self.region.height.saturating_sub(header.height),
+        )
+    }
+
+    /// Asks for the summary.
+    fn fetch(&self, cx: &mut Cx<'_, '_>) {
+        let request = summary_request(&self.language, &self.word, ANSWERED.id().clone());
+        cx.command(Command::http(request));
+    }
+
+    /// What the reader chose on the offer: the summary is asked for, or
+    /// said to need the network.
+    fn offered(&mut self, chosen: Option<ui::offline::Offer>, cx: &mut Cx<'_, '_>) {
+        let Some(chosen) = chosen else {
+            return;
+        };
+        self.waiting = false;
+        match chosen {
+            ui::offline::Offer::Online => self.fetch(cx),
+            _ => {
+                let env = *cx.env();
+                let text = env.i18n().tr("wikipedia.no-network").to_string();
+                self.set_text(&env, text);
+            }
+        }
+        cx.request_redraw();
+        cx.request_refresh(RefreshMode::Partial);
     }
 
     fn header(&self) -> Rect {
@@ -325,7 +372,7 @@ impl Summary {
 impl Screen for Summary {
     /// *Select* closes it; the arrows scroll.
     fn hint(&self, action: &Id, env: &Env<'_>) -> paperpaw_sdk::Hint {
-        if *action == actions::CONFIRM {
+        if *action == actions::CONFIRM && !self.offering(env) {
             paperpaw_sdk::Hint::Text(env.i18n().tr("core.hint.close").to_string())
         } else {
             paperpaw_sdk::Hint::Default
@@ -365,6 +412,9 @@ impl Screen for Summary {
             .px(style.title())
             .color(Color::BLACK)
             .draw_from(&mut ui, margin, header);
+        if self.offering(env) {
+            return self.online.draw(&mut ui, self.offer_area());
+        }
         let height = self.line_height(env);
         let ascent = font.line_metrics(style.text()).ascent;
         let top = f32::from(header.y + header.height) + style.gap() as f32 / 2.0;
@@ -394,8 +444,14 @@ impl Screen for Summary {
             cx.request_redraw();
             return;
         }
-        let request = summary_request(&self.language, &self.word, ANSWERED.id().clone());
-        cx.command(Command::http(request));
+        // Offline mode: asked first, once.
+        if self.online.shows(&env) {
+            self.waiting = true;
+            cx.request_redraw();
+            cx.request_refresh(RefreshMode::Partial);
+            return;
+        }
+        self.fetch(cx);
     }
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
@@ -410,6 +466,11 @@ impl Screen for Summary {
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let env = *cx.env();
         let a = action;
+        if *a != actions::BACK && self.offering(&env) {
+            let chosen = self.online.on_action(a, cx).done();
+            self.offered(chosen, cx);
+            return Handled::Yes;
+        }
         if [
             actions::NEXT_PAGE,
             actions::DOWN,
@@ -441,6 +502,11 @@ impl Screen for Summary {
             return Handled::No;
         }
         let env = *cx.env();
+        if self.offering(&env) {
+            let chosen = self.online.on_gesture(&gesture, cx).done();
+            self.offered(chosen, cx);
+            return Handled::Yes;
+        }
         let forward = gesture.start.x > i32::from(self.region.width) / 3;
         if !self.scroll(&env, forward, cx) && forward {
             cx.command(Command::Back);

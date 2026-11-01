@@ -54,6 +54,10 @@ pub(crate) struct FontScreen {
     /// The download going on, kept here: drawing reads nothing from the
     /// storage.
     job: Option<Progress>,
+    /// Offline mode: the offer to go online, and whether a download waits
+    /// for it.
+    offer: ui::offline::OfflineOffer,
+    asking: bool,
 }
 
 impl FontScreen {
@@ -91,6 +95,8 @@ impl FontScreen {
             font,
             samples,
             job: INSTALLER.progress(env.storage()),
+            offer: ui::offline::OfflineOffer::new(),
+            asking: false,
             style,
             header,
         }
@@ -131,6 +137,41 @@ impl FontScreen {
         }
     }
 
+    /// Starts the download of `font`.
+    fn download(&mut self, font: &Font, cx: &mut Cx<'_, '_>) {
+        let env = *cx.env();
+        let mut out = paperpaw_sdk::Commands::new();
+        install::start(&env, font, &mut out);
+        for command in out {
+            cx.command(command);
+        }
+        self.job = INSTALLER.progress(env.storage());
+        self.list.set_focus(0);
+        self.redraw(cx);
+    }
+
+    /// Whether the offer to go online shows in place of the rows.
+    fn offering(&self, env: &Env<'_>) -> bool {
+        self.asking && self.offer.shows(env)
+    }
+
+    /// What the reader chose on the offer: the download starts, or it is
+    /// told that it needs the network.
+    fn offered(&mut self, chosen: Option<ui::offline::Offer>, cx: &mut Cx<'_, '_>) {
+        let Some(chosen) = chosen else {
+            return;
+        };
+        self.asking = false;
+        match (chosen, self.font.clone()) {
+            (ui::offline::Offer::Online, Some(font)) => self.download(&font, cx),
+            _ => {
+                let text = cx.env().i18n().tr("fonts-browser.offline").to_string();
+                cx.command(Command::Notify(text));
+                self.redraw(cx);
+            }
+        }
+    }
+
     fn activate(&mut self, index: usize, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         let Some(font) = self.font.clone() else {
@@ -144,14 +185,12 @@ impl FontScreen {
                     cx.command(Command::Notify(text));
                     return;
                 }
-                let mut out = paperpaw_sdk::Commands::new();
-                install::start(&env, &font, &mut out);
-                for command in out {
-                    cx.command(command);
+                // Offline mode: asked first, once.
+                if self.offer.shows(&env) {
+                    self.asking = true;
+                    return self.redraw(cx);
                 }
-                self.job = INSTALLER.progress(env.storage());
-                self.list.set_focus(0);
-                self.redraw(cx);
+                self.download(&font, cx);
             }
             Some(Row::Stop) => {
                 INSTALLER.cancel(env.storage());
@@ -304,6 +343,9 @@ impl Screen for FontScreen {
                 );
             }
         }
+        if self.offering(env) {
+            return self.offer.draw(&mut ui, self.list.area());
+        }
         let job = self.job.as_ref();
         self.list
             .draw(&mut ui, rows.len(), |ui, index, rect, focused| {
@@ -325,6 +367,11 @@ impl Screen for FontScreen {
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
+        if *action != actions::BACK && self.offering(cx.env()) {
+            let chosen = self.offer.on_action(action, cx).done();
+            self.offered(chosen, cx);
+            return Handled::Yes;
+        }
         let len = self.rows(cx.env()).len();
         if let Some(change) = self.list.navigate(action, len) {
             change.request(cx);
@@ -347,6 +394,11 @@ impl Screen for FontScreen {
             .tap(cx.env(), &self.style, gesture.start, paging)
         {
             cx.command(Command::run(action));
+            return Handled::Yes;
+        }
+        if self.offering(cx.env()) {
+            let chosen = self.offer.on_gesture(&gesture, cx).done();
+            self.offered(chosen, cx);
             return Handled::Yes;
         }
         let Some(index) = self.list.hit(gesture.start, len) else {

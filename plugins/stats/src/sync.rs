@@ -551,6 +551,10 @@ pub(crate) struct SyncScreen {
     rows: Vec<Row>,
     sync: SharedSync,
     message: String,
+    /// Offline mode: the offer to go online, and whether *Sync now* waits
+    /// for it.
+    online: ui::offline::OfflineOffer,
+    waiting: bool,
 }
 
 impl SyncScreen {
@@ -573,6 +577,8 @@ impl SyncScreen {
             rows,
             sync,
             message: env.i18n().tr("stats.sync.help").to_string(),
+            online: ui::offline::OfflineOffer::new(),
+            waiting: false,
             style,
             header,
         };
@@ -615,6 +621,27 @@ impl SyncScreen {
     /// Whether the message shows in a row's dialog, not below.
     fn more(&self) -> bool {
         self.rows.last() == Some(&Row::More)
+    }
+
+    /// Whether the offer to go online shows in place of the list.
+    fn offering(&self, env: &Env<'_>) -> bool {
+        self.waiting && self.online.shows(env)
+    }
+
+    /// What the reader chose on the offer: the sync starts, or is told to
+    /// need the network.
+    fn offered(&mut self, chosen: Option<ui::offline::Offer>, cx: &mut Cx<'_, '_>) {
+        let Some(chosen) = chosen else {
+            return;
+        };
+        self.waiting = false;
+        match chosen {
+            ui::offline::Offer::Online => self.activate(Row::SyncNow, cx),
+            _ => {
+                let message = cx.env().i18n().tr("stats.sync.no-network").to_string();
+                self.show(message, cx);
+            }
+        }
     }
 
     fn show(&mut self, message: String, cx: &mut Cx<'_, '_>) {
@@ -660,6 +687,16 @@ impl SyncScreen {
                 if self.sync.borrow().running {
                     return;
                 }
+                // Offline mode: asked first, once.
+                if env.caps().network
+                    && !env.settings().read(&URL).trim().is_empty()
+                    && self.online.shows(&env)
+                {
+                    self.waiting = true;
+                    cx.request_redraw();
+                    cx.request_refresh(RefreshMode::Fast);
+                    return;
+                }
                 let mut commands = paperpaw_sdk::Commands::new();
                 self.sync.borrow_mut().start(&env, &mut commands);
                 for command in commands {
@@ -689,6 +726,16 @@ impl Screen for SyncScreen {
         let title = env.i18n().tr("stats.sync.title");
         let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(&mut ui, title, None, None);
+        if self.offering(env) {
+            let top = self.list.area().y;
+            let area = Rect::new(
+                0,
+                top,
+                env.device().display.width,
+                env.device().display.height.saturating_sub(top),
+            );
+            return self.online.draw(&mut ui, area);
+        }
         let rows = &self.rows;
         let has_password = !password(env).is_empty();
         self.list
@@ -723,6 +770,11 @@ impl Screen for SyncScreen {
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let a = action;
+        if *a != actions::BACK && self.offering(cx.env()) {
+            let chosen = self.online.on_action(a, cx).done();
+            self.offered(chosen, cx);
+            return Handled::Yes;
+        }
         let delta = if [actions::UP, actions::LEFT, actions::PREVIOUS].contains(a) {
             -1
         } else if [actions::DOWN, actions::RIGHT, actions::NEXT].contains(a) {
@@ -743,6 +795,11 @@ impl Screen for SyncScreen {
         }
         if let Some(action) = self.header.tap(cx.env(), &self.style, gesture.start, None) {
             cx.command(Command::run(action));
+            return Handled::Yes;
+        }
+        if self.offering(cx.env()) {
+            let chosen = self.online.on_gesture(&gesture, cx).done();
+            self.offered(chosen, cx);
             return Handled::Yes;
         }
         let Some(index) = self.list.hit(gesture.start, self.rows.len()) else {

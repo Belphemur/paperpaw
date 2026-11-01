@@ -133,6 +133,9 @@ struct BrowserScreen {
     /// The address being loaded.
     loading: Option<String>,
     message: Option<String>,
+    /// Offline mode: the offer to go online, and the address to load then.
+    online: ui::offline::OfflineOffer,
+    waiting: Option<String>,
 }
 
 impl BrowserScreen {
@@ -169,8 +172,32 @@ impl BrowserScreen {
             showing: false,
             loading: None,
             message: None,
+            online: ui::offline::OfflineOffer::new(),
+            waiting: None,
             style,
             header,
+        }
+    }
+
+    /// Whether the offer to go online shows (Offline mode, an address to
+    /// load).
+    fn offering(&self, env: &Env<'_>) -> bool {
+        self.waiting.is_some() && self.online.shows(env)
+    }
+
+    /// What the reader chose on the offer: the address loaded now, or said
+    /// to need the network.
+    fn offered(&mut self, chosen: Option<ui::offline::Offer>, cx: &mut Cx<'_, '_>) {
+        let (Some(chosen), Some(url)) = (chosen, self.waiting.take()) else {
+            return;
+        };
+        match chosen {
+            ui::offline::Offer::Online => self.load(&url, cx),
+            // Not now: on without the network.
+            _ => {
+                let message = cx.env().i18n().tr("browser.no-network").to_string();
+                self.say(message, cx);
+            }
         }
     }
 
@@ -216,6 +243,11 @@ impl BrowserScreen {
         if !env.caps().network {
             let message = env.i18n().tr("browser.no-network").to_string();
             return self.say(message, cx);
+        }
+        // Offline mode: asked first, once.
+        if self.online.shows(&env) {
+            self.waiting = Some(url.to_string());
+            return self.redraw(cx);
         }
         self.loading = Some(url.to_string());
         let message = env
@@ -498,6 +530,9 @@ impl Screen for BrowserScreen {
             None,
             self.list.paging(rows.len()),
         );
+        if self.offering(env) {
+            return self.online.draw(&mut ui, self.list.area());
+        }
         let (bookmarks, history) = (&self.bookmarks, &self.history);
         self.list
             .draw(&mut ui, rows.len(), |ui, index, rect, focused| {
@@ -556,6 +591,11 @@ impl Screen for BrowserScreen {
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let a = action;
+        if *a != actions::BACK && self.offering(cx.env()) {
+            let chosen = self.online.on_action(a, cx).done();
+            self.offered(chosen, cx);
+            return Handled::Yes;
+        }
         if let Some(delta) = ui::list_step(a, self.list.rows() as isize) {
             self.move_focus(delta, cx);
         } else if *a == actions::CONFIRM {
@@ -579,6 +619,11 @@ impl Screen for BrowserScreen {
                 .tap(cx.env(), &self.style, gesture.start, paging)
         {
             cx.command(Command::run(action));
+            return Handled::Yes;
+        }
+        if self.offering(cx.env()) {
+            let chosen = self.online.on_gesture(&gesture, cx).done();
+            self.offered(chosen, cx);
             return Handled::Yes;
         }
         let Some(index) = self.list.hit(gesture.start, len) else {
