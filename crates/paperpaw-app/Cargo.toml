@@ -40,6 +40,7 @@ store-plugins = [
     "dep:paperpaw-plugin-format-mobi",
     "dep:paperpaw-plugin-browser",
     "dep:paperpaw-plugin-readwise",
+    "dep:paperpaw-plugin-readwise-reader",
     "dep:paperpaw-plugin-joplin",
     "dep:paperpaw-plugin-wallabag",
     "dep:paperpaw-plugin-hyphenation-da",
@@ -119,6 +120,7 @@ paperpaw-plugin-vocabulary = { workspace = true, optional = true }
 paperpaw-plugin-sleep.workspace = true
 paperpaw-plugin-translate = { workspace = true, optional = true }
 paperpaw-plugin-readwise = { workspace = true, optional = true }
+paperpaw-plugin-readwise-reader = { workspace = true, optional = true }
 paperpaw-plugin-joplin = { workspace = true, optional = true }
 paperpaw-plugin-koreader = { workspace = true, optional = true }
 paperpaw-plugin-wallabag = { workspace = true, optional = true }

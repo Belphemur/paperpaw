@@ -32,6 +32,7 @@ notes-overview notes
 profiles reading
 reading-goal reading
 readwise notes
+readwise-reader news
 rules system
 stats reading
 translate reading

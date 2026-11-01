@@ -95,6 +95,12 @@ test = false
 bench = false
 
 [[bin]]
+name = "readwise-reader"
+path = "src/bin/readwise-reader.rs"
+test = false
+bench = false
+
+[[bin]]
 name = "end-of-book"
 path = "src/bin/end-of-book.rs"
 test = false
@@ -252,6 +258,7 @@ paperpaw-plugin-menu-editor = { path = "../../plugins/menu-editor" }
 paperpaw-plugin-news = { path = "../../plugins/news" }
 paperpaw-plugin-profiles = { path = "../../plugins/profiles" }
 paperpaw-plugin-readwise = { path = "../../plugins/readwise" }
+paperpaw-plugin-readwise-reader = { path = "../../plugins/readwise-reader" }
 paperpaw-plugin-rules = { path = "../../plugins/rules" }
 paperpaw-plugin-stats = { path = "../../plugins/stats" }
 paperpaw-plugin-translate = { path = "../../plugins/translate" }
