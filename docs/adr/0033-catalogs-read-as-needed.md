@@ -73,3 +73,61 @@ A catalog can stay on the card and be read as needed.
   turn as fast as before.
 - `Catalog::keys` lists no keys of a catalog on the card (it would read
   the whole file); tools that compare catalogs read the `.ini` files.
+
+## The batch it landed in
+
+The owner put every queued interface change into the same re-bless of
+interface 5 (2026-11-01, branch `kernel/iface5-catalog-ondemand`): one
+commit each, with host tests, CHANGELOG lines and, in the commit
+message, what other plugins and shells still have to do. The work left
+for others, in one list:
+
+**Plugin engineer**
+
+- Sliders: settings page and menu panel make them with
+  `.mirrored(style.is_rtl())`, hit-test with `Slider::parts`, step with
+  `Slider::key_step` (#33).
+- Digits: `fa`/`ur` catalogs say `digits = arabext` (`ar` `arab` where
+  wanted); numbers written with `format!` (status line, library counts,
+  stats, clock) go through `Translator::number`/`localize_digits` (#33).
+- Catalogs: the `ar` catalog as `i18n/ar.ppcat` (formats 4) (#33).
+- format-epub reads CSS `letter-spacing`, `text-decoration-style` and
+  `overline`; the reader and page layers use `LineBidi::DROP_CAP`
+  instead of the baseline heuristic (#27).
+- The reader's "install the Greek pack" hint takes
+  `Fonts::missing_letters` around a page (#60).
+- The store hears `PLUGINS_REQUESTED` (a confirm sheet, then its queue)
+  and fetches what `requires` names; templates send
+  `Command::request_plugins`; the settings page says "set by …" from
+  `Settings::default_from`; the plugin manager says what is missing
+  (#72).
+- The store pins a recovery key at first install, hands rotations to
+  `accept_rotation`, keeps the library's revoked keys; the Workshop makes
+  and backs up the recovery key (#20, with the web side).
+- Offers to go online on background paths (weather, news, update
+  check, kosync) send `Command::GoOnlineFor`; power settings follow
+  `Capabilities::power` (#35).
+- Downloads of known or bounded size set `HttpRequest::max_file`
+  (store, readwise-reader, news, catalogs) (#31).
+- The transfer screen shows `WifiState::reach`; a "Connect to
+  computer" entry and screen for the USB drive (#32).
+- The reader's zoom asks for `Document::prepare_image_larger` (#28).
+- RAM (#9): the 18 widgets that capture shared state, and the plugins'
+  handlers that capture nothing (wifi, kosync, stats, rules, joplin
+  first; about 100 `r.on` in all), move to `FixedWidget` and `hears!`
+  lists; state they capture moves to statics or a service first.
+
+**Firmware engineer**
+
+- The X4 shells call `KernelBuilder::font_dir` so packs loose on the
+  card show up (#59); `WifiState::Online::name` from mDNS (#32); the S3
+  shells' USB mass storage behind a `usb-drive` feature (#32, owner
+  decision on flash); Android reports `Battery::saver` and
+  `PowerControls::system_saver` (#35); the revoked-key list from the
+  store reaches the loader (#20).
+
+**Kernel engineer, next phase (no interface change)**
+
+- Tables: format-epub fills `TableRow`, the layout sets a row's cells in
+  their columns, keeps a row on one page, repeats header rows and adds
+  the rules; the reader draws `Page::rules` (#27).
