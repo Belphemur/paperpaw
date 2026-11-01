@@ -111,6 +111,7 @@ members = [
     "tools/publish",
     "tools/dev",
     "tools/checks",
+    "tools/library-bench",
 ]
 
 [workspace.package]

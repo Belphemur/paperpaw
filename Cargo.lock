@@ -1630,6 +1630,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "paperpaw-library-bench"
+version = "0.0.0"
+dependencies = [
+ "paperpaw-core",
+ "paperpaw-fat",
+ "paperpaw-platform",
+ "paperpaw-plugin-format-epub",
+ "paperpaw-sdk",
+]
+
+[[package]]
 name = "paperpaw-native"
 version = "0.5.0-beta.12"
 dependencies = [
