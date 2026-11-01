@@ -175,6 +175,7 @@ pub use menus::{
 };
 pub use params::Params;
 pub use plugin::{Manifest, Plugin, Priority, RegisterError, SlotSpec, Uses};
+pub use plugins::requires;
 pub use plugins::{PluginInfo, PluginKind, PluginProblem, PluginState, Plugins, RequiredFor};
 pub use replies::{
     FolderChosen, HttpError, HttpProgress, HttpReply, ServerNotice, SocketNotice, Typed,

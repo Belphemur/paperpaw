@@ -196,7 +196,7 @@ so a plugin without code cannot set it.
 
 | Path | Format | Read by, for | Since formats |
 |------|--------|--------------|---------------|
-| `plugin.ini` | ini: `[plugin]` with `id`, `name`, `description`, `version`, `formats`; `[extends]`, `[family]` and `[fonts]` (formats 3) where it brings fonts | the kernel: the plugin, its fonts, the fonts bound to roles | 1 |
+| `plugin.ini` | ini: `[plugin]` with `id`, `name`, `description`, `version`, `formats`; `[extends]`, `[family]` and `[fonts]` (formats 3) where it brings fonts; `requires` (formats 4): the plugins it needs, ids apart by commas, each with the version it needs at least after a space (`requires = stats, vocabulary 1.2.0`, at most 16) | the kernel: the plugin, its fonts, the fonts bound to roles; `requires` the store, which fetches what is missing with the plugin, and the plugin manager (`paperpaw_sdk::requires`); the kernel starts a plugin whatever it requires | 1 |
 | `i18n/<lang>.ini` | a translation catalog: `[meta]` (`language`, `name`, `plural`; optional `direction`, `script`, `digits`, `calendar`) and `[messages]` | the kernel: texts of any plugin, also a whole new language | 1 |
 | `i18n/<lang>.ppcat` | the same catalog compiled (`paperpaw-sign catalog <lang>.ini <lang>.ppcat`): its messages stay on the card and are read as they are needed, so a language of any size takes about a kilobyte (ADR 0033); an `.ini` of the same language beside it is left to older versions | the kernel, as `i18n/<lang>.ini` | 4 |
 | `settings.ini` | ini: a section per plugin, a key per setting, as `paperpaw.ini` writes them | the kernel: new defaults for any plugin's settings (a theme, a home screen, a logo) | 1 |

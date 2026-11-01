@@ -14,6 +14,8 @@ use crate::builtin::{fonts, slots};
 use crate::id::Id;
 use crate::plugin::Manifest;
 
+pub mod requires;
+
 /// What [`RequiredFor`] can name: the standard slots and the UI font.
 static ESSENTIALS: [Id; 6] = [
     slots::HOME,

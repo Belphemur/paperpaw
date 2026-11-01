@@ -867,7 +867,7 @@ fn read(storage: &dyn Storage, path: &str, max: usize) -> Option<String> {
 /// formats to 1.
 fn parse_manifest(source: &str, folder: &str) -> Result<(Manifest, u32), String> {
     let (mut id, mut name, mut description, mut version) = (None, None, None, None);
-    let mut formats = None;
+    let (mut formats, mut requires) = (None, None);
     for entry in paperpaw_config::parse(source) {
         let entry = entry.map_err(|e| e.to_string())?;
         if entry.section != "plugin" {
@@ -880,6 +880,7 @@ fn parse_manifest(source: &str, folder: &str) -> Result<(Manifest, u32), String>
             "description" => description = Some(value),
             "version" => version = Some(value),
             "formats" => formats = Some(value),
+            "requires" => requires = Some(value),
             _ => {}
         }
     }
@@ -906,6 +907,14 @@ fn parse_manifest(source: &str, folder: &str) -> Result<(Manifest, u32), String>
         }
         None => Version::new(0, 1, 0),
     };
+    // Plugins it needs (the store fetches them): named as said, in
+    // formats 4 and later.
+    if let Some(text) = requires {
+        if made_for < 4 {
+            return Err(String::from("`requires` needs formats 4"));
+        }
+        paperpaw_sdk::requires::parse(&text, id.as_str())?;
+    }
     let name = name.unwrap_or_else(|| id.as_str().to_string());
     let manifest = Manifest::new(id, name, version)
         .description(description.unwrap_or_default())
@@ -1172,6 +1181,21 @@ kind = Not An Id
         let later = parse_manifest(&ini("formats = 5\n"), "large").unwrap_err();
         assert!(later.contains("later PaperPaw"), "{later}");
         assert!(parse_manifest(&ini("formats = new\n"), "large").is_err());
+    }
+
+    /// `requires` names plugins as said, in formats 4 and later; else the
+    /// plugin is not loaded, with why.
+    #[test]
+    fn requirements_are_checked_with_the_manifest() {
+        let ini = |rest: &str| format!("[plugin]\nname = Cosy\n{rest}");
+        assert!(
+            parse_manifest(&ini("formats = 4\nrequires = stats 1.0.0, news\n"), "cosy").is_ok()
+        );
+        let old = parse_manifest(&ini("formats = 3\nrequires = stats\n"), "cosy").unwrap_err();
+        assert!(old.contains("formats 4"), "{old}");
+        let own = parse_manifest(&ini("formats = 4\nrequires = cosy\n"), "cosy").unwrap_err();
+        assert!(own.contains("itself"), "{own}");
+        assert!(parse_manifest(&ini("formats = 4\nrequires = Not Ok\n"), "cosy").is_err());
     }
 
     /// Fonts bound to roles in `[fonts]` of `plugin.ini`.
