@@ -489,7 +489,8 @@ impl GroupPage {
         if ui::slider::shows(env, spec) {
             let extra = self.slider_extra(env, spec, rect);
             let band = ui::slider::band_below(&self.style, rect, extra);
-            let parts = ui::slider::parts(&self.style, band);
+            let slider = ui::slider::Slider::of(spec)?.mirrored(self.style.is_rtl());
+            let parts = slider.parts(&self.style, band);
             return Some((parts.minus, parts.plus));
         }
         let value = ui::setting_value(env, spec);
@@ -604,7 +605,9 @@ impl Screen for GroupPage {
                 let note = spec.description.as_deref().map_or("", |d| env.i18n().tr(d));
                 let note = if noted { note } else { "" };
                 let mut value = ui::setting_value(env, spec);
-                if let Some(track) = Track::of(env, spec).filter(|_| ui::slider::shows(env, spec)) {
+                if let Some(track) =
+                    Track::of(env, spec, style.is_rtl()).filter(|_| ui::slider::shows(env, spec))
+                {
                     let focus = match (focused, editing) {
                         (false, _) => SliderFocus::None,
                         (true, false) => SliderFocus::Focused,
@@ -771,7 +774,7 @@ impl Screen for GroupPage {
         };
         let Some((index, track, id, rect)) = index.and_then(|i| {
             let spec = self.spec(i).filter(|s| ui::slider::shows(&env, s))?;
-            let track = Track::of(&env, spec)?;
+            let track = Track::of(&env, spec, self.style.is_rtl())?;
             Some((i, track, spec.id.clone(), self.rows.rect_of(i)?))
         }) else {
             return Handled::No;

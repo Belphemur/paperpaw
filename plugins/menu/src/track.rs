@@ -23,12 +23,13 @@ pub(crate) struct Track {
 }
 
 impl Track {
-    /// The track of number setting `spec`; `None` for other settings.
-    pub(crate) fn of(env: &Env<'_>, spec: &SettingSpec) -> Option<Self> {
-        let slider = Slider::of(spec)?;
+    /// The track of number setting `spec`, right to left where `mirrored`
+    /// (the lowest value at the right); `None` for other settings.
+    pub(crate) fn of(env: &Env<'_>, spec: &SettingSpec, mirrored: bool) -> Option<Self> {
+        let slider = Slider::of(spec)?.mirrored(mirrored);
         Some(match Self::sizes(env, spec) {
             Some(sizes) => Self {
-                slider: Slider::new(0, sizes.len() as i64 - 1),
+                slider: Slider::new(0, sizes.len() as i64 - 1).mirrored(mirrored),
                 sizes: Some(sizes),
             },
             None => Self {

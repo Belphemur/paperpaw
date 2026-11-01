@@ -72,3 +72,60 @@ fn the_sizes_are_spread_evenly_along_the_track() {
     let (least, most) = (inner.iter().min().unwrap(), inner.iter().max().unwrap());
     assert!(most - least <= 3, "uneven steps: {runs:?}");
 }
+
+/// A card with a right to left language, `ar`: its catalog says the
+/// direction and nothing else.
+fn arabic_page() -> App {
+    let storage = Shared::memory(
+        "[core]\nlanguage = ar\n",
+        &[
+            (
+                "plugins/language-ar/plugin.ini",
+                b"[plugin]\nid = language-ar\nname = Arabic\nversion = 1.0.0\nformats = 3\n",
+            ),
+            (
+                "plugins/language-ar/i18n/ar.ini",
+                b"[meta]\nlanguage = ar\nname = Arabic\nplural = arabic\ndirection = rtl\nscript = Arab\n",
+            ),
+        ],
+    );
+    let mut app = App::new(TOUCH, storage);
+    app.run(actions::SETTINGS);
+    app.open_screen(
+        Id::new_static("settings.group"),
+        Params::new().with(params::ID, "core.group.reading-text"),
+    );
+    app.set(SIZE, "6");
+    app
+}
+
+/// The size left by a finger put down on the knob at the smallest size and
+/// moved `along` pixels to the right (negative: to the left); the knob is at
+/// the track's right end in a right to left language.
+fn dragged_in_arabic(along: i32) -> i64 {
+    let mut app = arabic_page();
+    let track = slider_area(&mut app);
+    let knob = i32::from(track.height);
+    let (right, y) = (
+        i32::from(track.x) + i32::from(track.width) - knob / 2,
+        i32::from(track.y) + knob / 2,
+    );
+    app.drag(Point::new(right, y), Point::new(right + along, y));
+    app.kernel.settings().int(SIZE)
+}
+
+/// Where the UI runs right to left the slider does too: the smallest size
+/// at the right, the largest at the left; dragging the knob to the left
+/// makes the text larger, and to the right (past its end) keeps it.
+#[test]
+fn the_slider_runs_from_the_right_in_a_right_to_left_language() {
+    let largest = dragged(travel());
+    assert!(largest > 6);
+    assert_eq!(dragged_in_arabic(-travel()), largest);
+    assert_eq!(dragged_in_arabic(travel()), 6);
+    // In between it is larger the further the knob is taken to the left.
+    let sizes: Vec<i64> = (0..=travel())
+        .map(|moved| dragged_in_arabic(-moved))
+        .collect();
+    assert!(sizes.windows(2).all(|w| w[0] <= w[1]), "{sizes:?}");
+}
