@@ -1,7 +1,8 @@
-//! The text calls the table mode tests (`../../native_plugin.rs`): run in
-//! the plugin (whose shared functions call the shell's copies through the
-//! table) and in the test directly (the functions' own bodies), they must
-//! come out the same. Included by both with `#[path]`.
+//! The calls of shared functions the table mode tests
+//! (`../../native_plugin.rs`): run in the plugin (whose shared functions
+//! call the shell's copies through the table) and in the test directly
+//! (the functions' own bodies), they must come out the same. Included by
+//! both with `#[path]`.
 
 #![allow(
     clippy::unwrap_used,
@@ -10,7 +11,9 @@
 
 extern crate alloc;
 
+use alloc::format;
 use alloc::rc::Rc;
+use alloc::string::String;
 use alloc::vec::Vec;
 
 use paperpaw_graphics::Framebuffer;
@@ -153,3 +156,116 @@ pub fn probe() -> TextProbe {
 }
 
 paperpaw_sdk::service_type!(TextProbe, "hello.text-probe/1");
+
+/// What calls of the families after text came to: ui, data, graphics.
+#[repr(C)]
+#[derive(Debug, PartialEq)]
+pub struct FamilyProbe {
+    /// ui: a list view's moves, pages, rows and hits, and `list_step`.
+    pub list: Vec<String>,
+    /// data: a translator without catalogs, JSON, INI and XML.
+    pub data: Vec<String>,
+    /// graphics: the sum of the gray levels after shapes, and `round`.
+    pub gray: u64,
+    pub round: Vec<i32>,
+}
+
+fn list() -> Vec<String> {
+    use paperpaw_platform::{Point, Rect};
+    use paperpaw_sdk::ui::{ListView, list_step};
+    let mut view = ListView::new(Rect::new(0, 0, 100, 200), 40);
+    let mut out = alloc::vec![
+        format!("{:?}", view.set_focus(3)),
+        format!("{:?}", view.move_focus(4, 12)),
+        format!("{:?}", view.focus_change()),
+        format!("{:?}", view.paging(12)),
+        format!("{:?}", view.row_rect(2)),
+        format!("{:?}", view.hit(Point::new(10, 90), 12)),
+    ];
+    out.push(format!(
+        "{:?}",
+        list_step(&paperpaw_sdk::builtin::actions::NEXT_PAGE, 2)
+    ));
+    out
+}
+
+fn data() -> Vec<String> {
+    use paperpaw_sdk::{Arg, Translator, config, json, xml};
+    let tr = Translator::new();
+    let mut out = alloc::vec![
+        format!("{:?}", tr.get("probe.key")),
+        tr.format("probe.{name}", &[("name", Arg::Str("x"))]),
+        tr.plural("probe.count", 2, &[]),
+    ];
+    let members = json::object(r#"{"a": "b\u00e9", "n": 4.5, "l": ["x", "y"]}"#);
+    out.push(format!(
+        "{:?} {:?}",
+        json::text(&members, "a"),
+        json::number(&members, "n")
+    ));
+    out.push(json::string("q\"\u{7}"));
+    out.push(format!("{:?}", json::raw_member(r#"{"l": [1, 2]}"#, "l")));
+    out.push(format!("{:?}", json::unquote("\"a\\nb\"")));
+    out.push(format!("{:?}", json::string_array(r#"["x", "y"]"#)));
+    let mut events = String::new();
+    let mut parser = json::stream::Parser::default();
+    parser.feed(br#"{"k": [true, "v"]"#, &mut |e| {
+        events.push_str(&format!("{e:?};"))
+    });
+    parser.finish(&mut |e| events.push_str(&format!("{e:?};")));
+    out.push(events);
+    let ini = "[s]\nk = \"v w\"\nn = 7\n";
+    for entry in config::parse(ini) {
+        out.push(format!("{entry:?}"));
+    }
+    out.push(config::set(ini, "s", "k", "z"));
+    out.push(config::remove(ini, "s", "n"));
+    out.push(format!("{}", config::quote("a b")));
+    let mut tokens = String::new();
+    xml::Tokenizer::parse(b"<a b='&amp;c'>d&lt;</a>", &mut |t| {
+        tokens.push_str(&format!("{t:?};"));
+    });
+    out.push(tokens);
+    out.push(format!("{}", xml::decode("&quot;&#65;")));
+    out
+}
+
+fn graphics() -> (u64, Vec<i32>) {
+    use paperpaw_platform::{Point, Rect};
+    use paperpaw_sdk::round;
+    let mut frame = Framebuffer::new(64, 32, PixelFormat::Gray8).unwrap();
+    {
+        let mut canvas = frame.canvas();
+        canvas.clear(Color::WHITE);
+        canvas.fill_round(Rect::new(2, 2, 20, 12), 4, Color::BLACK);
+        canvas.stroke_round_rect(24, 2, 30, 20, 2, 6, Color::BLACK);
+        canvas.draw_line(Point::new(0, 31), Point::new(63, 16), 2, Color::BLACK);
+        canvas.fill_ring(Point::new(40, 20), 9, 3, 30, 200, Color::BLACK);
+        canvas.fill_tint(Rect::new(0, 20, 30, 10), Color::BLACK);
+    }
+    let view = frame.view();
+    let mut gray = 0u64;
+    for y in 0..32 {
+        for x in 0..64 {
+            gray += u64::from(view.pixel(x, y).r);
+        }
+    }
+    let (sin, cos) = round::sin_cos(30);
+    let at = round::point_at(Point::new(10, 10), 8, 45);
+    (
+        gray,
+        alloc::vec![sin, cos, at.x, at.y, round::corner_inset(6, 1, 20) as i32],
+    )
+}
+
+pub fn family_probe() -> FamilyProbe {
+    let (gray, round) = graphics();
+    FamilyProbe {
+        list: list(),
+        data: data(),
+        gray,
+        round,
+    }
+}
+
+paperpaw_sdk::service_type!(FamilyProbe, "hello.family-probe/1");
