@@ -186,11 +186,7 @@ pub fn accept_rotation(
 /// The revoked keys: those of the revocations kept that hold.
 pub fn revoked(storage: &dyn Storage) -> Vec<[u8; 32]> {
     match crate::files::load_for_update(storage, REVOKED, MAX_REVOKED_BYTES) {
-        Ok(Some(data)) => revocations_in(&data)
-            .into_iter()
-            .filter(|r| r.holds(storage))
-            .map(|r| r.key)
-            .collect(),
+        Ok(Some(data)) => holding(storage, &data).into_iter().map(|r| r.key).collect(),
         _ => Vec::new(),
     }
 }
@@ -198,6 +194,16 @@ pub fn revoked(storage: &dyn Storage) -> Vec<[u8; 32]> {
 /// How large the list of revocations may be: [`MAX_REVOKED`] lines of a
 /// plugin id and 194 bytes, with room.
 const MAX_REVOKED_BYTES: usize = 96 * 1024;
+
+/// The revocations in `data` that hold, at most [`MAX_REVOKED`]: lines
+/// that do not (written onto the card past [`keep_revoked`], or no
+/// longer about the pinned author) neither count nor hide the others.
+fn holding(storage: &dyn Storage, data: &[u8]) -> Vec<Revocation> {
+    let mut all = revocations_in(data);
+    all.retain(|r| r.holds(storage));
+    all.truncate(MAX_REVOKED);
+    all
+}
 
 /// The revocations in `data`, a line each. A line that is none (a
 /// damaged byte, a key or signature of another length) is left out on
@@ -215,7 +221,6 @@ fn revocations_in(data: &[u8]) -> Vec<Revocation> {
                 bytes(signature)?.try_into().ok()?,
             ))
         })
-        .take(MAX_REVOKED)
         .collect()
 }
 
@@ -244,8 +249,12 @@ pub enum RevokedError {
 pub fn keep_revoked(storage: &dyn Storage, revocations: &[Revocation]) -> Result<(), RevokedError> {
     // A list there that cannot be read is not written over by a shorter
     // one; one with damaged lines is written anew from the others.
-    let mut all = match crate::files::load_for_update(storage, REVOKED, MAX_REVOKED_BYTES) {
-        Ok(data) => data.as_deref().map(revocations_in).unwrap_or_default(),
+    // Those that no longer hold are left out, and the list written anew
+    // without them.
+    let (mut all, lines) = match crate::files::load_for_update(storage, REVOKED, MAX_REVOKED_BYTES)
+    {
+        Ok(Some(data)) => (holding(storage, &data), revocations_in(&data).len()),
+        Ok(None) => (Vec::new(), 0),
         Err(_) => return Err(RevokedError::NotKept),
     };
     let before = all.len();
@@ -263,7 +272,7 @@ pub fn keep_revoked(storage: &dyn Storage, revocations: &[Revocation]) -> Result
         }
         all.push(revocation.clone());
     }
-    if all.len() > before {
+    if all.len() > before || lines > before {
         let text: String = all.iter().filter_map(Revocation::line).collect();
         let _ = storage.create_dir(crate::data::DIR);
         if storage.write(REVOKED, text.as_bytes()).is_err() {
@@ -468,6 +477,30 @@ mod tests {
         assert_eq!(revoked(&storage), [AUTHOR]);
         // A plugin id a line cannot hold is not written.
         assert_eq!(revocation("a b", AUTHOR, &RECOVERY_SEED).line(), None);
+    }
+
+    /// Lines written onto the card past keep_revoked that do not hold
+    /// neither fill the list nor hide one that holds after them, and
+    /// keep_revoked writes the list anew without them.
+    #[test]
+    fn lines_that_do_not_hold_take_no_place() {
+        let storage = installed();
+        let notes_seed = [2; 32];
+        let notes = public_key(&notes_seed);
+        assert!(super::super::remember_author(&storage, "notes", &notes));
+        let forged = revocation("clock", AUTHOR, &[8; 32]).line().unwrap();
+        let real = revocation("clock", AUTHOR, &RECOVERY_SEED).line().unwrap();
+        let mut text = forged.repeat(MAX_REVOKED + 10);
+        text.push_str(&real);
+        storage.write(REVOKED, text.as_bytes()).unwrap();
+        assert_eq!(revoked(&storage), [AUTHOR]);
+        assert_eq!(
+            keep_revoked(&storage, &[revocation("notes", notes, &notes_seed)]),
+            Ok(())
+        );
+        assert_eq!(revoked(&storage), [AUTHOR, notes]);
+        let kept = crate::read_file(&storage, REVOKED, MAX_REVOKED_BYTES).unwrap();
+        assert_eq!(revocations_in(&kept).len(), 2);
     }
 
     /// Past the most: those before and the first new ones kept, and said
