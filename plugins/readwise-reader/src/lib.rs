@@ -39,6 +39,7 @@ use core::cell::RefCell;
 use paperpaw_sdk::builtin::{events, groups, menus, params};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::HttpReply;
+use paperpaw_sdk::secrets::SecretChange;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::web::clean_name;
 use paperpaw_sdk::{
@@ -64,6 +65,10 @@ pub const FROM_LATER: &str = "readwise-reader.from.later";
 pub const FROM_INBOX: &str = "readwise-reader.from.inbox";
 /// The access token, among the passwords and keys.
 pub const SECRET: &str = "readwise-reader.token";
+/// What tells the accounts apart, kept beside the token among the
+/// passwords and keys (nothing derived from the token is left on the
+/// card): a number made of the token the lists belong to.
+pub const ACCOUNT: &str = "readwise-reader.account";
 const SCREEN: Id = Id::new_static("readwise-reader.setup");
 /// Answers: the list, an article asked about, a book, an archived one.
 const LISTED: Event<HttpReply> = Event::new("readwise-reader.listed");
@@ -91,6 +96,12 @@ const MAX_DOWNLOADS: usize = 10;
 /// Reading progress, in percent, from which an article counts as read
 /// where its pages are not counted yet.
 const READ: f64 = 95.0;
+/// The most a saved answer may hold, in bytes: a list or a question about
+/// an article is small; an article's text is cut at [`html::MAX_TEXT`],
+/// and escaping it makes it a little longer. The kernel saves up to 64 MiB
+/// to a file; what is more than this is removed at once.
+const MAX_LIST: u64 = 512 * 1024;
+const MAX_ARTICLE_ANSWER: u64 = 4 * 1024 * 1024;
 
 fn data(name: &str) -> String {
     format!("{}/{name}", Env::plugin_dir(PLUGIN.as_str()))
@@ -153,30 +164,34 @@ fn save_articles(env: &Env<'_>, list: &[Article]) -> Result<(), StorageError> {
     env.storage().write(&data("articles.txt"), text.as_bytes())
 }
 
-/// Whose the articles fetched are: a number made of the token, in
-/// `account.txt` beside them (the token itself is kept with the secrets).
+/// Whose the articles fetched are: a number made of the token (the
+/// token itself is kept with the secrets).
 fn account(token: &str) -> String {
-    format!("{:016x}\n", paperpaw_sdk::digest::fnv1a64(token))
+    format!("{:016x}", paperpaw_sdk::digest::fnv1a64(token))
 }
 
 /// The articles fetched and those read to the end, for this token. Those
 /// of another token (another account) are let go of first: their books
 /// stay in the library, never asked about at a Reader that does not know
-/// them.
+/// them. The token an account is told by is noted among the secrets, as
+/// this says (`out`).
 fn lists_of_account(
     env: &Env<'_>,
     token: &str,
+    out: &mut Commands,
 ) -> Result<(Vec<Article>, Vec<String>), StorageError> {
     let (fetched, finished) = (articles(env.storage())?, finished(env.storage())?);
     let account = account(token);
-    let kept = load_for_update(env.storage(), "account.txt", 4 * 1024)?;
-    if kept == account {
+    if env.secrets().get(ACCOUNT) == Some(account.as_str()) {
         return Ok((fetched, finished));
     }
-    save_articles(env, &[])?;
-    env.storage().write(&data("finished.txt"), b"")?;
-    env.storage()
-        .write(&data("account.txt"), account.as_bytes())?;
+    if !fetched.is_empty() || !finished.is_empty() {
+        save_articles(env, &[])?;
+        env.storage().write(&data("finished.txt"), b"")?;
+    }
+    out.push(Command::set_secret(
+        SecretChange::keep(ACCOUNT, "readwise-reader.secret.account", &account).changeable(false),
+    ));
     Ok((Vec::new(), Vec::new()))
 }
 
@@ -331,7 +346,7 @@ impl Fetch {
         let Some(token) = env.secrets().get(SECRET).filter(|t| !t.is_empty()) else {
             return done(env, "readwise-reader.setup-needed", &[], out);
         };
-        let Ok((fetched, finished)) = lists_of_account(env, token) else {
+        let Ok((fetched, finished)) = lists_of_account(env, token, out) else {
             return done(env, "readwise-reader.unreadable", &[], out);
         };
         *self = Self {
@@ -360,6 +375,30 @@ impl Fetch {
         };
         self.finish(env);
         done(env, key, &[], out);
+        true
+    }
+
+    /// Ends the fetch where a saved answer is larger than `most` bytes:
+    /// the file is removed, and nothing more is asked of a Reader that
+    /// sends so much.
+    fn too_big(
+        &mut self,
+        env: &Env<'_>,
+        reply: &HttpReply,
+        file: &str,
+        most: u64,
+        out: &mut Commands,
+    ) -> bool {
+        let over = reply.ok()
+            && env
+                .storage()
+                .size(&data(file))
+                .is_ok_and(|size| size > most);
+        if !over {
+            return false;
+        }
+        self.finish(env);
+        done(env, "readwise-reader.too-big", &[], out);
         true
     }
 
@@ -450,6 +489,9 @@ impl Fetch {
         if self.stopped(env, reply, out) {
             return;
         }
+        if self.too_big(env, reply, "list.json", MAX_LIST, out) {
+            return;
+        }
         self.listed = true;
         // Only a whole list counts: an answer that is not one (a page of
         // the server's own, an error, a list cut short) changes nothing.
@@ -488,6 +530,9 @@ impl Fetch {
         if self.stopped(env, reply, out) {
             return;
         }
+        if self.too_big(env, reply, "doc.json", MAX_LIST, out) {
+            return;
+        }
         let id = reply.context.get(ARTICLE).unwrap_or_default();
         let answer = reply
             .ok()
@@ -507,6 +552,9 @@ impl Fetch {
 
     fn downloaded(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         if self.stopped(env, reply, out) {
+            return;
+        }
+        if self.too_big(env, reply, "doc.json", MAX_ARTICLE_ANSWER, out) {
             return;
         }
         let id = reply.context.get(ARTICLE).unwrap_or_default();

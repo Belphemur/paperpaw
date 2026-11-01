@@ -74,7 +74,6 @@ differently; a plugin must keep that mapping.
 | `.paperpaw/plugins/wallabag/articles.txt`, `finished.txt` | wallabag | an article per line: id and path; ids read to the end | version 1 |
 | `.paperpaw/plugins/wallabag/account.txt` | wallabag | the server and the user name the lists belong to, one a line: another account starts them anew | |
 | `.paperpaw/plugins/readwise-reader/articles.txt`, `finished.txt` | readwise-reader | an article per line: id and path; ids read to the end | version 1 |
-| `.paperpaw/plugins/readwise-reader/account.txt` | readwise-reader | a number made of the access token the lists belong to: another token starts them anew | |
 | `.paperpaw/plugins/joplin/sent.txt`, `sending.txt`, `waiting.txt`, `notebook.txt` | joplin | a book per line: notes file, note id, MD5 of the note's text (tab separated); the same for notes sent whose answer did not come; a notes file per line; the notebook's name and id | version 1 |
 | `.paperpaw/plugins/readwise/waiting.txt` | readwise | the notes files whose highlights wait to be sent, a path per line | |
 | `.paperpaw/plugins/battery/log.csv` | battery | CSV with a header | version 1 |

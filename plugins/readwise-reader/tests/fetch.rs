@@ -113,7 +113,7 @@ fn answer(kernel: &mut Kernel, call: &HttpCall, status: u16, body: &str) -> Vec<
     requests(kernel)
 }
 
-fn kernel(storage: &Shared) -> Kernel {
+fn boot(storage: &Shared) -> Kernel {
     let mut kernel = Kernel::builder(DEVICE)
         .storage(storage.clone())
         .user_config(CONFIG)
@@ -149,7 +149,7 @@ const FILES: &str = ".paperpaw/plugins/readwise-reader";
 /// Fetches the two articles of [`LIST`]: the books exist.
 fn fetched() -> (Shared, Kernel) {
     let storage = storage_with_token();
-    let mut kernel = kernel(&storage);
+    let mut kernel = boot(&storage);
     let calls = press(&mut kernel, 1);
     let calls = answer(&mut kernel, &calls[0], 200, LIST);
     let calls = answer(
@@ -171,7 +171,7 @@ fn fetched() -> (Shared, Kernel) {
 #[test]
 fn fetches_new_articles_as_books() {
     let storage = storage_with_token();
-    let mut kernel = kernel(&storage);
+    let mut kernel = boot(&storage);
     let calls = press(&mut kernel, 1);
     assert_eq!(calls.len(), 1);
     assert_eq!(calls[0].method, "GET");
@@ -352,7 +352,7 @@ fn stops_where_reader_says_so() {
         (0, "cannot be reached"),
     ] {
         let storage = storage_with_token();
-        let mut kernel = kernel(&storage);
+        let mut kernel = boot(&storage);
         let calls = press(&mut kernel, 1);
         let calls = answer(&mut kernel, &calls[0], status, r#"{"detail": "x"}"#);
         assert!(calls.is_empty(), "{status}");
@@ -367,7 +367,7 @@ fn stops_where_reader_says_so() {
 #[test]
 fn needs_the_token_and_a_network() {
     let storage = Shared(Rc::new(MemoryStorage::new()));
-    let mut kernel = kernel(&storage);
+    let mut kernel = boot(&storage);
     assert!(press(&mut kernel, 1).is_empty());
     let storage = storage_with_token();
     let mut kernel = Kernel::builder(DEVICE)
@@ -389,7 +389,7 @@ fn an_article_without_text_or_cut_is_not_a_book() {
         "<html>Maintenance</html>".to_string(),
     ] {
         let storage = storage_with_token();
-        let mut kernel = kernel(&storage);
+        let mut kernel = boot(&storage);
         let calls = press(&mut kernel, 1);
         let calls = answer(&mut kernel, &calls[0], 200, LIST);
         let calls = answer(&mut kernel, &calls[0], 200, &body);
@@ -402,20 +402,45 @@ fn an_article_without_text_or_cut_is_not_a_book() {
     }
 }
 
+/// The secrets as the kernel keeps them.
+fn secrets_of(storage: &Shared) -> Secrets {
+    Secrets::decode(&String::from_utf8(storage.0.get(FILE).unwrap()).unwrap())
+}
+
 #[test]
 fn another_token_lets_go_of_the_books() {
     let (storage, _) = fetched();
-    let mut secrets = Secrets::default();
+    // The account is told by a secret beside the token; the card holds
+    // nothing made of the token.
+    let secrets = secrets_of(&storage);
+    assert!(secrets.get("readwise-reader.account").is_some());
+    let marker = secrets.get("readwise-reader.account").unwrap().to_string();
+    assert!(!storage.0.exists(&format!("{FILES}/account.txt")));
+    let mut all = String::new();
+    for name in ["articles.txt", "finished.txt"] {
+        if let Some(bytes) = storage.0.get(&format!("{FILES}/{name}")) {
+            all.push_str(&String::from_utf8_lossy(&bytes));
+        }
+    }
+    assert!(!all.contains(&marker));
+    // The same token again: the books are still its own.
+    let mut kernel = boot(&storage);
+    let calls = press(&mut kernel, 40);
+    let calls = answer(&mut kernel, &calls[0], 200, LIST);
+    assert!(calls.is_empty());
+    assert_eq!(books(&storage).len(), 2);
+    // Another token (changed in the list of passwords and keys): the
+    // books of the other account are not asked about nor removed, and
+    // the new token is the account.
+    let mut secrets = secrets_of(&storage);
     secrets.apply(SecretChange::keep(
         "readwise-reader.token",
         "",
         "other-token",
     ));
     storage.0.write(FILE, secrets.encode().as_bytes()).unwrap();
-    let mut kernel = kernel(&storage);
+    let mut kernel = boot(&storage);
     let calls = press(&mut kernel, 50);
-    // Empty list: the books of the other account are not asked about nor
-    // removed.
     let calls = answer(
         &mut kernel,
         &calls[0],
@@ -424,4 +449,52 @@ fn another_token_lets_go_of_the_books() {
     );
     assert!(calls.is_empty());
     assert_eq!(books(&storage).len(), 2);
+    assert_ne!(
+        secrets_of(&storage).get("readwise-reader.account").unwrap(),
+        marker
+    );
+    // And again: nothing is let go of any more.
+    let calls = press(&mut kernel, 60);
+    let calls = answer(&mut kernel, &calls[0], 200, LIST);
+    assert!(calls[0].url.contains("01older"), "{calls:?}");
+}
+
+/// A saved answer larger than it can be is removed at once and ends the
+/// fetch.
+#[test]
+fn an_answer_that_is_too_big_ends_the_fetch() {
+    let huge = |n: usize| format!(r#"{{"count":0,"results":[],"x":"{}"}}"#, "x".repeat(n));
+    // The list.
+    let storage = storage_with_token();
+    let mut kernel = boot(&storage);
+    let calls = press(&mut kernel, 1);
+    let calls = answer(&mut kernel, &calls[0], 200, &huge(600 * 1024));
+    assert!(calls.is_empty());
+    assert!(storage.0.get(&format!("{FILES}/list.json")).is_none());
+    assert!(books(&storage).is_empty());
+    // An article's answer (the text is not too long, the answer is).
+    let storage = storage_with_token();
+    let mut kernel = boot(&storage);
+    let calls = press(&mut kernel, 1);
+    let calls = answer(&mut kernel, &calls[0], 200, LIST);
+    let big = doc("01older", "later", &"x".repeat(4 * 1024 * 1024 + 10));
+    let calls = answer(&mut kernel, &calls[0], 200, &big);
+    assert!(calls.is_empty(), "no more is asked of it");
+    for name in ["list.json", "doc.json", "article.tmp"] {
+        assert!(
+            storage.0.get(&format!("{FILES}/{name}")).is_none(),
+            "{name}"
+        );
+    }
+    assert!(books(&storage).is_empty());
+    // The next fetch starts anew.
+    assert_eq!(press(&mut kernel, 100).len(), 1);
+    // An article just within it is a book.
+    let storage = storage_with_token();
+    let mut kernel = boot(&storage);
+    let calls = press(&mut kernel, 1);
+    let calls = answer(&mut kernel, &calls[0], 200, LIST);
+    let fine = doc("01older", "later", &"x".repeat(2 * 1024 * 1024));
+    answer(&mut kernel, &calls[0], 200, &fine);
+    assert_eq!(books(&storage).len(), 1);
 }
