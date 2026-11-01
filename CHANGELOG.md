@@ -17,6 +17,10 @@ change the plugin SDK.
   oldest it runs), read from the firmware's ELF file (`PAPERPAW_NATIVE_ABI`, `paperpaw-sign abi`). The store
   and the web flasher use them to refuse a plugin that needs more than a firmware has; the first line is the
   fingerprint as before.
+- *Pictures in books* (Settings › Reading › Reading aids, in the `aids` plugin): show them as the book has them
+  (as before), put a short line such as `[Picture: Rings of light]` in their place (the picture's description,
+  centred, italic), or leave them out. No picture is decoded for a picture not shown. Comics and other books
+  made of pictures (CBZ, XTC) are not changed. It needs no SDK change.
 
 ### Changed
 
