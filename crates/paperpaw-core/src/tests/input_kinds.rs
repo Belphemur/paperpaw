@@ -736,3 +736,30 @@ fn screens_follow_the_interfaces_direction_unless_they_have_their_own() {
     assert_eq!(right_side(Direction::Rtl, "en"), rtl);
     assert_eq!(right_side(Direction::Rtl, "ar"), rtl);
 }
+
+/// A pen above the screen (reserved) reaches no screen, and a tilted pen
+/// is a pen like another.
+#[test]
+fn a_hovering_pen_reaches_no_screen() {
+    let log = log();
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(EdgeHolderPlugin(log.clone(), true))
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    let pen = |phase| {
+        InputEvent::Pointer(
+            PointerEvent::new(0, phase, Point::new(45, 45), PointerTool::Pen, 500)
+                .with_tilt(30, -120),
+        )
+    };
+    let effects = kernel.handle(Instant(100), pen(PointerPhase::Hover));
+    assert_eq!(effects.refresh(), None);
+    assert!(log.borrow().is_empty());
+    kernel.handle(Instant(200), pen(PointerPhase::Down));
+    assert_eq!(*log.borrow(), ["holder:down"]);
+    let InputEvent::Pointer(tilted) = pen(PointerPhase::Down) else {
+        unreachable!()
+    };
+    assert_eq!((tilted.tilt_x, tilted.tilt_y), (30, -90));
+}
