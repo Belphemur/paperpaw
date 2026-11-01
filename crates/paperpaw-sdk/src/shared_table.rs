@@ -103,6 +103,36 @@ pub(super) static UI: super::Addresses<52> = super::Addresses([
     crate::ui::list::list_step as *const (), // LIST_STEP
 ]);
 
+pub(super) static GRAPHICS: super::Addresses<27> = super::Addresses([
+    paperpaw_graphics::Canvas::clear as *const (), // CANVAS_CLEAR
+    paperpaw_graphics::Canvas::fill as *const (), // CANVAS_FILL
+    paperpaw_graphics::Canvas::fill_rect as *const (), // CANVAS_FILL_RECT
+    paperpaw_graphics::Canvas::fill_tint as *const (), // CANVAS_FILL_TINT
+    paperpaw_graphics::Canvas::fill_shaded as *const (), // CANVAS_FILL_SHADED
+    paperpaw_graphics::Canvas::fill_round_shaded as *const (), // CANVAS_FILL_ROUND_SHADED
+    paperpaw_graphics::Canvas::stroke as *const (), // CANVAS_STROKE
+    paperpaw_graphics::Canvas::fill_round as *const (), // CANVAS_FILL_ROUND
+    paperpaw_graphics::Canvas::stroke_round as *const (), // CANVAS_STROKE_ROUND
+    paperpaw_graphics::Canvas::stroke_rect as *const (), // CANVAS_STROKE_RECT
+    paperpaw_graphics::Canvas::fill_round_rect as *const (), // CANVAS_FILL_ROUND_RECT
+    paperpaw_graphics::Canvas::stroke_round_rect as *const (), // CANVAS_STROKE_ROUND_RECT
+    paperpaw_graphics::Canvas::draw_line as *const (), // CANVAS_DRAW_LINE
+    paperpaw_graphics::Canvas::fill_circle as *const (), // CANVAS_FILL_CIRCLE
+    paperpaw_graphics::Canvas::stroke_circle as *const (), // CANVAS_STROKE_CIRCLE
+    paperpaw_graphics::Canvas::fill_ring as *const (), // CANVAS_FILL_RING
+    paperpaw_graphics::Canvas::draw_gray_row as *const (), // CANVAS_DRAW_GRAY_ROW
+    paperpaw_graphics::Canvas::draw_gray_alpha_row as *const (), // CANVAS_DRAW_GRAY_ALPHA_ROW
+    paperpaw_graphics::Canvas::draw_rgb_row as *const (), // CANVAS_DRAW_RGB_ROW
+    paperpaw_graphics::Canvas::clipped as *const (), // CANVAS_CLIPPED
+    paperpaw_graphics::Canvas::describe as *const (), // CANVAS_DESCRIBE
+    paperpaw_graphics::Canvas::note_picture as *const (), // CANVAS_NOTE_PICTURE
+    paperpaw_graphics::Canvas::keep_diffusion as *const (), // CANVAS_KEEP_DIFFUSION
+    paperpaw_graphics::Canvas::take_diffusion as *const (), // CANVAS_TAKE_DIFFUSION
+    paperpaw_graphics::round::corner_inset as *const (), // ROUND_CORNER_INSET
+    paperpaw_graphics::round::sin_cos as *const (), // ROUND_SIN_COS
+    paperpaw_graphics::round::point_at as *const (), // ROUND_POINT_AT
+]);
+
 pub(super) static DATA: super::Addresses<30> = super::Addresses([
     paperpaw_i18n::Translator::get as *const (), // I18N_GET
     paperpaw_i18n::Translator::format as *const (), // I18N_FORMAT
@@ -141,6 +171,7 @@ pub(super) const fn of(n: usize) -> paperpaw_table::Table {
     match n {
         0 => paperpaw_table::Table(TEXT.0.as_ptr()),
         2 => paperpaw_table::Table(UI.0.as_ptr()),
+        3 => paperpaw_table::Table(GRAPHICS.0.as_ptr()),
         5 => paperpaw_table::Table(DATA.0.as_ptr()),
         _ => paperpaw_table::Table::NONE,
     }

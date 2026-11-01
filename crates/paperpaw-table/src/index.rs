@@ -1,11 +1,11 @@
 // Made by tools/shared-table.py from shared.list: do not edit.
 
 /// The revision of each family (`shared.list`).
-pub const REVISIONS: crate::Revisions = [1, 0, 1, 0, 0, 1, 0, 0];
+pub const REVISIONS: crate::Revisions = [1, 0, 1, 1, 0, 1, 0, 0];
 /// The oldest revision of each family whose plugins still run.
-pub const OLDEST: crate::Revisions = [1, 0, 1, 0, 0, 1, 0, 0];
+pub const OLDEST: crate::Revisions = [1, 0, 1, 1, 0, 1, 0, 0];
 /// Eight hex digits naming the tables of this build, for logs.
-pub const HASH: &str = "0d40015e";
+pub const HASH: &str = "ab1ff4dc";
 
 /// The text family's table.
 pub mod text {
@@ -227,8 +227,62 @@ pub mod ui {
 pub mod graphics {
     /// The family.
     pub const FAMILY: crate::Family = crate::Family::GRAPHICS;
+    /// `paperpaw_graphics::Canvas::clear` (revision 1).
+    pub const CANVAS_CLEAR: usize = 0;
+    /// `paperpaw_graphics::Canvas::fill` (revision 1).
+    pub const CANVAS_FILL: usize = 1;
+    /// `paperpaw_graphics::Canvas::fill_rect` (revision 1).
+    pub const CANVAS_FILL_RECT: usize = 2;
+    /// `paperpaw_graphics::Canvas::fill_tint` (revision 1).
+    pub const CANVAS_FILL_TINT: usize = 3;
+    /// `paperpaw_graphics::Canvas::fill_shaded` (revision 1).
+    pub const CANVAS_FILL_SHADED: usize = 4;
+    /// `paperpaw_graphics::Canvas::fill_round_shaded` (revision 1).
+    pub const CANVAS_FILL_ROUND_SHADED: usize = 5;
+    /// `paperpaw_graphics::Canvas::stroke` (revision 1).
+    pub const CANVAS_STROKE: usize = 6;
+    /// `paperpaw_graphics::Canvas::fill_round` (revision 1).
+    pub const CANVAS_FILL_ROUND: usize = 7;
+    /// `paperpaw_graphics::Canvas::stroke_round` (revision 1).
+    pub const CANVAS_STROKE_ROUND: usize = 8;
+    /// `paperpaw_graphics::Canvas::stroke_rect` (revision 1).
+    pub const CANVAS_STROKE_RECT: usize = 9;
+    /// `paperpaw_graphics::Canvas::fill_round_rect` (revision 1).
+    pub const CANVAS_FILL_ROUND_RECT: usize = 10;
+    /// `paperpaw_graphics::Canvas::stroke_round_rect` (revision 1).
+    pub const CANVAS_STROKE_ROUND_RECT: usize = 11;
+    /// `paperpaw_graphics::Canvas::draw_line` (revision 1).
+    pub const CANVAS_DRAW_LINE: usize = 12;
+    /// `paperpaw_graphics::Canvas::fill_circle` (revision 1).
+    pub const CANVAS_FILL_CIRCLE: usize = 13;
+    /// `paperpaw_graphics::Canvas::stroke_circle` (revision 1).
+    pub const CANVAS_STROKE_CIRCLE: usize = 14;
+    /// `paperpaw_graphics::Canvas::fill_ring` (revision 1).
+    pub const CANVAS_FILL_RING: usize = 15;
+    /// `paperpaw_graphics::Canvas::draw_gray_row` (revision 1).
+    pub const CANVAS_DRAW_GRAY_ROW: usize = 16;
+    /// `paperpaw_graphics::Canvas::draw_gray_alpha_row` (revision 1).
+    pub const CANVAS_DRAW_GRAY_ALPHA_ROW: usize = 17;
+    /// `paperpaw_graphics::Canvas::draw_rgb_row` (revision 1).
+    pub const CANVAS_DRAW_RGB_ROW: usize = 18;
+    /// `paperpaw_graphics::Canvas::clipped` (revision 1).
+    pub const CANVAS_CLIPPED: usize = 19;
+    /// `paperpaw_graphics::Canvas::describe` (revision 1).
+    pub const CANVAS_DESCRIBE: usize = 20;
+    /// `paperpaw_graphics::Canvas::note_picture` (revision 1).
+    pub const CANVAS_NOTE_PICTURE: usize = 21;
+    /// `paperpaw_graphics::Canvas::keep_diffusion` (revision 1).
+    pub const CANVAS_KEEP_DIFFUSION: usize = 22;
+    /// `paperpaw_graphics::Canvas::take_diffusion` (revision 1).
+    pub const CANVAS_TAKE_DIFFUSION: usize = 23;
+    /// `paperpaw_graphics::round::corner_inset` (revision 1).
+    pub const ROUND_CORNER_INSET: usize = 24;
+    /// `paperpaw_graphics::round::sin_cos` (revision 1).
+    pub const ROUND_SIN_COS: usize = 25;
+    /// `paperpaw_graphics::round::point_at` (revision 1).
+    pub const ROUND_POINT_AT: usize = 26;
     /// How many entries the table has.
-    pub const COUNT: usize = 0;
+    pub const COUNT: usize = 27;
 }
 
 /// The contribution family's table.

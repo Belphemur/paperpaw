@@ -126,3 +126,30 @@ data 1 XML_TRY_FEED: fn try_feed( &mut self, data: &[u8], emit: &mut dyn FnMut(T
 data 1 XML_FINISH: fn finish(&mut self, emit: &mut dyn FnMut(Token<'_>))
 data 1 XML_ATTRS_GET: fn get(&self, name: &str) -> Option<Cow<'a, str>>
 data 1 XML_DECODE: fn decode(text: &str) -> Cow<'_, str>
+graphics 1 CANVAS_CLEAR: fn clear(&mut self, color: Color)
+graphics 1 CANVAS_FILL: fn fill(&mut self, area: Rect, color: Color)
+graphics 1 CANVAS_FILL_RECT: fn fill_rect(&mut self, x: i32, y: i32, width: u32, height: u32, color: Color)
+graphics 1 CANVAS_FILL_TINT: fn fill_tint(&mut self, area: Rect, color: Color)
+graphics 1 CANVAS_FILL_SHADED: fn fill_shaded(&mut self, area: Rect, color: Color)
+graphics 1 CANVAS_FILL_ROUND_SHADED: fn fill_round_shaded(&mut self, area: Rect, radius: u32, color: Color)
+graphics 1 CANVAS_STROKE: fn stroke(&mut self, area: Rect, thickness: u32, color: Color)
+graphics 1 CANVAS_FILL_ROUND: fn fill_round(&mut self, area: Rect, radius: u32, color: Color)
+graphics 1 CANVAS_STROKE_ROUND: fn stroke_round(&mut self, area: Rect, thickness: u32, radius: u32, color: Color)
+graphics 1 CANVAS_STROKE_RECT: fn stroke_rect( &mut self, x: i32, y: i32, width: u32, height: u32, thickness: u32, color: Color, )
+graphics 1 CANVAS_FILL_ROUND_RECT: fn fill_round_rect( &mut self, x: i32, y: i32, width: u32, height: u32, radius: u32, color: Color, )
+graphics 1 CANVAS_STROKE_ROUND_RECT: fn stroke_round_rect( &mut self, x: i32, y: i32, width: u32, height: u32, thickness: u32, radius: u32, color: Color, )
+graphics 1 CANVAS_DRAW_LINE: fn draw_line(&mut self, from: Point, to: Point, width: u32, color: Color)
+graphics 1 CANVAS_FILL_CIRCLE: fn fill_circle(&mut self, center: Point, radius: u32, color: Color)
+graphics 1 CANVAS_STROKE_CIRCLE: fn stroke_circle(&mut self, center: Point, radius: u32, thickness: u32, color: Color)
+graphics 1 CANVAS_FILL_RING: fn fill_ring( &mut self, center: Point, radius: u32, thickness: u32, from: i32, sweep: u32, color: Color, )
+graphics 1 CANVAS_DRAW_GRAY_ROW: fn draw_gray_row(&mut self, x: i32, y: i32, gray: &[u8])
+graphics 1 CANVAS_DRAW_GRAY_ALPHA_ROW: fn draw_gray_alpha_row(&mut self, x: i32, y: i32, gray_alpha: &[u8], opacity: u8)
+graphics 1 CANVAS_DRAW_RGB_ROW: fn draw_rgb_row(&mut self, x: i32, y: i32, rgb: &[u8])
+graphics 1 CANVAS_CLIPPED: fn clipped(&mut self, region: Rect) -> Canvas<'_>
+graphics 1 CANVAS_DESCRIBE: fn describe<'c>(&'c mut self, role: Role, label: &'c str, area: Rect) -> Describe<'c>
+graphics 1 CANVAS_NOTE_PICTURE: fn note_picture(&mut self, area: Rect)
+graphics 1 CANVAS_KEEP_DIFFUSION: fn keep_diffusion(&mut self, key: u64, y: i32, atkinson: crate::diffuse::Atkinson)
+graphics 1 CANVAS_TAKE_DIFFUSION: fn take_diffusion(&mut self, key: u64, y: i32) -> Option<crate::diffuse::Atkinson>
+graphics 1 ROUND_CORNER_INSET: fn corner_inset(radius: u32, row: u32, height: u32) -> u32
+graphics 1 ROUND_SIN_COS: fn sin_cos(degrees: i32) -> (i32, i32)
+graphics 1 ROUND_POINT_AT: fn point_at(center: Point, radius: i32, degrees: i32) -> Point
