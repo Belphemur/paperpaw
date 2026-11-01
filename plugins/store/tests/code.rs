@@ -21,7 +21,8 @@ use paperpaw_native::{Chip, Header, LINK_BASE};
 use paperpaw_plugin_store::OPEN;
 use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::native::keys::{
-    is_revoked, known_recovery, revocation_message, revoked, rotation_message,
+    Revocation, is_revoked, keep_revoked, known_recovery, revocation_message, revoked,
+    rotation_message,
 };
 use paperpaw_sdk::native::{Fingerprint, Native, installed_code, known_author};
 use paperpaw_sdk::{PluginKind, Storage, Version};
@@ -457,6 +458,28 @@ fn a_long_list_is_read_in_parts_and_cut_at_what_the_kernel_keeps() {
     // No plugin of them is installed: only the clock's could hold, and
     // it came after the cut of 256.
     assert_eq!(revoked(&shopping.storage).len(), 0);
+}
+
+#[test]
+fn a_stopped_plugin_says_so_on_its_page_and_offers_removal() {
+    let mut first = store("1.0.0");
+    let code = ppn(BUILD, Some(&AUTHOR));
+    first_install(&mut first, "1.0.0", &code);
+    let storage = first.storage.clone();
+    // Its author revokes the key; the kernel, started again, does not run it.
+    let author = public_key(&AUTHOR);
+    let revocation = Revocation::new("clock", author, revoking(&AUTHOR, "clock", &author));
+    assert!(keep_revoked(&storage, &[revocation]).is_ok());
+    let mut shopping = Shopping::with(Some("x4"), Some(native()), &list("1.0.0"), storage);
+    shopping.choose("Reading");
+    shopping.choose("Clock");
+    shopping.serve(PAGE, page("1.0.0", &code).as_bytes());
+    let shown = shopping.shown().replace(" | ", " ");
+    assert!(
+        shown.contains("Stopped: the key its author signed it with"),
+        "{shown}"
+    );
+    assert!(shown.contains("Remove"), "{shown}");
 }
 
 #[test]
