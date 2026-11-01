@@ -229,9 +229,9 @@ pub mod qr {
 pub mod document {
     pub use paperpaw_document::{
         Align, Block, BlockKind, Document, DocumentError, EmbeddedFont, ImageRef,
-        LETTER_SPACING_STEPS, LineStyle, Link, LinkKind, Locator, MAX_FAMILIES, MAX_INLINE_LANGS,
-        MAX_LETTER_SPACING, MIN_LETTER_SPACING, Metadata, OffsetMap, PageProgression, Run,
-        TextStyle, TocEntry, is_external,
+        LETTER_SPACING_STEPS, LineStyle, Link, LinkKind, Locator, MAX_COLUMNS, MAX_FAMILIES,
+        MAX_INLINE_LANGS, MAX_LETTER_SPACING, MIN_LETTER_SPACING, Metadata, OffsetMap,
+        PageProgression, Run, TableCell, TableRow, TextStyle, TocEntry, VerticalAlign, is_external,
     };
 }
 

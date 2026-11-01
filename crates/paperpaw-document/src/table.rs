@@ -39,7 +39,25 @@ pub struct TableCell {
     pub end: u32,
     /// The columns it spans, at least 1.
     pub span: u8,
+    /// The rows it spans (`rowspan`), at least 1: the rows after its own
+    /// leave its columns free for it, up to the table's last row.
+    pub rows: u8,
     pub align: Align,
+    /// Where its lines sit in a row taller than they are.
+    pub vertical: VerticalAlign,
+}
+
+/// Where a cell's lines sit in a row taller than they are
+/// ([`TableCell::vertical`]), as CSS's `vertical-align` in a table.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub enum VerticalAlign {
+    /// At the top.
+    #[default]
+    Top,
+    /// In the middle.
+    Middle,
+    /// At the bottom.
+    Bottom,
 }
 
 impl TableCell {
@@ -47,7 +65,9 @@ impl TableCell {
         Self {
             end,
             span: 1,
+            rows: 1,
             align: Align::Start,
+            vertical: VerticalAlign::Top,
         }
     }
 
@@ -58,6 +78,16 @@ impl TableCell {
 
     pub const fn align(mut self, align: Align) -> Self {
         self.align = align;
+        self
+    }
+
+    pub const fn rows(mut self, rows: u8) -> Self {
+        self.rows = if rows == 0 { 1 } else { rows };
+        self
+    }
+
+    pub const fn vertical(mut self, vertical: VerticalAlign) -> Self {
+        self.vertical = vertical;
         self
     }
 }
@@ -145,5 +175,18 @@ mod tests {
         let mut row = TableRow::new(vec![TableCell::new(1).span(0)].into_boxed_slice());
         row.columns = vec![0].into_boxed_slice();
         assert_eq!(row.weights().collect::<Vec<_>>(), [1]);
+    }
+
+    #[test]
+    fn cells_span_rows_and_sit_where_they_say() {
+        let cell = TableCell::new(4);
+        assert_eq!(
+            (cell.span, cell.rows, cell.vertical),
+            (1, 1, VerticalAlign::Top)
+        );
+        let tall = cell.rows(3).vertical(VerticalAlign::Middle);
+        assert_eq!((tall.rows, tall.vertical), (3, VerticalAlign::Middle));
+        // No row is no span: one row.
+        assert_eq!(cell.rows(0).rows, 1);
     }
 }

@@ -8,6 +8,9 @@ change the plugin SDK.
 
 ### Added
 
+- SDK (document): a table cell can span rows (`TableCell::rows`) and say where its lines sit
+  (`TableCell::vertical`, `VerticalAlign`); `TableRow`, `TableCell` and `MAX_COLUMNS` are in `paperpaw_sdk::document`
+  for format plugins.
 - SDK: `Command::RequestPlugins` (`Command::request_plugins`): any plugin can ask for plugins by id (e.g. those
   a template names); those not on the device go to the store as `events::PLUGINS_REQUESTED`
   (`PluginsRequested`, at most `MAX_REQUESTED_PLUGINS`), which asks the reader before it downloads any.

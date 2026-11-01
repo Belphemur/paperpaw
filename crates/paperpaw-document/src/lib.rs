@@ -30,7 +30,7 @@ pub use paperpaw_lang::{Direction, Lang, WritingMode};
 pub use paperpaw_platform::{DirEntry, NoStorage, Storage};
 
 mod table;
-pub use table::{MAX_COLUMNS, TableCell, TableRow};
+pub use table::{MAX_COLUMNS, TableCell, TableRow, VerticalAlign};
 
 /// A reading position.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
