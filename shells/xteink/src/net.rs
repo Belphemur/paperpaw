@@ -117,6 +117,14 @@ impl Device for Phy {
     }
 }
 
+/// The `.local` name's socket, its responder and whether the multicast
+/// group is joined (only while something serves).
+struct Names {
+    socket: SocketHandle,
+    responder: paperpaw_x4::mdns::Responder,
+    in_group: bool,
+}
+
 pub struct Net {
     phy: Phy,
     stack: Stack,
@@ -132,7 +140,7 @@ pub struct Net {
     label: Option<&'static [u8]>,
     /// Answers for `<label>.local` (multicast DNS): its socket, once the
     /// network gave an address.
-    names: Option<(SocketHandle, paperpaw_x4::mdns::Responder)>,
+    names: Option<Names>,
     /// The address DHCP gave, with its network's size.
     address: Option<smoltcp::wire::Ipv4Cidr>,
     /// The next local port for a connection.
@@ -156,6 +164,10 @@ impl Net {
     /// `host`), from the next time DHCP asks (joining a network).
     pub fn set_host_name(&mut self, host: &'static [smoltcp::wire::DhcpOption<'static>]) {
         self.label = host.first().map(|option| option.data);
+        // A rename: the name answered for follows it.
+        if let Some(cidr) = self.address {
+            self.answer_for_name(cidr.address().octets());
+        }
         if let Some(handle) = self.dhcp {
             self.sockets
                 .get_mut::<dhcpv4::Socket<'static>>(handle)
@@ -336,17 +348,26 @@ impl Net {
     }
 
     /// In a network with an address: answers for the device's `.local`
-    /// name (`paperpaw_x4::mdns`) at `address`. Without a name, or memory
-    /// for the socket, the device is only found by its address.
+    /// name (`paperpaw_x4::mdns`) at `address`: the device's name and the
+    /// end of its hardware address (`paperpaw-x4-1a2b`), so that two
+    /// readers do not answer for one name. Without a name, or memory for
+    /// the socket, the device is only found by its address. Called again
+    /// when the name changes: the socket stays.
     fn answer_for_name(&mut self, address: [u8; 4]) {
-        let Some(responder) = self
-            .label
-            .and_then(|label| paperpaw_x4::mdns::Responder::new(label, address))
-        else {
+        let HardwareAddress::Ethernet(mac) = self.stack.hardware_addr();
+        let Some(responder) = self.label.and_then(|base| {
+            paperpaw_x4::mdns::Responder::new(
+                &paperpaw_x4::mdns::label_with_suffix(base, mac.0),
+                address,
+            )
+        }) else {
             return;
         };
-        if let Some((_, kept)) = &mut self.names {
-            *kept = responder;
+        let name = responder.name();
+        let name = core::str::from_utf8(&name).unwrap_or("?");
+        if let Some(names) = &mut self.names {
+            names.responder = responder;
+            log::info!("net: answering for {name}");
             return;
         }
         let Ok(handle) = self.open_udp(2, 2 * 512) else {
@@ -361,48 +382,80 @@ impl Net {
             self.sockets.remove(raw);
             return;
         }
-        let group = smoltcp::wire::Ipv4Address::from(paperpaw_x4::mdns::GROUP);
-        if self.stack.join_multicast_group(group).is_err() {
-            log::info!("net: the multicast group was not joined");
-        }
-        log::info!(
-            "net: answering for {}",
-            core::str::from_utf8(&responder.name()).unwrap_or("?")
-        );
-        self.names = Some((raw, responder));
+        // Multicast DNS packets are sent with a hop limit of 255, and only
+        // such are taken as from the network itself (RFC 6762 §11).
+        socket.set_hop_limit(Some(255));
+        log::info!("net: answering for {name}");
+        self.names = Some(Names {
+            socket: raw,
+            responder,
+            in_group: false,
+        });
     }
 
     /// The address is gone: the name is not answered for, and the socket
     /// and the group are let go.
     fn silence_name(&mut self) {
-        if let Some((handle, _)) = self.names.take() {
-            self.sockets.remove(handle);
-            let group = smoltcp::wire::Ipv4Address::from(paperpaw_x4::mdns::GROUP);
-            let _ = self.stack.leave_multicast_group(group);
+        if let Some(names) = self.names.take() {
+            self.sockets.remove(names.socket);
+            if names.in_group {
+                let _ = self.stack.leave_multicast_group(Self::group());
+            }
         }
+    }
+
+    fn group() -> smoltcp::wire::Ipv4Address {
+        smoltcp::wire::Ipv4Address::from(paperpaw_x4::mdns::GROUP)
     }
 
     /// Answers the queries for the device's name, while something serves
     /// (a TCP socket listens): an idle reader on a network does not
-    /// announce itself.
+    /// announce itself, and is not in the multicast group then, so the
+    /// router does not send it the network's chatter. Only senders on the
+    /// network are answered (RFC 6762 §11), the group at most once a
+    /// second.
     fn serve_names(&mut self) {
-        let Some((handle, responder)) = &mut self.names else {
-            return;
-        };
         let serving = self.sockets.iter().any(|(_, socket)| {
             matches!(socket, smoltcp::socket::Socket::Tcp(tcp)
                 if tcp.listen_endpoint().port != 0)
         });
-        let socket = self.sockets.get_mut::<udp::Socket<'_>>(*handle);
+        let Some(names) = &mut self.names else {
+            return;
+        };
+        if serving != names.in_group {
+            let result = if serving {
+                self.stack.join_multicast_group(Self::group()).map(|_| ())
+            } else {
+                self.stack.leave_multicast_group(Self::group()).map(|_| ())
+            };
+            match result {
+                Ok(()) => names.in_group = serving,
+                Err(e) => log::info!("net: the multicast group was not changed: {e:?}"),
+            }
+        }
+        let own = self.address;
+        let at = u64::try_from(now().total_millis()).unwrap_or(0);
+        let socket = self.sockets.get_mut::<udp::Socket<'_>>(names.socket);
         let mut answers = Vec::new();
         while let Ok((query, meta)) = socket.recv() {
             let from = meta.endpoint;
-            if serving && let Some(reply) = responder.answer(query, from.port) {
+            let near = match (own, from.addr) {
+                (Some(own), IpAddress::Ipv4(source)) => paperpaw_x4::mdns::on_link(
+                    source.octets(),
+                    own.address().octets(),
+                    own.prefix_len(),
+                ),
+                _ => false,
+            };
+            if serving
+                && near
+                && let Some(reply) = names.responder.answer(query, from.port, at)
+            {
                 answers.push((reply, from));
             }
         }
         let group = smoltcp::wire::IpEndpoint::new(
-            IpAddress::Ipv4(smoltcp::wire::Ipv4Address::from(paperpaw_x4::mdns::GROUP)),
+            IpAddress::Ipv4(Self::group()),
             paperpaw_x4::mdns::PORT,
         );
         for (reply, from) in answers {
