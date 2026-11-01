@@ -91,3 +91,26 @@ name = "Cyrillic letters"
 description = "Russian, Ukrainian, Bulgarian, Serbian and other Cyrillic books in Literata."
 de.name = "Kyrillische Schrift"
 de.description = "Bücher auf Russisch, Ukrainisch, Bulgarisch, Serbisch und anderen kyrillischen Sprachen in Literata."
+
+# Ready for the store, not offered yet: whether to offer it is the owner's
+# call (#61). To offer it, take the comment signs away;
+# tools/script-pack.py then builds it for the release.
+#
+# # script-korean (#61): the 2,350 Hangul syllables of KS X 1001 with CJK
+# # punctuation, compatibility jamo and full-width forms (2,602 characters),
+# # seven sizes, one face, from Nanum Myeongjo: 8.2 MiB on the card. Its pack
+# # extends Literata's regular face; bold, italic and the interface's font
+# # fall back to it. A pack holds up to 65,535 characters, so all 11,172
+# # syllables (`hangul`) can come later as data, without a new interface.
+# [script-korean]
+# version = "1.1.0"
+# group = "look"
+# licence = "OFL-1.1"
+# devices = ["x4", "x4-pro", "x4-classic"]
+# off_by_default = true
+# build = "tools/script-pack.py"
+# inputs = ["tools/fonts/NanumMyeongjo-Regular.ttf", "tools/fontgen", "crates/paperpaw-text/src/charset.rs", "tools/plugin-files/keyboards/korean.txt"]
+# name = "Korean letters"
+# description = "Korean books in a classic book face: the 2,350 Hangul syllables of everyday text, and a keyboard for typing Korean."
+# de.name = "Koreanische Schrift"
+# de.description = "Bücher auf Koreanisch in einer klassischen Buchschrift: die 2.350 Hangul-Silben des Alltags, und eine Tastatur dafür."
