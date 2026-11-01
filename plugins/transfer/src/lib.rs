@@ -17,6 +17,7 @@
 extern crate alloc;
 
 mod cable;
+mod link;
 mod phone;
 mod plugins;
 mod web;
@@ -275,9 +276,10 @@ impl TransferScreen {
                 // Drawn now: on the X4, the radio makes it fully random.
                 self.state = match served::key(&env.random()) {
                     Some(key) => {
-                        let url = format!("http://{address}/?k={key}");
+                        let (url, scanned) =
+                            link::urls(env.wifi().map(|wifi| &wifi.state), &address, &key);
                         self.guard = Some(Guard::new(key));
-                        let qr = QrCode::new(url.as_bytes());
+                        let qr = QrCode::new(scanned.as_bytes());
                         State::Serving { url, qr }
                     }
                     None => {

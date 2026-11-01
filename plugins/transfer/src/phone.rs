@@ -78,9 +78,10 @@ impl PhoneScreen {
             ServerNotice::Started { address, .. } => {
                 self.state = match served::key(&env.random()) {
                     Some(key) => {
-                        let url = format!("http://{address}/?k={key}");
+                        let (url, scanned) =
+                            crate::link::urls(env.wifi().map(|wifi| &wifi.state), &address, &key);
                         self.guard = Some(Guard::new(key));
-                        let qr = QrCode::new(url.as_bytes());
+                        let qr = QrCode::new(scanned.as_bytes());
                         State::Serving { url, qr }
                     }
                     None => {
