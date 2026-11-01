@@ -53,6 +53,8 @@ change the plugin SDK.
   given number of bytes comes as `Row::Oversized(size)`: nothing of it is allocated and its overflow pages are not
   read. One huge row (a picture kept in a note) then no longer fails the whole table for want of memory. Not part
   of the plugin interface.
+- The store lists a built-in plugin that is switched off (Android builds the store's plugins in, off until wanted)
+  with *Switch on*, which does what the plugin manager does; nothing is downloaded for it.
 
 ### Changed
 

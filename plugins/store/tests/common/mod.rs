@@ -104,6 +104,25 @@ impl CodeLoader for NoCode {
     }
 }
 
+/// The statistics built in, as on Android (by its id).
+pub struct BuiltInStats;
+
+impl Plugin for BuiltInStats {
+    fn manifest(&self) -> paperpaw_sdk::Manifest {
+        paperpaw_sdk::Manifest::new(
+            Id::new_static("stats"),
+            "Reading statistics",
+            paperpaw_sdk::Version::new(0, 4, 0),
+        )
+        .description("Reading statistics.")
+        .uses(paperpaw_sdk::Uses::NOTHING)
+    }
+
+    fn register(&self, _: &mut paperpaw_sdk::Registrar) -> Result<(), paperpaw_sdk::RegisterError> {
+        Ok(())
+    }
+}
+
 /// The kernel with the store, as the reader uses it.
 pub struct Shopping {
     pub kernel: Kernel,
@@ -131,13 +150,35 @@ impl Shopping {
         list: &str,
         storage: Shared,
     ) -> Self {
-        Self::of(DEVICE, device, native, list, storage, None)
+        Self::of(DEVICE, device, native, list, storage, None, false)
+    }
+
+    /// The store on the X4 with the statistics built in and switched off,
+    /// as on Android.
+    pub fn with_stats_off(list: &str) -> Self {
+        Self::of(
+            DEVICE,
+            Some("x4"),
+            None,
+            list,
+            Shared::default(),
+            None,
+            true,
+        )
     }
 
     /// The store on the X4 running firmware `version`.
     pub fn on_firmware(version: &str, list: &str, storage: Shared) -> Self {
         let firmware = paperpaw_sdk::firmware::Firmware::new(version, "", 0);
-        Self::of(DEVICE, Some("x4"), None, list, storage, Some(firmware))
+        Self::of(
+            DEVICE,
+            Some("x4"),
+            None,
+            list,
+            storage,
+            Some(firmware),
+            false,
+        )
     }
 
     /// The store on the X4 Pro (touch and buttons), its list answered with
@@ -150,7 +191,15 @@ impl Shopping {
     pub fn touch_with(native: Option<Native>, list: &str) -> Self {
         let mut pro = DEVICE;
         pro.input.touch = true;
-        Self::of(pro, Some("x4-pro"), native, list, Shared::default(), None)
+        Self::of(
+            pro,
+            Some("x4-pro"),
+            native,
+            list,
+            Shared::default(),
+            None,
+            false,
+        )
     }
 
     fn of(
@@ -160,6 +209,7 @@ impl Shopping {
         list: &str,
         storage: Shared,
         firmware: Option<paperpaw_sdk::firmware::Firmware>,
+        stats_off: bool,
     ) -> Self {
         let mut builder = Kernel::builder(info)
             .storage(storage.clone())
@@ -171,6 +221,9 @@ impl Shopping {
             // Asks for text and numbers.
             .plugin(paperpaw_plugin_keyboard::Keyboard)
             .plugin(Store);
+        if stats_off {
+            builder = builder.plugin_off(BuiltInStats);
+        }
         if let Some(device) = device {
             builder = builder.catalog_device(device);
         }

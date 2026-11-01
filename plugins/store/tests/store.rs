@@ -498,3 +498,45 @@ fn the_pages_of_a_library_with_a_key_keep_it() {
     shopping.choose("Airy");
     shopping.request("https://example.org/p/plugins/airy.json?key=abc&device=x4&lang=en");
 }
+
+#[test]
+fn a_built_in_plugin_switched_off_is_switched_on_and_never_downloaded() {
+    // Android builds the statistics in, switched off; the library lists them.
+    let list = r#"{"format": 2, "plugins": [
+  {"id": "stats", "name": "Reading statistics", "summary": "Your reading in numbers.",
+    "group": "tools", "author": "PaperPaw", "licence": "Apache-2.0", "kind": "data",
+    "latest": {"version": "1.0.0", "sdk": "0.4", "formats": 1, "size": 100}}]}"#;
+    let mut shopping = Shopping::with_stats_off(list);
+    shopping.choose("Tools");
+    let shown = shopping.shown();
+    assert!(shown.contains("Reading statistics"), "{shown}");
+    assert!(shown.contains("Off"), "{shown}");
+    shopping.choose("Reading statistics");
+    let call = shopping.request("https://paperpaw.org/api/v1/plugins/stats.json?device=x4&lang=en");
+    shopping.answer(
+        &call,
+        200,
+        list.replace("\"plugins\": [", "\"plugin\": ")
+            .replace("}]}", "}}")
+            .as_bytes(),
+    );
+    let shown = shopping.shown();
+    assert!(shown.contains("Switch on"), "{shown}");
+    assert!(!shown.contains("Install"), "{shown}");
+    assert!(!shown.contains("MB") && !shown.contains("KB"), "{shown}");
+    shopping.choose("Switch on");
+    let stats = shopping.kernel.plugins().get("stats").unwrap();
+    assert!(stats.enabled, "{stats:?}");
+    // Nothing was downloaded: no request after the list and the page.
+    assert!(
+        shopping
+            .kernel
+            .take_io()
+            .iter()
+            .filter_map(|io| match io {
+                paperpaw_core::Io::Http(call) => Some(call.url.clone()),
+                _ => None,
+            })
+            .all(|url| !url.contains(".ppn") && !url.contains("/b/"))
+    );
+}

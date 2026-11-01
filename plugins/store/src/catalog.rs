@@ -157,6 +157,15 @@ pub(crate) fn may_install(plugins: &Plugins, id: &str, code: bool) -> bool {
     })
 }
 
+/// Whether `id` is a built-in plugin that is switched off here (Android
+/// builds the store's file plugins in, off until the reader wants them):
+/// it is switched on, never downloaded.
+pub(crate) fn switched_off(plugins: &Plugins, id: &str) -> bool {
+    plugins
+        .get(id)
+        .is_some_and(|info| info.kind == PluginKind::BuiltIn && !info.enabled)
+}
+
 /// A plugin the library offers for this device: a data plugin, or a code
 /// plugin with a build for this PaperPaw.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -194,6 +203,12 @@ impl Entry {
         env.plugins()
             .get(&self.id)
             .map(|info| info.update.unwrap_or(info.manifest.version))
+    }
+
+    /// Whether it is a built-in plugin switched off here: *Switch on* is
+    /// what the store offers for it.
+    pub(crate) fn switched_off(&self, env: &Env<'_>) -> bool {
+        switched_off(env.plugins(), &self.id)
     }
 
     /// Its line in the index, tabs and line ends of the list left out.
@@ -345,16 +360,22 @@ impl Item {
     /// built for it, that takes the place of none of its own.
     fn fits(&self, device: &Device<'_>) -> bool {
         let entry = &self.entry;
+        // A built-in plugin switched off is offered to be switched on,
+        // with or without a file for this device.
+        let off = device
+            .plugins
+            .is_some_and(|plugins| switched_off(plugins, &entry.id));
         let kind = match self.kind.as_str() {
             "data" => true,
-            "code" => self.code.is_some(),
+            "code" => self.code.is_some() || off,
             _ => false,
         };
         let code = self.code.is_some();
         kind && !self.built_in
-            && device
-                .plugins
-                .is_none_or(|plugins| may_install(plugins, &entry.id, code))
+            && (off
+                || device
+                    .plugins
+                    .is_none_or(|plugins| may_install(plugins, &entry.id, code)))
             && (!self.devices || self.device)
             && install::is_plugin_name(&entry.id)
             && !entry.name.is_empty()

@@ -173,7 +173,7 @@ impl ListScreen {
                 })
                 .collect();
             index.scan(env.storage(), &mut |_, entry: Entry| {
-                if entry.installed(env).is_some() {
+                if entry.installed(env).is_some() && !entry.switched_off(env) {
                     counts.installed += 1;
                     counts.updates += usize::from(entry.newer_in(env, &origins));
                 }
