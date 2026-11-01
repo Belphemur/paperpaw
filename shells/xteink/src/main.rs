@@ -648,7 +648,10 @@ fn install_note(ota: Option<&ota::Ota>, storage: &dyn Storage, panicked: Option<
     let reset = alloc::format!("{reason:?}");
     let note = InstallNote {
         kind: if failed.is_some() {
-            Kind::Failed { panic: panicked }
+            Kind::Failed {
+                panic: panicked,
+                started: storage.exists(FILE),
+            }
         } else {
             Kind::Started
         },

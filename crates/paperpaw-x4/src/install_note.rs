@@ -26,6 +26,11 @@ pub enum Kind<'a> {
     Failed {
         /// The panic message of the last run, if it ended in one.
         panic: Option<&'a str>,
+        /// Whether the note of the first start was on the card: then an
+        /// earlier run got as far as the card; if not, the update was
+        /// found failed before any run noted itself (a crash before the
+        /// card, or a bootloader that marked the start itself).
+        started: bool,
     },
 }
 
@@ -150,7 +155,11 @@ mod tests {
 
     #[test]
     fn a_failed_note_says_it_went_back_and_carries_the_facts() {
-        let text = note(Kind::Failed { panic: None }).to_string();
+        let text = note(Kind::Failed {
+            panic: None,
+            started: true,
+        })
+        .to_string();
         assert!(text.contains("did not stay on this Xteink X4"), "{text}");
         assert!(text.contains("nicht geblieben"), "{text}");
         assert!(text.contains("CrossPoint"), "{text}");
@@ -158,12 +167,24 @@ mod tests {
         assert!(text.contains("CoreSw"), "{text}");
         assert!(text.contains("last place / letzter Ort: card"), "{text}");
         assert!(!text.contains("Panic:"), "{text}");
+        assert!(text.contains("gefunden: yes / ja"), "{text}");
+    }
+
+    #[test]
+    fn a_failed_note_says_when_no_first_start_was_noted() {
+        let text = note(Kind::Failed {
+            panic: None,
+            started: false,
+        })
+        .to_string();
+        assert!(text.contains("gefunden: no / nein"), "{text}");
     }
 
     #[test]
     fn a_panic_message_is_in_the_failed_note_only() {
         let text = note(Kind::Failed {
             panic: Some("src/x.rs:1:2 oops\n"),
+            started: true,
         })
         .to_string();
         assert!(text.contains("Panic: src/x.rs:1:2 oops"), "{text}");
@@ -176,7 +197,11 @@ mod tests {
         // It is written to a card at a start: a few hundred bytes of text
         // and the panic's 400 at most.
         let long = "x".repeat(400);
-        let text = note(Kind::Failed { panic: Some(&long) }).to_string();
+        let text = note(Kind::Failed {
+            panic: Some(&long),
+            started: true,
+        })
+        .to_string();
         assert!(text.len() < 2048, "{}", text.len());
     }
 }
