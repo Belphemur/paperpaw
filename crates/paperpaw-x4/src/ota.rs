@@ -41,12 +41,15 @@ const ENTRIES: [u32; 2] = [0, SECTOR];
 const ENTRY_LEN: usize = 32;
 /// What unwritten flash holds, as a word.
 const UNWRITTEN: u32 = u32::MAX;
-/// In an entry's label (its second word): this firmware itself put the
-/// image on trial, `PendingVerify` with this word. A bootloader with app
-/// rollback turns `New` into `PendingVerify` at the first start of an
-/// image, leaving the label as it was: without this word, the state is its
-/// doing, and not a trial that ended other than cleanly.
+/// In an entry's label (its third word, bound to the sequence number, see
+/// [`Entry::seal`] and [`Entry::raise_sequence`]): this firmware itself
+/// put the image on trial, `PendingVerify` with this word. A bootloader with app rollback turns
+/// `New` into `PendingVerify` at the first start of an image, leaving the
+/// label as it was: without this word, the state is its doing, and not a
+/// trial that ended other than cleanly.
 const ARMED: u32 = 0x5050_4131;
+/// Seals the time on trial the same way.
+const TIMED: u32 = 0x5050_4132;
 
 /// The state of an image, as ESP-IDF keeps it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -163,17 +166,45 @@ impl Entry {
         State::from_code(self.word(24))
     }
 
-    /// Whether the firmware itself marked the image as on trial (see
-    /// [`ARMED`]).
-    fn armed(&self) -> bool {
-        self.word(8) == ARMED
+    /// Raises the sequence number by a round of the slots (the slot it
+    /// chooses stays) and its CRC with it, left as it is where the number
+    /// cannot rise. ESP-IDF's installer gives a reused entry the least number
+    /// above the one in force that chooses the slot, which is the number
+    /// an update just after the way back has: an entry put on trial is
+    /// raised above that, so the number the installer gives is not its.
+    fn raise_sequence(&mut self) {
+        if let Some(raised) = self
+            .sequence()
+            .and_then(|s| s.checked_add(SLOTS))
+            .filter(|&s| s != UNWRITTEN)
+        {
+            self.0[..4].copy_from_slice(&raised.to_le_bytes());
+            self.0[28..].copy_from_slice(&crc(raised).to_le_bytes());
+        }
     }
 
-    /// How long its image ran on trial, in the label's first word.
+    /// A label word of `kind` for `value`, bound to this entry's sequence
+    /// number. ESP-IDF's installers (`esp_rewrite_ota_data`) reuse an
+    /// entry for a new image, changing the sequence number, the state and
+    /// the CRC and leaving the label: a word that does not hold for the
+    /// new number says the label is an older image's.
+    fn seal(&self, kind: u32, value: u32) -> u32 {
+        (self.word(0).wrapping_mul(0x9E37_79B1) ^ kind ^ value.rotate_left(16)).rotate_left(5)
+    }
+
+    /// Whether the firmware itself marked the image as on trial (see
+    /// [`ARMED`]); not an older image's mark, not the bootloader's.
+    fn armed(&self) -> bool {
+        self.sequence().is_some() && self.word(8) == self.seal(ARMED, 0)
+    }
+
+    /// How long its image ran on trial, in the label's first word; 0 if
+    /// the label is not this image's.
     fn trial_ms(&self) -> u32 {
         match self.word(4) {
             UNWRITTEN => 0,
-            ms => ms,
+            ms if self.word(12) == self.seal(TIMED, ms) => ms,
+            _ => 0,
         }
     }
 
@@ -183,11 +214,17 @@ impl Entry {
         self.0[4..8].copy_from_slice(&ms.to_le_bytes());
         // Only the firmware's own mark of a trial carries the word.
         let armed = if state == State::PendingVerify {
-            ARMED
+            self.seal(ARMED, 0)
         } else {
             UNWRITTEN
         };
         self.0[8..12].copy_from_slice(&armed.to_le_bytes());
+        let timed = if trial_ms == 0 {
+            UNWRITTEN
+        } else {
+            self.seal(TIMED, ms)
+        };
+        self.0[12..16].copy_from_slice(&timed.to_le_bytes());
     }
 }
 
@@ -276,6 +313,9 @@ impl OtaData {
     ) -> Result<(), FlashError> {
         let index = self.newest_of(slot).ok_or(FlashError)?;
         let mut entry = self.entries[index];
+        if state == State::PendingVerify {
+            entry.raise_sequence();
+        }
         entry.set(state, trial_ms);
         self.write(flash, index, entry)
     }
@@ -839,6 +879,154 @@ mod tests {
                 assert!(settled, "rollback {rollback}, cut after {left}");
             }
         }
+    }
+
+    /// What ESP-IDF's `esp_rewrite_ota_data` does (CrossPoint's installer,
+    /// IDF 5.5; `components/app_update/esp_ota_ops.c`): the entry in force
+    /// is the newest not `Invalid` or `Aborted`; the other one is reused,
+    /// its sequence number the least above the one in force that chooses
+    /// `slot`, its CRC and state (`New` with app rollback) rewritten and
+    /// its label left as it was.
+    fn idf_install(flash: &mut Nor, slot: u32, rollback: bool) {
+        let data = OtaData::read(flash).unwrap();
+        let active = (0..2)
+            .filter(|&i| !matches!(data.entries[i].state(), State::Invalid | State::Aborted))
+            .filter_map(|i| data.entries[i].sequence().map(|s| (s, i)))
+            .max();
+        let (seq, next) = match active {
+            Some((active_seq, i)) => {
+                let mut candidate = (slot + 1) % SLOTS;
+                while active_seq > candidate {
+                    candidate += SLOTS;
+                }
+                (candidate, 1 - i)
+            }
+            None => (slot + 1, 0),
+        };
+        let mut entry = data.entries[next];
+        entry.0[..4].copy_from_slice(&seq.to_le_bytes());
+        entry.0[28..].copy_from_slice(&crc(seq).to_le_bytes());
+        let state = if rollback {
+            State::New
+        } else {
+            State::Undefined
+        };
+        entry.0[24..28].copy_from_slice(&state.code().to_le_bytes());
+        let mut data = data;
+        data.write(flash, next, entry).unwrap();
+    }
+
+    /// An install by CrossPoint's menu over an update that was on trial
+    /// and ended other than cleanly, as a reader has it after the first
+    /// try: the entry the update had is reused with its label.
+    #[test]
+    fn a_reinstall_after_a_crashed_trial_is_a_start_not_a_failure() {
+        for rollback in [false, true] {
+            for ran in [0, 9_000] {
+                let mut flash = ota_data();
+                let mut data = OtaData::read(&mut flash).unwrap();
+                data.choose(&mut flash, 0, State::Valid, 0).unwrap();
+                idf_install(&mut flash, 1, rollback);
+                // First try: on trial (a pause first for some), then it
+                // crashes.
+                let slot = boot(&mut flash, rollback);
+                assert_eq!(slot, 1);
+                let mut data = OtaData::read(&mut flash).unwrap();
+                assert!(data.start(&mut flash, slot).is_some());
+                if ran != 0 {
+                    data.set_state(&mut flash, 1, State::New, ran).unwrap();
+                    let slot = boot(&mut flash, rollback);
+                    let mut data = OtaData::read(&mut flash).unwrap();
+                    assert!(data.start(&mut flash, slot).is_some());
+                }
+                // The crash: with app rollback the bootloader gives it up
+                // and CrossPoint runs; without, the next start finds the
+                // failed trial and goes back (checked below).
+                let slot = boot(&mut flash, rollback);
+                if rollback {
+                    assert_eq!(slot, 0);
+                    // The stale mark, the time and the sequence number a
+                    // reinstall gives: none is the new image's.
+                    idf_install(&mut flash, 1, rollback);
+                    let slot = boot(&mut flash, rollback);
+                    assert_eq!(slot, 1, "rollback {rollback}, ran {ran}");
+                    let mut data = OtaData::read(&mut flash).unwrap();
+                    assert!(!data.armed(1), "rollback {rollback}, ran {ran}");
+                    assert_eq!(
+                        data.start(&mut flash, slot),
+                        Some(Start::Marked { ran: 0 }),
+                        "rollback {rollback}, ran {ran}"
+                    );
+                } else {
+                    assert_eq!(slot, 1);
+                    let mut data = OtaData::read(&mut flash).unwrap();
+                    assert_eq!(
+                        data.start(&mut flash, slot),
+                        Some(Start::Failed { ran }),
+                        "rollback {rollback}, ran {ran}"
+                    );
+                    let slot = boot(&mut flash, rollback);
+                    let mut data = OtaData::read(&mut flash).unwrap();
+                    assert_eq!(data.start(&mut flash, slot), Some(Start::Undone));
+                    idf_install(&mut flash, 1, rollback);
+                    let slot = boot(&mut flash, rollback);
+                    let mut data = OtaData::read(&mut flash).unwrap();
+                    assert_eq!(
+                        data.start(&mut flash, slot),
+                        Some(Start::Trial { ran: 0 }),
+                        "rollback {rollback}, ran {ran}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// A trial that really fails is still found, on the reinstall too: the
+    /// mark of the new try binds to its entry as it is then.
+    #[test]
+    fn a_failed_trial_after_a_reinstall_is_found() {
+        let mut flash = ota_data();
+        let mut data = OtaData::read(&mut flash).unwrap();
+        data.choose(&mut flash, 0, State::Valid, 0).unwrap();
+        for _ in 0..3 {
+            idf_install(&mut flash, 1, true);
+            let slot = boot(&mut flash, true);
+            assert_eq!(slot, 1);
+            let mut data = OtaData::read(&mut flash).unwrap();
+            assert_eq!(data.start(&mut flash, slot), Some(Start::Marked { ran: 0 }));
+            // Crashes: given up, CrossPoint runs, the user tries again.
+            assert_eq!(boot(&mut flash, true), 0);
+        }
+        // Without a rollback bootloader the mark is found at the next
+        // start.
+        idf_install(&mut flash, 1, false);
+        let slot = boot(&mut flash, false);
+        let mut data = OtaData::read(&mut flash).unwrap();
+        assert_eq!(data.start(&mut flash, slot), Some(Start::Trial { ran: 0 }));
+        let slot = boot(&mut flash, false);
+        let mut data = OtaData::read(&mut flash).unwrap();
+        assert_eq!(data.start(&mut flash, slot), Some(Start::Failed { ran: 0 }));
+    }
+
+    /// A label an installer left, from the number the entry has: only the
+    /// number changes in the reuse of an entry, so a mark or a time must
+    /// not outlive its number (a reader with another firmware's entries
+    /// too).
+    #[test]
+    fn a_label_does_not_hold_for_another_sequence_number() {
+        let mut entry = Entry::new(4, State::New, 0);
+        entry.set(State::New, 6_000);
+        assert_eq!(entry.trial_ms(), 6_000);
+        entry.set(State::PendingVerify, 6_000);
+        assert!(entry.armed());
+        entry.0[..4].copy_from_slice(&6u32.to_le_bytes());
+        entry.0[28..].copy_from_slice(&crc(6).to_le_bytes());
+        assert!(!entry.armed());
+        assert_eq!(entry.trial_ms(), 0);
+        // A damaged entry is not armed.
+        let mut damaged = Entry::new(4, State::PendingVerify, 0);
+        damaged.0[28] ^= 1;
+        assert!(!damaged.armed());
     }
 
     #[test]
