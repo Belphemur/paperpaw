@@ -8,6 +8,11 @@ change the plugin SDK.
 
 ### Added
 
+- *Readwise Reader*, a new plugin (off at first): fetches the articles saved in Readwise Reader (from *Later* or
+  the *Inbox*, a setting) as HTML books into the folder `Reader`, with their text (no pictures), ten new ones
+  at a time. It asks for the Readwise access token once; articles read to the end are archived in Reader with
+  the next fetch and their books removed (not those with highlights, notes or bookmarks). It keeps within
+  Reader's limit of twenty list requests a minute and stops where Reader asks to wait. It needs no SDK change.
 - *End of book*, a new plugin: when the last page of a book is reached, a screen offers the next book of its
   series (or the library), a rating of one to five (`4 / 5`, kept as a book field and shown as a badge on the
   book's row and on its information page) and whether the book counts as finished. Two settings in the reading

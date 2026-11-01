@@ -78,7 +78,7 @@ impl core::fmt::Debug for StorePlugins<'_> {
 
 /// The ids of the plugins the store offers as files too: built in only
 /// with the feature `store-plugins`.
-pub const STORE_PLUGINS: [&str; 34] = [
+pub const STORE_PLUGINS: [&str; 35] = [
     "aids",
     "battery",
     "browser",
@@ -106,6 +106,7 @@ pub const STORE_PLUGINS: [&str; 34] = [
     "profiles",
     "reading-goal",
     "readwise",
+    "readwise-reader",
     "rules",
     "stats",
     "translate",
@@ -156,6 +157,7 @@ pub static NETWORK_SETTINGS: &[paperpaw_core::NetworkSettings] = paperpaw_core::
     "news",
     "opds",
     "readwise",
+    "readwise-reader",
     "stats",
     "store",
     "transfer",
@@ -260,6 +262,11 @@ pub fn install_with(
         };
         b = offered(b, shipped_off, paperpaw_plugin_browser::Browser);
         b = offered(b, shipped_off, paperpaw_plugin_readwise::Readwise);
+        b = offered(
+            b,
+            shipped_off,
+            paperpaw_plugin_readwise_reader::ReadwiseReader,
+        );
         b = offered(b, shipped_off, paperpaw_plugin_joplin::Joplin);
         b = offered(b, shipped_off, paperpaw_plugin_wallabag::Wallabag);
     }

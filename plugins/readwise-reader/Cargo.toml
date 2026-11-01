@@ -1,0 +1,23 @@
+[package]
+name = "paperpaw-plugin-readwise-reader"
+description = "PaperPaw Readwise Reader: articles saved to read later, fetched as books"
+version = "1.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+categories = ["no-std"]
+
+[dependencies]
+paperpaw-sdk.workspace = true
+
+[dev-dependencies]
+paperpaw-i18n.workspace = true
+paperpaw-core.workspace = true
+paperpaw-platform.workspace = true
+proptest.workspace = true
+
+[lints]
+workspace = true
