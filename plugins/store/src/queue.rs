@@ -133,7 +133,17 @@ fn said(env: &Env<'_>, out: &mut Commands) {
             .collect::<Vec<_>>()
             .join(", ")
     };
-    let (done, not) = (names('+'), names('-'));
+    let (done, mut not) = (names('+'), names('-'));
+    // The faces of Literata have a hint of their own: what helps is the
+    // network, not the store.
+    let styles = name_of(env, crate::styles::PACK);
+    if let Some(rest) = crate::styles::without(&not, &styles) {
+        not = rest;
+        out.push(Command::Notify(
+            env.i18n()
+                .format("store.styles.later", &[("name", Arg::Str(&styles))]),
+        ));
+    }
     if !done.is_empty() {
         out.push(Command::Notify(
             env.i18n()

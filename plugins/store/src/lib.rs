@@ -27,6 +27,7 @@ mod rows;
 mod setup;
 mod shots;
 mod source;
+mod styles;
 mod trust;
 mod view;
 
@@ -185,6 +186,8 @@ impl Plugin for Store {
             if queue::has_quiet(env) {
                 queue::next(env, out);
             }
+            // The faces of Literata the firmware leaves out, fetched once.
+            styles::offer(env, out);
         })?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;

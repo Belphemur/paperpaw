@@ -90,6 +90,14 @@ change the plugin SDK.
 
 ### Changed
 
+- *Literata's bold and italic* are no longer in the firmware of the X4, X3, X4 Pro and X4 Classic (531 KB less, more
+  room for updates and plugins) but a small font pack on the card, the plugin *Literata bold and italic*
+  (`literata-styles`, 0.5 MB, 0 flash). The web flasher puts it on the card with the firmware; after an update
+  or an install from CrossPoint, the store fetches it once by itself as soon as there is a network (the one download
+  it makes unasked; not in Offline mode, three tries at most), says "Added" once, and else shows a short hint. Until
+  the faces are there, bold and italic words are set in the regular face. `literata-large` (36 to 48 px) now
+  extends these faces. A face that a plugin binds to a role is now loaded also when the reading font is the
+  default one (it was, before, only once its family was chosen).
 - New reading setting "Hanging punctuation" (`core.hanging-punctuation`, off by default, in the layout settings): an
   opening quote that starts a line, and a stop, comma, hyphen or closing quote that ends a justified one, are set
   just outside the text, so its edges look straight (optical margin alignment). Lines break as before, so pages hold

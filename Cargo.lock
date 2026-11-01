@@ -1789,9 +1789,11 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-fonts-default"
-version = "1.0.1"
+version = "1.0.2"
 dependencies = [
+ "paperpaw-graphics",
  "paperpaw-i18n",
+ "paperpaw-platform",
  "paperpaw-sdk",
  "paperpaw-text",
 ]
@@ -2274,7 +2276,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-store"
-version = "1.0.3"
+version = "1.0.4"
 dependencies = [
  "paperpaw-core",
  "paperpaw-digest",
@@ -2288,6 +2290,7 @@ dependencies = [
  "paperpaw-plugin-menu",
  "paperpaw-publish",
  "paperpaw-sdk",
+ "paperpaw-text",
 ]
 
 [[package]]

@@ -30,12 +30,14 @@ FONTGEN = ROOT / "target/release/paperpaw-fontgen"
 FONTS = ROOT / "plugins/fonts-default/fonts"
 OTHER_FONTS = ROOT / "tools/fonts"
 
-# Pack, font file, weight, the built-in font it extends.
+# Pack, font file, weight, the font it extends: the firmware's regular
+# face, and the styles that the plugins `literata-styles` and
+# `literata-bold-italic` bring from the card.
 LITERATA = [
     ("literata", FONTS / "Literata.ttf", 400, "fonts-default.literata"),
-    ("literata-bold", FONTS / "Literata.ttf", 700, "fonts-default.literata-bold"),
-    ("literata-italic", FONTS / "Literata-Italic.ttf", 400, "fonts-default.literata-italic"),
-    ("literata-bold-italic", FONTS / "Literata-Italic.ttf", 700, "fonts-default.literata-bold-italic"),
+    ("literata-bold", FONTS / "Literata.ttf", 700, "literata-styles.bold"),
+    ("literata-italic", FONTS / "Literata-Italic.ttf", 400, "literata-styles.italic"),
+    ("literata-bold-italic", FONTS / "Literata-Italic.ttf", 700, "literata-bold-italic.bold-italic"),
 ]
 
 
@@ -44,9 +46,9 @@ def upright(name, file):
     of Literata's, and the regular one for the interface's font."""
     return [
         (name, file, 400, "fonts-default.literata"),
-        (f"{name}-bold", file, 700, "fonts-default.literata-bold"),
-        (f"{name}-italic", file, 400, "fonts-default.literata-italic"),
-        (f"{name}-bold-italic", file, 700, "fonts-default.literata-bold-italic"),
+        (f"{name}-bold", file, 700, "literata-styles.bold"),
+        (f"{name}-italic", file, 400, "literata-styles.italic"),
+        (f"{name}-bold-italic", file, 700, "literata-bold-italic.bold-italic"),
         (f"{name}-sans", file, 400, "fonts-default.source-sans"),
     ]
 
