@@ -227,6 +227,10 @@ struct Panel {
     asked: bool,
     /// No key yet: a tap asks for it.
     needs_key: bool,
+    /// Offline mode: the offer to go online, and whether the text waits
+    /// for it.
+    online: ui::offline::OfflineOffer,
+    waiting: bool,
 }
 
 impl Panel {
@@ -244,6 +248,8 @@ impl Panel {
             top: 0,
             asked: false,
             needs_key: false,
+            online: ui::offline::OfflineOffer::new(),
+            waiting: false,
         };
         panel.heading = panel.heading(env);
         let loading = env.i18n().tr("translate.loading").to_string();
@@ -307,8 +313,61 @@ impl Panel {
             cx.request_redraw();
             return;
         }
+        // Offline mode: asked first, once.
+        if self.online.shows(env) {
+            self.waiting = true;
+            cx.request_redraw();
+            return;
+        }
+        self.send(env, key, cx);
+    }
+
+    /// Sends the text off with `key`.
+    fn send(&self, env: &Env<'_>, key: &str, cx: &mut Cx<'_, '_>) {
         let to = target(env.settings().read(&TO), env.i18n().language());
         cx.command(Command::http(request(key, &self.original, &to)));
+    }
+
+    /// Whether the offer to go online shows in place of the text.
+    fn offering(&self, env: &Env<'_>) -> bool {
+        self.waiting && self.online.shows(env)
+    }
+
+    /// Where the offer goes: under the header.
+    fn offer_area(&self) -> Rect {
+        let header = self.header();
+        Rect::new(
+            self.region.x,
+            header.y + header.height,
+            self.region.width,
+            self.region.height.saturating_sub(header.height),
+        )
+    }
+
+    /// What the reader chose on the offer: the text is sent, or said to
+    /// need the network.
+    fn offered(&mut self, chosen: Option<ui::offline::Offer>, cx: &mut Cx<'_, '_>) {
+        let Some(chosen) = chosen else {
+            return;
+        };
+        self.waiting = false;
+        let env = *cx.env();
+        match chosen {
+            ui::offline::Offer::Online => {
+                let key = env
+                    .secrets()
+                    .get(KEY.as_str())
+                    .unwrap_or_default()
+                    .to_string();
+                self.send(&env, &key, cx);
+            }
+            _ => {
+                let text = env.i18n().tr("translate.no-network").to_string();
+                self.set_text(&env, text);
+            }
+        }
+        cx.request_redraw();
+        cx.request_refresh(RefreshMode::Partial);
     }
 
     /// Asks for the key on the keyboard.
@@ -388,7 +447,7 @@ impl Screen for Panel {
     /// *Select* closes it, or asks for the key while there is none; the
     /// arrows scroll.
     fn hint(&self, action: &Id, env: &Env<'_>) -> paperpaw_sdk::Hint {
-        if *action == actions::CONFIRM && !self.needs_key {
+        if *action == actions::CONFIRM && !self.needs_key && !self.offering(env) {
             paperpaw_sdk::Hint::Text(env.i18n().tr("core.hint.close").to_string())
         } else {
             paperpaw_sdk::Hint::Default
@@ -427,6 +486,9 @@ impl Screen for Panel {
             .px(style.title())
             .color(Color::BLACK)
             .draw_from(&mut ui, margin, header);
+        if self.offering(env) {
+            return self.online.draw(&mut ui, self.offer_area());
+        }
         let height = self.line_height(env);
         let ascent = font.line_metrics(style.text()).ascent;
         let top = f32::from(header.y + header.height) + style.gap() as f32 / 2.0;
@@ -485,6 +547,11 @@ impl Screen for Panel {
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let env = *cx.env();
         let a = action;
+        if *a != actions::BACK && self.offering(&env) {
+            let chosen = self.online.on_action(a, cx).done();
+            self.offered(chosen, cx);
+            return Handled::Yes;
+        }
         if [
             actions::NEXT_PAGE,
             actions::DOWN,
@@ -520,6 +587,11 @@ impl Screen for Panel {
             return Handled::No;
         }
         let env = *cx.env();
+        if self.offering(&env) {
+            let chosen = self.online.on_gesture(&gesture, cx).done();
+            self.offered(chosen, cx);
+            return Handled::Yes;
+        }
         if self.needs_key {
             self.ask_key(&env, cx);
             return Handled::Yes;

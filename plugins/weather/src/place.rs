@@ -47,6 +47,10 @@ pub(crate) struct PlaceScreen {
     search: Search,
     /// The keyboard was opened at once (no place was set).
     asked: bool,
+    /// Offline mode: the offer to go online, and the name to search for
+    /// then.
+    offer: ui::offline::OfflineOffer,
+    waiting: Option<String>,
 }
 
 impl PlaceScreen {
@@ -63,6 +67,8 @@ impl PlaceScreen {
             places: Vec::new(),
             search: Search::Idle,
             asked: false,
+            offer: ui::offline::OfflineOffer::new(),
+            waiting: None,
         }
     }
 
@@ -77,6 +83,39 @@ impl PlaceScreen {
     fn redraw(cx: &mut Cx<'_, '_>) {
         cx.request_redraw();
         cx.request_refresh(RefreshMode::Partial);
+    }
+
+    /// Whether the offer to go online shows (Offline mode, a name to
+    /// search for).
+    fn offering(&self, env: &Env<'_>) -> bool {
+        self.waiting.is_some() && self.offer.shows(env)
+    }
+
+    /// Searches for `name`.
+    fn find(&mut self, name: String, env: &Env<'_>, cx: &mut Cx<'_, '_>) {
+        let url = data::search_url(&name, env.i18n().language());
+        let request = HttpRequest::new("GET", &url, SEARCHED).header(
+            String::from("User-Agent"),
+            String::from("PaperPaw/0.1 (e-reader)"),
+        );
+        cx.command(Command::http(request));
+        self.search = Search::Searching(name);
+    }
+
+    /// What the reader chose on the offer: the search is sent, or said to
+    /// need the network.
+    fn offered(&mut self, chosen: Option<ui::offline::Offer>, cx: &mut Cx<'_, '_>) {
+        let (Some(chosen), Some(name)) = (chosen, self.waiting.take()) else {
+            return;
+        };
+        match chosen {
+            ui::offline::Offer::Online => {
+                let env = *cx.env();
+                self.find(name, &env, cx);
+            }
+            _ => self.search = Search::NoNetwork,
+        }
+        Self::redraw(cx);
     }
 
     fn ask(&self, env: &Env<'_>, cx: &mut Cx<'_, '_>) {
@@ -176,6 +215,9 @@ impl Screen for PlaceScreen {
             None,
             self.list.paging(len),
         );
+        if self.offering(env) {
+            return self.offer.draw(&mut ui, self.list.area());
+        }
         let places = &self.places;
         let note = self.note(env);
         self.list.draw(&mut ui, len, |ui, row, rect, focused| {
@@ -213,6 +255,11 @@ impl Screen for PlaceScreen {
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let env = *cx.env();
+        if *action != actions::BACK && self.offering(&env) {
+            let chosen = self.offer.on_action(action, cx).done();
+            self.offered(chosen, cx);
+            return Handled::Yes;
+        }
         let len = self.len(&env);
         let rows = self.list.rows() as isize;
         let delta = if let Some(delta) = ui::list_step(action, rows) {
@@ -239,6 +286,11 @@ impl Screen for PlaceScreen {
             cx.command(Command::run(action));
             return Handled::Yes;
         }
+        if self.offering(&env) {
+            let chosen = self.offer.on_gesture(&gesture, cx).done();
+            self.offered(chosen, cx);
+            return Handled::Yes;
+        }
         let Some(row) = self.list.hit(gesture.start, len) else {
             return Handled::No;
         };
@@ -261,14 +313,11 @@ impl Screen for PlaceScreen {
             self.list.set_focus(0);
             if !env.caps().network {
                 self.search = Search::NoNetwork;
+            } else if self.offer.shows(&env) {
+                // Offline mode: asked first, once.
+                self.waiting = Some(name);
             } else {
-                let url = data::search_url(&name, env.i18n().language());
-                let request = HttpRequest::new("GET", &url, SEARCHED).header(
-                    String::from("User-Agent"),
-                    String::from("PaperPaw/0.1 (e-reader)"),
-                );
-                cx.command(Command::http(request));
-                self.search = Search::Searching(name);
+                self.find(name, &env, cx);
             }
             Self::redraw(cx);
         } else if let Some(reply) = SEARCHED.read(event, params) {

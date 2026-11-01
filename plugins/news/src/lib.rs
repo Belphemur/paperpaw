@@ -513,6 +513,10 @@ struct FeedsScreen {
     /// Whether the list of feeds could be read: if not, it is not
     /// changed either.
     readable: bool,
+    /// Offline mode: the offer to go online, and the fetch (the feed to
+    /// start at, and whether the ones after it too) that waits for it.
+    online: ui::offline::OfflineOffer,
+    waiting: Option<(usize, bool)>,
 }
 
 impl FeedsScreen {
@@ -535,7 +539,41 @@ impl FeedsScreen {
             header,
             readable: feeds.is_ok(),
             feeds: feeds.unwrap_or_default(),
+            online: ui::offline::OfflineOffer::new(),
+            waiting: None,
         }
+    }
+
+    /// Fetches from feed `from`, once the reader has been asked whether to
+    /// go online, in Offline mode.
+    fn fetch(&mut self, from: usize, all: bool, cx: &mut Cx<'_, '_>) {
+        let env = *cx.env();
+        if env.caps().network && self.online.shows(&env) {
+            self.waiting = Some((from, all));
+            return self.redraw(cx);
+        }
+        fetch_into(&env, from, all, cx);
+    }
+
+    /// Whether the offer to go online shows in place of the list.
+    fn offering(&self, env: &Env<'_>) -> bool {
+        self.waiting.is_some() && self.online.shows(env)
+    }
+
+    /// What the reader chose on the offer: the fetch starts, or is told
+    /// to need the network.
+    fn offered(&mut self, chosen: Option<ui::offline::Offer>, cx: &mut Cx<'_, '_>) {
+        let (Some(chosen), Some((from, all))) = (chosen, self.waiting.take()) else {
+            return;
+        };
+        let env = *cx.env();
+        match chosen {
+            ui::offline::Offer::Online => fetch_into(&env, from, all, cx),
+            _ => cx.command(Command::Notify(
+                env.i18n().tr("news.no-network").to_string(),
+            )),
+        }
+        self.redraw(cx);
     }
 
     fn len(&self) -> usize {
@@ -568,7 +606,7 @@ impl FeedsScreen {
             return;
         }
         if row == 0 {
-            fetch_into(&env, 0, true, cx);
+            self.fetch(0, true, cx);
             return;
         }
         let index = row - 1;
@@ -578,7 +616,7 @@ impl FeedsScreen {
         if let Some(book) = feed.found_book(env.storage(), &folder(&env)) {
             cx.command(paperpaw_sdk::readers::open(book));
         } else {
-            fetch_into(&env, index, false, cx);
+            self.fetch(index, false, cx);
         }
     }
 
@@ -615,6 +653,9 @@ impl Screen for FeedsScreen {
             None,
             self.list.paging(len),
         );
+        if self.offering(env) {
+            return self.online.draw(&mut ui, self.list.area());
+        }
         let feeds = &self.feeds;
         self.list.draw(&mut ui, len, |ui, row, rect, focused| {
             let (title, value, note) = if row + 1 == len {
@@ -656,6 +697,11 @@ impl Screen for FeedsScreen {
         let len = self.len();
         let rows = self.list.rows() as isize;
         let a = action;
+        if *a != actions::BACK && self.offering(cx.env()) {
+            let chosen = self.online.on_action(a, cx).done();
+            self.offered(chosen, cx);
+            return Handled::Yes;
+        }
         let delta = if let Some(delta) = ui::list_step(a, rows) {
             delta
         } else if *a == actions::CONFIRM {
@@ -681,6 +727,11 @@ impl Screen for FeedsScreen {
                     .tap(&env, &self.style, gesture.start, self.list.paging(len))
         {
             cx.command(Command::run(action));
+            return Handled::Yes;
+        }
+        if self.offering(&env) {
+            let chosen = self.online.on_gesture(&gesture, cx).done();
+            self.offered(chosen, cx);
             return Handled::Yes;
         }
         let Some(row) = self.list.hit(gesture.start, len) else {
@@ -722,7 +773,7 @@ impl Screen for FeedsScreen {
                     self.feeds.len() - 1
                 }
             };
-            fetch_into(&env, index, false, cx);
+            self.fetch(index, false, cx);
             self.redraw(cx);
         } else if let Some(picked) = CHOSEN.read(event, params) {
             let Ok(index) = picked.path.parse::<usize>() else {
@@ -730,7 +781,7 @@ impl Screen for FeedsScreen {
             };
             match picked.option.as_str() {
                 "open" => self.open(index + 1, cx),
-                "fetch" => fetch_into(&env, index, false, cx),
+                "fetch" => self.fetch(index, false, cx),
                 "remove" if !self.readable => {
                     cx.command(Command::Notify(
                         env.i18n().tr("news.unreadable").to_string(),

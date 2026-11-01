@@ -128,6 +128,10 @@ pub(crate) struct UpdatePage {
     /// The help text scrolled, where it does not fit whole even smaller
     /// (the largest text), and where it is.
     help: Option<(ui::TextView, Rect)>,
+    /// Offline mode: the offer to go online, and the button (*Check* or
+    /// *Download*) that waits for it.
+    online: ui::offline::OfflineOffer,
+    waiting: Option<Button>,
 }
 
 /// The text for why an update cannot be installed.
@@ -158,6 +162,8 @@ impl UpdatePage {
             shown: ui::focus_shown(env),
             anyway: false,
             help: None,
+            online: ui::offline::OfflineOffer::new(),
+            waiting: None,
         };
         page.view = page.look_noted(env);
         page
@@ -653,8 +659,32 @@ impl UpdatePage {
         cx.request_refresh(mode);
     }
 
+    /// Whether the offer to go online shows in place of the page.
+    fn offering(&self, env: &Env<'_>) -> bool {
+        self.waiting.is_some() && self.online.shows(env)
+    }
+
+    /// What the reader chose on the offer: the button's work goes on, or
+    /// the page stays as it was.
+    fn offered(&mut self, chosen: Option<ui::offline::Offer>, cx: &mut Cx<'_, '_>) {
+        let (Some(chosen), Some(button)) = (chosen, self.waiting.take()) else {
+            return;
+        };
+        match chosen {
+            ui::offline::Offer::Online => self.choose(button, cx),
+            _ => self.redraw(cx, RefreshMode::Partial),
+        }
+    }
+
     fn choose(&mut self, button: Button, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
+        // Offline mode: asked first, once, before the network is used.
+        let goes_out = button == Button::Check
+            || (button == Button::Download && !matches!(self.view, View::Waiting { .. }));
+        if goes_out && self.online.shows(&env) {
+            self.waiting = Some(button);
+            return self.redraw(cx, RefreshMode::Partial);
+        }
         match button {
             Button::Close => cx.command(Command::Back),
             Button::Transfer => cx.command(Command::run(TRANSFER)),
@@ -861,6 +891,16 @@ impl Screen for UpdatePage {
         let mut ui = ui::Ui::new(canvas, env, &style);
         self.header
             .draw(&mut ui, env.i18n().tr("update.title"), None, None);
+        if self.offering(env) {
+            let top = self.header.area().height + style.gap();
+            let area = Rect::new(
+                0,
+                top,
+                env.device().display.width,
+                env.device().display.height.saturating_sub(top),
+            );
+            return self.online.draw(&mut ui, area);
+        }
         // Within the margins other pages keep, below the header as their
         // content.
         let margin = style.margin();
@@ -943,7 +983,10 @@ impl Screen for UpdatePage {
             // Held: the install must not be left half way.
             return Handled::Yes;
         }
-        if *a == actions::BACK {
+        if *a != actions::BACK && self.offering(cx.env()) {
+            let chosen = self.online.on_action(a, cx).done();
+            self.offered(chosen, cx);
+        } else if *a == actions::BACK {
             cx.command(Command::Back);
         } else if [actions::PREV_PAGE, actions::NEXT_PAGE].contains(a)
             && let Some((view, _)) = &mut self.help
@@ -974,6 +1017,11 @@ impl Screen for UpdatePage {
     fn on_gesture(&mut self, gesture: Gesture, cx: &mut Cx<'_, '_>) -> Handled {
         if matches!(self.view, View::Installing { .. } | View::Installed) {
             return Handled::No;
+        }
+        if self.offering(cx.env()) {
+            let chosen = self.online.on_gesture(&gesture, cx).done();
+            self.offered(chosen, cx);
+            return Handled::Yes;
         }
         // On the help text scrolled: it scrolls.
         if let Some((view, area)) = &mut self.help

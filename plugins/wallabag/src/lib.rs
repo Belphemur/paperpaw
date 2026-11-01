@@ -775,6 +775,10 @@ struct SetupScreen {
     list: ListView,
     note: Rect,
     message: String,
+    /// Offline mode: the offer to go online, and whether *Fetch articles*
+    /// waits for it.
+    online: ui::offline::OfflineOffer,
+    waiting: bool,
 }
 
 impl SetupScreen {
@@ -798,15 +802,53 @@ impl SetupScreen {
                 display.height.saturating_sub(note_top),
             ),
             message: env.i18n().tr("wallabag.help").to_string(),
+            online: ui::offline::OfflineOffer::new(),
+            waiting: false,
             style,
             header,
         }
     }
 
+    /// Where the offer goes: from the rows' top to the bottom.
+    fn offer_area(&self, env: &Env<'_>) -> Rect {
+        let top = self.list.area().y;
+        let display = env.device().display;
+        Rect::new(0, top, display.width, display.height.saturating_sub(top))
+    }
+
+    /// Whether the offer to go online shows in place of the rows.
+    fn offering(&self, env: &Env<'_>) -> bool {
+        self.waiting && self.online.shows(env)
+    }
+
+    /// What the reader chose on the offer: the fetch starts, or is told
+    /// to need the network.
+    fn offered(&mut self, chosen: Option<ui::offline::Offer>, cx: &mut Cx<'_, '_>) {
+        let Some(chosen) = chosen else {
+            return;
+        };
+        self.waiting = false;
+        match chosen {
+            ui::offline::Offer::Online => cx.command(Command::run(FETCH)),
+            _ => self.message = cx.env().i18n().tr("wallabag.no-network").to_string(),
+        }
+        cx.request_redraw();
+        cx.request_refresh(RefreshMode::Fast);
+    }
+
     fn activate(&mut self, row: Row, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         if row == Row::Fetch {
-            cx.command(Command::run(FETCH));
+            // Offline mode: asked first, once, where a fetch could start.
+            let set_up =
+                env.secrets().get(PASSWORD).is_some() && env.secrets().get(SECRET).is_some();
+            if env.caps().network && set_up && self.online.shows(&env) {
+                self.waiting = true;
+                cx.request_redraw();
+                cx.request_refresh(RefreshMode::Fast);
+            } else {
+                cx.command(Command::run(FETCH));
+            }
             return;
         }
         let (text, password) = match row {
@@ -833,6 +875,9 @@ impl Screen for SetupScreen {
         let mut ui = ui::Ui::new(canvas, env, &style);
         let title = env.i18n().tr("wallabag.title");
         self.header.draw(&mut ui, title, None, None);
+        if self.offering(env) {
+            return self.online.draw(&mut ui, self.offer_area(env));
+        }
         self.list
             .draw(&mut ui, ROWS.len(), |ui, index, rect, focused| {
                 let row = ROWS[index];
@@ -864,6 +909,11 @@ impl Screen for SetupScreen {
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let a = action;
+        if *a != actions::BACK && self.offering(cx.env()) {
+            let chosen = self.online.on_action(a, cx).done();
+            self.offered(chosen, cx);
+            return Handled::Yes;
+        }
         let delta = if [actions::UP, actions::LEFT, actions::PREVIOUS].contains(a) {
             -1
         } else if [actions::DOWN, actions::RIGHT, actions::NEXT].contains(a) {
@@ -884,6 +934,11 @@ impl Screen for SetupScreen {
         }
         if let Some(action) = self.header.tap(cx.env(), &self.style, gesture.start, None) {
             cx.command(Command::run(action));
+            return Handled::Yes;
+        }
+        if self.offering(cx.env()) {
+            let chosen = self.online.on_gesture(&gesture, cx).done();
+            self.offered(chosen, cx);
             return Handled::Yes;
         }
         let Some(index) = self.list.hit(gesture.start, ROWS.len()) else {

@@ -54,6 +54,8 @@ pub(crate) struct ListScreen {
     /// The download going on, kept here: drawing reads nothing from the
     /// storage.
     job: Option<Progress>,
+    /// Offline mode: the offer to go online for the catalog.
+    offer: ui::offline::OfflineOffer,
 }
 
 impl ListScreen {
@@ -78,6 +80,7 @@ impl ListScreen {
             trouble: Trouble::None,
             asked: false,
             job: INSTALLER.progress(env.storage()),
+            offer: ui::offline::OfflineOffer::new(),
             style,
             header,
         }
@@ -86,6 +89,11 @@ impl ListScreen {
     fn redraw(&self, cx: &mut Cx<'_, '_>) {
         cx.request_redraw();
         cx.request_refresh(RefreshMode::Partial);
+    }
+
+    /// Whether the offer to go online shows: no list, for Offline mode.
+    fn offering(&self, env: &Env<'_>) -> bool {
+        self.fonts.is_empty() && self.trouble == Trouble::Offline && self.offer.shows(env)
     }
 
     /// Fetches the catalog anew.
@@ -220,6 +228,9 @@ impl Screen for ListScreen {
         let mut ui = ui::Ui::new(canvas, env, &style);
         self.header
             .draw(&mut ui, title, None, self.list.paging(len));
+        if self.offering(env) {
+            return self.offer.draw(&mut ui, self.list.area());
+        }
         if len == 0 {
             let (icon, title, text) = match self.trouble {
                 Trouble::Offline => (
@@ -297,6 +308,12 @@ impl Screen for ListScreen {
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
+        if *action != actions::BACK && self.offering(cx.env()) {
+            if self.offer.on_action(action, cx).done() == Some(ui::offline::Offer::Online) {
+                self.fetch(cx);
+            }
+            return Handled::Yes;
+        }
         let len = self.fonts.len();
         if let Some(change) = self.list.navigate(action, len) {
             self.move_focus(change, cx);
@@ -319,6 +336,12 @@ impl Screen for ListScreen {
             .tap(cx.env(), &self.style, gesture.start, paging)
         {
             cx.command(Command::run(action));
+            return Handled::Yes;
+        }
+        if self.offering(cx.env()) {
+            if self.offer.on_gesture(&gesture, cx).done() == Some(ui::offline::Offer::Online) {
+                self.fetch(cx);
+            }
             return Handled::Yes;
         }
         if len == 0 && self.list.area().contains(gesture.start) {

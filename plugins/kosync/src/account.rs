@@ -65,6 +65,10 @@ pub(crate) struct AccountScreen {
     /// Waiting for the server.
     busy: bool,
     message: String,
+    /// Offline mode: the offer to go online, and the row (*Sign in* or
+    /// *Create*) that waits for it.
+    online: ui::offline::OfflineOffer,
+    waiting: Option<Row>,
 }
 
 impl AccountScreen {
@@ -91,6 +95,8 @@ impl AccountScreen {
             signed_in,
             busy: false,
             message: String::new(),
+            online: ui::offline::OfflineOffer::new(),
+            waiting: None,
         };
         screen.message = screen.state_message(env);
         screen
@@ -151,6 +157,26 @@ impl AccountScreen {
         }
     }
 
+    /// Whether the offer to go online shows in place of the rows.
+    fn offering(&self, env: &Env<'_>) -> bool {
+        self.waiting.is_some() && self.online.shows(env)
+    }
+
+    /// What the reader chose on the offer: the server is asked, or the
+    /// screen says it needs the network.
+    fn offered(&mut self, chosen: Option<ui::offline::Offer>, cx: &mut Cx<'_, '_>) {
+        let (Some(chosen), Some(row)) = (chosen, self.waiting.take()) else {
+            return;
+        };
+        match chosen {
+            ui::offline::Offer::Online => self.activate(row, cx),
+            _ => {
+                let message = cx.env().i18n().tr("kosync.no-network").to_string();
+                self.show(cx, message);
+            }
+        }
+    }
+
     fn show(&mut self, cx: &mut Cx<'_, '_>, message: String) {
         self.message = message;
         cx.request_redraw();
@@ -183,6 +209,13 @@ impl AccountScreen {
                 let Some(key) = self.key.clone().filter(|_| !self.user.is_empty()) else {
                     return self.show(cx, env.i18n().tr("kosync.missing").to_string());
                 };
+                // Offline mode: asked first, once.
+                if self.online.shows(&env) {
+                    self.waiting = Some(row);
+                    cx.request_redraw();
+                    cx.request_refresh(RefreshMode::Fast);
+                    return;
+                }
                 let request = if row == Row::SignIn {
                     let auth = Some((self.user.as_str(), key.as_str()));
                     server_request(
@@ -267,6 +300,16 @@ impl Screen for AccountScreen {
         self.list.set_len(rows.len());
         let title = env.i18n().tr("kosync.group");
         self.header.draw(&mut ui, title, None, None);
+        if self.offering(env) {
+            let top = self.list_area.y;
+            let area = Rect::new(
+                0,
+                top,
+                env.device().display.width,
+                env.device().display.height.saturating_sub(top),
+            );
+            return self.online.draw(&mut ui, area);
+        }
         let i18n = env.i18n();
         self.list
             .draw(&mut ui, rows.len(), |ui, index, rect, focused| {
@@ -300,6 +343,11 @@ impl Screen for AccountScreen {
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let rows = self.rows(cx.env());
         let a = action;
+        if *a != actions::BACK && self.offering(cx.env()) {
+            let chosen = self.online.on_action(a, cx).done();
+            self.offered(chosen, cx);
+            return Handled::Yes;
+        }
         let delta = if *a == actions::UP || *a == actions::LEFT || *a == actions::PREVIOUS {
             -1
         } else if *a == actions::DOWN || *a == actions::RIGHT || *a == actions::NEXT {
@@ -322,6 +370,11 @@ impl Screen for AccountScreen {
         }
         if let Some(action) = self.header.tap(cx.env(), &self.style, gesture.start, None) {
             cx.command(Command::run(action));
+            return Handled::Yes;
+        }
+        if self.offering(cx.env()) {
+            let chosen = self.online.on_gesture(&gesture, cx).done();
+            self.offered(chosen, cx);
             return Handled::Yes;
         }
         let rows = self.rows(cx.env());
