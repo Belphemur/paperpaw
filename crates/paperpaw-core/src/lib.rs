@@ -470,6 +470,9 @@ impl Kernel {
     /// Handles an input event.
     pub fn handle(&mut self, now: Instant, event: InputEvent) -> Effects {
         let _running = self.shared.meter.enter(meter::CORE);
+        if hovering(&event) {
+            return self.finish();
+        }
         self.shared.reader = true;
         if self.stale(now, &event) {
             return self.finish();
@@ -1466,6 +1469,18 @@ impl Shared {
             look: self.look.0,
         })
     }
+}
+
+/// A pen above the screen (reserved): no screen hears it yet, and it is
+/// not the reader's doing.
+fn hovering(event: &InputEvent) -> bool {
+    matches!(
+        event,
+        InputEvent::Pointer(PointerEvent {
+            phase: PointerPhase::Hover,
+            ..
+        })
+    )
 }
 
 /// `text` cut to what the clipboard holds, at a character boundary.

@@ -110,6 +110,7 @@ pub const paperpaw_native::signature::SIGNATURE_FORMAT: u16
 pub const paperpaw_native::signature::SIGNATURE_LEN: usize
 pub const paperpaw_native::signature::SIGNATURE_MAGIC: [u8; 4]
 pub fn paperpaw_native::signature::public_key(&[u8; 32]) -> [u8; 32]
+pub fn paperpaw_native::signature::revocation_message(&str, &[u8; 32]) -> alloc::string::String
 pub fn paperpaw_native::signature::rotation_message(&str, &[u8; 32], &[u8; 32]) -> alloc::string::String
 pub fn paperpaw_native::signature::sign(&[u8], &[u8; 32]) -> paperpaw_native::signature::Signature
 pub fn paperpaw_native::signature::sign_message(&[u8], &[u8; 32]) -> [u8; 64]

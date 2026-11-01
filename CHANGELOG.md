@@ -6,12 +6,11 @@ change the plugin SDK.
 
 ## [Unreleased]
 
-**Plugins of this release must be built from `ba270129` or later** (the interface 5 amendment, #259). The plugin
-fingerprint changed with its bless (`0005c55d0a4fa341`), so plugins built at `60752ff6` are refused; but shared
-UI and text bodies changed after the bless without changing the fingerprint (the right-to-left mirroring, digits,
-Hangul composition), so a plugin built from a commit between the bless (`26bdc02c`) and `ba270129` loads and keeps old
-copies that no longer agree with them (in a right-to-left language, taps on a switch miss). Store, test-card and
-Workshop builds from those commits are thrown away.
+**Plugins of this release must be built from `e5f4a41a` or later** (the interface 5 amendment, #259). The plugin
+fingerprint changed with its bless, so plugins built at `60752ff6` are refused; shared UI and text bodies changed
+after the bless without changing the fingerprint (the right-to-left mirroring, digits, Hangul composition), and the
+fingerprint changed once more with the pen and TLS reservations (`e5f4a41a`, #81), so plugins built before it are
+refused too. Store, test-card and Workshop builds from commits before `e5f4a41a` are thrown away.
 
 ### Added
 
@@ -112,10 +111,22 @@ Workshop builds from those commits are thrown away.
 - Author keys: a recovery key chosen in advance moves a plugin to a new key by a statement the device checks
   itself (`paperpaw-sign rotation`; SDK `native::keys`: `remember_first_install`, `rotation_message`,
   `accept_rotation`; `install::Marks::recovery`), and the code of an author whose key the store revoked does not
-  run (`PluginProblem::Revoked`, `keys::keep_revoked`, which only adds). The recovery key is pinned only with the
-  first install, and code installed before a rotation does not run until an update by the new key. The store
-  does not offer either yet; it calls `keys::keep_revoked` with its library's list and `keys::accept_rotation`
-  with a statement that came with an update (both plugin-facing; the recovery key arrives with the install marks).
+  run (`PluginProblem::Revoked`, `keys::keep_revoked`, which only adds). A revocation is a statement
+  (`keys::Revocation`, `paperpaw-sign revocation`) signed by the revoked key itself or by the plugin's recovery
+  key, about the key pinned as its author on the device; any other is left out, and the list is checked again where
+  it is read, so no taken-over library can revoke another author's key (installed plugins are trusted: they have the card). A revocation stops that plugin
+  alone (`keys::is_revoked(storage, plugin)`), not others the same key signed. The recovery key is pinned only with
+  the first install, and code installed before a rotation does not run until an update by the new key: install marks
+  never move a known author to another key, and name code as installed only where the author pinned then signed it. The store
+  does not offer either yet; it calls `keys::keep_revoked` with its library's revocations and `keys::accept_rotation`
+  with a statement that came with an update (both plugin-facing; the recovery key arrives with the install marks;
+  `keys::check_rotation` says beforehand, without writing, whether a rotation would be taken).
+- Reserved for devices and plugins to come, so they need no new interface: a pen above the screen
+  (`PointerPhase::Hover`, which the kernel passes to no screen yet) and how it leans (`PointerEvent::tilt_x`,
+  `tilt_y`, `with_tilt`; `Capability::PEN_HOVER`, `PEN_TILT`); TLS sockets (`SocketNotice::Secured`, `Untrusted`
+  with the certificate's SHA-256; `socket_params::SECURED`, `UNTRUSTED`, `CERTIFICATE`), whose commands will come
+  as `Command::Extended` (#81). The layout digest now also holds where `PointerEvent`'s fields lie (its size hid
+  the new ones), so the plugin fingerprint changed: build plugins from the baseline below or later.
 - Layout `VERSION` 11: books cached before are laid out anew once, so drop capitals and the new list markers show
   in them too. SDK, for real tables: `BlockKind::TableRow`, `Block::table` (`TableRow`, `TableCell`, `MAX_COLUMNS`:
   a row's cells, the table's column weights, header, first and last row) and `Page::rules` (`PageRule`: thin lines

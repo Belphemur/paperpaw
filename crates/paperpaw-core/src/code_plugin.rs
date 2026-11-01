@@ -183,7 +183,8 @@ impl Kernel {
                 .filter(|id| !disabled.iter().any(|off| off == id.as_str())),
         )
         .unwrap_or_default();
-        // Keys the store said were stolen: their authors' code does not run.
+        // Plugins whose author's key was revoked (stolen): their code does
+        // not run.
         let revoked = paperpaw_sdk::native::keys::revoked(storage.as_ref());
         for plugin in found {
             let manifest = plugin.manifest();
@@ -202,10 +203,9 @@ impl Kernel {
                 self.list_code_plugin(&plugin, disabled, PluginState::Failed, problem);
                 continue;
             };
-            if !revoked.is_empty()
-                && paperpaw_sdk::native::known_author(storage.as_ref(), id.as_str())
-                    .is_some_and(|key| revoked.contains(&key))
-            {
+            // Per plugin: a revocation holds for the author pinned for
+            // this plugin, not for others its key signed.
+            if revoked.iter().any(|r| r.plugin == id.as_str()) {
                 let message = format!("{path}: its author's key is revoked; not loaded");
                 self.warn(WarningSource::Plugin(id.clone()), None, message);
                 let problem = PluginProblem::Revoked;
@@ -596,19 +596,30 @@ mod tests {
         assert_eq!(info(&kernel, "zeta").state, PluginState::Running);
     }
 
-    /// The code of an author whose key the store said was revoked does
-    /// not run, and is not even read; the others' does.
+    /// The code of a plugin whose author's key was revoked for it does not
+    /// run, and is not even read; another plugin's does, even one signed
+    /// by the same key (revoked per plugin, review M1 of #277).
     #[test]
     fn code_of_a_revoked_key_does_not_run() {
+        use paperpaw_native::signature::{public_key, sign_message};
+        use paperpaw_sdk::native::keys::{self, Revocation};
         let loader = loader();
         let storage = storage();
+        let seed = [5; 32];
+        let hello = public_key(&seed);
         assert!(paperpaw_sdk::native::remember_author(
-            &storage, "hello", &[5; 32]
+            &storage, "hello", &hello
         ));
+        // zeta is signed by the same key, revoked for hello alone.
         assert!(paperpaw_sdk::native::remember_author(
-            &storage, "zeta", &[6; 32]
+            &storage, "zeta", &hello
         ));
-        assert!(paperpaw_sdk::native::keys::keep_revoked(&storage, &[[5; 32]]).is_ok());
+        // Revoked by the author's key itself.
+        let message = keys::revocation_message("hello", &hello);
+        let signature = sign_message(message.as_bytes(), &seed);
+        let revocation = Revocation::new("hello", hello, signature);
+        assert!(keys::keep_revoked(&storage, &[revocation]).is_ok());
+        assert_eq!(keys::revoked(&storage)[0].key, hello);
         let kernel = Kernel::builder(DEVICE)
             .storage(storage)
             .code_plugins(Native::new("code.ppn"), Box::new(loader.clone()))
@@ -640,7 +651,12 @@ mod tests {
             &[5; 32],
             &public_key(&recovery)
         ));
-        assert!(keys::keep_revoked(&storage, &[[5; 32]]).is_ok());
+        // The stolen key revoked with the recovery key.
+        let message = keys::revocation_message("hello", &[5; 32]);
+        let signature = sign_message(message.as_bytes(), &recovery);
+        let revocation = keys::Revocation::new("hello", [5; 32], signature);
+        assert!(keys::keep_revoked(&storage, &[revocation]).is_ok());
+        assert!(keys::is_revoked(&storage, "hello"));
         let message = keys::rotation_message("hello", &[5; 32], &[8; 32]);
         let signature = sign_message(message.as_bytes(), &recovery);
         assert_eq!(

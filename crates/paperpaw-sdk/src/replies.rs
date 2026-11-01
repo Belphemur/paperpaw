@@ -589,6 +589,19 @@ pub enum SocketNotice {
         socket: Id,
         reason: String,
     },
+    /// The socket is encrypted (TLS) from now on: what is sent and
+    /// received goes so. Reserved: no kernel opens TLS sockets yet.
+    Secured {
+        socket: Id,
+    },
+    /// The server's certificate is not trusted (not signed by a known
+    /// authority, nor the one pinned for it), and the socket closed;
+    /// `certificate` is its SHA-256 (hex), for the reader to check and pin.
+    /// Reserved: no kernel opens TLS sockets yet.
+    Untrusted {
+        socket: Id,
+        certificate: String,
+    },
 }
 
 impl SocketNotice {
@@ -601,7 +614,9 @@ impl SocketNotice {
             | SocketNotice::Closed { socket, .. }
             | SocketNotice::Failed { socket, .. }
             | SocketNotice::Answer { socket, .. }
-            | SocketNotice::Done { socket, .. } => socket,
+            | SocketNotice::Done { socket, .. }
+            | SocketNotice::Secured { socket }
+            | SocketNotice::Untrusted { socket, .. } => socket,
         }
     }
 }
@@ -635,6 +650,9 @@ impl EventData for SocketNotice {
                     p.with(socket_params::REASON, reason.clone())
                 }
             }
+            SocketNotice::Secured { .. } => kind(p, socket_params::SECURED),
+            SocketNotice::Untrusted { certificate, .. } => kind(p, socket_params::UNTRUSTED)
+                .with(socket_params::CERTIFICATE, certificate.clone()),
         }
     }
 
@@ -667,6 +685,11 @@ impl EventData for SocketNotice {
             socket_params::DONE => SocketNotice::Done {
                 socket,
                 reason: get(socket_params::REASON),
+            },
+            socket_params::SECURED => SocketNotice::Secured { socket },
+            socket_params::UNTRUSTED => SocketNotice::Untrusted {
+                socket,
+                certificate: get(socket_params::CERTIFICATE),
             },
             _ => return None,
         })
@@ -900,6 +923,18 @@ mod tests {
             from: "192.168.1.2".into(),
         };
         assert_eq!(SocketNotice::from_params(&answer.to_params()), Some(answer));
+        let socket = Id::new_static("a.mail");
+        for notice in [
+            SocketNotice::Secured {
+                socket: socket.clone(),
+            },
+            SocketNotice::Untrusted {
+                socket,
+                certificate: "ab".repeat(32),
+            },
+        ] {
+            assert_eq!(SocketNotice::from_params(&notice.to_params()), Some(notice));
+        }
         let mut typed = Typed {
             text: "secret".into(),
             typing: false,

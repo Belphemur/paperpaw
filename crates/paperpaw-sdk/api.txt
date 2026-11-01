@@ -2917,12 +2917,20 @@ pub paperpaw_sdk::native::keys::RotationError::NoAuthor
 pub paperpaw_sdk::native::keys::RotationError::NoRecoveryKey
 pub paperpaw_sdk::native::keys::RotationError::NotKept
 pub paperpaw_sdk::native::keys::RotationError::Refused
+#[non_exhaustive] pub struct paperpaw_sdk::native::keys::Revocation
+pub paperpaw_sdk::native::keys::Revocation::key: [u8; 32]
+pub paperpaw_sdk::native::keys::Revocation::plugin: alloc::string::String
+pub paperpaw_sdk::native::keys::Revocation::signature: [u8; 64]
+impl paperpaw_sdk::native::keys::Revocation
+pub fn paperpaw_sdk::native::keys::Revocation::new(impl core::convert::Into<alloc::string::String>, [u8; 32], [u8; 64]) -> Self
 pub const paperpaw_sdk::native::keys::MAX_REVOKED: usize
 pub fn paperpaw_sdk::native::keys::accept_rotation(&dyn paperpaw_platform::storage::Storage, &str, &[u8; 32], &[u8; 64]) -> core::result::Result<(), paperpaw_sdk::native::keys::RotationError>
-pub fn paperpaw_sdk::native::keys::is_revoked(&dyn paperpaw_platform::storage::Storage, &[u8; 32]) -> bool
-pub fn paperpaw_sdk::native::keys::keep_revoked(&dyn paperpaw_platform::storage::Storage, &[[u8; 32]]) -> core::result::Result<(), paperpaw_sdk::native::keys::RevokedError>
+pub fn paperpaw_sdk::native::keys::check_rotation(&dyn paperpaw_platform::storage::Storage, &str, &[u8; 32], &[u8; 64]) -> core::result::Result<(), paperpaw_sdk::native::keys::RotationError>
+pub fn paperpaw_sdk::native::keys::is_revoked(&dyn paperpaw_platform::storage::Storage, &str) -> bool
+pub fn paperpaw_sdk::native::keys::keep_revoked(&dyn paperpaw_platform::storage::Storage, &[paperpaw_sdk::native::keys::Revocation]) -> core::result::Result<(), paperpaw_sdk::native::keys::RevokedError>
 pub fn paperpaw_sdk::native::keys::known_recovery(&dyn paperpaw_platform::storage::Storage, &str) -> core::option::Option<[u8; 32]>
-pub fn paperpaw_sdk::native::keys::revoked(&dyn paperpaw_platform::storage::Storage) -> alloc::vec::Vec<[u8; 32]>
+pub fn paperpaw_sdk::native::keys::revocation_message(&str, &[u8; 32]) -> alloc::string::String
+pub fn paperpaw_sdk::native::keys::revoked(&dyn paperpaw_platform::storage::Storage) -> alloc::vec::Vec<paperpaw_sdk::native::keys::Revocation>
 pub fn paperpaw_sdk::native::keys::rotation_message(&str, &[u8; 32], &[u8; 32]) -> alloc::string::String
 #[non_exhaustive] pub enum paperpaw_sdk::native::Author
 pub paperpaw_sdk::native::Author::Known
@@ -3452,6 +3460,11 @@ pub paperpaw_sdk::replies::SocketNotice::Received::text: alloc::string::String
 pub paperpaw_sdk::replies::SocketNotice::Saved
 pub paperpaw_sdk::replies::SocketNotice::Saved::path: alloc::string::String
 pub paperpaw_sdk::replies::SocketNotice::Saved::socket: paperpaw_sdk::Id
+pub paperpaw_sdk::replies::SocketNotice::Secured
+pub paperpaw_sdk::replies::SocketNotice::Secured::socket: paperpaw_sdk::Id
+pub paperpaw_sdk::replies::SocketNotice::Untrusted
+pub paperpaw_sdk::replies::SocketNotice::Untrusted::certificate: alloc::string::String
+pub paperpaw_sdk::replies::SocketNotice::Untrusted::socket: paperpaw_sdk::Id
 impl paperpaw_sdk::replies::SocketNotice
 pub fn paperpaw_sdk::replies::SocketNotice::socket(&self) -> &paperpaw_sdk::Id
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::SocketNotice
@@ -5914,6 +5927,11 @@ pub paperpaw_sdk::SocketNotice::Received::text: alloc::string::String
 pub paperpaw_sdk::SocketNotice::Saved
 pub paperpaw_sdk::SocketNotice::Saved::path: alloc::string::String
 pub paperpaw_sdk::SocketNotice::Saved::socket: paperpaw_sdk::Id
+pub paperpaw_sdk::SocketNotice::Secured
+pub paperpaw_sdk::SocketNotice::Secured::socket: paperpaw_sdk::Id
+pub paperpaw_sdk::SocketNotice::Untrusted
+pub paperpaw_sdk::SocketNotice::Untrusted::certificate: alloc::string::String
+pub paperpaw_sdk::SocketNotice::Untrusted::socket: paperpaw_sdk::Id
 impl paperpaw_sdk::replies::SocketNotice
 pub fn paperpaw_sdk::replies::SocketNotice::socket(&self) -> &paperpaw_sdk::Id
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::SocketNotice
@@ -6017,6 +6035,8 @@ pub const paperpaw_sdk::Capability::KEYBOARD: Self
 pub const paperpaw_sdk::Capability::LOOK_EXTRAS: Self
 pub const paperpaw_sdk::Capability::PAGE_KEYS: Self
 pub const paperpaw_sdk::Capability::PAGE_TURNER: Self
+pub const paperpaw_sdk::Capability::PEN_HOVER: Self
+pub const paperpaw_sdk::Capability::PEN_TILT: Self
 pub const paperpaw_sdk::Capability::RENDER_HOOK: Self
 pub const paperpaw_sdk::Capability::RENDER_REGIONS: Self
 pub const paperpaw_sdk::Capability::USB_DRIVE: Self

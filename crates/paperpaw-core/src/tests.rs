@@ -602,8 +602,10 @@ impl Screen for EdgeHolder {
     }
 
     fn on_pointer(&mut self, event: &PointerEvent, _: &mut Cx<'_, '_>) -> Handled {
-        if event.phase == PointerPhase::Down {
-            self.log.borrow_mut().push(String::from("holder:down"));
+        match event.phase {
+            PointerPhase::Down => self.log.borrow_mut().push(String::from("holder:down")),
+            PointerPhase::Hover => self.log.borrow_mut().push(String::from("holder:hover")),
+            _ => {}
         }
         Handled::Yes
     }

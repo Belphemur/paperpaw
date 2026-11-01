@@ -113,6 +113,15 @@ pub fn settle(storage: &dyn Storage, id: &str, folder: &str) -> bool {
         .lines()
         .find_map(|line| line.strip_prefix("recovery "))
         .and_then(bytes32);
+    // A known author stays: only a rotation moves it to another key
+    // (`keys::accept_rotation`), never a mark. Code is named as installed
+    // only where its author's key signed it (any, where none is known).
+    let pinned = native::known_author(storage, id);
+    let author = pinned.or_else(|| {
+        text.lines()
+            .find_map(|line| line.strip_prefix("author "))
+            .and_then(bytes32)
+    });
     let mut kept = true;
     for line in text.lines() {
         let (key, value) = line.split_once(' ').unwrap_or((line, ""));
@@ -129,16 +138,17 @@ pub fn settle(storage: &dyn Storage, id: &str, folder: &str) -> bool {
                 _ => super::forget_store_install(storage, id),
             },
             "code" => match bytes32(value) {
-                Some(sha256) if code_is(storage, folder, &sha256) => {
+                Some(sha256) if code_is(storage, folder, &sha256, author) => {
                     native::remember_code(storage, id, &sha256)
                 }
                 _ => true,
             },
-            "author" => bytes32(value).is_none_or(|key| match recovery {
-                Some(recovery) if native::known_author(storage, id).is_none() => {
+            "author" => bytes32(value).is_none_or(|key| match (pinned, recovery) {
+                (Some(_), _) => true,
+                (None, Some(recovery)) => {
                     native::keys::remember_first_install(storage, id, &key, &recovery)
                 }
-                _ => native::remember_author(storage, id, &key),
+                (None, None) => native::remember_author(storage, id, &key),
             }),
             _ => true,
         };
@@ -150,11 +160,22 @@ pub fn settle(storage: &dyn Storage, id: &str, folder: &str) -> bool {
     true
 }
 
-/// Whether the code file in `folder` is the code named `sha256`.
-fn code_is(storage: &dyn Storage, folder: &str, sha256: &[u8; 32]) -> bool {
+/// Whether the code file in `folder` is the code named `sha256` and,
+/// where an `author` is known, signed by that author's key (checked
+/// whole, as the signature is over all of it).
+fn code_is(
+    storage: &dyn Storage,
+    folder: &str,
+    sha256: &[u8; 32],
+    author: Option<[u8; 32]>,
+) -> bool {
     native::CODE_FILES.iter().any(|name| {
         let path = format!("{}/{name}", folder.trim_end_matches('/'));
         native::read_header(storage, &path).is_some_and(|header| header.sha256 == *sha256)
+            && author.is_none_or(|author| {
+                native::checked_file(storage, &path)
+                    .is_ok_and(|(_, signature)| signature.is_some_and(|s| s.key == author))
+            })
     })
 }
 
@@ -220,5 +241,86 @@ mod tests {
         assert!(settle(&storage, "weather", "plugins/weather"));
         assert_eq!(native::keys::known_recovery(&storage, "weather"), None);
         assert!(!storage.exists("plugins/weather/.install-marks"));
+    }
+
+    /// The plugin file of `native`'s tests in `folder`, signed with `seed`
+    /// (unsigned where `None`); its code's sha256.
+    fn code_in(storage: &MemoryStorage, folder: &str, seed: Option<&[u8; 32]>) -> [u8; 32] {
+        let mut file = crate::native::tests::file();
+        let sha256 = native::read_header(&MemoryStorage::new().with("f", file.clone()), "f")
+            .unwrap()
+            .sha256;
+        if let Some(seed) = seed {
+            let signature = paperpaw_native::signature::sign(&file, seed);
+            file.extend_from_slice(&signature.to_bytes());
+        }
+        storage.write(&format!("{folder}/code.ppn"), &file).unwrap();
+        sha256
+    }
+
+    /// Marks never move a known author to another key, and name code as
+    /// installed only where the author pinned then signed it: after a
+    /// rotation, the old key's code is refused, the new key's taken (#20,
+    /// review of #277).
+    #[test]
+    fn code_is_named_only_where_the_pinned_author_signed_it() {
+        use paperpaw_native::signature::{public_key, sign_message};
+        let (old, new, recovery) = ([1; 32], [2; 32], [3; 32]);
+        let storage = MemoryStorage::new();
+        // The first install pins its signer.
+        let sha = code_in(&storage, "plugins/clock", Some(&old));
+        let marks = Marks::new(From::Local)
+            .code(sha)
+            .author(public_key(&old))
+            .recovery(public_key(&recovery));
+        assert!(write(&storage, "plugins/clock", &marks).is_ok());
+        assert!(settle(&storage, "clock", "plugins/clock"));
+        assert_eq!(native::installed_code(&storage, "clock"), Some(sha));
+        // A mark of another author: the known one stays.
+        let marks = Marks::new(From::Local).author(public_key(&new));
+        assert!(write(&storage, "plugins/clock", &marks).is_ok());
+        assert!(settle(&storage, "clock", "plugins/clock"));
+        assert_eq!(
+            native::known_author(&storage, "clock"),
+            Some(public_key(&old))
+        );
+        // Moved to the new key: code the old key signed, and unsigned
+        // code, are named no more.
+        let (from, to) = (public_key(&old), public_key(&new));
+        let message = native::keys::rotation_message("clock", &from, &to);
+        let signature = sign_message(message.as_bytes(), &recovery);
+        assert_eq!(
+            native::keys::accept_rotation(&storage, "clock", &to, &signature),
+            Ok(())
+        );
+        for seed in [Some(&old), None] {
+            let sha = code_in(&storage, "plugins/clock", seed);
+            assert!(
+                write(
+                    &storage,
+                    "plugins/clock",
+                    &Marks::new(From::Local).code(sha)
+                )
+                .is_ok()
+            );
+            assert!(settle(&storage, "clock", "plugins/clock"));
+            assert_eq!(native::installed_code(&storage, "clock"), None);
+        }
+        let sha = code_in(&storage, "plugins/clock", Some(&new));
+        assert!(
+            write(
+                &storage,
+                "plugins/clock",
+                &Marks::new(From::Local).code(sha)
+            )
+            .is_ok()
+        );
+        assert!(settle(&storage, "clock", "plugins/clock"));
+        assert_eq!(native::installed_code(&storage, "clock"), Some(sha));
+        // Unsigned code with no author known (one's own build) is named.
+        let sha = code_in(&storage, "plugins/mine", None);
+        assert!(write(&storage, "plugins/mine", &Marks::new(From::Local).code(sha)).is_ok());
+        assert!(settle(&storage, "mine", "plugins/mine"));
+        assert_eq!(native::installed_code(&storage, "mine"), Some(sha));
     }
 }
