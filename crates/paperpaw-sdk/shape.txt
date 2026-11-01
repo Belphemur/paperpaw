@@ -979,6 +979,7 @@ struct paperpaw_sdk::native::Native { fingerprint: paperpaw_sdk::native::Fingerp
 struct paperpaw_sdk::native::NotInstalled { plugin: paperpaw_sdk::id::Id, reason: paperpaw_sdk::native::NotInstalledReason }
 struct paperpaw_sdk::native::SafeMode { reason: paperpaw_sdk::native::SafeModeReason, last_loaded: core::option::Option<alloc::string::String>, crashed: core::option::Option<alloc::string::String>, switched_off: alloc::vec::Vec<paperpaw_sdk::id::Id> }
 struct paperpaw_sdk::native::installed::InstalledCodes { entries: alloc::vec::Vec<(paperpaw_sdk::id::Id, [u8; 32])> }
+struct paperpaw_sdk::native::keys::Revocation { plugin: alloc::string::String, key: [u8; 32], signature: [u8; 64] }
 struct paperpaw_sdk::params::Params { values: alloc::vec::Vec<(alloc::borrow::Cow<'static, str>, alloc::string::String)>, carried: core::option::Option<alloc::rcs::rc::Rc<dyn core::any::Any>> }
 struct paperpaw_sdk::pattern::Class { negated: bool, items: alloc::vec::Vec<paperpaw_sdk::pattern::Item> }
 struct paperpaw_sdk::pattern::Matches<'p, 't> { pattern: &'p paperpaw_sdk::pattern::Pattern, text: &'t str, at: usize, budget: u32 }
