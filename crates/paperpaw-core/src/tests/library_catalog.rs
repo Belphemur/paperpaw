@@ -365,6 +365,8 @@ fn a_walk_that_fails_is_told_and_a_later_one_tells_the_catalog() {
 struct Card {
     inner: MemoryStorage,
     full: Rc<Cell<bool>>,
+    /// The old folder of the books' details cannot be listed (damaged).
+    damaged: bool,
 }
 
 impl Card {
@@ -393,6 +395,9 @@ impl Storage for Card {
         self.inner.append(path, data)
     }
     fn list(&self, dir: &str, visit: &mut dyn FnMut(DirEntry<'_>)) -> Result<(), StorageError> {
+        if self.damaged && dir == ".paperpaw/library/books" {
+            return Err(StorageError::Io);
+        }
         self.inner.list(dir, visit)
     }
     fn remove(&self, path: &str) -> Result<(), StorageError> {
@@ -418,6 +423,7 @@ fn a_walk_that_cannot_write_is_told_and_tried_again() {
     let card = Card {
         inner: two_books(),
         full: full.clone(),
+        damaged: false,
     };
     let mut kernel = Kernel::builder(DEVICE)
         .plugin(LibraryPlugin { log: log.clone() })
@@ -444,4 +450,37 @@ fn a_walk_that_cannot_write_is_told_and_tried_again() {
     }
     assert_eq!(paths(&kernel), ["books/a.txt", "books/b.txt"]);
     assert!(log.borrow().len() > told);
+}
+
+/// Details kept where earlier versions kept them, in a folder that cannot
+/// be read: moving them fails once, and the catalog is made all the same.
+#[test]
+fn an_old_folder_that_cannot_be_read_does_not_keep_the_catalog_from_being_made() {
+    let card = Card {
+        inner: two_books().with(".paperpaw/library/books/0123456789abcdef.ini", "x"),
+        full: Rc::new(Cell::new(false)),
+        damaged: true,
+    };
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(LibraryPlugin { log: log() })
+        .storage(card)
+        .build()
+        .unwrap();
+    let effects = kernel.start(Instant(0));
+    let mut now = run(&mut kernel, 0, effects);
+    now = want(&mut kernel, now, false);
+    for _ in 0..10 {
+        if !paths(&kernel).is_empty() {
+            break;
+        }
+        now += 60_000;
+        let effects = kernel.tick(Instant(now));
+        now = run(&mut kernel, now, effects);
+    }
+    assert_eq!(paths(&kernel), ["books/a.txt", "books/b.txt"]);
+    assert!(
+        kernel
+            .storage()
+            .exists(".paperpaw/library/books/0123456789abcdef.ini")
+    );
 }

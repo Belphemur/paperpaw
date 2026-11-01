@@ -521,7 +521,9 @@ impl<IO: Read + Write + Seek, TP, OCC> FileSystem<IO, TP, OCC> {
     }
 
     /// Drops every note about a directory (see `Dir::note`): e.g. where the card was changed
-    /// otherwise than through this file system.
+    /// otherwise than through this file system. PaperPaw does not call it: a card is mounted
+    /// anew (a new `FileSystem`) whenever it may have been changed elsewhere. A shell that lets
+    /// the card be written otherwise while it stays mounted (as a USB drive, say) must call it.
     pub fn forget_dir_notes(&self) {
         *self.dir_notes.borrow_mut() = [None; DIR_NOTES];
     }

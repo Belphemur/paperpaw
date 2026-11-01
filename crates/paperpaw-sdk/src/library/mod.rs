@@ -1181,10 +1181,13 @@ pub fn moved(storage: &dyn Storage, from: &str, to: &str) {
         ),
         (cover_file, |path| old_cover_variant_file(path, "")),
     ] {
-        if storage.rename(&file(from), &file(to)).is_err() {
-            let _ = storage.rename(&old(from), &file(to));
+        let moved = storage.rename(&file(from), &file(to)).is_ok()
+            || storage.rename(&old(from), &file(to)).is_ok();
+        // Not where neither could be moved (a full card, say) and nothing
+        // is at `to`: the only copy, read there still.
+        if moved || storage.exists(&file(to)) {
+            let _ = storage.remove(&old(from));
         }
-        let _ = storage.remove(&old(from));
     }
     // A cover kept by a format's data for the book moves with it too
     // ([`BookData`]): the details name it where it is now.

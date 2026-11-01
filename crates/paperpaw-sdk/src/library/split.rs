@@ -27,9 +27,10 @@ use super::{
     BookData, BookDataKind, DETAILS_DIR, DIR, OLD_DETAILS_DIR, OLD_THUMBS_DIR, THUMBS_DIR,
 };
 
-/// Names listed at a time: a step of their own, the old folder read
-/// whole each time.
-const LISTED: usize = 256;
+/// Bytes of names listed at a time (some 150 of a book's, `<key>.thumb`):
+/// a step of their own, the old folder read whole each time; kept in one
+/// piece of memory.
+const LISTED: usize = 4 * 1024;
 
 /// Names moved in a step.
 const MOVED: usize = 16;
@@ -52,9 +53,10 @@ pub fn wanted(storage: &dyn Storage) -> bool {
 pub struct Split {
     /// Of [`FOLDERS`], then of the folders of caches.
     folder: usize,
-    /// The next names listed, to move or remove, and whether each is a
-    /// folder.
-    listed: Vec<(String, bool)>,
+    /// The next names listed, to move or remove, a line each: `d` for a
+    /// folder or `f`, then the name; from byte `taken` on.
+    listed: String,
+    taken: usize,
     /// Entries of the folder that could not be moved (first in its
     /// listing, as they stay): passed over.
     stuck: usize,
@@ -108,7 +110,7 @@ impl Split {
         old: &str,
         new: &str,
     ) -> Result<(), StorageError> {
-        if self.listed.is_empty() {
+        if self.taken >= self.listed.len() {
             self.list(storage, old, &|name, is_dir| !is_dir && is_kept_name(name))?;
             if self.listed.is_empty() {
                 // Nothing left to move, but what was not: the folder goes
@@ -124,8 +126,7 @@ impl Split {
             }
             return Ok(());
         }
-        let take = self.listed.len().min(MOVED);
-        for (name, _) in self.listed.drain(..take) {
+        for (name, _) in self.take(MOVED) {
             let Some(key) = name.get(..16) else {
                 continue;
             };
@@ -150,7 +151,7 @@ impl Split {
     /// A step of removing what folder of caches `cache` holds for books in
     /// the folder itself, not in the parts of their keys.
     fn clear_step(&mut self, storage: &dyn Storage, cache: &BookData) -> Result<(), StorageError> {
-        if self.listed.is_empty() {
+        if self.taken >= self.listed.len() {
             self.list(storage, &cache.folder, &|name, _| {
                 cache.key_of(name).is_some()
             })?;
@@ -159,8 +160,7 @@ impl Split {
             }
             return Ok(());
         }
-        let take = self.listed.len().min(CLEARED);
-        for (name, is_dir) in self.listed.drain(..take) {
+        for (name, is_dir) in self.take(CLEARED) {
             let path = files::join(&cache.folder, &name);
             let done = match is_dir {
                 true => storage.remove_dir_all(&path),
@@ -175,6 +175,19 @@ impl Split {
         Ok(())
     }
 
+    /// The next `most` names listed, and whether each is a folder.
+    fn take(&mut self, most: usize) -> Vec<(String, bool)> {
+        let mut names = Vec::new();
+        let rest = self.listed.get(self.taken..).unwrap_or_default();
+        for line in rest.split_terminator('\n').take(most) {
+            self.taken += line.len() + 1;
+            if let Some(name) = line.get(1..) {
+                names.push((String::from(name), line.starts_with('d')));
+            }
+        }
+        names
+    }
+
     /// On to the next folder.
     fn next(&mut self) {
         self.folder += 1;
@@ -182,8 +195,8 @@ impl Split {
     }
 
     /// Lists the next names of folder `old` that `wanted` takes: after
-    /// those that stay, at most [`LISTED`], in the order the folder lists
-    /// them.
+    /// those that stay, at most [`LISTED`] bytes of them, in the order the
+    /// folder lists them.
     fn list(
         &mut self,
         storage: &dyn Storage,
@@ -191,14 +204,20 @@ impl Split {
         wanted: &dyn Fn(&str, bool) -> bool,
     ) -> Result<(), StorageError> {
         let mut seen = 0;
+        self.listed.clear();
+        self.taken = 0;
         let listed = &mut self.listed;
         let stuck = self.stuck;
+        let mut full = false;
         match storage.list(old, &mut |entry| {
             if !wanted(entry.name, entry.is_dir) {
                 return;
             }
-            if seen >= stuck && listed.len() < LISTED {
-                listed.push((String::from(entry.name), entry.is_dir));
+            full |= listed.len() + entry.name.len() + 2 > LISTED;
+            if seen >= stuck && !full {
+                listed.push(if entry.is_dir { 'd' } else { 'f' });
+                listed.push_str(entry.name);
+                listed.push('\n');
             }
             seen += 1;
         }) {

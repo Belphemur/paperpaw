@@ -462,8 +462,9 @@ impl Catalog {
     }
 
     /// A step of moving what earlier versions kept for books: then on to
-    /// a walk or catching up, if wanted. Failed, it is tried again later;
-    /// views are not told, the books are read where they were.
+    /// a walk or catching up, if wanted. Failed, it is tried at the next
+    /// start, not before each walk (an old folder that cannot be read would
+    /// keep the catalog from being made); the books are read where they were.
     fn split_step(&self, env: &Env<'_>, job: &mut Option<CatalogJob>) -> paperpaw_sdk::work::Step {
         use paperpaw_sdk::work::Step;
         match job.as_mut().map_or(Ok(true), |job| job.step(env)) {
@@ -479,7 +480,6 @@ impl Catalog {
             }
             Err(error) => {
                 *job = None;
-                self.split.set(true);
                 Step::Failed(alloc::format!("library folders: {error:?}"))
             }
         }

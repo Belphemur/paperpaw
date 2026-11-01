@@ -12,6 +12,12 @@ after the bless without changing the fingerprint (the right-to-left mirroring, d
 fingerprint changed once more with the pen and TLS reservations (`e5f4a41a`, #81), so plugins built before it are
 refused too. Store, test-card and Workshop builds from commits before `e5f4a41a` are thrown away.
 
+**Plugins that read the library must also be built from the split of the library's folders (#280) or later**:
+calibre, end-of-book, file-manager, files, the format plugins, home, notes-overview, opds, sleep, stats, transfer,
+widgets. The firmware cannot refuse older builds (the fingerprint is the same): they would show books without their
+details and write them where the kernel moves them away from, so changes made in them would be lost. Builds from
+before it are thrown away.
+
 ### Added
 
 - SDK: `library::kept_path(folder, prefix, book)`: where a plugin keeps what it keeps for a book in a folder of

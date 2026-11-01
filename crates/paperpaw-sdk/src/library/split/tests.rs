@@ -283,6 +283,35 @@ impl Storage for Refusing<'_> {
     }
 }
 
+/// A book moved while its details are where earlier versions kept them,
+/// and they cannot be moved (a full card, say): they stay, read there.
+#[test]
+fn details_that_cannot_go_with_their_book_are_kept() {
+    let (from, to) = ("books/a.epub", "books/b.epub");
+    let inner = MemoryStorage::new().with(from, "12345");
+    library::save(&inner, from, &titled("Alice", 5)).unwrap();
+    inner.rename(&details(from), &old_details(from)).unwrap();
+    let refused = key(from);
+    let storage = Refusing {
+        inner: &inner,
+        refused: &refused,
+    };
+    moved(&storage, from, to);
+    assert!(inner.exists(&old_details(from)));
+    assert_eq!(
+        library::book(&inner, from).and_then(|b| b.title),
+        Some("Alice".into())
+    );
+    // Moved where it can be: none left behind.
+    inner.rename(from, to).unwrap();
+    moved(&inner, from, to);
+    assert!(!inner.exists(&old_details(from)));
+    assert_eq!(
+        library::book(&inner, to).and_then(|b| b.title),
+        Some("Alice".into())
+    );
+}
+
 #[test]
 fn what_cannot_be_moved_stays_where_it_is_read() {
     let inner = MemoryStorage::new();
