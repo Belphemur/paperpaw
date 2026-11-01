@@ -41,7 +41,11 @@ esp32c3 = [
     "esp-radio/esp32c3",
     "esp-rtos/esp32c3",
 ]
-x4-pro = ["esp32s3", "bluetooth"]
+# `log/release_max_level_info`: debug and trace messages (hidden by
+# `ESP_LOG = "info"` anyway) are not compiled into the release image, to
+# keep room in CrossPoint's slot. A developer build wanting them takes it
+# out.
+x4-pro = ["esp32s3", "bluetooth", "log/release_max_level_info"]
 x4-classic = ["esp32s3"]
 # What both ESP32-S3 devices build with; chosen by `x4-pro` or
 # `x4-classic`, not by hand.
@@ -135,7 +139,7 @@ embassy-net-driver = "0.2"
 # Bluetooth (feature `bluetooth`): trouble-host's 0.7 is the one on
 # esp-radio's bt-hci 0.9. Central and GATT client with pairing; the
 # peripheral side comes with advertising (ADR 0027, step 4).
-trouble-host = { version = "0.7", default-features = false, features = ["central", "scan", "gatt", "security", "log", "gatt-client-notification-queue-size-4"], optional = true }
+trouble-host = { version = "0.7", default-features = false, features = ["central", "scan", "gatt", "security", "log", "log-quiet", "gatt-client-notification-queue-size-4"], optional = true }
 bt-hci = { version = "0.9", optional = true }
 embassy-futures = { version = "0.1", optional = true }
 embassy-time = { version = "0.5", optional = true }

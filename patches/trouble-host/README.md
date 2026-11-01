@@ -3,7 +3,10 @@
 > Modified for PaperPaw: trouble-host 0.7.0 as published, with one
 > change in `src/host.rs` (`sync_resolving_list`): where the controller
 > refuses to switch address resolution on again, the sync is tried again
-> later instead of stopping the host. Licensed as the original
+> later instead of stopping the host; and the feature `log-quiet`, which
+> compiles the `trace!` and `debug!` messages out of the `log` feature
+> (what the firmware's `ESP_LOG = "info"` hides anyway; their strings and
+> the formatting of their arguments took flash). Licensed as the original
 > (`LICENSE-APACHE`, `LICENSE-MIT`).
 
 [![CI](https://github.com/embassy-rs/trouble/actions/workflows/ci.yaml/badge.svg)](https://github.com/embassy-rs/trouble/actions/workflows/ci.yaml)
