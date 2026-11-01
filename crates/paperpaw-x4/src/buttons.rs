@@ -43,6 +43,25 @@ pub const ALL: [&str; 7] = [
 /// A reading must hold this long to count: three readings 5 ms apart.
 pub const DEBOUNCE_MS: u64 = 15;
 
+/// The longest the processor sleeps between readings of the buttons when
+/// the power level asks to save (Saving and Offline, ADR 0025): the
+/// reader's own *Saving* button response (`IDLE_SAVING_MS` in the
+/// firmware), a value already chosen by readers. Slower would leave a
+/// press of 80 ms too little margin: quick taps missed, double taps merged.
+pub const SAVING_READ_MS: u64 = 50;
+
+/// How long the processor sleeps between readings of the buttons: the
+/// reader's own choice (`response_ms`), and at least [`SAVING_READ_MS`]
+/// where the power level saves, except for the *Faster* response (`faster`),
+/// which the reader chose and the mode does not override.
+pub const fn read_interval_ms(response_ms: u64, faster: bool, saving: bool) -> u64 {
+    if saving && !faster && response_ms < SAVING_READ_MS {
+        SAVING_READ_MS
+    } else {
+        response_ms
+    }
+}
+
 /// The buttons of each ladder, as bits of [`State`]: one ladder reads one
 /// button at a time.
 const LADDERS: [u8; 2] = [0b0000_1111, 0b0011_0000];
@@ -319,5 +338,27 @@ mod tests {
             events,
             [(buttons::CONFIRM, true), (buttons::CONFIRM, false)]
         );
+    }
+
+    #[test]
+    fn saving_reads_the_buttons_no_oftener_than_every_fifty_milliseconds() {
+        // Normal (30) and Saving (50) are the reader's choices.
+        for response in [30, 50] {
+            assert_eq!(read_interval_ms(response, false, false), response);
+            assert_eq!(read_interval_ms(response, false, true), SAVING_READ_MS);
+        }
+        // A slower value is kept.
+        assert_eq!(read_interval_ms(100, false, true), 100);
+        // The interval is the reader's own Saving response, and a press of
+        // 80 ms is read twice at that rate.
+        assert_eq!(SAVING_READ_MS, 50);
+        assert!(2 * SAVING_READ_MS < 120);
+    }
+
+    #[test]
+    fn a_faster_response_is_not_overridden_by_saving() {
+        // Faster (10) is what the reader chose; the mode keeps it.
+        assert_eq!(read_interval_ms(10, true, true), 10);
+        assert_eq!(read_interval_ms(10, true, false), 10);
     }
 }
