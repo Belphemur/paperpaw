@@ -20,11 +20,13 @@ use alloc::borrow::Cow;
 use alloc::boxed::Box;
 
 use paperpaw_sdk::builtin::{events, menus};
+use paperpaw_sdk::event::Event;
 use paperpaw_sdk::power::{self, PowerLevel, Wear};
 use paperpaw_sdk::setting::{Setting, Text};
+use paperpaw_sdk::ui::choice::Picked;
 use paperpaw_sdk::{
     Command, Env, Id, Manifest, MenuEntry, Plugin, RegisterError, Registrar, SettingSpec,
-    StatusItemSpec, StatusValue,
+    SettingValue, StatusItemSpec, StatusValue,
 };
 
 pub const PLUGIN: Id = Id::new_static("power");
@@ -43,6 +45,16 @@ pub const OFFLINE_BELOW: Setting<i64> = Setting::new("power.offline-below");
 /// Automatic: Normal while charging.
 pub const NORMAL_WHILE_CHARGING: Setting<bool> = Setting::new("power.normal-while-charging");
 const STATUS: Id = Id::new_static("power.status");
+/// Opens the power menu: what the power button held runs.
+pub const MENU: Id = Id::new_static("power.menu");
+/// The option chosen in the power menu.
+const CHOSEN: Event<Picked> = Event::new("power.menu.chosen");
+/// The power button held.
+const HELD: &str = "[keymap.global]\nlong.power = power.menu\n";
+/// The touch lock's switch and action (the lock plugin's, which may be
+/// off or absent: the menu then has no entry for it).
+const TOUCH_LOCK: &str = "lock.touch";
+const TOUCH_TOGGLE: Id = Id::new_static("lock.touch-toggle");
 
 /// The choices of [`MODE`], translation keys too.
 const AUTOMATIC: &str = "power.mode.auto";
@@ -169,17 +181,53 @@ static HOW: [(&str, &str); 2] = [
     ("de", include_str!("../how/de.txt")),
 ];
 
-static ACTIONS: [paperpaw_sdk::FixedAction; 1] =
-    [
-        paperpaw_sdk::FixedAction::new(OPEN, "power.title").handler(|_, _, out| {
-            let page =
-                paperpaw_sdk::Params::new().with(paperpaw_sdk::builtin::params::ID, GROUP.as_str());
-            out.push(paperpaw_sdk::Command::OpenSlot(
-                paperpaw_sdk::builtin::slots::SETTINGS,
-                page,
-            ));
-        }),
-    ];
+static ACTIONS: [paperpaw_sdk::FixedAction; 2] = [
+    paperpaw_sdk::FixedAction::new(OPEN, "power.title").handler(|_, _, out| {
+        let page =
+            paperpaw_sdk::Params::new().with(paperpaw_sdk::builtin::params::ID, GROUP.as_str());
+        out.push(paperpaw_sdk::Command::OpenSlot(
+            paperpaw_sdk::builtin::slots::SETTINGS,
+            page,
+        ));
+    }),
+    paperpaw_sdk::FixedAction::new(MENU, "power.menu.title").handler(|env, _, out| {
+        let title = env.i18n().tr("power.menu.title");
+        out.push(
+            paperpaw_sdk::ask::choice(title, &CHOSEN)
+                .options("power.menu.", &menu_options(env))
+                .command(),
+        );
+    }),
+];
+
+/// What the power menu offers here: sleep and restart always, switching
+/// off where PaperPaw does so, and on a touch device (with the touch
+/// lock about) locking touch or, while it is locked, unlocking it:
+/// the buttons work meanwhile, so the menu is the way out.
+pub fn menu_options(env: &Env<'_>) -> alloc::vec::Vec<&'static str> {
+    let mut options = alloc::vec!["sleep"];
+    if env.caps().power_off {
+        options.push("off");
+    }
+    options.push("restart");
+    if env.device().input.touch
+        && let Some(SettingValue::Bool(locked)) = env.settings().get(TOUCH_LOCK)
+    {
+        options.push(if *locked { "unlock" } else { "lock" });
+    }
+    options
+}
+
+/// What the option chosen in the power menu does.
+fn chosen(option: &str, out: &mut paperpaw_sdk::Commands) {
+    match option {
+        "sleep" => out.push(Command::Sleep),
+        "off" => out.push(Command::PowerOff),
+        "restart" => out.push(Command::Restart),
+        "lock" | "unlock" => out.push(Command::run(TOUCH_TOGGLE)),
+        _ => {}
+    }
+}
 /// The mode in the quick panel, as segments.
 static ENTRIES: [MenuEntry; 1] =
     [MenuEntry::new(menus::QUICK, Id::new_static(MODE.static_str())).order(30)];
@@ -222,6 +270,8 @@ impl Plugin for Power {
             .tap(OPEN),
         )?;
         r.add_actions(&ACTIONS)?;
+        r.add_keymap(HELD)?;
+        r.on(CHOSEN, |_, picked, out| chosen(&picked.option, out))?;
         // Silently: the mode changes, only the status mark says so.
         for event in [
             events::STARTED.id(),

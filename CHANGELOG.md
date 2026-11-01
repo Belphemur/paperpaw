@@ -125,6 +125,13 @@ Workshop builds from those commits are thrown away.
 - The English catalogs of the plugins built in are one catalog, indexed together when PaperPaw is built: the
   translator keeps a table of their sources rather than a catalog for each. SDK: `BuiltCatalogs`, `BuiltTable`,
   `Translator::built_catalogs`; kernel: `KernelBuilder::built_catalogs`; `paperpaw_app::BUILT_CATALOGS`.
+- A power menu: hold the power button and a small menu opens with *Sleep*, *Switch off* (where PaperPaw can switch
+  the device off), *Restart* and, on touch devices, *Lock touch* or *Unlock touch* (power 1.1.0). A short press
+  still sleeps, now when the button is let go. The touch lock no longer binds the held power button itself (so the
+  menu can open while touch is locked); it keeps the held home key and the two taps with a hold, and its hint says
+  to choose *Unlock touch* in the power menu (lock 1.0.3). No SDK change.
+- *Lock after waking up* (the screen lock's setting, on by default) is no longer an advanced setting: off, the lock
+  comes only after a real start (power on or restart), not after sleep.
 - *All notes*, a new plugin (Tools): the books that have bookmarks or highlights with how many, a book's notes
   (a note opens the book there), and *Export as My Clippings.txt*, all notes in one file in Kindle's form
   (UTF-8 with a byte order mark, `Exports/My Clippings.txt` beside the library) that notes apps read. A book's

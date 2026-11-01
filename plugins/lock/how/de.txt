@@ -2,6 +2,6 @@ Die Displaysperre fragt nach einer PIN, einem Muster oder einem Passwort, wenn P
 
 Richte sie in den Einstellungen unter Gerät, Displaysperre ein: Gib den bisherigen Code ein, falls es einen gibt, wähle die Art und dann den neuen Code zweimal. Ein Muster gibt es nur auf Touchscreens.
 
-Nach fünf falschen Versuchen wartet der nächste eine halbe Minute. Jetzt sperren sperrt sofort und lässt sich auf eine Taste, eine Geste oder eine Regel legen. Beim Aufwachen sperren lässt sich ausschalten, außer wo jedes Aufwachen ein Start ist, wie beim X4 im Akkubetrieb.
+Nach fünf falschen Versuchen wartet der nächste eine halbe Minute. Jetzt sperren sperrt sofort und lässt sich auf eine Taste, eine Geste oder eine Regel legen. Beim Aufwachen sperren lässt sich ausschalten, dann sperrt nur ein echter Start (Einschalten oder Neustart), außer wo jedes Aufwachen ein Start ist, wie beim X4 im Akkubetrieb.
 
-Daneben die Touch-Sperre: Touch sperren im Schnellpanel und im Lesemenü lässt Tippen, Wischen und den Stift nichts tun, die Tasten aber weiter gehen, etwa um mit der Hand auf dem Bildschirm zu lesen. Zum Entsperren zweimal mit einem Finger tippen und ihn kurz liegen lassen; auf dem X4 Pro geht es auch mit gehaltener Ein-Taste.
+Daneben die Touch-Sperre: Touch sperren im Schnellpanel und im Lesemenü lässt Tippen, Wischen und den Stift nichts tun, die Tasten aber weiter gehen, etwa um mit der Hand auf dem Bildschirm zu lesen. Zum Entsperren zweimal mit einem Finger tippen und ihn kurz liegen lassen; die gehaltene Ein/Aus-Taste öffnet das Menü, in dem Touch entsperren es mit den Tasten erledigt; auf dem X4 Pro entsperrt die gehaltene Home-Taste sofort.

@@ -2059,7 +2059,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-lock"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",
@@ -2149,10 +2149,12 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-power"
-version = "1.0.1"
+version = "1.1.0"
 dependencies = [
  "paperpaw-core",
  "paperpaw-platform",
+ "paperpaw-plugin-fonts-default",
+ "paperpaw-plugin-lock",
  "paperpaw-sdk",
 ]
 

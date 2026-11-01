@@ -1,8 +1,9 @@
 //! The touch lock with the real kernel: on a touch screen, taps and
 //! swipes turn no page while it is on and the buttons still do; a tap
 //! and a held tap unlock (as the notice says), so do two taps and a hold,
-//! a hand resting does not, and the power button held
-//! unlocks where it is bound; with the lock off, both do what they always
+//! a hand resting does not, and the home key held
+//! unlocks where it is bound (the power button held is the power menu's);
+//! with the lock off, both do what they always
 //! do.
 
 #![allow(
@@ -287,13 +288,24 @@ fn two_taps_and_a_hold_unlock_a_resting_hand_does_not() {
 }
 
 #[test]
-fn the_power_button_held_unlocks_only_while_locked() {
+fn the_home_key_held_unlocks_only_while_locked() {
+    let mut t = Test::new(true);
+    t.toggle();
+    t.button("home", 1500);
+    assert!(!t.locked(), "the home key held unlocks");
+    t.button("home", 1500);
+    assert!(!t.locked(), "and does not lock again");
+}
+
+#[test]
+fn the_power_button_held_is_the_power_menus_not_the_locks() {
     let mut t = Test::new(true);
     t.toggle();
     t.button("power", 1500);
-    assert!(!t.locked(), "the power button held unlocks");
-    t.button("power", 1500);
-    assert!(!t.locked(), "and does not lock again");
+    assert!(
+        t.locked(),
+        "the power menu (its own plugin) offers Unlock touch"
+    );
 }
 
 #[test]

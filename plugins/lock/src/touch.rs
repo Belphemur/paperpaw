@@ -11,8 +11,9 @@
 //! - A way out that needs no menu and that a resting hand does not make
 //!   (`Escape`): one finger taps twice and stays down on the second tap
 //!   (a third touch held after two taps counts too); or, where
-//!   PaperPaw is the firmware, the power button held, or the home key (the
-//!   X4 Pro's, below the screen) held. A small lock in the status lines
+//!   PaperPaw is the firmware, the home key (the X4 Pro's, below the
+//!   screen) held; or the power button held, whose menu (the power
+//!   plugin's) has *Unlock touch*. A small lock in the status lines
 //!   says it is on. Its times allow for a slow screen: a refresh may hold
 //!   the touches back that came meanwhile.
 //! - Said whenever it turns on or off, however it was switched (the
@@ -165,10 +166,10 @@ pub(crate) static SETTINGS: [SettingSpec; 1] =
             .description("lock.touch.help"),
     ];
 
-/// While touch is locked, the power button held unlocks it, and the home
-/// key held (the X4 Pro's touch key below the screen).
-const ESCAPE: &str =
-    "[keymap.global]\nlong.power = lock.touch-toggle\nlong.home = lock.touch-toggle\n";
+/// While touch is locked, the home key held (the X4 Pro's touch key below
+/// the screen) unlocks it. The power button held opens the power menu
+/// (the power plugin's), which offers *Unlock touch*.
+const ESCAPE: &str = "[keymap.global]\nlong.home = lock.touch-toggle\n";
 
 /// What the filter does with `event` while touch is locked: taken, the
 /// toggle once the way out is done, or how to unlock said where it was

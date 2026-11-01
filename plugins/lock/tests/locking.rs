@@ -617,6 +617,41 @@ fn waking_up_locks_unless_switched_off() {
 }
 
 #[test]
+fn every_wake_up_locks_by_default_and_so_does_a_start() {
+    let storage = Shared::default();
+    let mut device = Device::start(TOUCH, storage.clone());
+    device.set_pin("5555");
+    assert!(device.kernel.settings().bool("lock.on-wake"), "the default");
+    for _ in 0..2 {
+        device.sleep_and_wake();
+        assert!(device.locked(), "after every wake-up");
+        device.enter_pin("5555");
+        assert!(!device.locked());
+    }
+    let device = Device::start(TOUCH, storage);
+    assert!(device.locked(), "and after a start");
+}
+
+#[test]
+fn only_a_real_start_locks_when_waking_is_switched_off() {
+    let storage = Shared::default();
+    Device::start(TOUCH, storage.clone()).set_pin("5555");
+    let mut device = Device::start_with(TOUCH, storage.clone(), "[lock]\non-wake = off\n");
+    assert!(device.locked(), "a start locks");
+    device.enter_pin("5555");
+    for _ in 0..2 {
+        device.sleep_and_wake();
+        assert!(!device.locked(), "a wake-up does not");
+    }
+    // The lock now still locks, and a start after it does again.
+    device.run(Id::new_static("lock.now"));
+    assert!(device.locked());
+    device.enter_pin("5555");
+    let device = Device::start_with(TOUCH, storage, "[lock]\non-wake = off\n");
+    assert!(device.locked(), "a restart locks");
+}
+
+#[test]
 fn lock_now_locks_at_once() {
     let mut device = Device::start(BUTTONS, Shared::default());
     // Without a lock set up, nothing.

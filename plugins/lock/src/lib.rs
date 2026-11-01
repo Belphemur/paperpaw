@@ -53,7 +53,9 @@ pub const NOW: Id = Id::new_static("lock.now");
 /// The kind of lock: `lock.kind.off`, `…pin`, `…pattern` or `…password`
 /// (ids, as choices are, translated to their names).
 pub const KIND: Setting<Text> = Setting::new("lock.kind");
-/// Whether the lock is asked for when the device wakes up.
+/// Whether the lock is asked for after every wake-up (the default), or
+/// only after a real start: power on or restart (`STARTED`; a wake-up is
+/// `RESUME`).
 pub const ON_WAKE: Setting<bool> = Setting::new("lock.on-wake");
 const SCREEN: Id = Id::new_static("lock.screen");
 
@@ -141,7 +143,6 @@ static SETTINGS: [SettingSpec; 2] = [
     .guarded()
     .with_extra(&ON_PAGE),
     SettingSpec::switch(ON_WAKE.static_str(), "lock.setting.on-wake", true, GROUP)
-        .advanced()
         .description("lock.setting.on-wake.help")
         .guarded(),
 ];
