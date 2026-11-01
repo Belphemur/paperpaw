@@ -70,6 +70,7 @@ NAMES = {
     "keyboard.layout.fa": ("Persian", "Persisch"),
     "keyboard.layout.ur": ("Urdu", "Urdu"),
     "keyboard.layout.he": ("Hebrew", "Hebräisch"),
+    "keyboard.layout.ko": ("Korean", "Koreanisch"),
 }
 
 

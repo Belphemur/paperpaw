@@ -1,0 +1,5 @@
+# The keyboard layout the Korean letters pack brings (see arabic.txt): the
+# two-set (dubeolsik) layout; jamo join to syllables as they are typed
+# (plugins/keyboard/src/hangul.rs). Shift (or a long press) types the
+# doubled letters: ㅃ ㅉ ㄸ ㄲ ㅆ ㅒ ㅖ.
+keyboard.layout.ko; KO; ㅂㅈㄷㄱㅅㅛㅕㅑㅐㅔ ㅁㄴㅇㄹㅎㅗㅓㅏㅣ ㅋㅌㅊㅍㅠㅜㅡ
