@@ -59,6 +59,8 @@ pub(crate) enum Outcome {
     /// The file the deck is linked to has lines the last update could not
     /// make cards of (or could not read at all): a save would drop them.
     LeftOut,
+    /// The deck is linked to an Anki file (`.apkg`), which is only read.
+    AnkiFile,
 }
 
 /// What was done.
@@ -273,6 +275,12 @@ impl Saver {
         if sync::link_of(&ledger, self.deck).is_some_and(|s| s.left_out > 0 || s.failed()) {
             self.file = String::new();
             return Err(Outcome::LeftOut);
+        }
+        if let Some(link) = sync::link_of(&ledger, self.deck)
+            && crate::apkg::is_apkg(&link.name)
+        {
+            self.file.clone_from(&link.name);
+            return Err(Outcome::AnkiFile);
         }
         let _ = storage.create_dir(&self.folder);
         self.file = match sync::link_of(&ledger, self.deck) {

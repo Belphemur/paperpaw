@@ -115,6 +115,9 @@ impl SdMenu {
             Some(Item::Save(id)) => {
                 let deck = self.deck(id);
                 let (key, file) = match sync::link_of(&self.ledger, id) {
+                    Some(link) if crate::apkg::is_apkg(&link.name) => {
+                        ("vocabulary.sd.save.anki", link.name.clone())
+                    }
                     Some(link) => ("vocabulary.sd.save.linked", link.name.clone()),
                     None => ("vocabulary.sd.save.new", file_name_of(deck)),
                 };

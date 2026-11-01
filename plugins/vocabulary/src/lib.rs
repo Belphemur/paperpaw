@@ -37,6 +37,7 @@ extern crate alloc;
 #[cfg(test)]
 extern crate std;
 
+mod apkg;
 mod cards;
 mod decks;
 mod export;

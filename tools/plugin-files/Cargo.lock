@@ -379,6 +379,8 @@ name = "paperpaw-plugin-vocabulary"
 version = "1.1.0"
 dependencies = [
  "paperpaw-sdk",
+ "paperpaw-sqlite",
+ "paperpaw-zip",
 ]
 
 [[package]]

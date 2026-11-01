@@ -20,6 +20,13 @@ change the plugin SDK.
   with your phone* (CSV, TSV, TXT or Anki `.apkg`), which the page, the help and the empty state now explain, and
   with errors that name the problem: a wrong file type, a file that is not UTF-8 or has no cards, a full deck.
   Files over 4 MiB or 20,000 lines are refused and a card holds at most 500 characters. No SDK change.
+- Flash cards from Anki decks on the card (#49, part 3): an Anki deck package (`.apkg`, exported with *Support older
+  Anki versions*) in `/Flashcards/` is a deck like a CSV or TSV file: the notes' first three fields (front, back,
+  example) become cards as plain text, without markup and sounds, and an update merges them as it does a text file's
+  lines. Scheduling and media are not read (ticket #26, Anki's own sync, is not part of this). The deck's database is
+  read page by page, so the heap needs no more than for a text file. A deck of the newest Anki format, one with
+  more than 4,000 files, a database over 16 MiB or more than 20,000 notes is told, not read. An Anki file is only
+  read: *Save to card* never writes over it. No SDK change.
 - A release's `paperpaw-<device>-<version>-abi.txt` says the firmware's table for plugins after its
   fingerprint: `interface:`, `api:` (the table's size), `families:` and `min:` (each family's revision and the
   oldest it runs), read from the firmware's ELF file (`PAPERPAW_NATIVE_ABI`, `paperpaw-sign abi`). The store
