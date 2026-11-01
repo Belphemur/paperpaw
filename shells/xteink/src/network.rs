@@ -221,17 +221,21 @@ impl Network {
         remote::http_answer(answer, since.map_or(0, |at| now.0.saturating_sub(at)));
     }
 
-    /// Moves the TCP/IP stack on and nothing else: what the radio brought
-    /// is taken out of its queue (five frames, which drops what comes
-    /// beyond) and acknowledged. For the long waits of the main loop
-    /// (a refresh of the panel, up to 3.5 s) where [`Network::step`] cannot
-    /// be called; the requests' and servers' work waits for the next step,
-    /// the window of each connection keeping the other side from sending
-    /// more than the connection takes.
+    /// Moves the TCP/IP stack and the Bluetooth host on and nothing else:
+    /// what the radio brought is taken out of its queue (five frames, which
+    /// drops what comes beyond) and acknowledged; a remote's keys and the
+    /// links' packets are taken. For the long waits of the main loop (a
+    /// refresh of the panel, up to 3.5 s) where [`Network::step`] cannot be
+    /// called; the requests' and servers' work waits for the next step, the
+    /// window of each connection keeping the other side from sending more
+    /// than the connection takes, and what Bluetooth reports waits for it
+    /// too.
     pub fn keep_served(&mut self) {
         if let Some(net) = self.radio.net() {
             net.poll();
         }
+        #[cfg(feature = "bluetooth")]
+        self.bluetooth.keep_polled();
     }
 
     /// Leaves the network before the device starts again or sleeps
