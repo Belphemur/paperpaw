@@ -11,6 +11,7 @@
 //! is the device's label (letters, digits, hyphens), compared without
 //! regard to case.
 
+use alloc::string::String;
 use alloc::vec::Vec;
 
 /// The port multicast DNS uses.
@@ -95,6 +96,20 @@ pub fn label_with_suffix(base: &[u8], mac: [u8; 6]) -> Vec<u8> {
         }
     }
     label
+}
+
+/// The name to tell a person who opens a page of the device: the plain
+/// name once claimed (`plain`, a label: `paperpaw`), else the one with the
+/// suffix (`own`, as [`Responder::name`] gives it, with `.local`). `None`
+/// for a name that is not text.
+pub fn shown_name(own: &[u8], plain: Option<&[u8]>) -> Option<String> {
+    match plain {
+        Some(label) => {
+            let label = core::str::from_utf8(label).ok()?;
+            Some(alloc::format!("{label}.local"))
+        }
+        None => core::str::from_utf8(own).ok().map(String::from),
+    }
 }
 
 /// Whether `source` is on the network `address` is on (`prefix` bits of
@@ -470,6 +485,21 @@ impl Claim {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_name_shown_is_the_plain_one_once_claimed() {
+        let own = b"paperpaw-x4-1a2b.local";
+        assert_eq!(
+            shown_name(own, None).as_deref(),
+            Some("paperpaw-x4-1a2b.local")
+        );
+        assert_eq!(
+            shown_name(own, Some(b"paperpaw")).as_deref(),
+            Some("paperpaw.local")
+        );
+        assert_eq!(shown_name(&[0xff, 0xfe], None), None);
+        assert_eq!(shown_name(own, Some(&[0xff])), None);
+    }
+
     use super::*;
 
     fn name(label: &str) -> Vec<u8> {

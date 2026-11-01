@@ -889,9 +889,8 @@ fn kernel(
     builder.build().expect("kernel")
 }
 
-/// What the X4 shells change by the power level.
+/// What the X4 shells change by the power level: the buttons' reading, and
+/// the X4 Pro's front light.
 fn power_controls() -> paperpaw_sdk::power::PowerControls {
-    let mut controls = paperpaw_sdk::power::PowerControls::default();
-    controls.buttons = true;
-    controls
+    paperpaw_x4::controls::power_controls(cfg!(feature = "x4-pro"))
 }
