@@ -1437,6 +1437,7 @@ fn short_names_alone_are_names() {
 
 mod after_cuts;
 mod failing_writes;
+mod noted;
 
 /// The time a file was changed is the same listed and asked for, and
 /// read from FAT's date and time as seconds since 1970.

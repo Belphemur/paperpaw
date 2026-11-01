@@ -83,6 +83,7 @@
 extern crate alloc;
 
 mod disk;
+mod found;
 mod free;
 mod settle;
 
@@ -101,6 +102,10 @@ use paperpaw_platform::storage::is_valid_path;
 use paperpaw_platform::{DirEntry, Storage, StorageError};
 
 pub use fatfs;
+
+#[cfg(test)]
+use found::BIG;
+use found::{Lookup, Scan, lookup, lookup_with};
 
 type FatFile<IO> = File<'static, IO, DefaultTimeProvider, LossyOemCpConverter>;
 
@@ -320,89 +325,6 @@ impl Temps {
     fn ready(&self) -> &str {
         core::str::from_utf8(&self.ready).unwrap_or_default()
     }
-}
-
-/// What a name stands for in a folder.
-struct Lookup<IO: ReadWriteSeek + 'static> {
-    /// The entry it names: by its long name, or by its short name where
-    /// it has no long one.
-    entry: Option<FatEntry<IO>>,
-    /// rust-fatfs could take another entry for the name (one whose short
-    /// name it is, as `PAPERP~1` for `.paperpaw`): the name is not handed
-    /// to rust-fatfs then.
-    others: bool,
-    /// Another entry has its long name too: the old file and the new one,
-    /// a replace cut off between (see `settled`).
-    twice: bool,
-    /// Its file of [`Temps::tmp`], where looked for.
-    tmp: Option<FatEntry<IO>>,
-    /// Its file of [`Temps::ready`], where looked for.
-    ready: Option<FatEntry<IO>>,
-    /// A temporary file of an earlier version is in the folder, where
-    /// looked for (see [`is_old_temp`]).
-    old: bool,
-}
-
-/// Looks up `name` in `dir`, as PaperPaw names entries (see the [crate
-/// documentation](crate)): every entry, where the name goes to rust-fatfs
-/// after (`whole`), else up to the one it names.
-fn lookup<IO: ReadWriteSeek + 'static>(
-    dir: &FatDir<IO>,
-    name: &str,
-    whole: bool,
-) -> Result<Lookup<IO>, StorageError> {
-    lookup_with(dir, name, whole, None)
-}
-
-/// [`lookup`], looking for the files of `temps` on the way (all of them
-/// where `name` is not there, or `whole`).
-fn lookup_with<IO: ReadWriteSeek + 'static>(
-    dir: &FatDir<IO>,
-    name: &str,
-    whole: bool,
-    temps: Option<&Temps>,
-) -> Result<Lookup<IO>, StorageError> {
-    let mut found = Lookup {
-        entry: None,
-        others: false,
-        twice: false,
-        tmp: None,
-        ready: None,
-        old: false,
-    };
-    for entry in entries(dir) {
-        let entry = entry?;
-        let by_short = short_name_is(&entry, name);
-        let (named, other) = match long_name_is(&entry, name) {
-            Some(by_long) => (by_long, by_short),
-            None => (by_short, false),
-        };
-        if named && found.entry.is_none() {
-            found.entry = Some(entry);
-            if !whole {
-                break;
-            }
-            continue;
-        } else if named {
-            found.twice = true;
-        } else if other {
-            found.others = true;
-        }
-        let Some(temps) = temps.filter(|_| entry.is_file() && may_be_temp(&entry)) else {
-            continue;
-        };
-        // By its short name too: a temporary's long name, if lost, was
-        // the same.
-        let is = |temp| long_name_is(&entry, temp) == Some(true) || short_name_is(&entry, temp);
-        if is(temps.tmp()) && found.tmp.is_none() {
-            found.tmp = Some(entry);
-        } else if is(temps.ready()) && found.ready.is_none() {
-            found.ready = Some(entry);
-        } else {
-            found.old |= is_old_temp(&entry);
-        }
-    }
-    Ok(found)
 }
 
 /// Folder `name` in `dir`.
@@ -662,22 +584,21 @@ fn remove_in<IO: ReadWriteSeek + 'static>(
     dir: &FatDir<IO>,
     name: &str,
 ) -> Result<(), StorageError> {
-    remove_found(dir, name, lookup(dir, name, true)?)
+    remove_found(dir, lookup(dir, name, true)?)
 }
 
 /// [`remove_in`], `name` looked up whole (`found`).
 fn remove_found<IO: ReadWriteSeek + 'static>(
     dir: &FatDir<IO>,
-    name: &str,
     found: Lookup<IO>,
 ) -> Result<(), StorageError> {
     match found {
         Lookup { entry: None, .. } => Ok(()),
         Lookup { others: true, .. } => Err(StorageError::InvalidPath),
-        Lookup { .. } => match dir.remove(name) {
-            Ok(()) | Err(fatfs::Error::NotFound) => Ok(()),
-            Err(e) => Err(error(e)),
-        },
+        // The entry found, not looked for again by its name.
+        Lookup {
+            entry: Some(entry), ..
+        } => dir.remove_found(&entry).map_err(error),
     }
 }
 
@@ -709,17 +630,20 @@ fn rename_in<IO: ReadWriteSeek + 'static>(
     to: &FatDir<IO>,
     to_name: &str,
 ) -> Result<(), StorageError> {
-    match lookup(dir, name, true)? {
+    let entry = match lookup(dir, name, true)? {
         Lookup { entry: None, .. } => return Err(StorageError::NotFound),
         Lookup { others: true, .. } => return Err(StorageError::InvalidPath),
-        Lookup { .. } => {}
-    }
+        Lookup {
+            entry: Some(entry), ..
+        } => entry,
+    };
     match lookup(to, to_name, true)? {
+        // The entry found, not looked for again by its name.
         Lookup {
             entry: None,
             others: false,
             ..
-        } => dir.rename(name, to, to_name).map_err(error),
+        } => dir.rename_found(&entry, to, to_name).map_err(error),
         Lookup { .. } => Err(StorageError::InvalidPath),
     }
 }
@@ -1050,7 +974,7 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
         self.close(path)?;
         self.forget(path);
         match self.dir(parent(path)) {
-            Ok(dir) if settle => remove_found(&dir, name(path), settled(&dir, name(path))?),
+            Ok(dir) if settle => remove_found(&dir, settled(&dir, name(path))?),
             Ok(dir) => remove_in(&dir, name(path)),
             Err(StorageError::NotFound) => Ok(()),
             Err(e) => Err(e),
@@ -1106,8 +1030,14 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
                 rename_in(&dir, temps.ready(), &dir, name(to))
             });
         }
-        self.create_dirs(parent(to))?;
-        let to_dir = self.dir(parent(to))?;
+        // Made where it is not there (not looked up twice where it is).
+        let to_dir = match self.dir(parent(to)) {
+            Err(StorageError::NotFound) => {
+                self.create_dirs(parent(to))?;
+                self.dir(parent(to))?
+            }
+            found => found?,
+        };
         let there = settled(&to_dir, name(to))?;
         let replaced = match there.entry {
             _ if there.others => return Err(StorageError::InvalidPath),
@@ -1296,8 +1226,11 @@ impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
         }
         // The sizes in the folders, as appended.
         self.sync()?;
-        for entry in entries(&self.dir(dir)?) {
+        let folder = self.dir(dir)?;
+        let mut read = Scan::of(&folder);
+        for entry in entries(&folder) {
             let entry = entry?;
+            read.met(&entry);
             let name = entry.file_name();
             // Nor the storage's own (see `check`).
             let own = is_temp_name(&name) || (dir.is_empty() && same_path(&name, JOURNAL));
@@ -1311,6 +1244,7 @@ impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
                     .with_modified(modified),
             );
         }
+        read.note(&folder);
         Ok(())
     }
 
