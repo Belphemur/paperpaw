@@ -816,8 +816,8 @@ fn the_first_pages_of_a_long_comic_are_kept_and_not_held_in_memory() {
 /// The converted text of the book `book.epub`'s first chapter.
 fn chapter_text() -> String {
     format!(
-        ".paperpaw/plugins/format-epub/{}/sections/0/txt",
-        paperpaw_sdk::library::key("book.epub")
+        "{}/sections/0/txt",
+        paperpaw_sdk::library::kept_path(".paperpaw/plugins/format-epub", "", "book.epub")
     )
 }
 

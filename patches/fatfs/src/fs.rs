@@ -333,7 +333,16 @@ pub struct FileSystem<IO: ReadWriteSeek, TP = DefaultTimeProvider, OCC = LossyOe
     total_clusters: u32,
     fs_info: RefCell<FsInfoSector>,
     current_status_flags: Cell<FsStatusFlags>,
+    // Modified for PaperPaw: notes about directories (see `Dir::note`).
+    dir_notes: RefCell<[Option<(u32, u64)>; DIR_NOTES]>,
+    entries_written: Cell<u64>,
 }
+
+// Modified for PaperPaw: added.
+/// How many directories are noted at most (see `Dir::note`): the ones noted last. Enough for a
+/// folder of books and the large folders of what is kept for each book (their parts) to stay
+/// noted while each book is taken in turn; 16 bytes each.
+pub const DIR_NOTES: usize = 8;
 
 pub trait IntoStorage<T: Read + Write + Seek> {
     fn into_storage(self) -> T;
@@ -431,6 +440,8 @@ impl<IO: Read + Write + Seek, TP, OCC> FileSystem<IO, TP, OCC> {
             total_clusters,
             fs_info: RefCell::new(fs_info),
             current_status_flags: Cell::new(status_flags),
+            dir_notes: RefCell::new([None; DIR_NOTES]),
+            entries_written: Cell::new(0),
         })
     }
 
@@ -468,6 +479,53 @@ impl<IO: Read + Write + Seek, TP, OCC> FileSystem<IO, TP, OCC> {
 
     pub fn cluster_size(&self) -> u32 {
         self.bpb.cluster_size()
+    }
+
+    // Modified for PaperPaw: `dir_note`, `set_dir_note`, `entries_written`, `note_entry_written`,
+    // `drop_dir_note` and `forget_dir_notes` added (see `Dir::note`).
+
+    pub(crate) fn dir_note(&self, cluster: u32) -> Option<u64> {
+        let notes = self.dir_notes.borrow();
+        notes.iter().flatten().find(|(c, _)| *c == cluster).map(|(_, note)| *note)
+    }
+
+    pub(crate) fn set_dir_note(&self, cluster: u32, note: u64) {
+        let mut notes = self.dir_notes.borrow_mut();
+        // The one noted last first: the oldest goes.
+        let at = notes.iter().position(|n| n.is_some_and(|(c, _)| c == cluster)).unwrap_or(DIR_NOTES - 1);
+        notes[..=at].rotate_right(1);
+        notes[0] = Some((cluster, note));
+    }
+
+    /// How many entries were written so far (files and directories created, entries moved or
+    /// renamed), in any directory.
+    #[must_use]
+    pub fn entries_written(&self) -> u64 {
+        self.entries_written.get()
+    }
+
+    pub(crate) fn note_entry_written(&self, cluster: Option<u32>) {
+        self.entries_written.set(self.entries_written.get().wrapping_add(1));
+        if let Some(cluster) = cluster {
+            self.drop_dir_note(cluster);
+        }
+    }
+
+    pub(crate) fn drop_dir_note(&self, cluster: u32) {
+        let mut notes = self.dir_notes.borrow_mut();
+        for note in notes.iter_mut() {
+            if note.is_some_and(|(c, _)| c == cluster) {
+                *note = None;
+            }
+        }
+    }
+
+    /// Drops every note about a directory (see `Dir::note`): e.g. where the card was changed
+    /// otherwise than through this file system. PaperPaw does not call it: a card is mounted
+    /// anew (a new `FileSystem`) whenever it may have been changed elsewhere. A shell that lets
+    /// the card be written otherwise while it stays mounted (as a USB drive, say) must call it.
+    pub fn forget_dir_notes(&self) {
+        *self.dir_notes.borrow_mut() = [None; DIR_NOTES];
     }
 
     pub(crate) fn offset_from_cluster(&self, cluster: u32) -> u64 {

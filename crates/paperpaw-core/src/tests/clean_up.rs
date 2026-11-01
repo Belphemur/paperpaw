@@ -62,7 +62,7 @@ impl Plugin for Heard {
 #[test]
 fn cleaning_up_asks_before_the_notes_of_books_not_found_go() {
     let gone = |folder: &str, path: &str| alloc::format!(".paperpaw/{folder}/{}", key(path));
-    let cover = alloc::format!(".paperpaw/library/covers/{}.thumb", key("Books/a.txt"));
+    let cover = thumb("Books/a.txt");
     let storage = MemoryStorage::new()
         .with(&gone("annotations", "Books/a.txt"), "a note")
         .with(&gone("positions", "Books/a.txt"), "page 30")
@@ -141,7 +141,7 @@ fn cleaning_up_keeps_books_by_every_spelling_of_their_folder() {
 fn cleaning_up_runs_by_itself_while_charging_now_and_then() {
     use paperpaw_platform::{Battery, SystemStatus, WallClock};
     let annotations = |path: &str| alloc::format!(".paperpaw/annotations/{}", key(path));
-    let cover = alloc::format!(".paperpaw/library/covers/{}.thumb", key("Books/gone.txt"));
+    let cover = thumb("Books/gone.txt");
     let storage = MemoryStorage::new()
         .with(&annotations("Books/gone.txt"), "a note")
         .with(&cover, "a cover");
@@ -172,4 +172,10 @@ fn cleaning_up_runs_by_itself_while_charging_now_and_then() {
     let noted = paperpaw_sdk::read_file(kernel.storage(), ".paperpaw/cleaned-up.txt", 32).unwrap();
     // At the first tick after charging began.
     assert_eq!(noted, b"1800086403\n");
+}
+
+/// Where the cover of the book at `path` made small is kept.
+fn thumb(path: &str) -> String {
+    let key = key(path);
+    alloc::format!(".paperpaw/library/thumbs/{}/{key}.thumb", &key[..2])
 }

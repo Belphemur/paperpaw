@@ -755,6 +755,15 @@ impl<'a, IO: ReadWriteSeek, TP, OCC: OemCpConverter> DirEntry<'a, IO, TP, OCC> {
     }
 
     // Modified for PaperPaw: added.
+    /// Returns where its entries are in its directory: the byte offset of the first (a long name's
+    /// first entry, or a deleted one before them) and of the end of the last, where the next one
+    /// begins (see `Dir::iter_from`).
+    #[must_use]
+    pub fn offset_range(&self) -> (u64, u64) {
+        self.offset_range
+    }
+
+    // Modified for PaperPaw: added.
     /// Returns the mark `File::set_mark` gave it, if any.
     #[must_use]
     pub fn mark(&self) -> Option<u32> {

@@ -132,10 +132,8 @@ fn chapters_converted_with_stylesheets_one_has_no_more_go() {
         doc.block_at(&storage, Locator::START).unwrap();
     }
     let mut folders = 0;
-    let cache = format!(
-        ".paperpaw/plugins/format-epub/{}",
-        paperpaw_sdk::library::key("b/book.epub")
-    );
+    let cache =
+        paperpaw_sdk::library::kept_path(".paperpaw/plugins/format-epub", "", "b/book.epub");
     storage
         .list(&cache, &mut |entry| {
             folders += usize::from(entry.is_dir && entry.name.starts_with("css-"));

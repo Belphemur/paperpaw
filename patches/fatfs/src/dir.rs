@@ -126,6 +126,43 @@ impl<'a, IO: ReadWriteSeek, TP, OCC> Dir<'a, IO, TP, OCC> {
     pub fn iter(&self) -> DirIter<'a, IO, TP, OCC> {
         DirIter::new(self.stream.clone(), self.fs, true)
     }
+
+    // Modified for PaperPaw: `iter_from`, `note`, `entries_written` and `set_note` added.
+
+    /// Creates directory entries iterator from byte `offset` of the directory on, where an entry
+    /// (or a deleted one) begins: as `DirEntry::offset_range` says where one ends.
+    ///
+    /// # Errors
+    ///
+    /// `Error::Io` will be returned if the underlying storage object returned an I/O error.
+    pub fn iter_from(&self, offset: u64) -> Result<DirIter<'a, IO, TP, OCC>, Error<IO::Error>> {
+        let mut stream = self.stream.clone();
+        stream.seek(SeekFrom::Start(offset))?;
+        Ok(DirIter::new(stream, self.fs, true))
+    }
+
+    /// The note `set_note` gave this directory, while it holds: until an entry is added to it (a
+    /// file or a directory created, an entry moved or renamed into it), it is removed, or
+    /// `FileSystem::forget_dir_notes`; and while it is one of the `DIR_NOTES` directories noted
+    /// last. Entries removed keep it. None for a root directory outside the data area (FAT12/16).
+    #[must_use]
+    pub fn note(&self) -> Option<u64> {
+        self.fs.dir_note(self.stream.first_cluster()?)
+    }
+
+    /// How many entries the file system wrote so far, in any directory (see
+    /// `FileSystem::entries_written`).
+    #[must_use]
+    pub fn entries_written(&self) -> u64 {
+        self.fs.entries_written()
+    }
+
+    /// Notes `note` about this directory (see `note`), e.g. that it was read whole and how it was.
+    pub fn set_note(&self, note: u64) {
+        if let Some(cluster) = self.stream.first_cluster() {
+            self.fs.set_dir_note(cluster, note);
+        }
+    }
 }
 
 impl<'a, IO: ReadWriteSeek, TP: TimeProvider, OCC: OemCpConverter> Dir<'a, IO, TP, OCC> {
@@ -364,6 +401,20 @@ impl<'a, IO: ReadWriteSeek, TP: TimeProvider, OCC: OemCpConverter> Dir<'a, IO, T
         }
         // in case of directory check if it is empty
         let e = self.find_entry(name, None, None)?;
+        self.remove_found(&e)
+    }
+
+    // Modified for PaperPaw: `remove_found` added, `remove` through it.
+
+    /// Removes entry `e` of this directory, found by `iter` (or `iter_from`) and nothing changed
+    /// in the directory since: a file, or an empty directory. Make sure there is no reference to
+    /// it (no File instance) or filesystem corruption can happen.
+    ///
+    /// # Errors
+    ///
+    /// * `Error::DirectoryIsNotEmpty` will be returned if `e` is a directory that is not empty.
+    /// * `Error::Io` will be returned if the underlying storage object returned an I/O error.
+    pub fn remove_found(&self, e: &DirEntry<'a, IO, TP, OCC>) -> Result<(), Error<IO::Error>> {
         if e.is_dir() && !e.to_dir().is_empty()? {
             return Err(Error::DirectoryIsNotEmpty);
         }
@@ -371,9 +422,13 @@ impl<'a, IO: ReadWriteSeek, TP: TimeProvider, OCC: OemCpConverter> Dir<'a, IO, T
         // freed. Cut off between (power lost), the clusters stay taken by
         // no file, instead of a file pointing at free clusters that may be
         // given to another.
-        self.remove_entries(&e)?;
-        // free data
+        self.remove_entries(e)?;
         if let Some(n) = e.first_cluster() {
+            // Its clusters may hold another directory once freed.
+            if e.is_dir() {
+                self.fs.drop_dir_note(n);
+            }
+            // free data
             self.fs.free_cluster_chain(n)?;
         }
         Ok(())
@@ -550,6 +605,27 @@ impl<'a, IO: ReadWriteSeek, TP: TimeProvider, OCC: OemCpConverter> Dir<'a, IO, T
         trace!("Dir::rename_internal {} {}", src_name, dst_name);
         // find existing file
         let e = self.find_entry(src_name, None, None)?;
+        self.rename_found(&e, dst_dir, dst_name)
+    }
+
+    // Modified for PaperPaw: `rename_found` added, `rename_internal` through it.
+
+    /// Moves entry `e` of this directory, found by `iter` (or `iter_from`) and nothing changed in
+    /// the directory since, to `dst_name` in `dst_dir` (a name, not a path), as `rename` does.
+    /// Make sure there is no reference to this file (no File instance) or filesystem corruption
+    /// can happen.
+    ///
+    /// # Errors
+    ///
+    /// * `Error::AlreadyExists` will be returned if `dst_name` names another entry of `dst_dir`.
+    /// * `Error::Io` will be returned if the underlying storage object returned an I/O error.
+    pub fn rename_found(
+        &self,
+        e: &DirEntry<'a, IO, TP, OCC>,
+        dst_dir: &Dir<IO, TP, OCC>,
+        dst_name: &str,
+    ) -> Result<(), Error<IO::Error>> {
+        trace!("Dir::rename_found {}", dst_name);
         // check if destionation filename is unused
         let r = dst_dir.check_for_existence(dst_name, None)?;
         let short_name = match r {
@@ -571,7 +647,7 @@ impl<'a, IO: ReadWriteSeek, TP: TimeProvider, OCC: OemCpConverter> Dir<'a, IO, T
         // data, never at neither; the caller settles which one stays (see `unlink`).
         let sfn_entry = e.data.renamed(short_name);
         dst_dir.write_entry(dst_name, sfn_entry)?;
-        self.remove_entries(&e)?;
+        self.remove_entries(e)?;
         if e.is_dir() {
             let parent_cluster = if dst_dir.stream.is_root_dir() {
                 None
@@ -679,6 +755,9 @@ impl<'a, IO: ReadWriteSeek, TP: TimeProvider, OCC: OemCpConverter> Dir<'a, IO, T
         trace!("Dir::write_entry {}", name);
         // check if name doesn't contain unsupported characters
         validate_long_name(name)?;
+        // Modified for PaperPaw: counted, and a note about the directory holds no longer (see
+        // `note`).
+        self.fs.note_entry_written(self.stream.first_cluster());
         // convert long name to UTF-16
         let lfn_utf16 = Self::encode_lfn_utf16(name);
         // write LFN entries, except for . and .., which need to be at

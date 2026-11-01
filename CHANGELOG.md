@@ -12,6 +12,12 @@ after the bless without changing the fingerprint (the right-to-left mirroring, d
 fingerprint changed once more with the pen and TLS reservations (`e5f4a41a`, #81), so plugins built before it are
 refused too. Store, test-card and Workshop builds from commits before `e5f4a41a` are thrown away.
 
+**Plugins that read the library must also be built from the split of the library's folders (#280) or later**:
+calibre, end-of-book, file-manager, files, the format plugins, home, notes-overview, opds, sleep, stats, transfer,
+widgets. The firmware cannot refuse older builds (the fingerprint is the same): they would show books without their
+details and write them where the kernel moves them away from, so changes made in them would be lost. Builds from
+before it are thrown away.
+
 ### Added
 
 - Screens mirror in a user-interface language that runs right to left (#33): the switch, value rows and their
@@ -24,6 +30,10 @@ refused too. Store, test-card and Workshop builds from commits before `e5f4a41a`
 - Keyboards for Arabic, Persian, Urdu and Hebrew come with their letters packs (`script-arabic`,
   `script-hebrew`, 1.1.0), and a two-set Korean keyboard with the Korean pack: letters typed join to syllables
   (jamo), *Delete* takes back one jamo and *Shift* types the doubled letters (#61, keyboard 1.0.2).
+- SDK: `library::kept_path(folder, prefix, book)`: where a plugin keeps what it keeps for a book in a folder of
+  book data, in the part of the folder of the key's first two digits (`<folder>/<2 hex>/<prefix><key>`), so that
+  no folder holds thousands of entries. The format plugins (EPUB, FB2, HTML, Markdown, CBZ, DOCX, MOBI, TXT, XTC,
+  images) keep their caches so.
 - SDK (document): a table cell can span rows (`TableCell::rows`) and say where its lines sit
   (`TableCell::vertical`, `VerticalAlign`); `TableRow`, `TableCell` and `MAX_COLUMNS` are in `paperpaw_sdk::document`
   for format plugins.
@@ -270,6 +280,22 @@ refused too. Store, test-card and Workshop builds from commits before `e5f4a41a`
   `needs_api` and `families` of the build). The page says *Needs a newer PaperPaw* in place of *Install* or *Update*,
   and what is installed stays as it is; before, such a build was offered and the firmware refused it at the next
   start. A library that lists none of it is read as before.
+- Large libraries: the books' details and covers made small are kept in 256 folders by the first two digits of their
+  keys (`.paperpaw/library/details/<h>/<key>.ini`, `thumbs/<h>/…`) instead of one folder of thousands, which a
+  memory card searched one entry after the other for each name (the first catalog of 5,000 books grew with the
+  square of their number). What earlier versions kept in `books/` and `covers/` is read there until the kernel
+  moves it, once, a few at a time at calm moments after the start (each move whole or not made, cut off or not);
+  the old folders go once empty. Folders of book data (`add_book_data`, `add_book_cache`) may hold their entries
+  in the same subfolders (`<folder>/<2 hex>/<prefix><key>`, `library::kept_path`): the kernel moves, removes and
+  cleans up both, and with the move takes away once what folders of caches hold in the folder itself (made again
+  from the book when needed: each book's first opening after the update takes a little longer). On FAT
+  (the X4's card), a folder of 256 entries or more read whole is looked through from where the last name was
+  found (for up to 8 such folders at a time), so names taken out of it in its order take a few blocks each;
+  rust-fatfs, as patched, moves and removes an entry found without looking for it again. EPUB books look for one's
+  own stylesheets (`styles.css`, `<book>.css`) only when a chapter is first needed, not when opened: the catalog,
+  which opens every book for its details, no longer searches each book's folder for files mostly not there. With
+  10,000 books the first catalog reads 2.4 million blocks of the card instead of 160 million. Plugins that read the
+  library's details must be built from this change on (they read `details/`).
 - *Literata's bold and italic* are no longer in the firmware of the X4, X3, X4 Pro and X4 Classic (531 KB less, more
   room for updates and plugins) but a small font pack on the card, the plugin *Literata bold and italic*
   (`literata-styles`, 0.5 MB, 0 flash). The web flasher puts it on the card with the firmware; after an update

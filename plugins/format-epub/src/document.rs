@@ -1,7 +1,7 @@
 use alloc::borrow::Cow;
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::cell::{Cell, RefCell};
+use core::cell::{Cell, OnceCell, RefCell};
 
 use paperpaw_sdk::digest::fnv1a64;
 use paperpaw_sdk::document::{
@@ -40,9 +40,13 @@ pub struct EpubDocument {
     metadata: Metadata,
     toc_len: u32,
     cache: String,
-    /// Where converted chapters are: `cache`, or its `plain` folder when
-    /// the book's styles are off.
-    chapters: String,
+    /// The book's path, and the stylesheets to apply after its own (e.g.
+    /// the plugins'): for [`EpubDocument::styled`].
+    path: String,
+    plugin_css: String,
+    /// Where converted chapters are and one's own stylesheets, once a
+    /// chapter is converted or read.
+    styled: OnceCell<Styled>,
     /// Whether the book's CSS applies.
     styles: bool,
     /// Pictures in colour (ADR 0015).
@@ -53,9 +57,6 @@ pub struct EpubDocument {
     cover_fit: Fit,
     /// Archive path of the cover image.
     cover: Option<String>,
-    /// One's own stylesheets for this book (see [`user_css`]), applied
-    /// after the book's.
-    user_css: String,
     /// The printed pages of one section, resolved.
     pages: core::cell::RefCell<Option<SectionPages>>,
     /// Where an anchor was found last.
@@ -64,6 +65,31 @@ pub struct EpubDocument {
     /// blocks, and the block found last in it. A page is laid out a block
     /// at a time, the next one mostly right after the last.
     known: core::cell::RefCell<Option<Known>>,
+}
+
+/// Where a book's chapters are converted to, and one's own stylesheets
+/// for it (see [`user_css`]), applied after the book's. Looked for when a
+/// chapter is first needed, not when the book is opened: its details (for
+/// the library, say) need none, and a stylesheet not there is looked for
+/// through the whole of its folder.
+#[derive(Debug)]
+struct Styled {
+    /// `cache`, its `plain` folder when the book's styles are off, or one
+    /// for one's own stylesheets (see [`chapters_cache`]).
+    chapters: String,
+    user_css: String,
+}
+
+impl Styled {
+    fn new(storage: &dyn Storage, cache: &str, styles: bool, user_css: String) -> Self {
+        let chapters = chapters_cache(cache, styles, &user_css);
+        if chapters.contains("/css-") && !storage.exists(&paths(&chapters, 0).end) {
+            // Stylesheets of one's own changed: the chapters converted
+            // with those before go.
+            remove_other_css(storage, cache, &chapters);
+        }
+        Styled { chapters, user_css }
+    }
 }
 
 /// A converted chapter, as [`EpubDocument::known`] keeps it.
@@ -181,11 +207,7 @@ const MAX_SPAN: u32 = 16 * 1024;
 
 /// The cache of a book.
 fn book_cache(path: &str) -> String {
-    alloc::format!(
-        "{}/{}",
-        Env::plugin_dir(PLUGIN.as_str()),
-        paperpaw_sdk::library::key(path)
-    )
+    paperpaw_sdk::library::kept_path(&Env::plugin_dir(PLUGIN.as_str()), "", path)
 }
 
 /// The cache of a book's chapters converted with its styles or not, and
@@ -270,8 +292,7 @@ impl EpubDocument {
         Self::open_styled(
             storage,
             path,
-            styles,
-            styles_css(storage, path, styles, ""),
+            (styles, "", None),
             false,
             (convert::IMAGE_FIT, paperpaw_sdk::COVER_FIT),
         )
@@ -296,14 +317,11 @@ impl EpubDocument {
         prepared: &PreparedCss,
     ) -> Result<Self, DocumentError> {
         let styles = options.publisher_styles;
-        let user_css = prepared
-            .take(path, styles, &options.css)
-            .unwrap_or_else(|| styles_css(storage, path, styles, &options.css));
+        let user_css = prepared.take(path, styles, &options.css);
         Self::open_styled(
             storage,
             path,
-            styles,
-            user_css,
+            (styles, &options.css, user_css),
             options.color,
             (options.image_fit, options.cover_fit),
         )
@@ -341,11 +359,12 @@ impl EpubDocument {
         prepared
     }
 
+    /// Opens a book with its `styles` or not, the stylesheets to apply
+    /// after its own and one's own (looked for later where not given).
     fn open_styled(
         storage: &dyn Storage,
         path: &str,
-        styles: bool,
-        user_css: String,
+        (styles, plugin_css, user_css): (bool, &str, Option<String>),
         color: bool,
         (image_fit, cover_fit): (Fit, Fit),
     ) -> Result<Self, DocumentError> {
@@ -362,11 +381,9 @@ impl EpubDocument {
                 package::build(storage, &archive, &cache, &book)?
             }
         };
-        let chapters = chapters_cache(&cache, styles, &user_css);
-        if chapters.contains("/css-") && !storage.exists(&paths(&chapters, 0).end) {
-            // Stylesheets of one's own changed: the chapters converted
-            // with those before go.
-            remove_other_css(storage, &cache, &chapters);
+        let styled = OnceCell::new();
+        if let Some(user_css) = user_css {
+            let _ = styled.set(Styled::new(storage, &cache, styles, user_css));
         }
         let mut metadata = package.metadata;
         if metadata.title.is_none() {
@@ -386,20 +403,30 @@ impl EpubDocument {
             cover: package.cover,
             archive,
             cache,
-            chapters,
+            path: String::from(path),
+            plugin_css: String::from(plugin_css),
+            styled,
             styles,
             color,
             image_fit,
             cover_fit,
-            user_css,
             pages: core::cell::RefCell::new(None),
             anchors: cached::AnchorHint::default(),
             known: core::cell::RefCell::new(None),
         })
     }
 
-    fn paths(&self, section: u32) -> CachePaths {
-        paths(&self.chapters, section)
+    /// Where its chapters are converted to and one's own stylesheets:
+    /// looked for the first time they are needed.
+    fn styled(&self, storage: &dyn Storage) -> &Styled {
+        self.styled.get_or_init(|| {
+            let user_css = styles_css(storage, &self.path, self.styles, &self.plugin_css);
+            Styled::new(storage, &self.cache, self.styles, user_css)
+        })
+    }
+
+    fn paths(&self, storage: &dyn Storage, section: u32) -> CachePaths {
+        paths(&self.styled(storage).chapters, section)
     }
 
     fn length(&self, section: u32) -> Option<u32> {
@@ -420,7 +447,7 @@ impl EpubDocument {
         ) else {
             return Err(DocumentError::Malformed(Cow::Borrowed("no such chapter")));
         };
-        let paths = self.paths(section);
+        let paths = self.paths(storage, section);
         let length = match cached::converted_length(storage, &paths) {
             Some(length) => length,
             None if slot.get() == FAILED => {
@@ -440,8 +467,9 @@ impl EpubDocument {
                     Default::default()
                 };
                 // One's own after the book's: they win.
-                if !self.user_css.is_empty() {
-                    rules.add_own(&self.user_css);
+                let own = &self.styled(storage).user_css;
+                if !own.is_empty() {
+                    rules.add_own(own);
                 }
                 let source = convert::Source::Zip {
                     archive: &self.archive,

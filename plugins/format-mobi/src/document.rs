@@ -50,11 +50,7 @@ impl MobiDocument {
     ) -> Result<Self, DocumentError> {
         let header = Header::read(storage, path)?;
         let size = storage.size(path)?;
-        let dir = format!(
-            "{}/{}",
-            Env::plugin_dir(PLUGIN.as_str()),
-            paperpaw_sdk::library::key(path)
-        );
+        let dir = paperpaw_sdk::library::kept_path(&Env::plugin_dir(PLUGIN.as_str()), "", path);
         let stamp = format!(
             "{VERSION}\n{}\n{}x{}\n{}\n",
             fingerprint(storage, path)?,

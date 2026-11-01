@@ -527,11 +527,8 @@ impl Fb2Document {
         let (image_fit, cover_fit) = (options.image_fit, options.cover_fit);
         let size = storage.size(path)?;
         let book = crate::fingerprint(storage, path)?;
-        let mut cache = format!(
-            "{}/fb2-{}",
-            Env::plugin_dir(PLUGIN.as_str()),
-            paperpaw_sdk::library::key(path)
-        );
+        let mut cache =
+            paperpaw_sdk::library::kept_path(&Env::plugin_dir(PLUGIN.as_str()), "fb2-", path);
         if !styles {
             cache.push_str("/plain");
         }

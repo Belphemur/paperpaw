@@ -57,7 +57,8 @@ fn books(storage: &dyn Storage) -> Vec<(String, Option<u8>)> {
 }
 
 fn details(path: &str) -> String {
-    format!(".paperpaw/library/books/{}.ini", library::key(path))
+    let key = library::key(path);
+    format!(".paperpaw/library/details/{}/{key}.ini", &key[..2])
 }
 
 fn reading(path: &str, progress: f32) -> Reading {

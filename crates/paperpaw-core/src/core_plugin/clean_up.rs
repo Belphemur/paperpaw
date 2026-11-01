@@ -14,8 +14,8 @@ pub(super) fn register_clean_up(r: &mut Registrar) -> Result<(), RegisterError> 
     r.add_book_data(paperpaw_sdk::data_path!("annotations"), "")?;
     r.add_book_data(paperpaw_sdk::positions::DIR, "")?;
     r.add_book_data(paperpaw_sdk::readers::DIR, "")?;
-    r.add_book_data(alloc::format!("{}/books", library::DIR), "")?;
-    r.add_book_cache(alloc::format!("{}/covers", library::DIR), "")?;
+    r.add_book_data(alloc::format!("{}/details", library::DIR), "")?;
+    r.add_book_cache(alloc::format!("{}/thumbs", library::DIR), "")?;
     // With the device's settings.
     static ENTRY: [paperpaw_sdk::MenuEntry; 1] = [paperpaw_sdk::MenuEntry::new(
         groups::SYSTEM,

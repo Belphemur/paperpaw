@@ -14,11 +14,17 @@ not mean its SDK and plugin crates are available to plugin authors.
    A source refactor or changed package resource needs a new crate
    version even when the plugin's runtime behaviour stayed the same:
    crates.io cannot replace the sources of a published version.
-2. Commit the prepared release. Run the checks in
+2. Build every plugin of the release (store, test cards, Workshop) from
+   the baseline the CHANGELOG's section names, or later. The firmware
+   refuses plugins of another interface fingerprint, but not those built
+   before a change it cannot tell, such as the library's folders split
+   by key (#280): an older build of a plugin that reads the library would
+   keep its books' details where no version reads them any more.
+3. Commit the prepared release. Run the checks in
    [CONTRIBUTING.md](../CONTRIBUTING.md) and review their GitHub results.
    Run `tools/release-gate.sh <previous-tag>` and complete the hardware
    OTA gate, including the second update hop on the X4 and X4 Pro.
-3. Check the crate publication before tagging:
+4. Check the crate publication before tagging:
 
    ```sh
    python3 tools/publish-workspace.py --plan
@@ -42,7 +48,7 @@ not mean its SDK and plugin crates are available to plugin authors.
    versions cannot hide a problem in the current library sources. It
    uses the same source guard for existing plugin versions. This script
    also uploads nothing.
-4. Push the prepared commit and its version tag. Review the Release,
+5. Push the prepared commit and its version tag. Review the Release,
    CI, Publish check and Reproducible build workflows separately: they
    are independent, and a successful Release workflow does not imply
    the others passed. Do not move a tag whose files are already public.
