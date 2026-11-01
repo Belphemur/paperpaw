@@ -753,6 +753,16 @@ const CASES: &[Case] = &[
         colour: 0,
         fixtures: false,
     },
+    // A picture as a book: its page, the picture fit to the screen.
+    Case {
+        name: "x4-pictures-book",
+        profile: "xteink-x4",
+        book: Some("books/alice-cover.jpg"),
+        sets: &[],
+        script: "wait:1500",
+        colour: 0,
+        fixtures: false,
+    },
     Case {
         name: "x4-endbook-next",
         profile: "xteink-x4",
@@ -856,6 +866,9 @@ fn library(case: &Case) -> PathBuf {
     let mut sources = vec![root().join("samples/library/books"), fixtures.clone()];
     if case.name.contains("endbook") {
         sources.push(fixtures.with_file_name("fixtures-endbook"));
+    }
+    if case.name.contains("pictures") {
+        sources.push(root().join("crates/paperpaw-image/tests/data"));
     }
     for dir in sources {
         for entry in fs::read_dir(dir).unwrap() {
