@@ -68,8 +68,10 @@ impl Wheels {
         let band = Rect::new(area.x, area.y, area.width, height);
         let mut cells = [Rect::new(area.x, area.y, 0, 0); 3];
         let gap = (style.gap * 2) as u16;
+        // The first field at the start side: the right one where the UI
+        // runs right to left.
         for (cell, column) in cells.iter_mut().zip(columns(band, count, gap)) {
-            *cell = column;
+            *cell = style.flip(band, column);
         }
         Self {
             cells,
@@ -83,6 +85,11 @@ impl Wheels {
 
     fn count(&self) -> usize {
         usize::from(self.count)
+    }
+
+    /// Whether the second field is left of the first.
+    fn mirrored(&self) -> bool {
+        self.count > 1 && self.cells[1].x < self.cells[0].x
     }
 
     fn focus(&self) -> usize {
@@ -132,7 +139,11 @@ impl Wheels {
         match change {
             Some(by) => step(self.focus(), by),
             None if count == 0 => {}
-            None if *action == actions::LEFT => self.focus = (self.focus + count - 1) % count,
+            // The fields run from the right where the UI runs right to left:
+            // the left button then goes on to the next.
+            None if (*action == actions::LEFT) != self.mirrored() => {
+                self.focus = (self.focus + count - 1) % count;
+            }
             None => self.focus = (self.focus + 1) % count,
         }
         true

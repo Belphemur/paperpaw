@@ -82,9 +82,11 @@ impl Chips {
             .max()
             .map_or(0, |b| b as u16);
         let below = (area.y + area.height).saturating_sub(rows_height) / 2;
+        // From the start side of the area: the right where the UI runs right
+        // to left.
         let cells = cells
             .into_iter()
-            .map(|c| Rect::new(c.x, c.y + below, c.width, c.height))
+            .map(|c| style.flip(area, Rect::new(c.x, c.y + below, c.width, c.height)))
             .collect();
         Self {
             cells,
@@ -118,10 +120,21 @@ impl Chips {
     /// other actions.
     pub fn step(&self, focus: usize, action: &Id) -> Option<usize> {
         let last = self.shown().checked_sub(1)?;
-        if [actions::LEFT, actions::PREVIOUS].contains(action) {
-            Some(focus.saturating_sub(1).min(last))
-        } else if [actions::RIGHT, actions::NEXT].contains(action) {
-            Some((focus + 1).min(last))
+        // The second chip left of the first, on the same row: the chips
+        // run from the right, so left goes on.
+        let mirrored = matches!(
+            (self.cells.first(), self.cells.get(1)),
+            (Some(first), Some(second)) if second.y == first.y && second.x < first.x
+        );
+        let (back, on) = (focus.saturating_sub(1).min(last), (focus + 1).min(last));
+        if action == &actions::PREVIOUS {
+            Some(back)
+        } else if action == &actions::NEXT {
+            Some(on)
+        } else if action == &actions::LEFT {
+            Some(if mirrored { on } else { back })
+        } else if action == &actions::RIGHT {
+            Some(if mirrored { back } else { on })
         } else {
             None
         }
