@@ -17,6 +17,9 @@ change the plugin SDK.
   oldest it runs), read from the firmware's ELF file (`PAPERPAW_NATIVE_ABI`, `paperpaw-sign abi`). The store
   and the web flasher use them to refuse a plugin that needs more than a firmware has; the first line is the
   fingerprint as before.
+- Each release has `paperpaw-fontgen`, which makes bitmap font packs (and, with `--family`, a font plugin to copy to the
+  card), built for Windows (x64), macOS (Apple silicon and Intel) and Linux (x64): `paperpaw-fontgen-<version>-<computer>.zip`,
+  with its SHA-256 and a signature of its own, like the emulators.
 
 ### Changed
 

@@ -295,7 +295,7 @@ cargo run -p paperpaw-emulator -- --headless --profile boox-go-7 --set core.lang
 | `crates/paperpaw-x4` | The X4's and X4 Pro's hardware: displays, buttons, battery |
 | `crates/paperpaw-fat` | Storage on FAT cards with long file names |
 | `plugins/` | First-party plugins: home screen, reader, library, file manager, menu, settings, plugin manager, plugin store, firmware updates, first-run setup, first-time help, menu editor, keyboard, buttons and gestures, profiles, rules, screen lock, power modes, battery use, dictionary, Wikipedia, translation, vocabulary, reading goal, reading statistics, progress sync and KOReader highlights, Calibre, catalogs (OPDS), browser, news feeds, Wallabag, Readwise, Joplin, widgets, weather, sleep screen, Wi-Fi (where PaperPaw manages it), Wi-Fi transfer, formats (EPUB, HTML, FB2, CBZ, Markdown, TXT, XTC), hyphenation, reading aids, default fonts, fonts from the internet, diagnostics, about (version and licences) |
-| `tools/fontgen` | Converts fonts into bitmap font packs for small devices |
+| `tools/fontgen` | Converts fonts into bitmap font packs for small devices; each release has it built for Windows, macOS and Linux (`paperpaw-fontgen-<version>-<computer>.zip`) |
 | `tools/dev` | `paperpaw-dev`, which checks plugins on emulated devices |
 | `tools/sign` | `paperpaw-sign`, which signs updates, makes keys, and packs and signs plugin files |
 | `tools/plugin-files` | Builds PaperPaw's own store plugins as files for each release |
