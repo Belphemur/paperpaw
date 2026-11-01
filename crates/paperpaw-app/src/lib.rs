@@ -261,20 +261,7 @@ pub fn install_with(
         b = offered(b, store, paperpaw_plugin_news::News);
         b = offered(b, store, paperpaw_plugin_weather::Weather);
         b = offered(b, store, paperpaw_plugin_widgets::Widgets);
-        // Off as they ship, wherever they are built in.
-        let shipped_off = match store {
-            StorePlugins::Left => StorePlugins::Left,
-            _ => StorePlugins::Off(&|_| false),
-        };
-        b = offered(b, shipped_off, paperpaw_plugin_browser::Browser);
-        b = offered(b, shipped_off, paperpaw_plugin_readwise::Readwise);
-        b = offered(
-            b,
-            shipped_off,
-            paperpaw_plugin_readwise_reader::ReadwiseReader,
-        );
-        b = offered(b, shipped_off, paperpaw_plugin_joplin::Joplin);
-        b = offered(b, shipped_off, paperpaw_plugin_wallabag::Wallabag);
+        b = offer_shipped_off(b, store);
     }
     // A theme of the app's own, off as it ships, on every device.
     let builder = b
@@ -289,6 +276,26 @@ pub fn install_with(
         .plugin(paperpaw_plugin_about::About)
         .plugin(paperpaw_plugin_setup::Setup)
         .plugin(paperpaw_plugin_help::Help)
+}
+
+/// Adds the plugins the store offers that ship off, wherever they are
+/// built in, as `store` says.
+#[cfg(feature = "store-plugins")]
+fn offer_shipped_off(mut b: KernelBuilder, store: StorePlugins<'_>) -> KernelBuilder {
+    let shipped_off = match store {
+        StorePlugins::Left => StorePlugins::Left,
+        _ => StorePlugins::Off(&|_| false),
+    };
+    b = offered(b, shipped_off, paperpaw_plugin_browser::Browser);
+    b = offered(b, shipped_off, paperpaw_plugin_readwise::Readwise);
+    b = offered(
+        b,
+        shipped_off,
+        paperpaw_plugin_readwise_reader::ReadwiseReader,
+    );
+    b = offered(b, shipped_off, paperpaw_plugin_joplin::Joplin);
+    b = offered(b, shipped_off, paperpaw_plugin_wallabag::Wallabag);
+    b
 }
 
 /// Adds the hyphenation plugins of the languages the store offers, one
