@@ -6,7 +6,7 @@
 //! estimate: an SD card over SPI reads a block in a few hundred µs) and
 //! the heap's peak above what was live before (host sizes: 64-bit).
 //!
-//! usage: paperpaw-library-bench <library-dir> [<more-books-dir>]
+//! usage: `paperpaw-library-bench <library-dir> [<more-books-dir>]`
 //!
 //! `<library-dir>/books` goes onto the card; the books of
 //! `<more-books-dir>/books` are added after the first walks, as books
