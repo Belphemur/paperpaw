@@ -83,7 +83,7 @@ impl Face {
 
 /// Changes whenever the same input is laid out differently, so readers
 /// rebuild page indexes they cached.
-pub const VERSION: u32 = 10;
+pub const VERSION: u32 = 11;
 
 /// Measures text for the layout engine; readers implement it with their
 /// fonts.

@@ -28,7 +28,8 @@ change the plugin SDK.
   lines gets a smaller capital. Only where the font can be drawn that large: fonts of fixed sizes (the X4's font
   packs) show the paragraph as before. The layout does what the reserved `Block::drop_cap` names (no SDK change).
   EPUB chapters converted before keep no capitals until they are converted again. The paragraph's own size is no
-  longer taken from such a letter (it was set as large as the letter before).
+  longer taken from such a letter (it was set as large as the letter before). Layout version 11: every saved page index is made
+  again once after the update (reading positions are kept).
 - Line breaking follows Unicode (UAX #14) where the text needs it: Korean breaks between syllables, Chinese and
   Japanese between characters, never before a closing mark (。」) or after an opening one (「), and U+200B (the zero
   width space) is a place to break; it and the word joiner U+2060 are now zero width and not drawn (they took

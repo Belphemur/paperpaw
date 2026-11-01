@@ -32,7 +32,7 @@ const paperpaw_layout::ScriptOptions::LINE_BREAK_STRICT: paperpaw_layout::Script
 const paperpaw_layout::ScriptOptions::NONE: paperpaw_layout::ScriptOptions = ScriptOptions(0)
 const paperpaw_layout::ScriptOptions::SEGMENT_WORDS: paperpaw_layout::ScriptOptions = ScriptOptions(1 << 7)
 const paperpaw_layout::ScriptOptions::TRIM_CJK_PUNCTUATION: paperpaw_layout::ScriptOptions = ScriptOptions(1 << 8)
-const paperpaw_layout::VERSION: u32 = 10u32
+const paperpaw_layout::VERSION: u32 = 11u32
 struct paperpaw_layout::BookStyles(0: u16)
 struct paperpaw_layout::Face { style: paperpaw_document::TextStyle, heading: u8, size: u16 }
 struct paperpaw_layout::LayoutContext<'a> { document: &'a dyn paperpaw_document::Document, storage: &'a dyn paperpaw_platform::storage::Storage, width: f32, style: &'a paperpaw_layout::Style, typesetter: &'a dyn paperpaw_layout::Typesetter, hyphenate: core::option::Option<paperpaw_text::layout::Hyphenate<'a>>, pieces: core::option::Option<&'a paperpaw_layout::pieces::PieceStarts> }
