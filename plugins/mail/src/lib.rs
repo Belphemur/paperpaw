@@ -7,6 +7,7 @@ extern crate alloc;
 
 pub mod codec;
 pub mod compose;
+pub mod driver;
 pub mod header;
 pub mod html;
 pub mod imap;
