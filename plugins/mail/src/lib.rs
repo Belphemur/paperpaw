@@ -12,6 +12,7 @@ pub mod driver;
 pub mod header;
 pub mod html;
 pub mod imap;
+pub mod job;
 pub mod provider;
 pub mod render;
 pub mod session;
