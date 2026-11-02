@@ -190,7 +190,7 @@ static ICONS: [(Id, &str); 9] = [
     (VIEW_ID, "layout-grid"),
     (ROOT_ID, "folder"),
 ];
-static ENTRIES: [MenuEntry; 11] = [
+static ENTRIES: [MenuEntry; 12] = [
     MenuEntry::new(SHELVES_MENU, FAVOURITES).order(5),
     MenuEntry::new(SHELVES_MENU, BY_AUTHOR).order(10),
     MenuEntry::new(SHELVES_MENU, BY_SERIES).order(20),
@@ -201,6 +201,7 @@ static ENTRIES: [MenuEntry; 11] = [
     MenuEntry::new(MENU, VIEW_ID).order(11),
     MenuEntry::new(MENU, list::FIND).order(20),
     MenuEntry::new(MENU, SEARCH).order(21),
+    MenuEntry::new(MENU, list::LOOK_AGAIN).order(25),
     MenuEntry::new(MENU, SHELVES_MENU).order(30),
     MenuEntry::new(MENU, ROOT_ID).order(80),
     MenuEntry::new(MENU, core_actions::SETTINGS).order(90),

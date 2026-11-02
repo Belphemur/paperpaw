@@ -16,6 +16,13 @@ pub(super) enum CatalogJob {
     /// The books sorted for the view of them ([`library::sorted`]), after
     /// the catalog was made anew.
     Sort(library::sorted::Build),
+    /// A first walk that put the books it found so far into the catalog
+    /// (`Walk::published`), set aside while they are sorted for the views
+    /// (`None` once they are): then views hear of them and it goes on.
+    Shown(
+        alloc::boxed::Box<library::catalog::Walk>,
+        Option<library::sorted::Build>,
+    ),
 }
 
 impl CatalogJob {
@@ -25,7 +32,26 @@ impl CatalogJob {
             CatalogJob::Rewrite(rewrite) => rewrite.step(env),
             CatalogJob::Split(split) => split.step(env.storage(), env.book_data()),
             CatalogJob::Sort(sort) => sort.step(env),
+            CatalogJob::Shown(_, sort) => {
+                match sort.as_mut().map(|s| s.step(env)) {
+                    Some(Ok(false)) => {}
+                    // Not sorted: the views still hear of the books, and
+                    // ask for them sorted anew.
+                    Some(Err(_)) => {
+                        if let Some(failed) = sort.take() {
+                            failed.abort(env.storage());
+                        }
+                    }
+                    Some(Ok(true)) | None => *sort = None,
+                }
+                Ok(false)
+            }
         }
+    }
+
+    /// A walk (set aside or not).
+    pub(super) fn is_walk(&self) -> bool {
+        matches!(self, CatalogJob::Walk(_) | CatalogJob::Shown(..))
     }
 
     pub(super) fn abort(self, storage: &dyn paperpaw_sdk::Storage) {
@@ -35,6 +61,12 @@ impl CatalogJob {
             // Each move is whole: the next goes on from what is left.
             CatalogJob::Split(_) => {}
             CatalogJob::Sort(sort) => sort.abort(storage),
+            CatalogJob::Shown(walk, sort) => {
+                if let Some(sort) = sort {
+                    sort.abort(storage);
+                }
+                (*walk).abort(storage);
+            }
         }
     }
 
@@ -43,9 +75,50 @@ impl CatalogJob {
             CatalogJob::Walk(walk) => walk.pause(),
             CatalogJob::Rewrite(rewrite) => rewrite.pause(),
             CatalogJob::Split(_) => {}
-            CatalogJob::Sort(sort) => sort.pause(storage),
+            CatalogJob::Sort(sort) | CatalogJob::Shown(_, Some(sort)) => sort.pause(storage),
+            CatalogJob::Shown(_, None) => {}
         }
     }
+}
+
+/// After a step that did not end the job: a first walk that put the books
+/// it found so far into the catalog is set aside (paused) while they are
+/// sorted for the views (where one asked), which then hear of them
+/// (`CATALOG_CHANGED`, as of a catalog made anew); the walk goes on.
+pub(super) fn after_step(
+    catalog: &super::Catalog,
+    env: &Env<'_>,
+    job: &mut Option<CatalogJob>,
+    out: &mut paperpaw_sdk::Commands,
+) -> paperpaw_sdk::work::Step {
+    use paperpaw_sdk::builtin::events;
+    let published = match job {
+        Some(CatalogJob::Walk(walk)) => walk.published(),
+        _ => false,
+    };
+    match job.take() {
+        Some(CatalogJob::Walk(mut walk)) if published => {
+            let sort = catalog
+                .sort_wanted(env)
+                .and_then(|archive| library::sorted::Build::start(env, &archive).ok());
+            *job = Some(match sort {
+                Some(sort) => {
+                    walk.pause();
+                    CatalogJob::Shown(alloc::boxed::Box::new(walk), Some(sort))
+                }
+                None => {
+                    out.push(events::CATALOG_CHANGED.emit(()));
+                    CatalogJob::Walk(walk)
+                }
+            });
+        }
+        Some(CatalogJob::Shown(walk, None)) => {
+            out.push(events::CATALOG_CHANGED.emit(()));
+            *job = Some(CatalogJob::Walk(*walk));
+        }
+        other => *job = other,
+    }
+    paperpaw_sdk::work::Step::Continue
 }
 
 /// Whether the catalog's job waits (paused, it goes on where it was):
@@ -94,7 +167,7 @@ pub(super) fn register_sorted(
     let woken = alloc::rc::Rc::clone(catalog);
     r.on(events::RESUME, move |env, _, out| {
         woken.walked.set(false);
-        let walking = matches!(*woken.job.borrow(), Some(CatalogJob::Walk(_)));
+        let walking = woken.job.borrow().as_ref().is_some_and(CatalogJob::is_walk);
         let open = env
             .stack()
             .iter()
