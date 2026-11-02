@@ -752,6 +752,15 @@ fn walking(books: usize, battery: Option<u8>) -> Kernel {
     kernel
 }
 
+/// Whether the library's walk is over: its catalog in place, nothing
+/// building. Not that the catalog lists books: a first walk lists those
+/// found so far at checkpoints while it goes on (#108).
+fn walked(kernel: &Kernel) -> bool {
+    let storage = kernel.storage();
+    storage.exists(".paperpaw/library/catalog.txt")
+        && !storage.exists(".paperpaw/library/catalog.tmp")
+}
+
 /// The minute at which the device is first told to sleep, ticking each
 /// minute for at most `minutes`; `None` if it never is.
 fn first_sleep(kernel: &mut Kernel, minutes: u64) -> Option<u64> {
@@ -767,7 +776,7 @@ fn the_sleep_waits_for_the_library_walk_and_comes_after_it() {
     let mut done = None;
     for minute in 1..=59u64 {
         let effects = kernel.tick(Instant(minute * 60_000));
-        if !paths(&kernel).is_empty() {
+        if walked(&kernel) {
             done = Some(minute);
             break;
         }
@@ -788,7 +797,47 @@ fn a_walk_keeps_the_device_awake_for_an_hour_at_most() {
     let mut kernel = walking(100, None);
     let minute = first_sleep(&mut kernel, 150).expect("slept at the cap");
     assert!((60..=62).contains(&minute), "slept at minute {minute}");
-    assert!(paths(&kernel).is_empty(), "the walk had ended");
+    assert!(!walked(&kernel), "the walk had ended");
+}
+
+/// A first walk lists the books found so far at checkpoints (#108),
+/// each a few steps: appending to the catalog, then sorting the books
+/// for the view that asked. The sleep that falls due during them is put
+/// off as during any other step of the walk, and comes once it is over.
+#[test]
+fn the_sleep_waits_through_the_checkpoints_of_a_first_walk() {
+    let mut kernel = walking(50, None);
+    let wanted = events::SortedWanted::new(String::new()).to_params();
+    kernel.send_event(Instant(12_500), events::SORTED_WANTED.id().clone(), wanted);
+    let storage = |kernel: &Kernel, path: &str| kernel.storage().size(path).ok();
+    let (catalog, sorted) = (".paperpaw/library/catalog.txt", sorted_of(""));
+    let (mut appended, mut sorting, mut done) = (0, 0, None);
+    for minute in 1..=59u64 {
+        let before = (
+            storage(&kernel, catalog),
+            kernel.storage().exists(".paperpaw/library/sorted.tmp"),
+        );
+        // "Sleep after" is a minute: the sleep falls due at each tick.
+        let effects = kernel.tick(Instant(minute * 60_000));
+        if walked(&kernel) {
+            done = Some(minute);
+            break;
+        }
+        assert!(!effects.sleep(), "slept during the walk, minute {minute}");
+        appended += usize::from(storage(&kernel, catalog) > before.0);
+        let sorts = before.1 || kernel.storage().exists(".paperpaw/library/sorted.tmp");
+        sorting += usize::from(sorts);
+    }
+    let done = done.expect("the walk ended within the hour");
+    assert!(
+        appended >= 2,
+        "checkpoint appends at a sleep due: {appended}"
+    );
+    assert!(sorting >= 2, "checkpoint sorts at a sleep due: {sorting}");
+    assert!(storage(&kernel, &sorted).is_some());
+    assert_eq!(paths(&kernel).len(), 50);
+    let slept = (done + 1..=done + 12).find(|minute| kernel.tick(Instant(minute * 60_000)).sleep());
+    assert!(slept.is_some(), "no sleep after the walk (ended at {done})");
 }
 
 /// The hour counts from the last press: pressing something starts it
