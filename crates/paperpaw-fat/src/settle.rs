@@ -332,12 +332,28 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
         }
         // A folder moved names its new parent `..`, the last step of a
         // move: folders are followed only where it does (see `damaged`).
-        match lookup(&to_dir, name(to), true)? {
+        // Not in a damaged one (nothing is written there), and the move
+        // settled even where it cannot be done: the folder is then cut
+        // off when removed, its space left.
+        #[expect(
+            clippy::let_underscore_must_use,
+            reason = "a folder not pointed up is cut off when removed"
+        )]
+        let _ = self.point_up(&to_dir, name(to));
+        Ok(())
+    }
+
+    /// Points the `..` of folder `name` in `dir` at `dir`, where it is
+    /// intact (see [`FatStorage::is_intact`]).
+    fn point_up(&self, dir: &FatDir<IO>, name: &str) -> Result<(), StorageError> {
+        match lookup(dir, name, true)? {
             Lookup {
                 entry: Some(entry),
                 others: false,
                 ..
-            } if entry.is_dir() => entry.to_dir().point_up(&to_dir).map_err(error),
+            } if entry.is_dir() && self.is_intact(&entry)? => {
+                entry.to_dir().point_up(dir).map_err(error)
+            }
             _ => Ok(()),
         }
     }

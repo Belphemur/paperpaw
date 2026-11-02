@@ -301,3 +301,49 @@ fn a_cross_linked_folder_is_not_followed() {
         assert_eq!(whole(&s, "keep/live/other.bin").unwrap(), kept());
     }
 }
+
+/// Where cluster `n` of the card `image` is: its first byte, its size
+/// (from the boot sector).
+fn cluster_at(image: &[u8], n: u32) -> (usize, usize) {
+    let word = |at: usize| usize::from(u16::from_le_bytes([image[at], image[at + 1]]));
+    let sector = word(11);
+    let fat = match word(22) {
+        0 => u32::from_le_bytes([image[36], image[37], image[38], image[39]]) as usize,
+        size => size,
+    };
+    let data = (word(14) + usize::from(image[16]) * fat) * sector + word(17) * 32;
+    let size = usize::from(image[13]) * sector;
+    (data + (n as usize - 2) * size, size)
+}
+
+/// A folder moved, the move cut off at any point, and the folder's
+/// cluster then garbled: the move settles (its record cleared, no path
+/// held), nothing is written into the folder, and its new path and the
+/// old one can be removed.
+#[test]
+fn a_damaged_folder_moved_settles_after_any_cut() {
+    let card = Cut::formatted(FormatVolumeOptions::new());
+    let s = card.storage();
+    s.write("Books/Sub/x.txt", b"x").unwrap();
+    s.write("Other/d.txt", b"d").unwrap();
+    s.rename("Other/d.txt", "Other/e.txt").unwrap();
+    s.sync().unwrap();
+    let sub = first_cluster(&card, short_entry(&card, b"SUB        "));
+    let text = b"Chapter one. It was a dark night. ".repeat(400);
+    let cuts = cut_images(card.image(), |s| {
+        s.rename("Books/Sub", "Other/Sub").unwrap()
+    });
+    for (n, mut image) in cuts.into_iter().enumerate() {
+        let (at, size) = cluster_at(&image, sub);
+        image[at..at + size].copy_from_slice(&text[..size]);
+        let card = Cut::new(image);
+        let s = card.storage();
+        assert_eq!(s.write("other.txt", b"other"), Ok(()), "{n}");
+        assert_eq!(s.recorded(), Ok(None), "{n}");
+        assert!(s.stuck.borrow().is_none(), "{n}");
+        assert_eq!(card.image()[at..at + size], text[..size], "{n}");
+        assert_eq!(s.remove_dir_all("Other/Sub"), Ok(()), "{n}");
+        assert_eq!(s.remove_dir_all("Books/Sub"), Ok(()), "{n}");
+        assert_eq!(whole(&s, "Other/e.txt").unwrap(), b"d", "{n}");
+    }
+}
