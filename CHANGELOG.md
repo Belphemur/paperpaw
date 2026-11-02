@@ -282,6 +282,14 @@ before it are thrown away.
 
 ### Changed
 
+- The library's shelves hold a bounded part of the memory however large the library (#79): the shelves in the
+  list show the first 200 series and folders on the X4 (2,000 on others) with an *All series* and *All folders*
+  row after them, and count the authors up to 2,048 (*more than 2048 authors*); the screens of authors, series,
+  tags and (new) folders hold 200 names at a time, the next taken when the focus moves on past the last. At
+  10,000 books of 5,000 authors and 2,500 series, showing the shelves took 1.26 MB on the host (about 600 KB on
+  the X4, more than its heap) and now takes 52 KB; the authors' screen 214 KB, now 25 KB. Each name is counted
+  exactly; the authors' screen showed the first 2,000 met before, now every author, in order. The list keeps its
+  index when the catalog is as it was.
 - A catalog walk that finds the library as it was writes nothing (#79): it compares what it makes with the old
   catalog and writes a new one only from where they part (the lines before copied a piece a step), keeps the
   catalog and its generation where they never do, and keeps a folder listed in one piece in memory instead of

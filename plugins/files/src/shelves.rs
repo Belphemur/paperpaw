@@ -7,10 +7,12 @@
 //! until the new one is complete, then reads it again
 //! ([`events::CATALOG_CHANGED`]).
 //!
-//! A view lists the authors (or series, or tags) with how many books each
-//! has; choosing one lists those books with their covers and states
-//! ([`crate::list::shelf`]), a series by its numbers. Only the names are
-//! held in memory, never the whole catalog.
+//! A view lists the authors (or series, tags, folders) with how many
+//! books each has; choosing one lists those books with their covers and
+//! states ([`crate::list::shelf`]), a series by its numbers. Only a
+//! window of the names is held in memory ([`crate::names`]), never the
+//! whole catalog: moving past its ends takes the next (a pass over the
+//! catalog).
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -22,6 +24,7 @@ use paperpaw_sdk::{
 };
 
 use crate::list::shelf::{self as books, Kind};
+use crate::names::{Bound, Firsts};
 use paperpaw_sdk::library::{
     self,
     catalog::{self, Record, State},
@@ -32,65 +35,104 @@ use paperpaw_sdk::library::{
 pub(crate) const MODE_AUTHORS: &str = "authors";
 pub(crate) const MODE_SERIES: &str = "series";
 pub(crate) const MODE_TAGS: &str = "tags";
+/// The folders in the folder of parameter `path` (`folders`).
+pub(crate) const MODE_FOLDERS: &str = "folders";
 
 /// What books are listed under.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Shelf {
     Authors,
     Series,
     Tags,
+    /// The folders in a folder (the path before them, with its `/`).
+    Folders(String),
 }
 
 impl Shelf {
-    fn of(mode: Option<&str>) -> Shelf {
-        match mode {
+    fn of(params: &Params) -> Shelf {
+        match params.get(params::MODE) {
             Some(MODE_SERIES) => Shelf::Series,
             Some(MODE_TAGS) => Shelf::Tags,
+            Some(MODE_FOLDERS) => Shelf::Folders(prefix(params.get(params::PATH).unwrap_or(""))),
             _ => Shelf::Authors,
         }
     }
 
     /// The list of books one of its names opens.
-    fn books(self) -> Kind {
+    fn books(&self) -> Kind {
         match self {
             Shelf::Authors => Kind::Author,
             Shelf::Series => Kind::Series,
             Shelf::Tags => Kind::Tag,
+            Shelf::Folders(_) => Kind::Folder,
         }
     }
 }
-/// Names held at most.
-const MAX_NAMES: usize = 2000;
-/// What a book is listed under in a view: its author, its series, or
-/// each of its tags.
-fn keys(record: &Record, shelf: Shelf) -> Vec<&str> {
+
+/// Opens the folders in the folder `root`, all of them.
+pub(crate) fn open_folders(root: &str) -> Command {
+    Command::OpenScreen(
+        crate::SHELF_SCREEN,
+        Params::new()
+            .with(params::MODE, MODE_FOLDERS)
+            .with(params::PATH, root.to_string()),
+    )
+}
+
+/// The path of folder `root` with its `/`, as the paths in it begin
+/// (none for the whole card).
+pub(crate) fn prefix(root: &str) -> String {
+    let root = root.trim_matches('/');
+    if root.is_empty() {
+        String::new()
+    } else {
+        alloc::format!("{root}/")
+    }
+}
+
+/// The folder of the book at `path` right in the folder of `prefix`
+/// (see [`prefix`]), its whole path; none for a book right in it.
+pub(crate) fn folder_in<'a>(path: &'a str, prefix: &str) -> Option<&'a str> {
+    let inner = path.strip_prefix(prefix).unwrap_or(path);
+    let (folder, _) = inner.split_once('/')?;
+    path.get(..path.len() - inner.len() + folder.len())
+}
+
+/// What a book is listed under in a view: its author, its series, each
+/// of its tags, or its folder.
+fn keys<'a>(record: &'a Record, shelf: &Shelf) -> Vec<&'a str> {
     match shelf {
         Shelf::Authors => alloc::vec![record.author.as_str()],
         Shelf::Series => alloc::vec![record.series.as_str()],
         Shelf::Tags => record.tags().collect(),
+        Shelf::Folders(prefix) => folder_in(&record.path, prefix).into_iter().collect(),
     }
 }
 
-/// The names of the authors, series or tags and how many books each
-/// has, alphabetically.
-fn names(books: catalog::Books<'_>, shelf: Shelf) -> Vec<(String, usize)> {
-    let mut names: Vec<(String, usize)> = Vec::new();
+/// A window of the names of the authors, series, tags or folders
+/// (`bound`, at most `cap`), alphabetically, and how many books each
+/// has; and whether there are names past its end (before its start for
+/// [`Bound::Before`]).
+fn names(
+    books: catalog::Books<'_>,
+    shelf: &Shelf,
+    cap: usize,
+    bound: Bound,
+) -> (Vec<(String, usize)>, bool) {
+    let mut firsts = Firsts::new(cap, bound);
     books(&mut |_, line| {
         for key in keys(&line, shelf) {
             // Books without series are no series; those without author
             // are listed under "Unknown author".
-            if shelf == Shelf::Series && key.is_empty() {
+            if *shelf == Shelf::Series && key.is_empty() {
                 continue;
             }
-            if let Some((_, count)) = names.iter_mut().find(|(n, _)| n == key) {
-                *count += 1;
-            } else if names.len() < MAX_NAMES {
-                names.push((key.to_string(), 1));
-            }
+            firsts.add(key, false);
         }
     });
-    names.sort_by_cached_key(|(n, _)| n.to_lowercase());
-    names
+    let (names, cut) = firsts.into_names();
+    let names = names.into_iter().map(|n| (n.name, n.count)).collect();
+    (names, cut)
 }
 
 pub(crate) struct ShelfScreen {
@@ -98,7 +140,11 @@ pub(crate) struct ShelfScreen {
     header: ui::Header,
     list: ListView,
     shelf: Shelf,
+    /// The window of names shown ([`names`]), and whether there are
+    /// names before its first, after its last.
     names: Vec<(String, usize)>,
+    before: bool,
+    after: bool,
     /// No catalog yet: the kernel is making the first.
     collecting: bool,
     /// The kernel could not make the catalog (`CATALOG_FAILED`).
@@ -112,16 +158,78 @@ impl ShelfScreen {
         let display = env.device().display;
         let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
-        let shelf = Shelf::of(params.get(params::MODE));
-        Self {
+        let shelf = Shelf::of(params);
+        let mut screen = Self {
             list: ListView::new(area, style.noted_row()).focus_on_keys(env),
-            names: names(&mut |f| library::service(env).each(env, f), shelf),
+            names: Vec::new(),
+            before: false,
+            after: false,
             collecting: false,
             failed: false,
             shelf,
             style,
             header,
+        };
+        screen.load(env, Bound::First);
+        screen
+    }
+
+    /// The window of names from `bound` (the first where it has none).
+    fn load(&mut self, env: &Env<'_>, bound: Bound) {
+        let first = bound == Bound::First;
+        // The window there was goes first: never two at once.
+        self.names = Vec::new();
+        let cap = crate::names::cap(env.device().memory);
+        let each = &mut |f: &mut dyn FnMut(u64, Record)| library::service(env).each(env, f);
+        let (names, cut) = names(each, &self.shelf, cap, bound.clone());
+        self.names = names;
+        (self.before, self.after) = match bound {
+            Bound::First => (false, cut),
+            Bound::After(_) | Bound::From(_) => (true, cut),
+            Bound::Before(_) => (cut, true),
+            Bound::Last => (cut, false),
+        };
+        if self.names.is_empty() && !first {
+            // Nothing there any more: from the first.
+            self.load(env, Bound::First);
+            return;
         }
+        self.list.set_len(self.names.len());
+    }
+
+    /// Moves the focus `delta` rows on: past the window's ends into the
+    /// next or the one before, and a row on from the last name to the
+    /// first (and back), as lists go round.
+    fn move_focus(&mut self, delta: isize, cx: &mut Cx<'_, '_>) {
+        let len = self.names.len();
+        let to = self.list.focus() as isize + delta;
+        let round = delta.abs() == 1;
+        let next = if to >= len as isize && self.after {
+            self.names.last().map(|(n, _)| Bound::After(n.clone()))
+        } else if to >= len as isize && round && self.before {
+            Some(Bound::First)
+        } else if to < 0 && self.before {
+            self.names.first().map(|(n, _)| Bound::Before(n.clone()))
+        } else if to < 0 && round && self.after {
+            Some(Bound::Last)
+        } else {
+            None
+        };
+        let Some(bound) = next else {
+            let change = self.list.move_focus(delta, len);
+            change.request(cx);
+            return;
+        };
+        let backwards = bound.backwards();
+        let env = *cx.env();
+        self.load(&env, bound);
+        let focus = if backwards {
+            self.names.len().saturating_sub(1)
+        } else {
+            0
+        };
+        self.list.set_focus(focus);
+        self.redraw(cx);
     }
 
     fn redraw(&self, cx: &mut Cx<'_, '_>) {
@@ -141,6 +249,7 @@ impl ShelfScreen {
             Shelf::Authors => "files.by-author",
             Shelf::Series => "files.by-series",
             Shelf::Tags => "files.by-tag",
+            Shelf::Folders(_) => "files.by-folder",
         }
     }
 }
@@ -170,17 +279,19 @@ impl Screen for ShelfScreen {
                 }
                 Shelf::Series => ("books", "files.no-series"),
                 Shelf::Tags => ("tag", "files.no-tags"),
-                Shelf::Authors => ("books", "files.no-books"),
+                Shelf::Authors | Shelf::Folders(_) => ("books", "files.no-books"),
             };
             let text = ui::tr_input(env, text);
             ui.empty(area, icon, "", text);
             return;
         }
-        let names = &self.names;
+        let (names, folders) = (&self.names, matches!(self.shelf, Shelf::Folders(_)));
         self.list.draw(&mut ui, len, |ui, index, rect, focused| {
             let (name, count) = &names[index];
             let name = if name.is_empty() {
                 env.i18n().tr("files.unknown-author")
+            } else if folders {
+                paperpaw_sdk::files::name(name)
             } else {
                 name.as_str()
             };
@@ -222,8 +333,11 @@ impl Screen for ShelfScreen {
             let env = *cx.env();
             self.collecting = false;
             self.failed = false;
-            self.names = names(&mut |f| library::service(&env).each(&env, f), self.shelf);
-            self.list.set_len(self.names.len());
+            let bound = match self.names.first() {
+                Some((first, _)) if self.before => Bound::From(first.clone()),
+                _ => Bound::First,
+            };
+            self.load(&env, bound);
             self.redraw(cx);
         }
     }
@@ -239,8 +353,7 @@ impl Screen for ShelfScreen {
         } else {
             return Handled::No;
         };
-        let change = self.list.move_focus(delta, self.names.len());
-        change.request(cx);
+        self.move_focus(delta, cx);
         Handled::Yes
     }
 
@@ -304,7 +417,13 @@ mod tests {
             })
             .collect();
         catalog::write(&storage, &records).unwrap();
-        let authors = names(&mut |f| catalog::each_at(&storage, f), Shelf::Authors);
+        let authors = names(
+            &mut |f| catalog::each_at(&storage, f),
+            &Shelf::Authors,
+            10,
+            Bound::First,
+        )
+        .0;
         assert_eq!(
             authors,
             [
@@ -314,11 +433,23 @@ mod tests {
             ]
         );
         assert_eq!(
-            names(&mut |f| catalog::each_at(&storage, f), Shelf::Series),
+            names(
+                &mut |f| catalog::each_at(&storage, f),
+                &Shelf::Series,
+                10,
+                Bound::First
+            )
+            .0,
             [(String::from("Tales"), 2)]
         );
         assert_eq!(
-            names(&mut |f| catalog::each_at(&storage, f), Shelf::Tags),
+            names(
+                &mut |f| catalog::each_at(&storage, f),
+                &Shelf::Tags,
+                10,
+                Bound::First
+            )
+            .0,
             [(String::from("Fantasy"), 2), (String::from("Kids"), 1)]
         );
         // Searching: every word, anywhere, in any case.

@@ -58,6 +58,8 @@ use paperpaw_sdk::{
 use index::{Filter, Index, NEVER, cap, hash};
 use rows::{Loaded, Sizes};
 
+use crate::names::{self, Bound, Distinct, Firsts};
+
 /// Finds a book by a letter ([`find`]).
 pub(crate) const FIND: Id = Id::new_static("files.list.find");
 /// A list of books: a series, a folder, the favourites, a letter, a
@@ -158,39 +160,47 @@ fn read(path: &str, cx: &mut Cx<'_, '_>) {
     cx.command(paperpaw_sdk::readers::open(path));
 }
 
-/// A shelf of the shelves, with its words made ready.
+/// A shelf of the shelves; its words are made when it is drawn (a
+/// library of many series has many: each holds no more than its name).
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ShelfRow {
     /// "Next in your series" (a filter), else a shelf of `kind`.
     next: bool,
+    /// All of the series or folders, where the shelves hold only the
+    /// first of them ([`crate::names`]); the authors: more than
+    /// `count`.
+    more: bool,
     kind: shelf::Kind,
     /// The series' or folder's name (the folder's path for folders).
     name: String,
     count: usize,
     finished: usize,
-    icon: &'static str,
-    title: String,
-    note: String,
 }
 
 impl ShelfRow {
-    fn new(next: bool, kind: shelf::Kind, name: &str, count: usize, finished: usize) -> Self {
+    fn new(next: bool, kind: shelf::Kind, name: String, count: usize, finished: usize) -> Self {
         ShelfRow {
             next,
+            more: false,
             kind,
-            name: name.to_string(),
+            name,
             count,
             finished,
-            icon: "",
-            title: String::new(),
-            note: String::new(),
         }
     }
 
-    /// Writes its icon, title and note.
-    fn word(&mut self, env: &Env<'_>) {
+    /// A row of all the series or folders.
+    fn all(kind: shelf::Kind) -> Self {
+        ShelfRow {
+            more: true,
+            ..ShelfRow::new(false, kind, String::new(), 0, 0)
+        }
+    }
+
+    /// Its icon, title and note.
+    fn words(&self, env: &Env<'_>) -> (&'static str, String, String) {
         let books = env.i18n().plural("files.books", self.count as i64, &[]);
-        let (icon, title, note) = match self.kind {
+        match self.kind {
             _ if self.next => (
                 "arrow-bar-to-right",
                 env.i18n().tr("files.list.show.next").to_string(),
@@ -199,11 +209,22 @@ impl ShelfRow {
             shelf::Kind::Favourites => {
                 ("star", env.i18n().tr("files.favourites").to_string(), books)
             }
-            shelf::Kind::Authors => (
-                "user",
-                env.i18n().tr("files.list.authors").to_string(),
-                env.i18n()
-                    .plural("files.list.authors.count", self.count as i64, &[]),
+            shelf::Kind::Authors => {
+                let count = if self.more {
+                    "files.list.authors.many"
+                } else {
+                    "files.list.authors.count"
+                };
+                (
+                    "user",
+                    env.i18n().tr("files.list.authors").to_string(),
+                    env.i18n().plural(count, self.count as i64, &[]),
+                )
+            }
+            shelf::Kind::Series if self.more => (
+                "stack-2",
+                env.i18n().tr("files.list.series.all").to_string(),
+                env.i18n().tr("files.list.series").to_string(),
             ),
             shelf::Kind::Series => {
                 let series = env.i18n().tr("files.list.series");
@@ -217,45 +238,17 @@ impl ShelfRow {
                 };
                 ("stack-2", self.name.clone(), note)
             }
+            _ if self.more => (
+                "folder",
+                env.i18n().tr("files.list.folders.all").to_string(),
+                env.i18n().tr("files.folder").to_string(),
+            ),
             _ => (
                 "folder",
                 paperpaw_sdk::files::name(&self.name).to_string(),
                 format!("{} · {books}", env.i18n().tr("files.folder")),
             ),
-        };
-        self.icon = icon;
-        self.title = title;
-        self.note = note;
-    }
-}
-
-/// The names met in a pass over the catalog, found by their hashes
-/// sorted: a library of many authors would else compare each book's
-/// with all those met before. Names of the same hash are compared too.
-#[derive(Default)]
-struct Seen {
-    /// The hash of each name met and its number (the order met), sorted
-    /// by hash.
-    keys: Vec<(u32, u32)>,
-}
-
-impl Seen {
-    /// The number of `name` if it was met, else marks it met and gives
-    /// `None`. `named` gives the name of a number.
-    fn find<'a>(&mut self, name: &str, named: impl Fn(usize) -> &'a str) -> Option<usize> {
-        let hash = hash(name);
-        let mut at = self.keys.partition_point(|&(key, _)| key < hash);
-        while let Some(&(key, number)) = self.keys.get(at) {
-            if key != hash {
-                break;
-            }
-            if named(number as usize) == name {
-                return Some(number as usize);
-            }
-            at += 1;
         }
-        self.keys.insert(at, (hash, self.keys.len() as u32));
-        None
     }
 }
 
@@ -554,73 +547,59 @@ impl ListScreen {
     /// it has (and how many are finished), from one pass over the catalog.
     fn make_shelves(&self, env: &Env<'_>) -> Vec<ShelfRow> {
         let favourites = library::favourites(env.storage()).len();
-        // The authors met, one after the other, and where each begins.
-        let mut authors = String::new();
-        let mut starts: Vec<u32> = Vec::new();
-        let mut seen = [Seen::default(), Seen::default(), Seen::default()];
-        let mut series: Vec<ShelfRow> = Vec::new();
-        let mut folders: Vec<ShelfRow> = Vec::new();
-        let prefix = if self.root.is_empty() {
-            String::new()
-        } else {
-            format!("{}/", self.root)
-        };
+        // Bounded however large the library: the authors counted (up to
+        // a number), the first series and folders held.
+        let memory = env.device().memory;
+        let mut authors = Distinct::new(names::counted(memory));
+        let mut series = Firsts::new(names::cap(memory), Bound::First);
+        let mut folders = Firsts::new(names::cap(memory), Bound::First);
+        let prefix = crate::shelves::prefix(&self.root);
         library::service(env).each(env, &mut |_, line| {
             let finished = line.reading() == library::catalog::Reading::Finished;
-            let [by_author, by_series, by_folder] = &mut seen;
-            let named = |n: usize| {
-                let start = starts.get(n).map_or(0, |&start| start as usize);
-                let end = starts.get(n + 1).map_or(authors.len(), |&end| end as usize);
-                authors.get(start..end).unwrap_or_default()
-            };
-            if by_author.find(&line.author, named).is_none() {
-                starts.push(authors.len() as u32);
-                authors.push_str(&line.author);
-            }
-            let count = |rows: &mut Vec<ShelfRow>, seen: &mut Seen, kind, name: &str| {
-                let named = |n: usize| rows.get(n).map_or("", |row: &ShelfRow| row.name.as_str());
-                match seen.find(name, named).and_then(|n| rows.get_mut(n)) {
-                    Some(row) => {
-                        row.count += 1;
-                        row.finished += usize::from(finished);
-                    }
-                    None => rows.push(ShelfRow::new(false, kind, name, 1, usize::from(finished))),
-                }
-            };
+            authors.add(&line.author);
             if !line.series.is_empty() {
-                count(&mut series, by_series, shelf::Kind::Series, &line.series);
+                series.add(&line.series, finished);
             }
-            let inner = line.path.strip_prefix(&prefix).unwrap_or(&line.path);
-            if let Some((folder, _)) = inner.split_once('/') {
-                let folder = format!("{prefix}{folder}");
-                count(&mut folders, by_folder, shelf::Kind::Folder, &folder);
+            if let Some(folder) = crate::shelves::folder_in(&line.path, &prefix) {
+                folders.add(folder, finished);
             }
         });
-        series.sort_by_cached_key(|r| r.name.to_lowercase());
-        folders.sort_by_cached_key(|r| r.name.to_lowercase());
         let next = Filter::Next.order(&self.index, false).len();
         let mut shelves = Vec::new();
         if next > 0 {
-            shelves.push(ShelfRow::new(true, shelf::Kind::Series, "", next, 0));
+            shelves.push(ShelfRow::new(
+                true,
+                shelf::Kind::Series,
+                String::new(),
+                next,
+                0,
+            ));
         }
         shelves.push(ShelfRow::new(
             false,
             shelf::Kind::Favourites,
-            "",
+            String::new(),
             favourites,
             0,
         ));
-        shelves.push(ShelfRow::new(
-            false,
-            shelf::Kind::Authors,
-            "",
-            starts.len(),
-            0,
-        ));
-        shelves.extend(series);
-        shelves.extend(folders);
-        for row in &mut shelves {
-            row.word(env);
+        let (count, more) = authors.count();
+        shelves.push(ShelfRow {
+            more,
+            ..ShelfRow::new(false, shelf::Kind::Authors, String::new(), count, 0)
+        });
+        for (kind, firsts) in [
+            (shelf::Kind::Series, series),
+            (shelf::Kind::Folder, folders),
+        ] {
+            let (named, cut) = firsts.into_names();
+            shelves.extend(
+                named
+                    .into_iter()
+                    .map(|n| ShelfRow::new(false, kind, n.name, n.count, n.finished)),
+            );
+            if cut {
+                shelves.push(ShelfRow::all(kind));
+            }
         }
         shelves
     }
@@ -885,6 +864,10 @@ impl ListScreen {
                 self.set_filter(Filter::Next, cx);
             } else if row.kind == shelf::Kind::Authors {
                 cx.command(Command::run(crate::BY_AUTHOR));
+            } else if row.more && row.kind == shelf::Kind::Series {
+                cx.command(Command::run(crate::BY_SERIES));
+            } else if row.more {
+                cx.command(crate::shelves::open_folders(&self.root));
             } else {
                 cx.command(shelf::open(row.kind, &row.name));
             }
@@ -1001,15 +984,16 @@ impl ListScreen {
         let ink = style.focus_ink(focused);
         let room = ui::icon_room(ui.env(), ui.style(), true);
         let band = ui::title_area(style, rect);
-        ui.row_icon(band, room, Some(row.icon), ink);
+        let (icon, title, note) = row.words(ui.env());
+        ui.row_icon(band, room, Some(icon), ink);
         let text = Rect::new(
             rect.x + room,
             rect.y,
             rect.width.saturating_sub(room),
             rect.height,
         );
-        ui::Row::value(&row.title, "›")
-            .note(&row.note)
+        ui::Row::value(&title, "›")
+            .note(&note)
             .focused(focused)
             .draw(ui, text);
     }
@@ -1373,34 +1357,5 @@ impl Screen for ListScreen {
                 cx.wake_at(env.now());
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Names are told apart as by comparing them all, those of the same
-    /// hash too, and numbered in the order met.
-    #[test]
-    fn names_met_are_found_again() {
-        let names = ["b", "a", "B", "b", "", "a", "c", ""];
-        let mut met: Vec<&str> = Vec::new();
-        let mut seen = Seen::default();
-        for name in names {
-            let found = seen.find(name, |n| met[n]);
-            assert_eq!(found, met.iter().position(|m| *m == name), "{name}");
-            if found.is_none() {
-                met.push(name);
-            }
-        }
-        assert_eq!(met, ["b", "a", "B", "", "c"]);
-        // Two names of one hash (as if): both kept, each found again.
-        let mut seen = Seen {
-            keys: alloc::vec![(hash("x"), 0)],
-        };
-        let met = ["y", "x"];
-        assert_eq!(seen.find("x", |n| met[n]), None);
-        assert_eq!(seen.find("x", |n| met[n]), Some(1));
     }
 }
