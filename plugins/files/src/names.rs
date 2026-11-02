@@ -129,6 +129,9 @@ pub(crate) struct Firsts {
     /// Some where names were left out past the end (before the start for
     /// [`Bound::Before`]).
     passed: Option<String>,
+    /// Names were met on the other side of the bound (before it, after
+    /// it for [`Bound::Before`]).
+    beyond: bool,
 }
 
 impl Firsts {
@@ -142,6 +145,7 @@ impl Firsts {
             bound,
             names: Vec::new(),
             passed: None,
+            beyond: false,
         }
     }
 
@@ -167,6 +171,7 @@ impl Firsts {
     /// A book of `name`, `finished` or not.
     pub(crate) fn add(&mut self, name: &str, finished: bool) {
         if !self.within(name) {
+            self.beyond = true;
             return;
         }
         let at = match self.names.binary_search_by(|n| self.order(&n.name, name)) {
@@ -208,14 +213,23 @@ impl Firsts {
         );
     }
 
-    /// The names, in [`order`], and whether names were left out past the
-    /// end (before the start for [`Bound::Before`]).
-    pub(crate) fn into_names(self) -> (Vec<Named>, bool) {
+    /// The names, in [`order`], and whether there are names before the
+    /// first of them and after the last.
+    pub(crate) fn into_names(self) -> (Vec<Named>, bool, bool) {
         let mut names = self.names;
-        if self.bound.backwards() {
-            names.reverse();
+        let cut = self.passed.is_some();
+        match self.bound {
+            Bound::First => (names, false, cut),
+            Bound::After(_) | Bound::From(_) => (names, self.beyond, cut),
+            Bound::Before(_) => {
+                names.reverse();
+                (names, cut, self.beyond)
+            }
+            Bound::Last => {
+                names.reverse();
+                (names, cut, false)
+            }
         }
-        (names, self.passed.is_some())
     }
 }
 
@@ -258,7 +272,7 @@ impl Distinct {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloc::format;
+    use alloc::{format, vec};
 
     /// Every name of `names` in a window of `budget` from `bound`, as
     /// [`Firsts`] keeps them, and as all of them sorted give them: as many
@@ -270,7 +284,7 @@ mod tests {
             firsts.add(name, n % 3 == 0);
             all.add(name, n % 3 == 0);
         }
-        let (all, _) = all.into_names();
+        let (all, _, _) = all.into_names();
         let mut within: Vec<Named> = all
             .into_iter()
             .filter(|n| Firsts::new(budget, bound.clone()).within(&n.name))
@@ -291,7 +305,9 @@ mod tests {
         if bound.backwards() {
             expected.reverse();
         }
-        (firsts.into_names(), expected)
+        let (got, before, after) = firsts.into_names();
+        let cut = if bound.backwards() { before } else { after };
+        ((got, cut), expected)
     }
 
     /// A budget of `names` names, of any number of bytes.
@@ -368,6 +384,56 @@ mod tests {
                 assert!(cut, "{bound:?} {bytes}");
             }
         }
+    }
+
+    #[test]
+    fn a_window_knows_whether_there_are_names_beyond_it() {
+        let window = |names: &[&str], bound: Bound| {
+            let mut firsts = Firsts::new(unbounded(2), bound);
+            for name in names {
+                firsts.add(name, false);
+            }
+            let (names, before, after) = firsts.into_names();
+            let names: Vec<String> = names.into_iter().map(|n| n.name).collect();
+            (names, before, after)
+        };
+        let from = |name: &str| Bound::From(name.into());
+        let names = ["b", "c", "d", "e"];
+        let (got, before, after) = window(&names, from("b"));
+        assert_eq!(
+            (got, before, after),
+            (vec!["b".into(), "c".into()], false, true)
+        );
+        let (got, before, after) = window(&names, from("c"));
+        assert_eq!(
+            (got, before, after),
+            (vec!["c".into(), "d".into()], true, true)
+        );
+        let (got, before, after) = window(&names, Bound::After("c".into()));
+        assert_eq!(
+            (got, before, after),
+            (vec!["d".into(), "e".into()], true, false)
+        );
+        let (got, before, after) = window(&names, Bound::Before("d".into()));
+        assert_eq!(
+            (got, before, after),
+            (vec!["b".into(), "c".into()], false, true)
+        );
+        let (got, before, after) = window(&names, Bound::Before("f".into()));
+        assert_eq!(
+            (got, before, after),
+            (vec!["d".into(), "e".into()], true, false)
+        );
+        let (got, before, after) = window(&names, Bound::Last);
+        assert_eq!(
+            (got, before, after),
+            (vec!["d".into(), "e".into()], true, false)
+        );
+        let (got, before, after) = window(&names, Bound::First);
+        assert_eq!(
+            (got, before, after),
+            (vec!["b".into(), "c".into()], false, true)
+        );
     }
 
     #[test]

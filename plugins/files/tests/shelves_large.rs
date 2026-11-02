@@ -287,3 +287,38 @@ fn every_name_is_reached_through_the_windows() {
     let back: Vec<String> = all.iter().rev().cloned().collect();
     assert_eq!(met[..], back[..]);
 }
+
+/// The catalog changed while a later window of the authors shows, the
+/// authors before it gone: the window is read again from its first, and
+/// up from it goes round to the last (none are before it any more).
+#[test]
+fn a_window_read_again_knows_what_is_before_it() {
+    let _turn = turn();
+    let mut app = library(900);
+    let open = Params::new().with(params::MODE, "authors");
+    app.open_screen(paperpaw_sdk::Id::new_static("files.shelf"), open);
+    app.repeat(actions::DOWN, 200);
+    let focused = app.focused().unwrap_or_default();
+    assert!(focused.starts_with("Somebody Writing 0200"), "{focused}");
+    // The books of the first 200 authors gone from the catalog.
+    let mut kept = Vec::new();
+    catalog::each(&app.storage, &mut |record| {
+        if record.author.as_str() >= "Somebody Writing 0200" {
+            kept.push(record);
+        }
+    });
+    catalog::write(&app.storage, &kept).unwrap();
+    app.send(
+        paperpaw_sdk::builtin::events::CATALOG_CHANGED,
+        Params::new(),
+    );
+    let focused = app.focused().unwrap_or_default();
+    assert!(focused.starts_with("Somebody Writing 0200"), "{focused}");
+    app.run(actions::UP);
+    let focused = app.focused().unwrap_or_default();
+    assert!(focused.starts_with("Somebody Writing 0449"), "{focused}");
+    // Down again: round to the first.
+    app.run(actions::DOWN);
+    let focused = app.focused().unwrap_or_default();
+    assert!(focused.starts_with("Somebody Writing 0200"), "{focused}");
+}

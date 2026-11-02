@@ -93,7 +93,7 @@ pub(crate) fn prefix(root: &str) -> String {
 /// The folder of the book at `path` right in the folder of `prefix`
 /// (see [`prefix`]), its whole path; none for a book right in it.
 pub(crate) fn folder_in<'a>(path: &'a str, prefix: &str) -> Option<&'a str> {
-    let inner = path.strip_prefix(prefix).unwrap_or(path);
+    let inner = path.strip_prefix(prefix)?;
     let (folder, _) = inner.split_once('/')?;
     path.get(..path.len() - inner.len() + folder.len())
 }
@@ -111,14 +111,14 @@ fn keys<'a>(record: &'a Record, shelf: &Shelf) -> Vec<&'a str> {
 
 /// A window of the names of the authors, series, tags or folders
 /// (`bound`, at most a `budget` of them), alphabetically, and how many books each
-/// has; and whether there are names past its end (before its start for
-/// [`Bound::Before`]).
+/// has; and whether there are names before its first and after its
+/// last.
 fn names(
     books: catalog::Books<'_>,
     shelf: &Shelf,
     budget: Budget,
     bound: Bound,
-) -> (Vec<(String, usize)>, bool) {
+) -> (Vec<(String, usize)>, bool, bool) {
     let mut firsts = Firsts::new(budget, bound);
     books(&mut |_, line| {
         for key in keys(&line, shelf) {
@@ -130,9 +130,9 @@ fn names(
             firsts.add(key, false);
         }
     });
-    let (names, cut) = firsts.into_names();
+    let (names, before, after) = firsts.into_names();
     let names = names.into_iter().map(|n| (n.name, n.count)).collect();
-    (names, cut)
+    (names, before, after)
 }
 
 pub(crate) struct ShelfScreen {
@@ -181,14 +181,9 @@ impl ShelfScreen {
         self.names = Vec::new();
         let budget = Budget::of(env.device().memory);
         let each = &mut |f: &mut dyn FnMut(u64, Record)| library::service(env).each(env, f);
-        let (names, cut) = names(each, &self.shelf, budget, bound.clone());
+        let (names, before, after) = names(each, &self.shelf, budget, bound);
         self.names = names;
-        (self.before, self.after) = match bound {
-            Bound::First => (false, cut),
-            Bound::After(_) | Bound::From(_) => (true, cut),
-            Bound::Before(_) => (cut, true),
-            Bound::Last => (cut, false),
-        };
+        (self.before, self.after) = (before, after);
         if self.names.is_empty() && !first {
             // Nothing there any more: from the first.
             self.load(env, Bound::First);
@@ -386,6 +381,14 @@ mod tests {
     use super::*;
     use paperpaw_sdk::MemoryStorage;
     use paperpaw_sdk::library;
+
+    #[test]
+    fn a_folder_is_found_only_in_its_folder() {
+        assert_eq!(folder_in("books/A/b.epub", "books/"), Some("books/A"));
+        assert_eq!(folder_in("books/b.epub", "books/"), None);
+        assert_eq!(folder_in("other/A/b.epub", "books/"), None);
+        assert_eq!(folder_in("A/b.epub", ""), Some("A"));
+    }
 
     #[test]
     fn catalog_lines_and_views() {

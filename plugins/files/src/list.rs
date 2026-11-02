@@ -662,7 +662,7 @@ impl ListScreen {
             (shelf::Kind::Series, series),
             (shelf::Kind::Folder, folders),
         ] {
-            let (named, cut) = firsts.into_names();
+            let (named, _, cut) = firsts.into_names();
             shelves.extend(
                 named
                     .into_iter()
