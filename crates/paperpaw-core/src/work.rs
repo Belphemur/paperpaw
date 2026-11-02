@@ -258,6 +258,16 @@ impl Queue {
         self.held = held;
     }
 
+    /// Whether the job of the work `id` takes steps now: not waiting for
+    /// an event or a time, and not held back for a screen.
+    pub(crate) fn stepping(&self, id: &Id) -> bool {
+        !self.held
+            && self
+                .entries
+                .iter()
+                .any(|e| e.work.id == *id && matches!(e.job, Some(Job::Ready)))
+    }
+
     /// Whether work is held back.
     #[cfg(test)]
     pub(crate) fn is_held(&self) -> bool {

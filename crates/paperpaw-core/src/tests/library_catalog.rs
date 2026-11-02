@@ -715,3 +715,122 @@ fn what_a_sorting_cut_short_left_goes_at_a_start() {
     assert!(!kernel.storage().exists(".paperpaw/library/sorted.runs"));
     assert!(!kernel.storage().exists(".paperpaw/library/sorted.tmp"));
 }
+
+/// A library of `books` books, "Sleep after" one minute, and the walk
+/// wanted at once: each tick takes a step of it.
+fn walking(books: usize, battery: Option<u8>) -> Kernel {
+    let mut storage = MemoryStorage::new();
+    for n in 0..books {
+        storage = storage.with(&alloc::format!("books/b{n:04}.txt"), "x");
+    }
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(LibraryPlugin { log: log() })
+        .storage(storage)
+        .user_config("[core]\nsleep-after = 1\n")
+        .sleep(true)
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    if let Some(percent) = battery {
+        let status = paperpaw_platform::SystemStatus::default()
+            .with_battery(Some(paperpaw_platform::Battery::new(percent, false, None)));
+        kernel.set_status(Instant(0), status);
+    }
+    let wanted = events::CatalogWanted::new(false).to_params();
+    kernel.send_event(Instant(0), events::CATALOG_WANTED.id().clone(), wanted);
+    // Ten seconds without input: the walk begins.
+    for at in [11_000, 12_000] {
+        kernel.tick(Instant(at));
+    }
+    kernel
+}
+
+/// The minute at which the device is first told to sleep, ticking each
+/// minute for at most `minutes`; `None` if it never is.
+fn first_sleep(kernel: &mut Kernel, minutes: u64) -> Option<u64> {
+    (1..=minutes).find(|minute| kernel.tick(Instant(minute * 60_000)).sleep())
+}
+
+/// "Sleep after" does not stop a library walk that outlasts it: the sleep
+/// is put off while the walk goes on, and comes with the minute after it
+/// ends.
+#[test]
+fn the_sleep_waits_for_the_library_walk_and_comes_after_it() {
+    let mut kernel = walking(30, None);
+    let mut done = None;
+    for minute in 1..=59u64 {
+        let effects = kernel.tick(Instant(minute * 60_000));
+        if !paths(&kernel).is_empty() {
+            done = Some(minute);
+            break;
+        }
+        assert!(!effects.sleep(), "slept while walking, minute {minute}");
+    }
+    let done = done.expect("the walk ended within the hour");
+    assert!(done > 5, "the walk was too short to test: {done} minutes");
+    // The walk is over: the sleep comes at the next one due.
+    let slept = (done + 1..=done + 12).find(|minute| kernel.tick(Instant(minute * 60_000)).sleep());
+    assert!(slept.is_some(), "no sleep after the walk (ended at {done})");
+}
+
+/// A walk that outlasts an hour without a press lets the device sleep
+/// anyway (and goes on after the wake).
+#[test]
+fn a_walk_keeps_the_device_awake_for_an_hour_at_most() {
+    // A step each minute, a book a step: the walk takes over 100 minutes.
+    let mut kernel = walking(100, None);
+    let minute = first_sleep(&mut kernel, 150).expect("slept at the cap");
+    assert!((60..=62).contains(&minute), "slept at minute {minute}");
+    assert!(paths(&kernel).is_empty(), "the walk had ended");
+}
+
+/// The hour counts from the last press: pressing something starts it
+/// again.
+#[test]
+fn a_press_starts_the_walks_hour_again() {
+    let mut kernel = walking(170, None);
+    for minute in 1..=50u64 {
+        assert!(!kernel.tick(Instant(minute * 60_000)).sleep(), "{minute}");
+    }
+    kernel.handle(
+        Instant(50 * 60_000 + 500),
+        paperpaw_platform::InputEvent::Button {
+            name: "right",
+            state: paperpaw_platform::ButtonState::Pressed,
+        },
+    );
+    kernel.handle(
+        Instant(50 * 60_000 + 600),
+        paperpaw_platform::InputEvent::Button {
+            name: "right",
+            state: paperpaw_platform::ButtonState::Released,
+        },
+    );
+    let minute = (51..=170u64)
+        .find(|minute| kernel.tick(Instant(minute * 60_000)).sleep())
+        .expect("slept");
+    assert!(
+        (110..=112).contains(&minute),
+        "an hour from the press, not from the start: minute {minute}"
+    );
+}
+
+/// A nearly empty battery (not charging) sleeps as it would.
+#[test]
+fn a_nearly_empty_battery_does_not_wait_for_the_walk() {
+    let mut kernel = walking(30, Some(8));
+    assert_eq!(first_sleep(&mut kernel, 5), Some(1));
+    // Charging, it waits.
+    let mut kernel = walking(30, None);
+    assert_eq!(first_sleep(&mut kernel, 3), None);
+}
+
+/// A walk paused for a book that is open (a reader on top) holds nothing:
+/// the device sleeps when it is due.
+#[test]
+fn a_walk_paused_for_a_book_does_not_hold_the_sleep() {
+    let mut kernel = walking(30, None);
+    let path = Params::new().with(params::PATH, "books/b0001.txt");
+    kernel.open_slot(Instant(1000), slots::READER, path);
+    assert_eq!(first_sleep(&mut kernel, 5), Some(2));
+}
