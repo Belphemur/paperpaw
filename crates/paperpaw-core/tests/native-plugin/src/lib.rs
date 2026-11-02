@@ -8,6 +8,7 @@
 extern crate alloc;
 
 mod probe;
+mod ui_probe;
 
 use paperpaw_sample_hello::Hello;
 use paperpaw_sdk::{Id, Manifest, Plugin, RegisterError, Registrar, Version};
@@ -38,6 +39,12 @@ impl Plugin for Probe {
         r.provide(
             Id::new_static("hello.family-probe"),
             probe::family_probe(),
+            Version::new(1, 0, 0),
+        )?;
+        // The ui calls that need the kernel's `Env`, run when asked.
+        r.provide(
+            Id::new_static("hello.ui-probe"),
+            ui_probe::UI_PROBE,
             Version::new(1, 0, 0),
         )
     }

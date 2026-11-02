@@ -17,7 +17,7 @@
 //! (1) or with its own copies (0); the test checks it is so.
 
 use std::alloc::Layout;
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::OnceLock;
@@ -113,6 +113,8 @@ unsafe extern "C" fn alloc_in(size: usize, align: usize, _placement: u32) -> *mu
 /// The same calls as the plugin makes: with this build's own copies.
 #[path = "native-plugin/src/probe.rs"]
 mod probe;
+#[path = "native-plugin/src/ui_probe.rs"]
+mod ui_probe;
 
 /// The plugin library, built as the module says (`PAPERPAW_TEST_PLUGIN`
 /// names another build of it: the CI job `table-compat` builds it in
@@ -144,11 +146,12 @@ impl Plugin for Loaded {
 }
 
 /// A plugin of this build that looks for the loaded one's service by
-/// name.
+/// name; it brings the interface's font, which the ui calls draw with.
 struct Looks(
     Rc<Cell<Option<Version>>>,
     Rc<Cell<Option<bool>>>,
     Rc<Cell<Option<bool>>>,
+    Rc<RefCell<Option<Result<(), String>>>>,
 );
 
 impl Plugin for Looks {
@@ -162,6 +165,16 @@ impl Plugin for Looks {
         let found = self.0.clone();
         let text = self.1.clone();
         let families = self.2.clone();
+        let ui = self.3.clone();
+        let font = paperpaw_text::Font::from_data(probe::PACK, &[]).map_err(|_| {
+            RegisterError::Invalid {
+                message: "the test pack".into(),
+            }
+        })?;
+        r.add_font(paperpaw_sdk::FontSpec::new(
+            Id::new_static("looks.font"),
+            font,
+        ))?;
         r.on(
             events::STARTED,
             move |env: &Env<'_>, _, _: &mut paperpaw_sdk::Commands| {
@@ -184,9 +197,42 @@ impl Plugin for Looks {
                         .get::<probe::FamilyProbe>("hello.family-probe", Version::new(1, 0, 0))
                         .map(|got| *got == probe::family_probe()),
                 );
+                // And its ui calls, run with this kernel's `Env`: every
+                // entry of the ui family, and text drawn right to left.
+                let here = ui_probe::ui_calls(env);
+                *ui.borrow_mut() = services
+                    .get::<ui_probe::UiProbe>("hello.ui-probe", Version::new(1, 0, 0))
+                    .map(|probe| differences(&(probe.run)(env), &here));
             },
         )
     }
+}
+
+/// Where the plugin's ui calls came out otherwise than this tree's.
+fn differences(got: &ui_probe::UiCalls, here: &ui_probe::UiCalls) -> Result<(), String> {
+    // Drawings that left no ink would agree without showing anything.
+    let white = here.gray.iter().filter(|&&gray| gray == 0).count();
+    assert!(
+        here.numbers.iter().all(|n| n != "no font") && white == 0,
+        "the ui calls draw with a font: {here:?}"
+    );
+    if got == here {
+        return Ok(());
+    }
+    let numbers = got.numbers.iter().zip(&here.numbers).enumerate();
+    let mut said: Vec<String> = numbers
+        .filter(|(_, (a, b))| a != b)
+        .map(|(n, (a, b))| format!("number {n}: the plugin's {a:?}, here {b:?}"))
+        .collect();
+    let gray = got.gray.iter().zip(&here.gray).enumerate();
+    said.extend(
+        gray.filter(|(_, (a, b))| a != b)
+            .map(|(n, (a, b))| format!("drawing {n}: the plugin's ink {a}, here {b}")),
+    );
+    if got.numbers.len() != here.numbers.len() || got.gray.len() != here.gray.len() {
+        said.push(String::from("not as many calls"));
+    }
+    Err(said.join("\n"))
 }
 
 #[test]
@@ -252,9 +298,15 @@ fn a_plugin_built_apart_runs_in_the_kernel() {
     let found = Rc::new(Cell::new(None));
     let text = Rc::new(Cell::new(None));
     let families = Rc::new(Cell::new(None));
+    let ui = Rc::new(RefCell::new(None));
     let mut kernel = Kernel::builder(DEVICE)
         .plugin(Loaded(plugin))
-        .plugin(Looks(found.clone(), text.clone(), families.clone()))
+        .plugin(Looks(
+            found.clone(),
+            text.clone(),
+            families.clone(),
+            ui.clone(),
+        ))
         .build()
         .unwrap();
     assert!(kernel.take_warnings().is_empty());
@@ -285,6 +337,14 @@ fn a_plugin_built_apart_runs_in_the_kernel() {
             Some(false),
             "its ui, data and graphics calls come out as the kernel's own"
         );
+    }
+
+    // Its ui calls: tools/table-compat.sh builds this tree's probe against
+    // the baseline's crates, so every plugin has them.
+    match ui.borrow().as_ref() {
+        Some(Ok(())) => {}
+        Some(Err(said)) => panic!("its ui calls come out otherwise than the kernel's own:\n{said}"),
+        None => panic!("no ui probe in the plugin"),
     }
 
     // Its action opens its screen, drawn by its code; its translations
