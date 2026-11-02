@@ -138,13 +138,16 @@ with that before the betas of 0.5:
      before take it up without a rebuild, which is the point of sharing.
   2. **Free as well**, where a result does change (a height, a position,
      a hit, a line break, a focus or page, a parsed value), when every
-     function that must agree with it is an entry of the same family,
-     changed in the same commit, and no value a plugin keeps (a cache, a
-     file, a page index, a revision such as `paperpaw_layout::VERSION`)
-     and no promise of the documentation rests on the old result. A
-     plugin built before then calls all of them anew, and they agree.
-     Example: `Row::height`, `Row::draw` and `Row::hit` are all ui
-     entries, so a row 4 pixels taller is free.
+     function that must agree with it is an entry too, of any family (all
+     of them run the one firmware's bodies, whichever family a plugin's
+     calls go through), changed in the same commit, and no value a plugin
+     keeps (a cache, a file, a page index, a revision such as
+     `paperpaw_layout::VERSION`) and no promise of the documentation rests
+     on the old result. A plugin built before then calls all of them
+     anew, and they agree. Examples: `Row::height`, `Row::draw` and
+     `Row::hit` are all ui entries, so a row 4 pixels taller is free; the
+     ui entry `fit` shortening Arabic as the text entry `measure` sets it
+     is free too.
   3. **A bump** otherwise: a line `bump <family> <revision>` appended to
      `shared.list` in the same commit, at the family's next revision.
      The firmware then refuses the plugins of that family built before
