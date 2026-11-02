@@ -174,10 +174,12 @@ fn on_the_x4_the_catalog_is_caught_up_beside_the_list() {
     shown_and_finished(&mut app);
 }
 
+/// On the X4 a walk goes on beside the list (which holds a few
+/// kilobytes of the sorted books, not an index of them all), and the
+/// list shows the catalog made anew.
 #[test]
-fn on_the_x4_a_walk_waits_while_the_list_shows() {
+fn on_the_x4_a_walk_goes_on_beside_the_list() {
     let _turn = turn();
-    // A walk takes more: not while the list shows, but once it is left.
     let (mut app, _) = read_often(X4);
     app.wait(61_000);
     let generation = |app: &App| library::catalog::generation(app.storage.0.as_ref()).unwrap();
@@ -191,10 +193,6 @@ fn on_the_x4_a_walk_waits_while_the_list_shows() {
     let anew = events::CatalogWanted::new(true);
     app.send(events::CATALOG_WANTED.id().clone(), anew.to_params());
     app.wait(61_000);
-    assert_eq!(generation(&app), before, "walked beside the list");
-    app.home();
-    app.wait(61_000);
-    assert!(generation(&app) > before, "not walked away from the list");
-    app.run(actions::LIBRARY);
+    assert!(generation(&app) > before, "not walked beside the list");
     shown_and_finished(&mut app);
 }

@@ -52,6 +52,14 @@ unsafe impl GlobalAlloc for Counting {
 #[global_allocator]
 static ALLOCATOR: Counting = Counting;
 
+/// The tests take turns: the heap is counted for the whole program.
+static TURN: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn turn() -> std::sync::MutexGuard<'static, ()> {
+    TURN.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 /// How far the heap grows while `run` runs (at most), and how much more
 /// it holds after.
 fn growth(run: impl FnOnce()) -> (usize, isize) {
@@ -80,7 +88,7 @@ fn library(books: usize) -> App {
     let paths: Vec<String> = (0..books).map(path).collect();
     let files: Vec<(&str, &[u8])> = paths.iter().map(|p| (p.as_str(), &b"t"[..])).collect();
     let storage = Shared::memory("", &files);
-    let records: Vec<Record> = paths
+    let mut records: Vec<Record> = paths
         .iter()
         .enumerate()
         .map(|(n, path)| {
@@ -93,6 +101,13 @@ fn library(books: usize) -> App {
             Record::of(path, &book)
         })
         .collect();
+    // In the order a walk meets them (the last folder listed first), as
+    // the catalog a walk made is: the walk after the start takes each
+    // from it.
+    records.sort_by(|a, b| {
+        let folder = |r: &Record| r.path.rsplit_once('/').map(|(f, _)| f.to_string());
+        folder(b).cmp(&folder(a)).then_with(|| a.path.cmp(&b.path))
+    });
     storage.create_dir(".paperpaw").unwrap();
     storage.create_dir(".paperpaw/library").unwrap();
     catalog::write(&storage, &records).unwrap();
@@ -102,8 +117,38 @@ fn library(books: usize) -> App {
     app
 }
 
+/// The list of every book (the X4 listed 2,000 at most before): opened
+/// and paged to its end it holds a few kilobytes, whatever the
+/// library's size.
+#[test]
+fn the_list_of_a_large_library_takes_a_few_kilobytes() {
+    let _turn = turn();
+    let mut app = library(10_000);
+    let first = app.focused().unwrap_or_default();
+    app.run(actions::BACK);
+    let (opened, held) = growth(|| {
+        app.run(actions::LIBRARY);
+        app.render();
+    });
+    let (paged, _) = growth(|| {
+        for _ in 0..40 {
+            app.run(actions::NEXT_PAGE);
+        }
+        app.render();
+    });
+    eprintln!("list of 10,000: opened peak {opened} B, held {held} B; paged peak {paged} B");
+    // Paged on, past what the X4 held before.
+    let later = app.focused().unwrap_or_default();
+    assert_ne!(later, first, "{}", app.described());
+    // Before, the X4 held an index of 2,000 books at most: 48 KB.
+    assert!(held <= 16 * 1024, "the list holds {held} B");
+    assert!(opened <= 32 * 1024, "the list took {opened} B");
+    assert!(paged <= 32 * 1024, "paging took {paged} B");
+}
+
 #[test]
 fn the_shelves_of_a_large_library_take_a_bounded_part_of_the_heap() {
+    let _turn = turn();
     let mut app = library(10_000);
     let mut count = 0;
     catalog::each(&app.storage, &mut |_| count += 1);
@@ -167,6 +212,7 @@ fn the_shelves_of_a_large_library_take_a_bounded_part_of_the_heap() {
 /// and back.
 #[test]
 fn every_name_is_reached_through_the_windows() {
+    let _turn = turn();
     let mut app = library(900);
     let open = Params::new().with(params::MODE, "authors");
     app.open_screen(paperpaw_sdk::Id::new_static("files.shelf"), open);

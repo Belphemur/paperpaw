@@ -50,29 +50,13 @@ impl CatalogJob {
 
 /// Whether the catalog's job waits (paused, it goes on where it was):
 /// while a book is read (the reader is the screen shown, overlays over it
-/// aside), its memory and time are the reader's; on a device of little
-/// memory (the X4), a walk waits while the library is open (shown, or
-/// under the screens it opened: finding, a shelf, a book's information),
-/// whose index takes the memory. Catching up, which takes little, goes on
-/// beside the library; a library with no catalog yet, or a catalog without
-/// books, holds no index.
-pub(super) fn waits(env: &Env<'_>, walk: bool) -> bool {
+/// aside), its memory and time are the reader's. Beside the library it
+/// goes on, also on a device of little memory (the X4): the library holds
+/// a few kilobytes of the sorted books ([`library::sorted`]), and says
+/// they are being prepared until the job made them.
+pub(super) fn waits(env: &Env<'_>) -> bool {
     let shown = env.stack().iter().rev().find(|entry| !entry.overlay);
-    let reading = shown.is_some_and(|entry| entry.slot.as_ref() == Some(&slots::READER));
-    let library_open = env
-        .stack()
-        .iter()
-        .any(|entry| entry.slot.as_ref() == Some(&slots::LIBRARY));
-    reading
-        || (walk
-            && env.device().memory == paperpaw_sdk::MemoryClass::Small
-            && library_open
-            && matches!(
-                library::catalog::state(env.storage()),
-                library::catalog::State::Ready { .. }
-            )
-            && !(library::emptiness::is_empty(env.storage())
-                && !library::emptiness::log_has_entries(env.storage())))
+    shown.is_some_and(|entry| entry.slot.as_ref() == Some(&slots::READER))
 }
 
 /// The library's folder is there from the first start on: made where it

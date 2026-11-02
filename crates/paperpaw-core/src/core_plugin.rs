@@ -473,12 +473,7 @@ impl Catalog {
         use paperpaw_sdk::work::Step;
         let storage = env.storage();
         let mut job = self.job.borrow_mut();
-        let walk_next = match &*job {
-            Some(running) => matches!(running, CatalogJob::Walk(_)),
-            // Moving what earlier versions kept takes little memory.
-            None => self.walk.get() && !self.split.get(),
-        };
-        if waits(env, walk_next) {
+        if waits(env) {
             // Goes on where it was once another screen shows.
             if let Some(running) = job.as_mut() {
                 running.pause(storage);

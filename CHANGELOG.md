@@ -290,6 +290,13 @@ before it are thrown away.
 
 ### Changed
 
+- The library lists every book on the X4 too (#79), not 2,000 at most: the list pages the books sorted on the card
+  (`library::sorted`) and holds a few kilobytes (10,000 books: 3.7 KB held, 8 KB at most while opened or paged, on
+  the host; the index of 2,000 took 48 KB). Its order, filters, stacks of series as covers, the next book of each
+  series and where the focus goes are as before. Right after the catalog was made anew the list says *Preparing
+  the library …* until the kernel sorted the books (a moment); the index it kept while a book covered it
+  (`.paperpaw/plugins/files/index.bin`) is removed. On the X4 the catalog is now walked and caught up while the
+  library shows too (the reason it waited, the index's memory, is gone); still never while a book is read.
 - The library's shelves hold a bounded part of the memory however large the library (#79): the shelves in the
   list show the first 200 series and folders on the X4 (2,000 on others) with an *All series* and *All folders*
   row after them, and count the authors up to 2,048 (*more than 2048 authors*); the screens of authors, series,
