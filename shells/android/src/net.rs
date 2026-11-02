@@ -41,6 +41,9 @@ struct Teller {
 }
 
 thread_local! {
+    // Already `const`: clippy (1.99) asks for it all the same, without a
+    // suggestion to apply.
+    #[allow(clippy::missing_const_for_thread_local)]
     static TELLER: RefCell<Option<Teller>> = const { RefCell::new(None) };
 }
 
