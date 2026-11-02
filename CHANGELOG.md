@@ -18,6 +18,48 @@ widgets. The firmware cannot refuse older builds (the fingerprint is the same): 
 details and write them where the kernel moves them away from, so changes made in them would be lost. Builds from
 before it are thrown away.
 
+### In plain words
+
+This is a beta. Keep a copy of your books. The details for plugin authors follow in the sections below.
+
+- **Per-book data lies elsewhere now** (#280). What PaperPaw keeps for each book (its details, its small cover, the
+  caches of the format plugins) is spread over 256 subfolders by the first two digits of the book's key, no longer
+  in one folder of thousands. A big library opens much faster on a slow card. After the update PaperPaw moves the
+  old data once, a few books at a time at calm moments; each book's first opening takes a little longer, as its
+  cache is made again. **Plugins that read the library have to be built again for it**: calibre, end-of-book,
+  file-manager, files, the format plugins (EPUB, FB2, HTML, Markdown, CBZ, DOCX, MOBI, TXT, XTC, images), home,
+  notes-overview, opds, sleep, stats, transfer and widgets. PaperPaw's own are rebuilt for this release; a plugin
+  from someone else that reads the library needs its author's new build, and until then shows books without their
+  details.
+- **The room hint after an SD install.** After an installation from the SD card (as from CrossPoint) there is less
+  room for plugins than a full flash gives. The store and the plugin manager now say how much room is left and
+  that *A full install via USB (paperpaw.org/flash) gives about …* more; on a fully flashed device they say nothing.
+- **Neutral plugin names** (#90). Plugins that work with a third-party product have a generic name; the product is
+  named only in the description, as what they work with: *Wireless library* (calibre), *Book notes sync* (Joplin),
+  *Highlights sharing* (KOReader), *Highlights export (cloud)* (Readwise), *Read-later articles (own server)*
+  (wallabag), *Read-later articles (cloud)* (new id `read-later-cloud`, off at first), *Encyclopedia lookup*
+  (Wikipedia), *DOCX documents*, *MOBI books*. The ids of the plugins already published stay.
+- **Arabic user interface** (#33). The screens run right to left in Arabic: the switch, the rows, the keyboard, the
+  library, the reader's menu, the sliders and the taps and swipes at the sides. The translation comes as the data
+  plugin `language-ar` from the store. Nobody on the team reads Arabic: the rules are tested and the pictures
+  checked, how it looks to a reader and how it feels on a device are not. Tell us what is wrong.
+- **A wider keyboard** (#91). The keys reach nearer to the sides of the screen; on small screens they get nearly the
+  whole width.
+- **The landscape home screen** (#88). Turned on its side, the home screen keeps the start card beside the clock.
+- **A power menu** (#78). Hold the power button: *Sleep*, *Switch off*, *Restart* and, on touch devices, *Lock touch*
+  or *Unlock touch*. A short press still sleeps.
+- **All six language packs are in the store**: Arabic, Hebrew, Greek, Cyrillic, Korean (2,350 syllables) and
+  *Korean, more syllables* (about 30 MB on the card). The Arabic, Hebrew and Korean packs bring their keyboards
+  (Hangul letters join to syllables as you type).
+- Also new: *Literata bold and italic* come as a small pack from the store (531 KB less firmware, more room for
+  plugins), *All notes*, *End of book*, *Pictures* and the formats MOBI and DOCX, flash cards from the card and from
+  Anki decks, your own fonts, hanging punctuation, drop capitals, lists that hang under their marker, line breaking for
+  Korean, Chinese and Japanese. Book text in Arabic and Hebrew is set right to left.
+- **Updating:** books, reading positions and settings are kept. Every book is laid out again once, the first time it
+  is opened. Plugins with code need a build for plugin interface 5; the store offers PaperPaw's own.
+- **Not in this release:** exFAT cards. The X4 Pro, X4 Classic and X3 are built and checked by the tests on a
+  computer; the owner tests the X4 and X4 Pro by hand.
+
 ### Added
 
 - Text: `TextInk::RIGHT_TO_LEFT`, a flag of the reserved ones: the lines a handle draws run right to left
@@ -169,17 +211,17 @@ before it are thrown away.
   (a note opens the book there), and *Export as My Clippings.txt*, all notes in one file in Kindle's form
   (UTF-8 with a byte order mark, `Exports/My Clippings.txt` beside the library) that notes apps read. A book's
   notes file is found by the hash of its path, so listing needs no book to be opened. It needs no SDK change.
-- *Mobipocket*, a new format plugin: opens `.mobi` and `.azw` books without DRM (PalmDOC or uncompressed
+- *MOBI books* (`format-mobi`), a new format plugin: opens `.mobi` and `.azw` books without DRM (PalmDOC or uncompressed
   text, Windows-1252 or UTF-8). It shows the title, authors, language, subjects, the cover, headings with a table of
   contents, bold and italic, centred and right-aligned text, lists and pictures (GIF, JPEG, PNG, decoded when
   their page shows). It reads the book in pieces, so a long book needs little memory. Books with DRM, with
   Huffman/CDIC compression or in the KF8-only form (`.azw3`) are refused with a clear message. It needs no SDK change.
-- *Readwise Reader*, a new plugin (off at first): fetches the articles saved in Readwise Reader (from *Later* or
+- *Read-later articles (cloud)* (`read-later-cloud`, #90), a new plugin (off at first): fetches the articles saved in the Readwise Reader service (from *Later* or
   the *Inbox*, a setting) as HTML books into the folder `Reader`, with their text (no pictures), ten new ones
   at a time. It asks for the Readwise access token once; articles read to the end are archived in Reader with
   the next fetch and their books removed (not those with highlights, notes or bookmarks). It keeps within
   Reader's limit of twenty list requests a minute and stops where Reader asks to wait. It needs no SDK change.
-- *Word documents*, a new store plugin (`format-docx`): opens `.docx` files as books, with headings and a table
+- *DOCX documents*, a new store plugin (`format-docx`): opens `.docx` files as books, with headings and a table
   of contents, lists (bulleted, numbered, nested), tables (a row a line), bold, italic, underline, links (also
   within the document) and pictures (JPEG, PNG, GIF), and the title, author and language of the document. The
   text is read in pieces from the archive and written once as blocks, so a long document needs little memory;
@@ -269,7 +311,7 @@ before it are thrown away.
   so on its store page, with *Remove*.
 - The transfer screens show the device's name in the network (`paperpaw.local`) beside its address where the shell
   gives one; the QR code keeps the numeric address.
-- Downloads of the store, the update, the news and font lists and Readwise Reader are limited to the size the library
+- Downloads of the store, the update, the news and font lists and the read-later cloud plugin are limited to the size the library
   names (`max_file`), so a manipulated server cannot make a plugin read an unbounded body.
 - The icon font has `alert-triangle` (+320 bytes), and a check (`tools/checks`, icons) fails where a plugin names a
   Tabler icon the font lacks; the *Unreviewed* line of the store had been drawn without its icon.
@@ -504,7 +546,7 @@ before it are thrown away.
   `temperature-c`, `frontlight-percent`) a later shell can fill without a
   new interface.
 
-### Added
+### Added (plugin interface 5, for plugin authors)
 
 - More freedom over how things look (ticket #57, interface 5):
   - **Text tone:** `ToneCurve::from_alphas`, `parse`, `parse_for` and `to_text` make a curve of your own from 16 values or text
