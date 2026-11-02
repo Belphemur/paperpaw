@@ -585,31 +585,58 @@ pub fn keep_code_room(storage: &dyn Storage, room: Option<&CodeRoom>) -> bool {
     storage.write(ROOM, text.as_bytes()).is_ok()
 }
 
-/// The bytes the code plugins installed take where `room` places them,
-/// and how many they are: each folder in `plugins` with a code file named
-/// `file` ([`Native::file`]), by its header. Those installed since the
-/// start (loaded only after a restart) count, those switched off too: what
-/// the next start would place at most. Folders whose names begin with a
-/// dot (a download being put together, e.g. `.clock.part`) are no plugins
-/// and do not count.
+/// What the code plugins installed take of the room for code, by plugin
+/// state (see [`installed_code_need`]).
 #[cfg(any(test, feature = "kernel"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
-pub fn installed_code_need(storage: &dyn Storage, room: &CodeRoom, file: &str) -> (u64, u32) {
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct InstalledNeed {
+    /// The bytes those that are on take, and how many they are.
+    pub taken: u64,
+    pub plugins: u32,
+    /// The same for those switched off.
+    pub off: u64,
+    pub off_plugins: u32,
+}
+
+/// The bytes the code plugins installed take where `room` places them:
+/// each folder in `plugins` with a code file named `file`
+/// ([`Native::file`]), by its header. Those installed since the start
+/// (loaded only after a restart) count; those `off` says are switched off
+/// (by the folder's name) are kept apart, as the loader skips their code
+/// at the next start and the room it would have placed them in is free.
+/// Folders whose names begin with a dot (a download being put together,
+/// e.g. `.clock.part`) are no plugins and do not count.
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+pub fn installed_code_need(
+    storage: &dyn Storage,
+    room: &CodeRoom,
+    file: &str,
+    off: &dyn Fn(&str) -> bool,
+) -> InstalledNeed {
     let mut folders: Vec<String> = Vec::new();
     let _ = storage.list(crate::builtin::PLUGIN_DIR, &mut |entry| {
         if entry.is_dir && !entry.name.starts_with('.') {
             folders.push(String::from(entry.name));
         }
     });
-    let (mut taken, mut count) = (0u64, 0u32);
+    let mut installed = InstalledNeed::default();
     for folder in folders {
         let path = alloc::format!("{}/{folder}/{file}", crate::builtin::PLUGIN_DIR);
-        if let Some(header) = read_header(storage, &path) {
-            taken = taken.saturating_add(room.needs(u64::from(header.image_len), header.align));
-            count += 1;
+        let Some(header) = read_header(storage, &path) else {
+            continue;
+        };
+        let need = room.needs(u64::from(header.image_len), header.align);
+        if off(&folder) {
+            installed.off = installed.off.saturating_add(need);
+            installed.off_plugins += 1;
+        } else {
+            installed.taken = installed.taken.saturating_add(need);
+            installed.plugins += 1;
         }
     }
-    (taken, count)
+    installed
 }
 
 /// The header of the plugin file at `path`, if it has one this SDK reads
@@ -1212,16 +1239,35 @@ pub(crate) mod tests {
             .with("plugins/.clock.part/code.ppn", header_of(5000, 16))
             .with("plugins/weather/code.ppn", header_of(100, 16));
         // The theme has no code, the broken file no header.
+        let none = |_: &str| false;
         assert_eq!(
-            installed_code_need(&storage, &room, "code.ppn"),
-            (8192 + 4096, 2)
+            installed_code_need(&storage, &room, "code.ppn", &none),
+            InstalledNeed {
+                taken: 8192 + 4096,
+                plugins: 2,
+                ..InstalledNeed::default()
+            }
+        );
+        // The clock switched off: kept apart.
+        let clock_off = |id: &str| id == "clock";
+        assert_eq!(
+            installed_code_need(&storage, &room, "code.ppn", &clock_off),
+            InstalledNeed {
+                taken: 4096,
+                plugins: 1,
+                off: 8192,
+                off_plugins: 1,
+            }
         );
         assert_eq!(
             read_header(&storage, "plugins/clock/code.ppn").map(|h| h.image_len),
             Some(5000)
         );
         assert!(read_header(&storage, "plugins/broken/code.ppn").is_none());
-        assert_eq!(installed_code_need(&storage, &room, "code.so"), (0, 0));
+        assert_eq!(
+            installed_code_need(&storage, &room, "code.so", &none),
+            InstalledNeed::default()
+        );
     }
 
     #[test]

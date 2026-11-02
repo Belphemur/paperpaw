@@ -5,9 +5,8 @@
 //! where it cannot.
 
 use alloc::string::String;
-use alloc::vec::Vec;
 
-use paperpaw_sdk::native::{self, CodeRoom};
+use paperpaw_sdk::native::{self, CodeRoom, InstalledNeed};
 use paperpaw_sdk::{Arg, Env, files};
 
 use crate::catalog::Entry;
@@ -43,9 +42,13 @@ impl Room {
     /// takes the place of the version before).
     pub(crate) fn of(env: &Env<'_>, plugin: Option<&str>) -> Room {
         let code = env.native().and_then(|_| native::code_room(env.storage()));
-        let mut installed = Installed::default();
+        let mut installed = InstalledNeed::default();
         if let (Some(room), Some(native)) = (&code, env.native()) {
-            installed = Installed::of(env, room, &native.file);
+            // Those switched off are free: the loader skips their code at
+            // the next start.
+            installed = native::installed_code_need(env.storage(), room, &native.file, &|id| {
+                switched_off(env, id)
+            });
             // Its own code makes room for the update, where it is on.
             if let Some(own) = plugin
                 .filter(|id| !switched_off(env, id))
@@ -197,51 +200,6 @@ impl Room {
         };
         let args = [("size", Arg::Str(&need)), ("free", Arg::Str(&free))];
         Some(env.i18n().format(key, &args))
-    }
-}
-
-/// What the code plugins installed take of the room at the next start.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-struct Installed {
-    taken: u64,
-    plugins: u32,
-    off: u64,
-    off_plugins: u32,
-}
-
-impl Installed {
-    /// Each folder in `plugins` with a code file named `file`, by its
-    /// header (as `native::installed_code_need` measures them): those
-    /// installed since the start count (loaded only after a restart),
-    /// those switched off do not (the loader skips their code at the next
-    /// start and the room it would have placed them in is free), and
-    /// folders that begin with a dot (a download being put together) are
-    /// no plugins.
-    fn of(env: &Env<'_>, room: &CodeRoom, file: &str) -> Self {
-        let mut folders: Vec<String> = Vec::new();
-        let _ = env
-            .storage()
-            .list(paperpaw_sdk::builtin::PLUGIN_DIR, &mut |entry| {
-                if entry.is_dir && !entry.name.starts_with('.') {
-                    folders.push(String::from(entry.name));
-                }
-            });
-        let mut installed = Self::default();
-        for folder in folders {
-            let path = alloc::format!("{}/{folder}/{file}", paperpaw_sdk::builtin::PLUGIN_DIR);
-            let Some(header) = native::read_header(env.storage(), &path) else {
-                continue;
-            };
-            let need = room.needs(u64::from(header.image_len), header.align);
-            if switched_off(env, &folder) {
-                installed.off = installed.off.saturating_add(need);
-                installed.off_plugins += 1;
-            } else {
-                installed.taken = installed.taken.saturating_add(need);
-                installed.plugins += 1;
-            }
-        }
-        installed
     }
 }
 
