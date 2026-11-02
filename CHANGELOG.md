@@ -111,8 +111,8 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   start). `SocketNotice::Failed` says why it failed (`SocketError`; `Other(0)` from older kernels).
   `SocketRead::Bytes` reads bytes as they come (`SocketNotice::Bytes`), for 8-bit protocol lines that are no
   UTF-8. `Capabilities::tls_sessions` says how many TLS
-  connections fit at once, HTTPS among them; with none (every shell for now) TLS sockets fail at once,
-  `SocketError::Unsupported`. The shells' TLS comes with the firmware's part of #81.
+  connections fit at once, HTTPS among them; with none (the browser's emulator) TLS sockets fail at once,
+  `SocketError::Unsupported`.
 - **Plugin interface (next raise):** screens fit another size in place (#88). `Screen::on_resize` lays a screen out
   anew when its part of the screen changes size (turned, a window resized, the row of hints): answering
   `Handled::Yes` it keeps everything (a book open, a list scrolled, a connection); by default it is made anew as
@@ -130,6 +130,15 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   Classic two, shared with HTTPS and served in the order asked: a socket that waits longer than its timeout fails
   `Busy`. Nothing is sent or read before `Secured`; a switch to TLS over bytes that came after the server's
   go-ahead fails (`NotReady`, socket closed), as they might be injected.
+- **Emulator on Linux, macOS and Windows, and the Android app: TLS for plugins' sockets** (#81, owner decision 52):
+  rustls with ring, over the same sockets, with the same rules as the X4's. The authorities are Mozilla's list
+  (`webpki-roots`, the same as the X4's, not the computer's store, so a plugin behaves alike everywhere), or up to
+  four pinned certificates or keys; the name is checked for the authorities only, the dates (where the clock
+  is believed, i.e. set after 2025) for both; there is no way to trust what is merely shown. A server's own
+  certificate, a certificate authority's that it made itself, ends `Untrusted` (`UnknownIssuer`), so a plugin can
+  offer to pin its key. Up to eight sessions at once, a socket waits for one until its timeout. The Mail plugin
+  checks and sends mail against a real IMAP and SMTP server this way. The browser's emulator has no sockets and
+  holds no TLS session.
 - Screens mirror in a user-interface language that runs right to left (#33): the switch, value rows and their
   chevrons, ticked rows, the number buttons, text fields, dialog buttons, list rows' icons, chips, the date
   and time pickers, headings and the reader's menu bar start at the right, and left/right follow them. The

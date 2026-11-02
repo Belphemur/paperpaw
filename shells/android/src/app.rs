@@ -487,6 +487,8 @@ fn start_kernel(
         .random(random)
         .plugin_dir("plugins")
         .network(true)
+        // Plugins' secure sockets (rustls with ring).
+        .tls_sessions(paperpaw_serve::TLS_SESSIONS)
         .catalog_device("android")
         .system_clipboard(true)
         .speech(true)

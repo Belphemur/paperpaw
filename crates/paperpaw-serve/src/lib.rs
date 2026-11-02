@@ -1,7 +1,9 @@
 //! Serving HTTP for plugins, for shells with the standard library (the
 //! emulator, Android): a small HTTP/1.1 server per plugin server, each
 //! connection on a thread of its own, one request per connection. Also
-//! plugins' sockets ([`Sockets`]).
+//! plugins' sockets ([`Sockets`]), secure ones too (rustls with ring:
+//! implicit TLS, STARTTLS, Mozilla's authorities or pinned certificates and
+//! keys; see `tls`).
 //!
 //! The shell starts and stops servers as the kernel asks
 //! (`ServerCall`), passes requests on (`ServerEvent`) and the answers
@@ -33,9 +35,20 @@ use std::time::{Duration, Instant};
 use paperpaw_core::{ServedFile, ServerCall, ServerEvent};
 use paperpaw_http::server::{MAX_REQUEST_HEAD, RequestHead, parse_request};
 
+mod link;
 mod sockets;
+#[cfg(not(target_arch = "wasm32"))]
+mod tls;
+#[cfg(target_arch = "wasm32")]
+#[path = "tls_stub.rs"]
+mod tls;
 
 pub use sockets::Sockets;
+
+/// The secure sessions [`Sockets`] holds at once, for
+/// `KernelBuilder::tls_sessions` (0 in the browser's module, which has no
+/// sockets).
+pub const TLS_SESSIONS: u8 = tls::SESSIONS;
 
 /// Size of the parts bodies go in.
 const PART: usize = 64 * 1024;

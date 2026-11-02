@@ -280,6 +280,7 @@ Crates in the apps (Android, the desktop and web emulators) used under the MIT L
 - futures-core 0.3.34: Copyright (c) 2016 Alex Crichton; Copyright (c) 2017 The Tokio Authors
 - futures-task 0.3.34: Copyright (c) 2016 Alex Crichton; Copyright (c) 2017 The Tokio Authors
 - futures-util 0.3.34: Copyright (c) 2016 Alex Crichton; Copyright (c) 2017 The Tokio Authors
+- getrandom 0.2.17: Copyright (c) 2018-2024 The rust-random Project Developers; Copyright (c) 2014 The Rust Project Developers
 - getrandom 0.3.4: Copyright (c) 2018-2025 The rust-random Project Developers; Copyright (c) 2014 The Rust Project Developers
 - getrandom 0.4.3: Copyright (c) 2018-2026 The rust-random Project Developers; Copyright (c) 2014 The Rust Project Developers
 - hashbrown 0.17.1: Copyright (c) 2016 Amanieu d'Antras
@@ -339,10 +340,13 @@ Crates in the apps (Android, the desktop and web emulators) used under the MIT L
 - read-fonts 0.45.1: Copyright 2019 Fontations Developers; Copyright (c) 2019 Fontations Developers
 - rustix 0.38.44: Copyright Dan Gohman, Jakub Konka (https://github.com/bytecodealliance/rustix)
 - rustix 1.1.5: Copyright Dan Gohman, Jakub Konka (https://github.com/bytecodealliance/rustix)
+- rustls 0.23.46: Copyright (c) 2016, Joseph Birr-Pixton <jpixton@gmail.com>; Copyright (c) 2016 Joseph Birr-Pixton <jpixton@gmail.com>
+- rustls-pki-types 1.15.1: Copyright 2023 Dirkjan Ochtman; Copyright (c) 2023 Dirkjan Ochtman <dirkjan@ochtman.nl>
 - rustversion 1.0.23: Copyright David Tolnay (https://github.com/dtolnay/rustversion)
 - scoped-tls 1.0.1: Copyright (c) 2014 Alex Crichton
 - serde 1.0.229: Copyright Erick Tryzelaar, David Tolnay (https://github.com/serde-rs/serde)
 - serde_core 1.0.229: Copyright Erick Tryzelaar, David Tolnay (https://github.com/serde-rs/serde)
+- serde_derive 1.0.229: Copyright Erick Tryzelaar, David Tolnay (https://github.com/serde-rs/serde)
 - simd-adler32 0.3.10: Copyright Marvin Countryman (https://github.com/mcountryman/simd-adler32)
 - simd_cesu8 1.2.0: Copyright Sean C. Roach (https://github.com/seancroach/simd_cesu8)
 - simdutf8 0.1.5: Copyright Hans Kratz (https://github.com/rusticstuff/simdutf8)
@@ -397,6 +401,7 @@ Crates in the apps (Android, the desktop and web emulators) used under the MIT L
 - xkbcommon-dl 0.4.2: Copyright (c) 2023 Kirill Chibisov
 - xkeysym 0.2.1: Copyright 2022-2023 John Nunley; Copyright (c) 2022-2023 John Nunley
 - zerocopy 0.8.63: Copyright 2023 The Fuchsia Authors; Copyright 2019 The Fuchsia Authors.
+- zeroize 1.9.1: Copyright (c) 2018-2026 The RustCrypto Project Developers
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
@@ -410,6 +415,7 @@ Crates in the apps (Android, the desktop and web emulators) used under the Apach
 
 - dpi 0.1.2: Copyright (c) 2018 Jorge Aparicio; Copyright © 2005-2020 Rich Felker, et al.; Copyright © 1993,2004 Sun Microsystems or; Copyright © 2003-2011 David Schultz or; Copyright © 2003-2009 Steven G. Kargl or; Copyright © 2003-2009 Bruce D. Evans or; Copyright © 2008 Stephen L. Moshier or; Copyright © 2017-2018 Arm Limited
 - gethostname 1.1.0: Copyright Sebastian Wiesner (https://codeberg.org/swsnr/gethostname.rs.git)
+- ring 0.17.14: Copyright (c) 2009 The Go Authors. All rights reserved.; Copyright 2015 The Chromium Authors. All rights reserved.; Copyright 2015-2025 Brian Smith.
 - winit 0.30.13: Copyright The winit contributors, Pierre Krieger (https://github.com/rust-windowing/winit)
 
 Its text is in the chapter on PaperPaw's own licence above.
@@ -420,10 +426,29 @@ Crates in the apps (Android, the desktop and web emulators) used under the ISC L
 
 - libloading 0.8.9: Copyright © 2015, Simonas Kazlauskas
 - libloading 0.9.0: Copyright © 2015, Simonas Kazlauskas
+- ring 0.17.14: Copyright (c) 2009 The Go Authors. All rights reserved.; Copyright 2015 The Chromium Authors. All rights reserved.; Copyright 2015-2025 Brian Smith.
+- rustls-webpki 0.103.16: Copyright 2015 Brian Smith.
+- untrusted 0.9.0: Copyright 2015-2016 Brian Smith.
 
 Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby granted, provided that the above copyright notice and this permission notice appear in all copies.
 
 THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+## Third-party crates: BSD 3-Clause License
+
+Crates in the apps (Android, the desktop and web emulators) used under the BSD 3-Clause License:
+
+- subtle 2.6.1: Copyright (c) 2016-2017 Isis Agora Lovecruft, Henry de Valence. All rights reserved.; Copyright (c) 2016-2024 Isis Agora Lovecruft. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+
+* Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+
+* Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
+
+* Neither the name of the copyright holder nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ## Third-party crates: zlib License
 
@@ -467,3 +492,45 @@ THE DATA FILES AND SOFTWARE ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, 
 IN NO EVENT SHALL THE COPYRIGHT HOLDER OR HOLDERS INCLUDED IN THIS NOTICE BE LIABLE FOR ANY CLAIM, OR ANY SPECIAL INDIRECT OR CONSEQUENTIAL DAMAGES, OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THE DATA FILES OR SOFTWARE.
 
 Except as contained in this notice, the name of a copyright holder shall not be used in advertising or otherwise to promote the sale, use or other dealings in these Data Files or Software without prior written authorization of the copyright holder.
+
+## Third-party crates: Community Data License Agreement Permissive 2.0
+
+Crates in the apps (Android, the desktop and web emulators) used under the Community Data License Agreement Permissive 2.0:
+
+- webpki-roots 1.0.11: Copyright the webpki-roots contributors (https://github.com/rustls/webpki-roots)
+
+Community Data License Agreement - Permissive - Version 2.0
+
+This is the Community Data License Agreement - Permissive, Version 2.0 (the "agreement"). Data Provider(s) and Data Recipient(s) agree as follows:
+
+1. Provision of the Data
+
+1.1. A Data Recipient may use, modify, and share the Data made available by Data Provider(s) under this agreement if that Data Recipient follows the terms of this agreement.
+
+1.2. This agreement does not impose any restriction on a Data Recipient's use, modification, or sharing of any portions of the Data that are in the public domain or that may be used, modified, or shared under any other legal exception or limitation.
+
+2. Conditions for Sharing Data
+
+2.1. A Data Recipient may share Data, with or without modifications, so long as the Data Recipient makes available the text of this agreement with the shared Data.
+
+3. No Restrictions on Results
+
+3.1. This agreement does not impose any restriction or obligations with respect to the use, modification, or sharing of Results.
+
+4. No Warranty; Limitation of Liability
+
+4.1. All Data Recipients receive the Data subject to the following terms:
+
+THE DATA IS PROVIDED ON AN "AS IS" BASIS, WITHOUT REPRESENTATIONS, WARRANTIES OR CONDITIONS OF ANY KIND, EITHER EXPRESS OR IMPLIED INCLUDING, WITHOUT LIMITATION, ANY WARRANTIES OR CONDITIONS OF TITLE, NON-INFRINGEMENT, MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE.
+
+NO DATA PROVIDER SHALL HAVE ANY LIABILITY FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING WITHOUT LIMITATION LOST PROFITS), HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE DATA OR RESULTS, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+
+5. Definitions
+
+5.1. "Data" means the material received by a Data Recipient under this agreement.
+
+5.2. "Data Provider" means any person who is the source of Data provided under this agreement and in reliance on a Data Recipient's agreement to its terms.
+
+5.3. "Data Recipient" means any person who receives Data directly or indirectly from a Data Provider and agrees to the terms of this agreement.
+
+5.4. "Results" means any outcome obtained by computational analysis of Data, including for example machine learning models and models' insights.

@@ -1,7 +1,9 @@
 # 0014. Sockets for plugins
 
 - Status: Accepted; the X4 now has sockets too
-  (`shells/xteink/src/sockets.rs`)
+  (`shells/xteink/src/sockets.rs`); TLS for them in the emulator and
+  the Android app is rustls with ring (`crates/paperpaw-serve/src/tls`,
+  owner decision 52)
 - Date: 2026-10-16
 
 ## Context

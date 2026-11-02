@@ -260,7 +260,6 @@ fn many_broadcasts_are_counted_until_each_is_done() {
 /// The kernel cannot see bytes the shell holds unread: only the shell can
 /// check this.
 #[test]
-#[ignore = "paperpaw-serve does no TLS yet (#81, the shells' part): it must pass then"]
 fn bytes_sent_past_a_starttls_go_ahead_fail_the_switch() {
     use paperpaw_core::TlsSetup;
     use paperpaw_core::sdk::{SocketError, Trust};

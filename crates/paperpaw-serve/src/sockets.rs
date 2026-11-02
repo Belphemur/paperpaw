@@ -5,24 +5,23 @@
 //! happen only when asked, one at a time per socket, so what waits for
 //! the kernel is at most one part per socket.
 //!
-//! No TLS yet (the kernel asks for none while the shell says it holds no
-//! TLS sessions, `KernelBuilder::tls_sessions`): a TLS connection or a
-//! switch to TLS fails, `SocketError::Unsupported`.
+//! TLS is rustls with ring ([`crate::tls`], owner decision 52), for the
+//! shells that say they hold sessions (`KernelBuilder::tls_sessions`,
+//! [`crate::TLS_SESSIONS`]); the browser's module holds none.
 
 use std::collections::HashMap;
-use std::io::{Read, Write};
-use std::net::{Ipv4Addr, Shutdown, SocketAddr, TcpStream, ToSocketAddrs, UdpSocket};
+use std::net::{Ipv4Addr, Shutdown, UdpSocket};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
-use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use paperpaw_core::sdk::SocketError;
-use paperpaw_core::{SocketCall, SocketEvent, TlsSetup};
+use paperpaw_core::{SocketCall, SocketEvent};
 
-/// How long connecting may take.
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+use crate::link::{self, Job, Link};
+use crate::tls::Env;
+
 /// The largest answer to a broadcast read.
 const DATAGRAM: usize = 1500;
 
@@ -30,11 +29,9 @@ type Wake = Arc<dyn Fn() + Send + Sync>;
 
 /// An open connection, seen from the shell's side.
 struct Connection {
-    reads: Sender<u32>,
-    writes: Sender<Vec<u8>>,
+    link: Link,
     /// Set once the kernel closed it: nothing is reported after.
     closed: Arc<AtomicBool>,
-    stream: Arc<Mutex<Option<TcpStream>>>,
 }
 
 /// The sockets and broadcasts of all plugins.
@@ -46,15 +43,8 @@ pub struct Sockets {
     /// Where broadcasts go; the local network's broadcast address.
     broadcast_to: Ipv4Addr,
     wake: Wake,
-}
-
-/// Why connecting failed with `e`.
-fn connect_error(e: &std::io::Error) -> SocketError {
-    match e.kind() {
-        std::io::ErrorKind::TimedOut => SocketError::Timeout,
-        std::io::ErrorKind::OutOfMemory => SocketError::NoMemory,
-        _ => SocketError::Refused,
-    }
+    /// What TLS depends on besides the server (tests set it).
+    pub(crate) tls: Env,
 }
 
 impl std::fmt::Debug for Sockets {
@@ -77,6 +67,7 @@ impl Sockets {
             broadcasts: 0,
             broadcast_to: Ipv4Addr::BROADCAST,
             wake: Arc::new(wake),
+            tls: Env::system(),
         }
     }
 
@@ -87,33 +78,30 @@ impl Sockets {
                 socket,
                 host,
                 port,
-                tls: None,
-            } => self.connect(socket, host, port),
-            SocketCall::Connect {
-                socket,
-                tls: Some(tls),
-                ..
-            } => self.no_tls(socket, &tls),
+                tls,
+            } => self.connect(socket, host, port, tls),
             SocketCall::StartTls { socket, tls } => {
-                self.apply(SocketCall::Close { socket });
-                self.no_tls(socket, &tls);
+                let deadline = Instant::now() + Duration::from_millis(u64::from(tls.timeout_ms));
+                if let Some(c) = self.open.get(&socket) {
+                    let _ = c.link.writes.send(Job::StartTls { tls, deadline });
+                }
             }
             SocketCall::Send { socket, data } => {
                 if let Some(c) = self.open.get(&socket) {
-                    let _ = c.writes.send(data);
+                    let _ = c.link.writes.send(Job::Send(data));
                 }
             }
             SocketCall::Read { socket, max } => {
                 if let Some(c) = self.open.get(&socket) {
-                    let _ = c.reads.send(max);
+                    let _ = c.link.reads.send(max);
                 }
             }
             SocketCall::Close { socket } => {
                 // Its senders go with it: the writing thread sends what
-                // was asked before, then ends the stream (see `connect`).
+                // was asked before, then ends the stream (see `link`).
                 if let Some(c) = self.open.remove(&socket) {
                     c.closed.store(true, Ordering::Relaxed);
-                    if let Ok(stream) = c.stream.lock()
+                    if let Ok(stream) = c.link.stream.lock()
                         && let Some(stream) = stream.as_ref()
                     {
                         let _ = stream.shutdown(Shutdown::Read);
@@ -129,22 +117,12 @@ impl Sockets {
         }
     }
 
-    /// TLS as `tls` sets up for `socket`: not done here.
-    fn no_tls(&mut self, socket: u32, tls: &TlsSetup) {
-        let _ = tls;
-        let _ = self.events.send(SocketEvent::Failed {
-            socket,
-            error: SocketError::Unsupported,
-            reason: String::from("secure connections are not supported here"),
-        });
-        (self.wake)();
-    }
-
     /// An event to pass to the kernel, if any.
     pub fn take_event(&mut self) -> Option<SocketEvent> {
         let event = self.receiver.try_recv().ok()?;
         match &event {
-            SocketEvent::Failed { socket, .. } => {
+            // The connection is over, and shut.
+            SocketEvent::Failed { socket, .. } | SocketEvent::Untrusted { socket, .. } => {
                 self.open.remove(socket);
             }
             SocketEvent::Done { .. } => self.broadcasts = self.broadcasts.saturating_sub(1),
@@ -158,98 +136,27 @@ impl Sockets {
         !self.open.is_empty() || self.broadcasts > 0
     }
 
-    fn connect(&mut self, socket: u32, host: String, port: u16) {
-        let (reads, read_asks) = channel::<u32>();
-        let (writes, write_asks) = channel::<Vec<u8>>();
+    fn connect(
+        &mut self,
+        socket: u32,
+        host: String,
+        port: u16,
+        tls: Option<paperpaw_core::TlsSetup>,
+    ) {
         let closed = Arc::new(AtomicBool::new(false));
-        let stream = Arc::new(Mutex::new(None));
-        self.open.insert(
-            socket,
-            Connection {
-                reads,
-                writes,
-                closed: closed.clone(),
-                stream: stream.clone(),
-            },
-        );
         let events = self.events.clone();
         let wake = self.wake.clone();
-        let report = move |event: SocketEvent| {
-            if !closed.load(Ordering::Relaxed) {
-                let _ = events.send(event);
-                wake();
-            }
-        };
-        thread::spawn(move || {
-            let failure = move |error, reason| SocketEvent::Failed {
-                socket,
-                error,
-                reason,
-            };
-            let connected = (host.as_str(), port)
-                .to_socket_addrs()
-                .map_err(|e| (SocketError::Dns, e.to_string()))
-                .and_then(|mut addresses| {
-                    let none = (SocketError::Dns, String::from("no such host"));
-                    addresses.next().ok_or(none)
-                })
-                .and_then(|address: SocketAddr| {
-                    TcpStream::connect_timeout(&address, CONNECT_TIMEOUT)
-                        .map_err(|e| (connect_error(&e), e.to_string()))
-                });
-            let mut reading = match connected {
-                Ok(s) => s,
-                Err((error, reason)) => return report(failure(error, reason)),
-            };
-            let _ = reading.set_nodelay(true);
-            let writing = match reading.try_clone() {
-                Ok(w) => w,
-                Err(e) => return report(failure(SocketError::Other(0), e.to_string())),
-            };
-            if let Ok(mut held) = stream.lock() {
-                *held = reading.try_clone().ok();
-            }
-            report(SocketEvent::Connected { socket });
-            let failed = Arc::new(AtomicBool::new(false));
-            // Writing on a thread of its own, so a read waiting does not
-            // hold sends back.
-            {
-                let report = report.clone();
-                let failed = failed.clone();
-                let mut writing = writing;
-                thread::spawn(move || {
-                    for data in write_asks {
-                        if let Err(e) = writing.write_all(&data).and_then(|()| writing.flush()) {
-                            if !failed.swap(true, Ordering::Relaxed) {
-                                report(failure(SocketError::Lost, e.to_string()));
-                            }
-                            return;
-                        }
-                    }
-                    // Closed (its sender gone) once everything asked
-                    // before was sent: the other side reads the end.
-                    let _ = writing.shutdown(Shutdown::Write);
-                });
-            }
-            for max in read_asks {
-                let mut buffer = vec![0; max.max(1) as usize];
-                match reading.read(&mut buffer) {
-                    Ok(n) => {
-                        buffer.truncate(n);
-                        report(SocketEvent::Data {
-                            socket,
-                            data: buffer,
-                        });
-                    }
-                    Err(e) => {
-                        if !failed.swap(true, Ordering::Relaxed) {
-                            report(failure(SocketError::Lost, e.to_string()));
-                        }
-                        return;
-                    }
+        let report: link::Report = {
+            let closed = closed.clone();
+            Arc::new(move |event: SocketEvent| {
+                if !closed.load(Ordering::Relaxed) {
+                    let _ = events.send(event);
+                    wake();
                 }
-            }
-        });
+            })
+        };
+        let link = link::start(socket, host, port, tls, self.tls.clone(), report);
+        self.open.insert(socket, Connection { link, closed });
     }
 
     fn broadcast(&mut self, broadcast: u32, ports: Vec<u16>, data: Vec<u8>, wait_ms: u32) {
@@ -299,6 +206,8 @@ impl Sockets {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use paperpaw_core::sdk::SocketError;
+    use std::io::{Read, Write};
     use std::net::TcpListener;
 
     /// The next event, waiting up to two seconds.
@@ -407,44 +316,6 @@ mod tests {
                 ..
             }
         ));
-    }
-
-    #[test]
-    fn tls_is_not_done_here_yet() {
-        let tls = TlsSetup {
-            server_name: String::from("127.0.0.1"),
-            trust: paperpaw_core::sdk::Trust::Authorities,
-            timeout_ms: 1000,
-            idle_ms: 0,
-        };
-        let unsupported = |socket| SocketEvent::Failed {
-            socket,
-            error: SocketError::Unsupported,
-            reason: String::from("secure connections are not supported here"),
-        };
-        let mut sockets = Sockets::new(|| {});
-        sockets.apply(SocketCall::Connect {
-            socket: 5,
-            host: String::from("127.0.0.1"),
-            port: 993,
-            tls: Some(tls.clone()),
-        });
-        assert_eq!(wait(&mut sockets), unsupported(5));
-        // A plain socket switched to TLS fails and closes.
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let port = listener.local_addr().unwrap().port();
-        let server = thread::spawn(move || drop(listener.accept().unwrap()));
-        sockets.apply(SocketCall::Connect {
-            socket: 6,
-            host: String::from("127.0.0.1"),
-            port,
-            tls: None,
-        });
-        assert_eq!(wait(&mut sockets), SocketEvent::Connected { socket: 6 });
-        sockets.apply(SocketCall::StartTls { socket: 6, tls });
-        assert_eq!(wait(&mut sockets), unsupported(6));
-        assert!(!sockets.any());
-        server.join().unwrap();
     }
 
     #[test]

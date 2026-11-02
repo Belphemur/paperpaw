@@ -981,6 +981,8 @@ fn build_kernel(
             ))
             .colors(profile.colors)
             .network(true)
+            // Plugins' secure sockets (rustls); none in the browser.
+            .tls_sessions(paperpaw_serve::TLS_SESSIONS)
             .wifi(profile.wifi)
             .bluetooth(profile.bluetooth)
             .speech(profile.speech)
