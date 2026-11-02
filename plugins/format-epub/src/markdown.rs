@@ -304,6 +304,9 @@ struct State<'a> {
     held: Option<String>,
     /// A table is open.
     table: bool,
+    /// The block quote open is a callout: left-aligned without the first
+    /// line's indent, which suits a narrow block.
+    callout: bool,
 }
 
 impl State<'_> {
@@ -329,6 +332,7 @@ impl State<'_> {
         if self.quote {
             out.push_str("</blockquote>\n");
             self.quote = false;
+            self.callout = false;
         }
     }
 }
@@ -393,13 +397,19 @@ fn line(raw: &str, state: &mut State<'_>, out: &mut String, cut: bool) {
     if quoted != state.quote {
         state.close_blocks(out);
         if quoted {
-            out.push_str("<blockquote>\n");
+            state.callout = opened && callout(text).is_some();
+            out.push_str(if state.callout {
+                "<blockquote style=\"text-align:left\">\n"
+            } else {
+                "<blockquote>\n"
+            });
             state.quote = true;
         }
     }
     // A callout (`> [!note] Title`) is a quote that begins with its title.
     if opened && let Some(title) = callout(text) {
-        out.push_str("<p><b>");
+        out.push_str(FLUSH_P);
+        out.push_str("<b>");
         inline(&title, &state.pictures, state.vault.as_ref(), out);
         out.push_str("</b></p>\n");
         return;
@@ -467,11 +477,14 @@ fn line(raw: &str, state: &mut State<'_>, out: &mut String, cut: bool) {
         // Two spaces at the end of the line before break the line.
         out.push_str(if br { "<br/>" } else { " " });
     } else {
-        out.push_str("<p>");
+        out.push_str(if state.callout { FLUSH_P } else { "<p>" });
         state.paragraph = true;
     }
     inline(text, &state.pictures, state.vault.as_ref(), out);
 }
+
+/// A paragraph of a callout: no indent of the first line.
+const FLUSH_P: &str = "<p style=\"text-indent:0\">";
 
 /// The title of the callout that `text`, the first line of a quote,
 /// begins: what follows `[!kind]` (and a `+` or `-` that folds it), else
@@ -488,16 +501,19 @@ fn callout(text: &str) -> Option<String> {
         return None;
     }
     let title = rest.trim_start_matches(['+', '-']).trim();
-    if !title.is_empty() {
-        return Some(title.to_string());
-    }
     let mut chars = kind.chars();
     let first: String = chars
         .next()
         .into_iter()
         .flat_map(char::to_uppercase)
         .collect();
-    Some(first + &chars.as_str().to_lowercase())
+    let kind = first + &chars.as_str().to_lowercase();
+    // The kind, then the title it is given.
+    Some(if title.is_empty() {
+        kind
+    } else {
+        format!("{kind} · {title}")
+    })
 }
 
 /// `text` without the block id some notes end a line with (` ^a1b2`),
@@ -817,11 +833,13 @@ mod tests {
     fn callouts_are_quotes_that_begin_with_their_title() {
         assert_eq!(
             html("> [!warning] Careful now\n> The body."),
-            "<blockquote>\n<p><b>Careful now</b></p>\n<p>The body.</p>\n</blockquote>\n"
+            "<blockquote style=\"text-align:left\">\n<p style=\"text-indent:0\"><b>Warning · Careful now</b></p>\n\
+             <p style=\"text-indent:0\">The body.</p>\n</blockquote>\n"
         );
         assert_eq!(
             html("> [!note]-\n> Folded."),
-            "<blockquote>\n<p><b>Note</b></p>\n<p>Folded.</p>\n</blockquote>\n"
+            "<blockquote style=\"text-align:left\">\n<p style=\"text-indent:0\"><b>Note</b></p>\n\
+             <p style=\"text-indent:0\">Folded.</p>\n</blockquote>\n"
         );
         // Not a callout: a quote.
         assert_eq!(
@@ -946,7 +964,7 @@ mod tests {
                 "#work",
                 "Plan",
                 "See the other and Later.",
-                "Handy",
+                "Tip · Handy",
                 "Use it.",
                 "a · b",
                 "1 · 2",
