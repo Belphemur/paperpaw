@@ -10,15 +10,12 @@ change the plugin SDK.
 
 **Plugins of this release must be built from `6c4a19dc` or later** (plugin interface 6, #363). 0.6.0-beta.1 takes
 the interface-6 round too (TLS sockets, screens that fit another size, libraries of any size), so plugins change
-once: from interface 4 of 0.5.0-beta.12 to interface 6. Interface 5 was never released; plugins built for it (the
+once: from interface 4 of 0.5.0-beta.12 to interface 6. Interface 6 was never released; plugins built for it (the
 earlier release candidate's store files, test cards and Workshop builds) are refused as built for an older
 interface, and are thrown away.
 
-**Plugins that read the library must also be built from the split of the library's folders (#280) or later**:
-calibre, end-of-book, file-manager, files, the format plugins, home, notes-overview, opds, sleep, stats, transfer,
-widgets. The firmware cannot refuse older builds (the fingerprint is the same): they would show books without their
-details and write them where the kernel moves them away from, so changes made in them would be lost. Builds from
-before it are thrown away.
+Every plugin is built anew for interface 6, so the split of the library's folders (#280) needs no rule of its own any more: a build
+from before the split is refused with the rest.
 
 ### In plain words
 
@@ -60,6 +57,26 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   plugins), *All notes*, *End of book*, *Pictures* and the formats MOBI and DOCX, flash cards from the card and from
   Anki decks, your own fonts, hanging punctuation, drop capitals, lists that hang under their marker, line breaking for
   Korean, Chinese and Japanese. Book text in Arabic and Hebrew is set right to left.
+- **Libraries of any size** (#79). The X4 no longer stops at 2,000 books: the library lists every book, paged from a sorted
+  list PaperPaw keeps on the card (a few kilobytes of memory however many books; 10,000 books were tested on a
+  computer). Right after the catalog is made anew the list says *Preparing the library …* for a moment. The shelves
+  (authors, series, tags, and now folders) show 200 names at a time and go on when the focus moves past the last. A start
+  after nothing changed writes next to nothing to the card, and big folders are read about twice, not once per piece.
+- **Secure connections for plugins** (#81). Plugins can open HTTPS, IMAP and SMTP connections: the X4 does the encryption
+  itself (one connection at a time), the emulator and the Android app use rustls. A server whose certificate no authority
+  vouches for is shown and trusted only after you say so, and then only that certificate or key. The X4 just after a
+  cold start does not know the time yet and says so. The first plugins that use it are *Mail* (IMAP/SMTP with a
+  password or app password, up to three accounts, home widgets) and *Notes vault* (below), both from the store.
+- **Background connections** (#81). A connection that background work opens (a mail fetch) stays open until that work
+  ends; it no longer closes when the screen that happened to be showing closes.
+- **Notes link to notes in the reader** (#87). Markdown notes open with `[[wikilinks]]`, links between note files and
+  headings (*Back* returns to the note before), embedded pictures, hidden front matter, callouts and tags. The *Notes
+  vault* plugin (from the store) adds a vault view of a notes folder and six home widgets. It works with Obsidian
+  vaults and does not change them.
+- **Screens that follow the turn** (#88). Screens lay themselves out again when the screen turns or changes size,
+  keeping the focus, instead of staying as they were at the start.
+- **Plugins go from interface 4 to 6 in one step.** Every plugin with code needs a new build for this release (PaperPaw's
+  own are rebuilt); a plugin from someone else needs its author's.
 - **Updating:** books, reading positions and settings are kept. Every book is laid out again once, the first time it
   is opened. Plugins with code need a build for plugin interface 6; the store offers PaperPaw's own.
 - **Not in this release:** exFAT cards. The X4 Pro, X4 Classic and X3 are built and checked by the tests on a
@@ -69,7 +86,7 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
 
 - UI: `UiStyle::flip` and `UiStyle::flip_x` are public (#33): a screen lays a row or a grid out once from the left
   and mirrors each part where the interface runs right to left, as the SDK's own parts do. New functions, no
-  change of what plugins built before see; their api.txt lines come with the next bless. The library's rows and
+  change of what plugins built before see; their api.txt lines are part of this release's interface 6. The library's rows and
   covers, the reader's menu bar and the home screen's drawer mirror with them now, no copies of their own.
 - Text: `TextInk::RIGHT_TO_LEFT`, a flag of the reserved ones: the lines a handle draws run right to left
   (`TextInk::is_right_to_left`). The kernel sets it for the interface's font where its language runs right to left.
@@ -82,7 +99,7 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   HTML mail; attachments are named, not fetched), *Reply*, *Reply all*, *Star*, and writing a mail on the keyboard.
   It connects, fetches and closes (the X4 holds one secure connection), keeps what it fetched on the card, and asks
   once before trusting a server no authority vouches for. Five home widgets: unread mail, latest mail, starred
-  mail, one mailbox and a shortcut to write. Needs the TLS sockets of the next interface raise; background
+  mail, one mailbox and a shortcut to write. Needs the TLS sockets of plugin interface 6; background
   fetching and a Sent copy are not in this first version.
 - **Notes vault (#87):** a plugin that reads a folder of Markdown notes (works with Obsidian vaults) without
   changing it: the vault's folders as they are on the card, its latest changes, its tags and a search in the
@@ -94,7 +111,7 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   to the note before; embedded pictures (`![[picture.png]]`) show, front matter is hidden (its tags are shown),
   callouts (`> [!note] Title`) are quotes with their title, `#tags` stay as written and tables are rows of cells.
   The Markdown reader's HTML anchors the headings for those links.
-- **Plugin interface (next raise):** `library::sorted` (#79): every book of the library sorted by title on the card
+- **Plugin interface 6:** `library::sorted` (#79): every book of the library sorted by title on the card
   (`.paperpaw/library/sorted-<hash>.idx`, one for each archive folder a view leaves out, two at most), paged by a view
   in a few kilobytes, so the X4 lists every book instead of 2,000 at most. `Sorted::open` (`None` for a file of
   another library version or archive, cut short or damaged: a view asks for it with `sorted::request` and says the
@@ -102,14 +119,14 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   series stacked; as `Index::order` and `Index::stacked` list them), `next_in_series`, `refresh`, `hide`/`hide_all`;
   the event `SORTED_WANTED`. The kernel makes the file (kernel feature: `sorted::Build`, a bounded merge sort of runs
   of 512 books, written beside it and put in place whole; `sorted::wanted`, `asked`, `kept_archives`, `clean_up`).
-- **Plugin interface (next raise):** `Storage::list_from` lists a folder a piece at a time, each piece going on
+- **Plugin interface 6:** `Storage::list_from` lists a folder a piece at a time, each piece going on
   where the last one stopped (#79): a folder of thousands of entries is read about twice in all, not once a
   piece. Storages that cannot go on from a place count, as `paperpaw_platform::list_counted` does (the item's
   default), so every storage keeps working; the memory card's (FAT) goes on from where the entry begins and
   finds a place taken by another entry by its count. The catalog lists the library's folders so: the walk after
   a start reads a folder of 4,000 books (1,254 blocks) in 2,535 blocks instead of 66,460 (bench; the whole walk
   4,367 instead of 68,291).
-- **Plugin interface (next raise):** TLS for plugins' sockets (#81), as a mail plugin needs it (IMAP, SMTP):
+- **Plugin interface 6:** TLS for plugins' sockets (#81), as a mail plugin needs it (IMAP, SMTP):
   `Command::connect_tls` is secure from the start, `Command::start_tls` switches an open socket (STARTTLS) once
   everything the server sent was read, else it fails and closes. Nothing is sent or read until it is secure: a send or
   read before fails `NotReady` and closes the socket. `Tls` sets it up: the authorities PaperPaw ships (`Tls::new`),
@@ -131,7 +148,7 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   (several connections are a job's steps). A secure one ends when idle: `idle_ms(0)` is refused for it
   (`SocketError::Options`); `MAX_TLS_IDLE_MS` is 30 minutes (was 10), so that waiting for new mail (IMAP IDLE)
   keeps it open. Sockets a plugin opens for the reader still close with their screen.
-- **Plugin interface (next raise):** screens fit another size in place (#88). `Screen::on_resize` lays a screen out
+- **Plugin interface 6:** screens fit another size in place (#88). `Screen::on_resize` lays a screen out
   anew when its part of the screen changes size (turned, a window resized, the row of hints): answering
   `Handled::Yes` it keeps everything (a book open, a list scrolled, a connection); by default it is made anew as
   before. The old screen is now dropped before the new one is made, so a turn never holds both in memory.
@@ -229,7 +246,7 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   messages on the card, about a kilobyte of memory for 3,400 messages, and the messages of the screen shown;
   an Arabic interface of all plugins (some 210 KB) fits the X4. A pulled card or a damaged file falls back to
   English. SDK: `Catalog::compile`, `Catalog::open`, `CatalogFile`, `Translator::forget_read`,
-  `Registrar::add_translation_file`; plugin interface 5 is written anew for it (every plugin is built again),
+  `Registrar::add_translation_file`; plugin interface 6 is written anew for it (every plugin is built again),
   `DATA_FORMATS` is 4.
 - When the library's folder cannot be read (a failing card, one the device cannot use), the library says
   *Couldn’t read the books folder* instead of collecting books for ever or saying there are none; PaperPaw tries
@@ -544,8 +561,8 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
 - X4, X3, X4 Pro and X4 Classic: a plugin may ask to switch the reader off (`Command::PowerOff`, where the device allows
   it): plugins save as for a sleep, then the power goes at once, without the light sleep before. Not yet tested on a
   device.
-- **Plugin interface 5** (in progress; every code plugin is built anew
-  for it). Plugin files are of format 4: the header (116 bytes) says the
+- **Plugin interface 6** (every code plugin is built anew
+  for it; interface 5 was never released). Plugin files are of format 4: the header (116 bytes) says the
   plugin interface a plugin was built for, how much of the firmware's
   table it needs and the revisions of the families of shared functions
   it uses, and a plugin's entry is 32 bytes on the chips. A plugin built
@@ -556,14 +573,14 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   of the families of shared functions and a build name, and grows at its
   end from now on without a new interface. `paperpaw-plugin.x` makes a
   word per family of shared functions (`PAPERPAW_TABLE_0` to `_7`).
-- Plugin interface 5, the plugins' side: each of the first-party code
+- Plugin interface 6, the plugins' side: each of the first-party code
   plugins that the store offers (33 of them besides the ones that had a
   newer version already) has a newer version, so that a device fetches
   its interface-5 build as an update; until then its old build waits
   with "Built for an older PaperPaw: update it in the store" in the
   plugin list. Data plugins carry no code and keep their versions. The
   texts of these two messages are in English and German.
-- Plugin interface 5: types that grow later are `#[non_exhaustive]` and
+- Plugin interface 6: types that grow later are `#[non_exhaustive]` and
   are built with `new` and `with_*` (e.g. `Run::new`, `LineRun::new`,
   `DeviceInfo::new`, `PluginInfo::new`, `Mark::new`); the SDK's event
   payloads, `Progress`, `Metrics`, `library::Entry`, the platform's
@@ -604,14 +621,14 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   new interface. No framebuffer is made in such a format (the shell draws
   into a known one and converts); a shell that doesn't know a mode
   refreshes as with `Full`.
-- Plugin interface 5: the error enums have an `Other(u16)` variant (a
+- Plugin interface 6: the error enums have an `Other(u16)` variant (a
   cause a later build adds, by its code): `StorageError`, `HttpError`,
   `InstallFailure`, `PluginProblem`, `install::local::Refusal`,
   `DocumentError`, `ImageError`, `ZipError`, `BtError`, `DevError`,
   `RegisterError`, `FontError`, `CatalogError`, the plugin header's and
   the update file's `Problem`. HTTP and Bluetooth errors keep the code in
   event parameters (`other-7`).
-- Plugin interface 5: kinds have an open value. `Other(&'static str)` (a
+- Plugin interface 6: kinds have an open value. `Other(&'static str)` (a
   name; a later build's values are constants of it) in `GestureKind`,
   `MenuPlace`, `library::catalog::Sort` and `Show`,
   `ActionHint`, `screen::Hint`, `canvas::Role`, `decorations::Tone` and
@@ -621,7 +638,7 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   `Params`). A build that doesn't know a value
   falls back: the default sort and filter, a gray tone, a solid line,
   a setting's value kept as text, a status value left out.
-- Plugin interface 5: `BlockKind::Extended(u16)`: a block kind of a
+- Plugin interface 6: `BlockKind::Extended(u16)`: a block kind of a
   later build by its number (reserved: 1 a table's row, 2 a list item,
   3 a rule, 4 a figure's caption, 5 an aside, 6 a verse line, 7 maths),
   its content in the block's text, runs and annotations. A build that
@@ -635,17 +652,17 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   a file that sets them is refused as one of a newer format ("needs a
   newer PaperPaw", in the store a plugin for another build) rather than
   as malformed.
-- Plugin interface 5: `Align::Left` and `Align::Right` (`bits()` 5, 6):
+- Plugin interface 6: `Align::Left` and `Align::Right` (`bits()` 5, 6):
   the page's edges whatever the paragraph's direction, as CSS
   `text-align: left`/`right`; `Start` and `End` stay the paragraph's.
   Layout resolves them by the paragraph's resolved direction (#33).
-- Plugin interface 5: `WordBox::bidi` (`LineBidi`, also as
+- Plugin interface 6: `WordBox::bidi` (`LineBidi`, also as
   `paperpaw_sdk::reading::LineBidi`): how the word's line goes, its
   paragraph's direction included, so a selection on a line of an Arabic
   book that holds only an English quote knows the line belongs to a
   right-to-left paragraph. The layout digest covers `WordBox`,
   `PageView`, `Page`, `PageLine`, `LineRun` and `LineBidi`.
-- Plugin interface 5, second sweep of open values (#33): `Other(u16)` in
+- Plugin interface 6, second sweep of open values (#33): `Other(u16)` in
   `native::Chip` (a file for an unknown chip is still refused),
   `image::Format` (decoded as unsupported), `document::LinkKind`
   (followed as a plain link), `document::AnnotationKind` (shown as a
@@ -657,15 +674,15 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   `GraphicsError`, `config::ErrorKind` and `MemoryError`.
   `WritingMode` gains `SidewaysRl` and `SidewaysLr` (all of CSS Writing
   Modes 4).
-- Plugin interface 5: `MenuNeed::Has(Capability)`: a menu entry can need
+- Plugin interface 6: `MenuNeed::Has(Capability)`: a menu entry can need
   any capability, also one a later build adds (not met where unknown).
   `SystemStatus` holds eight named values (`value`, `with_value`:
   `temperature-c`, `frontlight-percent`) a later shell can fill without a
   new interface.
 
-### Added (plugin interface 5, for plugin authors)
+### Added (plugin interface 6, for plugin authors)
 
-- More freedom over how things look (ticket #57, interface 5):
+- More freedom over how things look (ticket #57, interface 6):
   - **Text tone:** `ToneCurve::from_alphas`, `parse`, `parse_for` and `to_text` make a curve of your own from 16 values or text
     (`smooth`, `contrast:1`, `sharp:128`, a list of numbers); the settings `core.text-curve` (book text, in place of *Text
     contrast* when set) and `core.ui-text-curve` (the interface; themes set them) take a list of `[script=]curve` entries.
@@ -684,7 +701,7 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
     (`ui::text_ink(value, language)`, `Fonts::set_ui_ink`), and the handles of the UI font carry it, so no plugin carries the
     parser (about 3 KB of each code plugin); `Fonts` gained a field for it.
   - **Rebuild all plugins:** `FontHandle` gained a field (its `TextInk`) that the firmware's `draw` reads, so every plugin has to
-    be built against interface 5 again; one built before would pass a shorter handle.
+    be built against interface 6 again; one built before would pass a shorter handle.
   - **Colour roles:** `Ink` (the interface's colour roles) is now an open `Ink(u8)` with constants: `Ink::Text` is `Ink::TEXT`
     and so on (rename it; plugins only change the spelling). New roles `ACCENT`, `ON_ACCENT`, `LINK`, `SELECTION` and
     `WARNING` (numbers 14 to 18; 19 to 31 are free). `Palette` holds 32 colours (100 bytes, was 42) and knows which a theme set:
