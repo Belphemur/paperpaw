@@ -19,10 +19,18 @@ use crate::{Storage, StorageError};
 /// as many.
 const FIRST: usize = 20;
 /// Between two checkpoints at most, once [`MIN_NEW`] books more were
-/// found: a large library shows more of its books every few minutes.
+/// found (and a [`GROWTH`]th more): a large library shows more of its
+/// books every few minutes.
 const EVERY_MS: u64 = 120_000;
 /// Books more found that make a checkpoint after [`EVERY_MS`].
 const MIN_NEW: usize = 50;
+/// After [`EVERY_MS`], a checkpoint also wants the books shown grown by
+/// this part of them: each sorts all books found, so in a library of
+/// tens of thousands checkpoints every two minutes would sort them over
+/// and over (as many sorts as the walk takes minutes); grown by a
+/// quarter each time, all of them together sort the books about five
+/// times.
+const GROWTH: usize = 4;
 /// Bytes taken into the catalog in a step.
 const PIECE: usize = 2 * 1024;
 /// A line of the catalog longer than a piece is taken whole, up to this
@@ -65,7 +73,7 @@ impl Publish {
         }
         let new = found.saturating_sub(self.books);
         found >= self.books.saturating_mul(2)
-            || (new >= MIN_NEW && now.saturating_sub(self.at) >= EVERY_MS)
+            || (new >= MIN_NEW.max(self.books / GROWTH) && now.saturating_sub(self.at) >= EVERY_MS)
     }
 
     /// Whether the catalog holds books of this walk (the end adds the

@@ -336,3 +336,30 @@ fn a_first_walk_without_its_note_goes_on() {
     assert_eq!(books(&h.storage).len(), 100);
     assert!(!h.storage.exists(BUILDING));
 }
+
+/// A slow walk of a large library: each checkpoint sorts all books found,
+/// so those after two minutes also want a quarter more books than shown
+/// (not as many sorts as the walk takes minutes).
+#[test]
+fn checkpoints_of_a_large_slow_walk_grow_by_a_quarter() {
+    let mut h = harness(library(1_500));
+    let mut walk = Walk::start(&h.env(), Vec::new()).unwrap();
+    let mut shown = Vec::new();
+    loop {
+        h.now = Instant(h.now.0 + 2_000);
+        let env = h.env();
+        let done = walk.step(&env).unwrap();
+        if walk.published() {
+            shown.push(books(&h.storage).len());
+        }
+        if done {
+            break;
+        }
+    }
+    for pair in shown.windows(2) {
+        let grown = pair[1] >= 2 * pair[0] || pair[1] >= pair[0] + (pair[0] / 4).max(50);
+        assert!(grown, "{shown:?}");
+    }
+    // Every two minutes would be about 25 (a book a step, two seconds).
+    assert!((5..16).contains(&shown.len()), "{shown:?}");
+}
