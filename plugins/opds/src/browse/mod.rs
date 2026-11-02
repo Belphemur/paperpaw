@@ -338,7 +338,7 @@ impl BrowseScreen {
 
     fn move_focus(&mut self, delta: isize, cx: &mut Cx<'_, '_>) {
         let len = self.rows().len();
-        match self.list.move_focus(delta, len) {
+        match self.list.move_focus_in(cx.env(), delta, len) {
             ListChange::Page => {
                 self.redraw(cx);
                 self.next_cover(cx);

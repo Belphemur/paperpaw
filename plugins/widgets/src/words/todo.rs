@@ -838,7 +838,7 @@ impl Screen for TodoScreen {
         } else {
             return Handled::No;
         };
-        let change = self.list.move_focus(delta, len);
+        let change = self.list.move_focus_in(cx.env(), delta, len);
         change.request(cx);
         Handled::Yes
     }

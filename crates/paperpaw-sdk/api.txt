@@ -1036,6 +1036,7 @@ pub const paperpaw_sdk::builtin::screens::STATUS_ITEMS: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::screens::STATUS_LINES: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::screens::WIDGET_LIST: paperpaw_sdk::Id
 pub mod paperpaw_sdk::builtin::settings
+pub const paperpaw_sdk::builtin::settings::ARROWS_STAY_ON_PAGE: paperpaw_sdk::setting::Setting<bool>
 pub const paperpaw_sdk::builtin::settings::AWAKE_HOLDS: paperpaw_sdk::setting::Setting<bool>
 pub const paperpaw_sdk::builtin::settings::BATTERY_LOW: paperpaw_sdk::setting::Setting<i64>
 pub const paperpaw_sdk::builtin::settings::BOOK_ALIGN: paperpaw_sdk::setting::Setting<bool>
@@ -4362,6 +4363,7 @@ pub fn paperpaw_sdk::ui::sections::Sections::rect_of(&self, usize) -> core::opti
 pub fn paperpaw_sdk::ui::sections::Sections::section_of(&self, usize) -> core::option::Option<(usize, usize)>
 pub fn paperpaw_sdk::ui::sections::Sections::set_focus(&mut self, usize) -> paperpaw_sdk::ui::ListChange
 pub fn paperpaw_sdk::ui::sections::Sections::step(&mut self, bool) -> paperpaw_sdk::ui::ListChange
+pub fn paperpaw_sdk::ui::sections::Sections::step_in(&mut self, &paperpaw_sdk::Env<'_>, bool) -> paperpaw_sdk::ui::ListChange
 pub fn paperpaw_sdk::ui::sections::Sections::turn(&mut self, bool) -> paperpaw_sdk::ui::ListChange
 pub fn paperpaw_sdk::ui::sections::Sections::visible(&self) -> alloc::vec::Vec<(paperpaw_sdk::ui::sections::Item, paperpaw_platform::geometry::Rect)>
 pub mod paperpaw_sdk::ui::slider
@@ -4678,7 +4680,9 @@ pub fn paperpaw_sdk::ui::ListView::focus_change(&self) -> paperpaw_sdk::ui::List
 pub fn paperpaw_sdk::ui::ListView::focus_on_keys(self, &paperpaw_sdk::Env<'_>) -> Self
 pub fn paperpaw_sdk::ui::ListView::hit(&self, paperpaw_platform::geometry::Point, usize) -> core::option::Option<usize>
 pub fn paperpaw_sdk::ui::ListView::move_focus(&mut self, isize, usize) -> paperpaw_sdk::ui::ListChange
+pub fn paperpaw_sdk::ui::ListView::move_focus_in(&mut self, &paperpaw_sdk::Env<'_>, isize, usize) -> paperpaw_sdk::ui::ListChange
 pub fn paperpaw_sdk::ui::ListView::navigate(&mut self, &paperpaw_sdk::Id, usize) -> core::option::Option<paperpaw_sdk::ui::ListChange>
+pub fn paperpaw_sdk::ui::ListView::navigate_in(&mut self, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::Id, usize) -> core::option::Option<paperpaw_sdk::ui::ListChange>
 pub fn paperpaw_sdk::ui::ListView::new(paperpaw_platform::geometry::Rect, u32) -> Self
 pub fn paperpaw_sdk::ui::ListView::page(&self) -> usize
 pub fn paperpaw_sdk::ui::ListView::pages(&self, usize) -> usize
@@ -4764,6 +4768,7 @@ pub fn paperpaw_sdk::ui::Rows::rect_of(&self, usize) -> core::option::Option<pap
 pub fn paperpaw_sdk::ui::Rows::set_focus(&mut self, usize) -> paperpaw_sdk::ui::ListChange
 pub fn paperpaw_sdk::ui::Rows::set_passed(&mut self, alloc::vec::Vec<bool>)
 pub fn paperpaw_sdk::ui::Rows::step(&mut self, bool) -> paperpaw_sdk::ui::ListChange
+pub fn paperpaw_sdk::ui::Rows::step_in(&mut self, &paperpaw_sdk::Env<'_>, bool) -> paperpaw_sdk::ui::ListChange
 pub fn paperpaw_sdk::ui::Rows::turn(&mut self, bool) -> paperpaw_sdk::ui::ListChange
 pub fn paperpaw_sdk::ui::Rows::visible(&self) -> alloc::vec::Vec<(usize, paperpaw_platform::geometry::Rect)>
 pub struct paperpaw_sdk::ui::Segments
@@ -4991,6 +4996,7 @@ pub fn paperpaw_sdk::ui::shown_number(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::Set
 pub fn paperpaw_sdk::ui::shown_slider_value(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::SettingSpec, i64, i64) -> i64
 pub fn paperpaw_sdk::ui::shown_step(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::SettingSpec, i64, i64) -> i64
 pub fn paperpaw_sdk::ui::step_focus(usize, isize, usize) -> usize
+pub fn paperpaw_sdk::ui::step_focus_in(&paperpaw_sdk::Env<'_>, usize, isize, usize, usize) -> usize
 pub fn paperpaw_sdk::ui::stepper(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, &str) -> core::option::Option<(paperpaw_platform::geometry::Rect, paperpaw_platform::geometry::Rect)>
 pub fn paperpaw_sdk::ui::stepper_lines(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, u16, u16, &str, &str) -> paperpaw_sdk::ui::RowLines
 pub fn paperpaw_sdk::ui::stroke_round(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, u32, paperpaw_platform::pixel::Color)

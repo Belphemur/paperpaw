@@ -272,7 +272,7 @@ impl Frame {
         let rows = self.list.rows() as isize;
         let a = action;
         let delta = ui::list_step(a, rows)?;
-        self.list.move_focus(delta, len).request(cx);
+        self.list.move_focus_in(cx.env(), delta, len).request(cx);
         Some(Handled::Yes)
     }
 
@@ -754,7 +754,9 @@ impl Screen for EntryScreen {
         } else {
             return Handled::No;
         };
-        self.list.move_focus(delta, OPTIONS.len()).request(cx);
+        self.list
+            .move_focus_in(cx.env(), delta, OPTIONS.len())
+            .request(cx);
         Handled::Yes
     }
 

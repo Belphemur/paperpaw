@@ -185,7 +185,9 @@ impl EditScreen {
     }
 
     fn move_focus(&mut self, delta: isize, cx: &mut Cx<'_, '_>) {
-        self.list.move_focus(delta, FIELDS.len()).request(cx);
+        self.list
+            .move_focus_in(cx.env(), delta, FIELDS.len())
+            .request(cx);
     }
 }
 

@@ -360,7 +360,7 @@ impl Screen for Screens {
         } else {
             return Handled::No;
         };
-        self.list.move_focus(delta, len).request(cx);
+        self.list.move_focus_in(cx.env(), delta, len).request(cx);
         Handled::Yes
     }
 

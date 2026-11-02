@@ -320,7 +320,7 @@ impl Screen for SetupScreen {
             self.activate(self.focused(), cx);
             return Handled::Yes;
         }
-        let Some(change) = self.list.navigate(action, self.rows().len()) else {
+        let Some(change) = self.list.navigate_in(cx.env(), action, self.rows().len()) else {
             return Handled::No;
         };
         if change != ListChange::None {

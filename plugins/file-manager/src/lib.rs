@@ -535,7 +535,7 @@ impl Browser {
             Focus::List if delta > 0 && (len == 0 || self.list.focus() + 1 >= len) => Focus::Bar(0),
             Focus::List if delta < 0 && self.list.focus() == 0 => Focus::Bar(bar - 1),
             Focus::List => {
-                let change = self.list.move_focus(delta, len);
+                let change = self.list.move_focus_in(cx.env(), delta, len);
                 if change == ListChange::Page {
                     cx.request_refresh(RefreshMode::Partial);
                 }
@@ -700,7 +700,7 @@ impl Screen for Browser {
             } else {
                 -rows
             };
-            if self.list.move_focus(delta, self.len) != ListChange::None {
+            if self.list.move_focus_in(cx.env(), delta, self.len) != ListChange::None {
                 let env = *cx.env();
                 self.show_focus(&env);
                 cx.request_redraw();

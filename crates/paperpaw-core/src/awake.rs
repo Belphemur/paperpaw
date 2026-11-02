@@ -29,6 +29,18 @@ pub(crate) const LOW_BATTERY_PERCENT: u8 = 10;
 /// on after the wake.
 pub(crate) const WALK_AWAKE_MS: u64 = 60 * 60_000;
 
+/// Whether plugins may keep the device awake (ADR 0030): with the power
+/// settings, where the power plugin keeps them (`power.group`).
+pub(crate) static AWAKE_HOLDS: [paperpaw_sdk::SettingSpec; 1] =
+    [paperpaw_sdk::SettingSpec::switch(
+        core_settings::AWAKE_HOLDS.static_str(),
+        "core.setting.awake-holds",
+        true,
+        Id::new_static("power.group"),
+    )
+    .advanced()
+    .description("core.setting.awake-holds.help")];
+
 /// A hold in force.
 #[derive(Debug)]
 struct Held {

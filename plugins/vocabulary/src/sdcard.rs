@@ -500,7 +500,7 @@ impl Screen for SdScreen {
                 let Some(delta) = ui::list_step(action, self.list.rows() as isize) else {
                     return Handled::No;
                 };
-                let change = self.list.move_focus(delta, 2);
+                let change = self.list.move_focus_in(cx.env(), delta, 2);
                 change.request(cx);
                 Handled::Yes
             }
@@ -509,7 +509,7 @@ impl Screen for SdScreen {
                 let Some(delta) = ui::list_step(action, self.list.rows() as isize) else {
                     return Handled::No;
                 };
-                let change = self.list.move_focus(delta, len);
+                let change = self.list.move_focus_in(cx.env(), delta, len);
                 change.request(cx);
                 let _ = env;
                 Handled::Yes

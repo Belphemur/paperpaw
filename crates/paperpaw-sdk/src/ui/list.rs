@@ -296,6 +296,43 @@ impl ListView {
         Some(self.move_focus(delta, len))
     }
 
+    /// Moves the focus by a navigation action as [`navigate`](Self::navigate)
+    /// does, following the reader's choice of whether the arrow keys stay
+    /// on the page ([`move_focus_in`](Self::move_focus_in)).
+    pub fn navigate_in(
+        &mut self,
+        env: &Env<'_>,
+        action: &crate::Id,
+        len: usize,
+    ) -> Option<ListChange> {
+        let delta = list_step(action, self.rows() as isize)?;
+        Some(self.move_focus_in(env, delta, len))
+    }
+
+    /// Moves the focus by `delta` rows as [`move_focus`](Self::move_focus)
+    /// does, but where the reader chose that the arrow keys stay on the
+    /// page ([`settings::ARROWS_STAY_ON_PAGE`](crate::builtin::settings::ARROWS_STAY_ON_PAGE)),
+    /// one step past either end of the page goes round to its other end
+    /// (on a last page shorter than the others, among the items it has),
+    /// and in a grid of more than one row a page, a step of a row (as many
+    /// as it has columns) past its top or bottom row goes to the same
+    /// column on its bottom (the lowest that has it) or top row: only
+    /// larger steps (pages) turn pages.
+    pub fn move_focus_in(&mut self, env: &Env<'_>, delta: isize, len: usize) -> ListChange {
+        let columns = self.columns as usize;
+        let row = columns > 1 && columns < self.rows() && delta.unsigned_abs() == columns;
+        if (delta.abs() != 1 && !row) || len == 0 || !self.shown || !stays_on_page(env) {
+            return self.move_focus(delta, len);
+        }
+        let focus = step_on_page(self.focus, delta, len, self.rows(), columns);
+        if focus == self.focus {
+            return ListChange::None;
+        }
+        self.before = self.focus;
+        self.focus = focus;
+        self.focus_change()
+    }
+
     paperpaw_table::shared! {
     /// Moves the focus by `delta` rows within `0..len`; one step past
     /// either end goes round to the other (quicker with few buttons),
@@ -383,6 +420,52 @@ impl ListView {
             }
             draw_row(ui, index, rect, focused);
         }
+    }
+}
+
+/// The focus `delta` steps on from `focus` among `len` things shown
+/// `page` at a time, as [`step_focus`] moves it, but where the reader
+/// chose that the arrow keys stay on the page
+/// ([`settings::ARROWS_STAY_ON_PAGE`](crate::builtin::settings::ARROWS_STAY_ON_PAGE)),
+/// one step past either end of the page goes round to its other end (on
+/// a last page shorter than the others, among the things it has). For
+/// screens that move a focus of their own over pages; a `page` of `len`
+/// or more is one page, as with [`step_focus`].
+pub fn step_focus_in(env: &Env<'_>, focus: usize, delta: isize, len: usize, page: usize) -> usize {
+    if delta.abs() == 1 && len > 0 && stays_on_page(env) {
+        step_on_page(focus, delta, len, page, 1)
+    } else {
+        step_focus(focus, delta, len)
+    }
+}
+
+/// Whether the reader chose that the arrow keys stay on the page.
+pub(crate) fn stays_on_page(env: &Env<'_>) -> bool {
+    env.settings()
+        .read(&crate::builtin::settings::ARROWS_STAY_ON_PAGE)
+}
+
+/// One step (`delta` of 1 or -1, or of a row of `columns`) on from
+/// `focus` among `len` things (at least one), round within the page of
+/// `page` of them it is on: a row step to the same column on the page's
+/// other edge (going up, the lowest row that has that column).
+fn step_on_page(focus: usize, delta: isize, len: usize, page: usize, columns: usize) -> usize {
+    let focus = focus.min(len - 1);
+    let page = page.clamp(1, len);
+    let start = focus / page * page;
+    let last = (start + page).min(len) - 1;
+    let row = delta.unsigned_abs() > 1;
+    let column = if row {
+        (focus - start) % columns.max(1)
+    } else {
+        0
+    };
+    match focus.checked_add_signed(delta) {
+        Some(next) if (start..=last).contains(&next) => next,
+        _ if row && delta < 0 => last - (last - start - column) % columns.max(1),
+        _ if row => start + column,
+        _ if delta < 0 => last,
+        _ => start,
     }
 }
 

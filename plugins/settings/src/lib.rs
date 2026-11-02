@@ -323,7 +323,12 @@ fn page(env: &Env<'_>) -> (UiStyle, ui::Header, Rect) {
 /// Moves the focus of `rows` (lists with headings) by the navigation
 /// actions; `None` if `action` is another. The first press on a touch
 /// screen only shows the focus (`keys`), which taps hide.
-fn navigate_rows(rows: &mut ui::Rows, keys: &mut bool, action: &Id) -> Option<ListChange> {
+fn navigate_rows(
+    env: &Env<'_>,
+    rows: &mut ui::Rows,
+    keys: &mut bool,
+    action: &Id,
+) -> Option<ListChange> {
     let forward =
         if *action == actions::UP || *action == actions::LEFT || *action == actions::PREVIOUS {
             Some(false)
@@ -349,7 +354,7 @@ fn navigate_rows(rows: &mut ui::Rows, keys: &mut bool, action: &Id) -> Option<Li
         *keys = true;
         return Some(rows.focus_change());
     }
-    Some(rows.step(forward))
+    Some(rows.step_in(env, forward))
 }
 
 /// Shows the values kept again, if values were shown without being kept.

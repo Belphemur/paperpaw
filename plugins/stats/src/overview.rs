@@ -471,7 +471,7 @@ impl Screen for Overview {
         // In one column the buttons page as in other lists.
         if self.stacked
             && *a != actions::CONFIRM
-            && let Some(change) = self.list.navigate(a, self.entries.len())
+            && let Some(change) = self.list.navigate_in(cx.env(), a, self.entries.len())
         {
             if change != ListChange::None {
                 cx.request_redraw();
@@ -491,7 +491,9 @@ impl Screen for Overview {
         } else {
             return Handled::No;
         };
-        self.list.move_focus(delta, self.entries.len()).request(cx);
+        self.list
+            .move_focus_in(cx.env(), delta, self.entries.len())
+            .request(cx);
         Handled::Yes
     }
 

@@ -1315,7 +1315,7 @@ fn register_look_settings(r: &mut Registrar) -> Result<(), RegisterError> {
 
 /// Buttons, the panel's refresh, sleep, rotation, notices and long
 /// presses.
-static DEVICE: [SettingSpec; 15] = [
+static DEVICE: [SettingSpec; 16] = [
     SettingSpec::choice(
         settings::KEYMAP_PRESET.static_str(),
         "core.setting.keymap-preset",
@@ -1383,6 +1383,13 @@ static DEVICE: [SettingSpec; 15] = [
         groups::CONTROLS,
     )
     .description("core.setting.swap-page-buttons.help"),
+    SettingSpec::switch(
+        settings::ARROWS_STAY_ON_PAGE.static_str(),
+        "core.setting.arrows-stay-on-page",
+        false,
+        groups::CONTROLS,
+    )
+    .description("core.setting.arrows-stay-on-page.help"),
     SettingSpec::number(
         settings::NOTICE_SECONDS.static_str(),
         "core.setting.notice-seconds",
@@ -1588,17 +1595,6 @@ static TIME: [SettingSpec; 4] = [
     .description("core.setting.time-zone-rule.help"),
 ];
 
-/// Whether plugins may keep the device awake (ADR 0030): with the power
-/// settings, where the power plugin keeps them (`power.group`).
-static AWAKE_HOLDS: [SettingSpec; 1] = [SettingSpec::switch(
-    settings::AWAKE_HOLDS.static_str(),
-    "core.setting.awake-holds",
-    true,
-    Id::new_static("power.group"),
-)
-.advanced()
-.description("core.setting.awake-holds.help")];
-
 /// Below which charge the battery shows when it shows only when low.
 static BATTERY_LOW: [SettingSpec; 1] = [SettingSpec::number(
     settings::BATTERY_LOW.static_str(),
@@ -1703,7 +1699,7 @@ fn register_time_and_battery(r: &mut Registrar) -> Result<(), RegisterError> {
         }),
     ))?;
     r.add_settings(&BATTERY_LOW)?;
-    r.add_settings(&AWAKE_HOLDS)?;
+    r.add_settings(&crate::awake::AWAKE_HOLDS)?;
     Ok(())
 }
 

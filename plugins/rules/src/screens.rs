@@ -279,7 +279,7 @@ impl RulesScreen {
 
     fn move_focus(&mut self, delta: isize, cx: &mut Cx<'_, '_>) {
         let len = self.rows().len();
-        self.list.move_focus(delta, len).request(cx);
+        self.list.move_focus_in(cx.env(), delta, len).request(cx);
     }
 }
 
@@ -957,7 +957,7 @@ impl Screen for PickScreen {
         } else {
             return Handled::No;
         };
-        self.list.move_focus(delta, len).request(cx);
+        self.list.move_focus_in(cx.env(), delta, len).request(cx);
         Handled::Yes
     }
 

@@ -376,7 +376,7 @@ impl Screen for FolderChooser {
             None
         };
         if let Some(delta) = delta {
-            let change = self.list.move_focus(delta, len);
+            let change = self.list.move_focus_in(cx.env(), delta, len);
             self.moved(change, cx);
         } else if *a == actions::CONFIRM {
             self.activate(self.list.focus(), cx);

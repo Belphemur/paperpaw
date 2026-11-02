@@ -700,26 +700,39 @@ impl GridView {
         self.owners.iter().all(|owner| *owner == Some(index))
     }
 
-    /// The target nearest below (or above) the focused one.
-    fn vertical(&self, down: bool) -> Option<usize> {
+    /// The target nearest below (or above) the focused one; with `round`
+    /// (the arrow keys stay on the page), where there is none, the one
+    /// nearest the top (or bottom) edge below (or above) it.
+    fn vertical(&self, down: bool, round: bool) -> Option<usize> {
         let (from, _) = self.targets.get(self.focus)?;
         let cx = i32::from(from.x) + i32::from(from.width) / 2;
-        self.targets
-            .iter()
-            .enumerate()
-            .filter(|(_, (r, _))| {
-                if down {
-                    r.y >= from.y + from.height
-                } else {
-                    r.y + r.height <= from.y
-                }
-            })
-            .min_by_key(|(_, (r, _))| {
-                let dy = (i32::from(r.y) - i32::from(from.y)).abs();
-                let dx = (i32::from(r.x) + i32::from(r.width) / 2 - cx).abs();
-                dy * 4 + dx
-            })
-            .map(|(i, _)| i)
+        let nearest = |past: &dyn Fn(&Rect) -> bool, line: i32| {
+            self.targets
+                .iter()
+                .enumerate()
+                .filter(|(_, (r, _))| past(r))
+                .min_by_key(|(_, (r, _))| {
+                    let dy = (i32::from(r.y) - line).abs();
+                    let dx = (i32::from(r.x) + i32::from(r.width) / 2 - cx).abs();
+                    dy * 4 + dx
+                })
+                .map(|(i, _)| i)
+        };
+        let next = if down {
+            nearest(&|r| r.y >= from.y + from.height, i32::from(from.y))
+        } else {
+            nearest(&|r| r.y + r.height <= from.y, i32::from(from.y))
+        };
+        if next.is_some() || !round {
+            return next;
+        }
+        // Round: from past the other edge, the row nearest it.
+        let line = if down {
+            0
+        } else {
+            self.targets.iter().map(|(r, _)| i32::from(r.y)).max()?
+        };
+        nearest(&|_| true, line).filter(|&i| i != self.focus)
     }
 
     fn run(&mut self, index: usize, cx: &mut Cx<'_, '_>) -> GridResponse {
@@ -1034,7 +1047,8 @@ impl GridView {
         } else {
             // The nearest above or below (in a widget too); nothing there,
             // it stays.
-            match self.vertical(*a == actions::DOWN) {
+            let round = ui::list::stays_on_page(cx.env());
+            match self.vertical(*a == actions::DOWN, round) {
                 Some(to) => to,
                 None => return GridResponse::Handled,
             }
@@ -1773,5 +1787,58 @@ mod tests {
         let env = many.env();
         let grid = laid_out(&env, &[], &[]);
         assert_eq!(grid.place(&env, "test.w"), "test.w");
+    }
+
+    /// A kit with "Arrow keys stay on the page" (#112) `on` or off.
+    fn arrows(on: bool) -> Kit {
+        let mut kit = Kit::new(false);
+        let id = crate::builtin::settings::ARROWS_STAY_ON_PAGE.static_str();
+        let spec = SettingSpec::switch(id, "arrows", false, crate::builtin::groups::CONTROLS);
+        kit.settings.define(spec).unwrap();
+        kit.settings.set(id, SettingValue::Bool(on)).unwrap();
+        kit
+    }
+
+    #[test]
+    fn up_and_down_go_round_the_page_only_where_asked() {
+        // `a` and `b` on the top row, `c` and `d` below them on the bottom.
+        let items = [
+            at(tool("t.a"), 0, 0, 1, 1),
+            at(tool("t.b"), 1, 0, 1, 1),
+            at(tool("t.c"), 0, 2, 1, 1),
+            at(tool("t.d"), 1, 2, 1, 1),
+        ];
+        let off = arrows(false);
+        let env = off.env();
+        let mut grid = laid_out(&env, &items, &[]);
+        act(&mut grid, &env, &actions::UP);
+        assert_eq!(grid.focus, 0, "nothing above: it stays, as before");
+        let on = arrows(true);
+        let env = on.env();
+        let mut grid = laid_out(&env, &items, &[]);
+        // Up from the top row: the same column on the bottom row, and back.
+        for (from, action, to) in [
+            (0, actions::UP, 2),
+            (2, actions::DOWN, 0),
+            (1, actions::UP, 3),
+            (3, actions::DOWN, 1),
+            (0, actions::DOWN, 2),
+        ] {
+            grid.focus = from;
+            assert_eq!(act(&mut grid, &env, &action).0, GridResponse::Handled);
+            assert_eq!(grid.focus, to, "{from} {action:?}");
+        }
+        // A single row: nothing to go round to, the focus stays.
+        let mut row = laid_out(&env, &items[..2], &[]);
+        for action in [actions::UP, actions::DOWN] {
+            act(&mut row, &env, &action);
+            assert_eq!(row.focus, 0);
+        }
+        // A button below the grid is the bottom row.
+        let mut grid = laid_out(&env, &items, &[BUTTON]);
+        act(&mut grid, &env, &actions::UP);
+        assert_eq!(grid.focus, grid.targets.len() - 1, "the button");
+        act(&mut grid, &env, &actions::DOWN);
+        assert_eq!(grid.focus, 0);
     }
 }

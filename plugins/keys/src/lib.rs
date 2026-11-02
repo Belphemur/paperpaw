@@ -464,7 +464,7 @@ fn navigate(list: &mut ListView, len: usize, action: &Id, cx: &mut Cx<'_, '_>) -
     } else {
         return false;
     };
-    list.move_focus(delta, len).request(cx);
+    list.move_focus_in(cx.env(), delta, len).request(cx);
     true
 }
 
@@ -744,7 +744,7 @@ impl Screen for ListScreen {
         } else {
             return Handled::No;
         };
-        self.rows.step(delta > 0).request(cx);
+        self.rows.step_in(cx.env(), delta > 0).request(cx);
         Handled::Yes
     }
 
@@ -1142,7 +1142,7 @@ impl Screen for PickScreen {
         } else {
             return Handled::No;
         };
-        self.rows.step(delta > 0).request(cx);
+        self.rows.step_in(cx.env(), delta > 0).request(cx);
         Handled::Yes
     }
 

@@ -222,7 +222,7 @@ impl Screen for EndScreen {
         }
         let rows = self.list.rows() as isize;
         if let Some(delta) = ui::list_step(action, rows) {
-            let change = self.list.move_focus(delta, 3);
+            let change = self.list.move_focus_in(cx.env(), delta, 3);
             change.request(cx);
             return Handled::Yes;
         }

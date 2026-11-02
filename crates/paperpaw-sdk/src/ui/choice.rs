@@ -274,7 +274,7 @@ impl Screen for Choice {
         };
         match ui::list_step(action, page) {
             Some(delta) => {
-                let change = self.list.move_focus(delta, self.options.len());
+                let change = self.list.move_focus_in(cx.env(), delta, self.options.len());
                 self.moved(change, cx);
                 Handled::Yes
             }

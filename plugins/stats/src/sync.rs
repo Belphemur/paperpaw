@@ -785,7 +785,9 @@ impl Screen for SyncScreen {
         } else {
             return Handled::No;
         };
-        self.list.move_focus(delta, self.rows.len()).request(cx);
+        self.list
+            .move_focus_in(cx.env(), delta, self.rows.len())
+            .request(cx);
         Handled::Yes
     }
 

@@ -189,7 +189,7 @@ impl Screen for SearchScreen {
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
-        if let Some(change) = self.list.navigate(action, self.hits.len()) {
+        if let Some(change) = self.list.navigate_in(cx.env(), action, self.hits.len()) {
             change.request(cx);
             return Handled::Yes;
         }

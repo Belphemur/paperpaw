@@ -197,7 +197,7 @@ impl Screen for DrawerScreen {
         } else {
             return Handled::No;
         };
-        match self.list.move_focus(delta, len) {
+        match self.list.move_focus_in(cx.env(), delta, len) {
             ListChange::Focus { left, reached, .. } => {
                 // The focus goes round a tool's icon and name: past its cell
                 // above and below by the room the rows keep for it (a half

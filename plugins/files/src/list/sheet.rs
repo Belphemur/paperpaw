@@ -366,7 +366,9 @@ impl Screen for BookSheet {
             } else {
                 return Handled::No;
             };
-            answers.move_focus(delta, ANSWERS.len()).request(cx);
+            answers
+                .move_focus_in(cx.env(), delta, ANSWERS.len())
+                .request(cx);
             return Handled::Yes;
         }
         let delta = if [
@@ -393,7 +395,9 @@ impl Screen for BookSheet {
         } else {
             return Handled::No;
         };
-        self.list.move_focus(delta, self.actions.len()).request(cx);
+        self.list
+            .move_focus_in(cx.env(), delta, self.actions.len())
+            .request(cx);
         Handled::Yes
     }
 

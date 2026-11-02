@@ -360,7 +360,9 @@ impl Screen for AccountScreen {
         } else {
             return Handled::No;
         };
-        self.list.move_focus(delta, rows.len()).request(cx);
+        self.list
+            .move_focus_in(cx.env(), delta, rows.len())
+            .request(cx);
         Handled::Yes
     }
 
