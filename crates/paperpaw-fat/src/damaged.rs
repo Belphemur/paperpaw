@@ -29,15 +29,22 @@ fn is_past_card<IO: ReadWriteSeek + 'static>(fs: &FileSystem<IO>, size: u64) -> 
     size > u64::from(fs.total_clusters()) * u64::from(fs.cluster_size())
 }
 
+/// Where a folder followed from its parent is: the first clusters its
+/// `.` and `..` must name (its entry's, and its parent's).
+pub(super) type Place = (Option<u32>, Option<u32>);
+
 /// Whether `entry`, named `name`, the `at`th of a folder (from 0), tells
 /// the folder is damaged: its name (see [`is_damaged_name`]), its first
 /// cluster or its size past the card, or the first two not `.` and `..`
-/// (which each folder but the root begins with).
+/// (which each folder but the root begins with), at the clusters of
+/// `place` where it is known. Not one that leads back up, or into
+/// another folder (an entry cross-linked).
 pub(super) fn is_damaged<IO: ReadWriteSeek + 'static>(
     fs: &FileSystem<IO>,
     entry: &FatEntry<IO>,
     name: &str,
     at: usize,
+    place: Option<Place>,
 ) -> bool {
     let clusters = fs.total_clusters();
     // Clusters are numbered from 2.
@@ -45,8 +52,16 @@ pub(super) fn is_damaged<IO: ReadWriteSeek + 'static>(
         .first_cluster()
         .is_some_and(|first| first < 2 || first - 2 >= clusters);
     let dots = match at {
-        0 => name == "." && entry.is_dir(),
-        1 => name == ".." && entry.is_dir(),
+        0 => {
+            name == "."
+                && entry.is_dir()
+                && place.is_none_or(|(own, _)| own == entry.first_cluster())
+        }
+        1 => {
+            name == ".."
+                && entry.is_dir()
+                && place.is_none_or(|(_, up)| up == entry.first_cluster())
+        }
         _ => name != "." && name != "..",
     };
     !dots || is_damaged_name(name) || past || is_past_card(fs, entry.len())
@@ -102,8 +117,7 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
 
     /// Whether folder `entry`, of the folder at cluster `parent`, is one
     /// to follow: none of its entries damaged (see [`is_damaged`]), its
-    /// `.` at its own cluster and its `..` at its parent's. Not one that
-    /// leads back up, or into another file's data.
+    /// `.` at its own cluster and its `..` at its parent's.
     fn is_sound(&self, entry: &FatEntry<IO>, parent: Option<u32>) -> Result<bool, StorageError> {
         let own = entry.first_cluster();
         if own.is_none() || parent.is_none() {
@@ -113,13 +127,7 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
         for (at, found) in entries(&entry.to_dir()).enumerate() {
             let found = found?;
             seen = at + 1;
-            let name = found.file_name();
-            let points = match at {
-                0 => found.first_cluster() == own,
-                1 => found.first_cluster() == parent,
-                _ => true,
-            };
-            if !points || is_damaged(self.fs, &found, &name, at) {
+            if is_damaged(self.fs, &found, &found.file_name(), at, Some((own, parent))) {
                 return Ok(false);
             }
         }

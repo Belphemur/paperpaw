@@ -269,3 +269,35 @@ fn folders_not_taken_go_with_what_they_hold() {
     let s = card.storage();
     assert!(counted(&s) > free, "{} {free}", counted(&s));
 }
+
+/// A sane folder whose sub-folder entry points at another live folder
+/// (cross-linked): its `..` names that folder's parent, so it is cut off,
+/// and the live folder keeps what it holds, also once the card is filled.
+#[test]
+fn a_cross_linked_folder_is_not_followed() {
+    for card in [Cut::formatted(FormatVolumeOptions::new()), fat32()] {
+        let s = card.storage();
+        s.write("keep/live/other.bin", &kept()).unwrap();
+        s.write("cache/1e/book/sub/aaaa.bin", b"cached").unwrap();
+        s.write("cache/1e/book/bbbb.bin", b"cached").unwrap();
+        s.sync().unwrap();
+        let live = first_cluster(&card, short_entry(&card, b"LIVE       "));
+        garble(
+            &card,
+            short_entry(&card, b"SUB        "),
+            b"SUB        ",
+            0x10,
+            live,
+            0,
+        );
+
+        let s = card.storage();
+        assert_eq!(s.remove_dir_all("cache"), Ok(()));
+        assert_eq!(s.list("cache", &mut |_| {}), Err(StorageError::NotFound));
+        assert_eq!(whole(&s, "keep/live/other.bin").unwrap(), kept());
+        followed_as_counted(&card, &s);
+        fill(&s);
+        let s = card.storage();
+        assert_eq!(whole(&s, "keep/live/other.bin").unwrap(), kept());
+    }
+}
