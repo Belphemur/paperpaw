@@ -562,10 +562,14 @@ impl Kernel {
         self.screen_changed(bounds, false);
     }
 
-    /// Makes screen `index` anew for `area`. The old one goes: told as
+    /// Fits screen `index` to `area`: it lays itself out anew where it
+    /// can ([`Screen::on_resize`], revision 2, asked through
+    /// [`paperpaw_sdk::call_since`] as every newer item is), keeping
+    /// all it has. Else it is made anew. The old one goes first: told as
     /// when it closes, so it keeps what it would lose (a reading
-    /// position, text typed). What it asks for then is not done: the
-    /// screen stays open, made anew.
+    /// position, text typed), and dropped before the new one is made, so
+    /// the two never take memory at once. What it asks for then is not
+    /// done: the screen stays open, made anew.
     pub(crate) fn remake_screen(&mut self, index: usize, area: Rect) {
         if !self
             .shared
@@ -576,6 +580,16 @@ impl Kernel {
             return;
         }
         let asked = self.output.commands.len();
+        let before = mem::replace(&mut self.stack[index].area, area);
+        let resized = self.with_screen(index, |screen, cx| {
+            paperpaw_sdk::call_since(screen, 2, Handled::No, |screen| screen.on_resize(cx))
+        });
+        if resized == Handled::Yes {
+            self.apply_area(area);
+            return;
+        }
+        self.output.commands.truncate(asked);
+        self.stack[index].area = before;
         self.with_screen(index, |screen, cx| {
             screen.on_close(cx);
             Handled::Yes
@@ -589,6 +603,8 @@ impl Kernel {
             return;
         };
         let _running = self.shared.meter.enter(active.id.namespace());
+        // `Gone` has no size: nothing is allocated for it.
+        active.screen = Box::new(Gone);
         active.screen = spec.make(&env, &active.params);
     }
 
@@ -797,4 +813,16 @@ pub(crate) fn uncovered(area: Rect, cover: Rect) -> Option<Rect> {
         return Some(Rect::new(area.x, area.y, area.width, common.y - area.y));
     }
     Some(area)
+}
+
+/// What a screen's place holds between the old screen dropped and the new
+/// one made ([`Kernel::remake_screen`]): never drawn nor asked anything.
+struct Gone;
+
+impl Screen for Gone {
+    fn draw(&mut self, _: &mut paperpaw_graphics::Canvas<'_>, _: &Env<'_>) {}
+
+    fn on_action(&mut self, _: &Id, _: &mut Cx<'_, '_>) -> Handled {
+        Handled::No
+    }
 }

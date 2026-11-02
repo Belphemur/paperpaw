@@ -283,13 +283,15 @@ fn api_appended(path: &str, before: &str, after: &str) -> bool {
             .is_some_and(|rest| rest.starts_with(", "))
 }
 
-/// The private traits behind the handles `StoredPack` and `GlyphCache`,
-/// which grow at their end (ADR 0026): each item new with a higher
-/// `revision()`, the first item, which code checks before it calls a
-/// newer one.
-const GROWING: [&str; 2] = [
+/// The traits that grow at their end (ADR 0026): each item new with a
+/// higher `revision()`, the first item, which code checks before it calls
+/// a newer one. The private traits behind the handles `StoredPack` and
+/// `GlyphCache`, and `Screen`, the first one plugins implement (its
+/// newer items called through `paperpaw_sdk::call_since`).
+const GROWING: [&str; 3] = [
     "trait paperpaw_text::stored::Pack",
     "trait paperpaw_text::cache::Cache",
+    "trait paperpaw_sdk::screen::Screen",
 ];
 
 /// Whether `after` is `before`, the shape of a trait of [`GROWING`], with

@@ -417,13 +417,70 @@ pub enum Handled {
     No,
 }
 
+/// The revision of [`Screen`]'s items in this SDK: what a screen built
+/// with it says in [`Screen::revision`]. 1: the items up to
+/// [`Screen::on_timer`]; 2: [`Screen::on_resize`] and [`Screen::pane`].
+pub const SCREEN_REVISION: u16 = 2;
+
+/// How a screen shows where the screen is wide ([`Screen::pane`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum Pane {
+    /// On all of its part of the screen, as any screen.
+    #[default]
+    Full,
+    /// One thing of the list the screen below it shows (a book's details,
+    /// a message, a note): where the screen is wide enough, beside that
+    /// list; elsewhere as [`Pane::Full`].
+    Detail,
+}
+
+/// `call` with `screen` where it has the items of `revision`
+/// ([`Screen::revision`]), else `older`: what a screen built before them
+/// does. Every call of an item newer than revision 1 goes through this,
+/// the kernel's and that of a screen passing items on to one it holds:
+/// a screen built before has no such item to call.
+pub fn call_since<T>(
+    screen: &mut dyn Screen,
+    revision: u16,
+    older: T,
+    call: impl FnOnce(&mut dyn Screen) -> T,
+) -> T {
+    if screen.revision() >= revision {
+        call(screen)
+    } else {
+        older
+    }
+}
+
+/// The revision of a screen that passes items on to `held` (shows it in
+/// its place, hosts it): the lower of its own and `held`'s, so that only
+/// items both have are called (see [`Screen::revision`]).
+pub fn revision_holding(held: &dyn Screen) -> u16 {
+    SCREEN_REVISION.min(held.revision())
+}
+
 /// A full-screen UI unit (home, library, reader, …).
 ///
 /// The kernel calls [`Screen::draw`] when the screen becomes visible and
 /// whenever a redraw is requested. Event handlers never draw; they request
 /// a redraw of the screen or of an area ([`Cx::request_redraw_area`]), and
 /// the kernel refreshes exactly that region.
+///
+/// The trait grows at its end (ADR 0026): each item added later comes
+/// with a higher [`SCREEN_REVISION`], and is called only on screens of
+/// that revision or later ([`call_since`]).
 pub trait Screen {
+    /// The revision of the items this screen has: [`SCREEN_REVISION`] of
+    /// the SDK it was built with, which the kernel checks before it calls
+    /// an item that came later. Never implement it: the default is right.
+    /// Only a screen that passes items on to another it holds answers
+    /// [`revision_holding`] of that one, and calls items newer than revision 1 on
+    /// it through [`call_since`].
+    fn revision(&self) -> u16 {
+        SCREEN_REVISION
+    }
+
     /// Draws the screen. For full screens the canvas has been cleared to
     /// white; overlays paint their own background, all of their
     /// [`region`](Self::region): where an overlay covers all of the part
@@ -713,6 +770,24 @@ pub trait Screen {
     fn on_timer(&mut self, cx: &mut Cx<'_, '_>) {
         let _ = cx;
     }
+
+    /// Its part of the screen changed size (turned, a window resized, the
+    /// row of hints or a bar came or went): it lays itself out anew for
+    /// [`Env::content`] and answers [`Handled::Yes`], keeping all it has
+    /// (a book open, a list scrolled, a connection). [`Handled::No`], the
+    /// default, and it is made anew instead, after
+    /// [`on_close`](Self::on_close), as screens of revision 1 always are.
+    /// Revision 2.
+    fn on_resize(&mut self, cx: &mut Cx<'_, '_>) -> Handled {
+        let _ = cx;
+        Handled::No
+    }
+
+    /// How it shows where the screen is wide: [`Pane::Detail`] for a
+    /// screen that shows one thing of the list below it. Revision 2.
+    fn pane(&self) -> Pane {
+        Pane::Full
+    }
 }
 
 /// What a plugin asked the kernel to do during an event.
@@ -889,5 +964,63 @@ impl<'a, 'e> Cx<'a, 'e> {
 
     pub fn wake_at(&mut self, at: Instant) {
         self.output.wake_at = Some(self.output.wake_at.map_or(at, |w| w.min(at)));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A screen saying `revision`, as one built with an SDK of that
+    /// revision would.
+    struct Built(u16);
+
+    impl Screen for Built {
+        fn revision(&self) -> u16 {
+            self.0
+        }
+
+        fn draw(&mut self, _: &mut Canvas<'_>, _: &Env<'_>) {}
+
+        fn on_action(&mut self, _: &Id, _: &mut Cx<'_, '_>) -> Handled {
+            Handled::No
+        }
+
+        fn pane(&self) -> Pane {
+            Pane::Detail
+        }
+    }
+
+    #[test]
+    fn newer_items_are_called_only_on_screens_that_have_them() {
+        let ask =
+            |screen: &mut dyn Screen| call_since(screen, 2, Pane::Full, |screen| screen.pane());
+        assert_eq!(ask(&mut Built(1)), Pane::Full, "built before: never asked");
+        assert_eq!(ask(&mut Built(2)), Pane::Detail);
+        assert_eq!(ask(&mut Built(3)), Pane::Detail);
+    }
+
+    #[test]
+    fn a_screen_passing_items_on_is_no_newer_than_the_one_it_holds() {
+        assert_eq!(revision_holding(&Built(1)), 1);
+        assert_eq!(revision_holding(&Built(SCREEN_REVISION)), SCREEN_REVISION);
+        // Held by an older one: its own, older revision.
+        assert_eq!(
+            revision_holding(&Built(SCREEN_REVISION + 1)),
+            SCREEN_REVISION
+        );
+    }
+
+    #[test]
+    fn screens_say_this_sdks_revision() {
+        struct Plain;
+        impl Screen for Plain {
+            fn draw(&mut self, _: &mut Canvas<'_>, _: &Env<'_>) {}
+            fn on_action(&mut self, _: &Id, _: &mut Cx<'_, '_>) -> Handled {
+                Handled::No
+            }
+        }
+        assert_eq!(Plain.revision(), SCREEN_REVISION);
+        assert_eq!(Plain.pane(), Pane::Full);
     }
 }

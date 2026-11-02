@@ -455,6 +455,15 @@ impl SleepScreen {
 }
 
 impl Screen for SleepScreen {
+    /// No higher than that of the screen shown in its place: only what
+    /// that one has is passed on to it.
+    fn revision(&self) -> u16 {
+        self.shown.as_deref().map_or(
+            paperpaw_sdk::SCREEN_REVISION,
+            paperpaw_sdk::revision_holding,
+        )
+    }
+
     fn region(&self, env: &Env<'_>) -> Option<Rect> {
         if let Some(shown) = &self.shown {
             return shown.region(env);

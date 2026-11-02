@@ -3276,6 +3276,7 @@ mod pictures_in_grays;
 mod plugins_loaded;
 mod realtime;
 mod refreshes;
+mod resizing;
 mod screen_life;
 mod services_declared;
 mod settings_files;
