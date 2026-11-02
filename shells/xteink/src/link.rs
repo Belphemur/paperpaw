@@ -20,6 +20,37 @@ pub struct Link {
     received: bool,
 }
 
+/// Why a connection failed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Failure {
+    /// The connection is gone.
+    Lost,
+    /// Its TLS failed.
+    Tls(tls::Error),
+}
+
+impl Failure {
+    /// The reason, for the plugin that asked.
+    pub fn reason(self) -> &'static str {
+        match self {
+            Failure::Lost => "connection lost",
+            Failure::Tls(e) => e.reason(),
+        }
+    }
+}
+
+impl From<tls::Error> for Failure {
+    fn from(e: tls::Error) -> Self {
+        Failure::Tls(e)
+    }
+}
+
+impl From<Failure> for &'static str {
+    fn from(failure: Failure) -> Self {
+        failure.reason()
+    }
+}
+
 /// What receiving brought.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Received {
@@ -47,6 +78,11 @@ impl Link {
         }
     }
 
+    /// The TLS session over the connection, if it has one.
+    pub fn session(&self) -> Option<&tls::Session> {
+        self.tls.as_deref()
+    }
+
     /// Whether any byte came over the connection.
     pub fn received(&self) -> bool {
         self.received
@@ -54,7 +90,7 @@ impl Link {
 
     /// Moves the encrypted bytes between the socket and TLS, and TLS's
     /// handshake on; whether anything moved.
-    pub fn pump(&mut self, net: &mut Net) -> Result<bool, &'static str> {
+    pub fn pump(&mut self, net: &mut Net) -> Result<bool, Failure> {
         let Some(session) = self.tls.as_mut() else {
             return Ok(false);
         };
@@ -67,7 +103,7 @@ impl Link {
                     session.feed(&data[..n]);
                     (n, n)
                 })
-                .map_err(|_| "connection lost")?;
+                .map_err(|_| Failure::Lost)?;
             moved |= got > 0;
             if got == 0 {
                 break;
@@ -77,21 +113,18 @@ impl Link {
         if tcp_ended(socket) {
             session.ended();
         }
-        session.handshake().map_err(tls::Error::reason)?;
+        session.handshake()?;
         moved |= Self::flush(session, socket)?;
         Ok(moved)
     }
 
     /// Sends what TLS gave to send, as far as the socket takes it.
-    fn flush(
-        session: &mut tls::Session,
-        socket: &mut tcp::Socket<'_>,
-    ) -> Result<bool, &'static str> {
+    fn flush(session: &mut tls::Session, socket: &mut tcp::Socket<'_>) -> Result<bool, Failure> {
         let output = session.output();
         if output.is_empty() || !socket.can_send() {
             return Ok(false);
         }
-        let n = socket.send_slice(output).map_err(|_| "connection lost")?;
+        let n = socket.send_slice(output).map_err(|_| Failure::Lost)?;
         session.sent(n);
         Ok(n > 0)
     }
@@ -128,16 +161,25 @@ impl Link {
     }
 
     /// Sends plain bytes; how many were taken (0 when there is no room).
-    pub fn send(&mut self, net: &mut Net, data: &[u8]) -> Result<usize, &'static str> {
+    pub fn send(&mut self, net: &mut Net, data: &[u8]) -> Result<usize, Failure> {
         let socket = net.socket(self.socket);
         match self.tls.as_mut() {
-            None if socket.can_send() => socket.send_slice(data).map_err(|_| "connection lost"),
+            None if socket.can_send() => socket.send_slice(data).map_err(|_| Failure::Lost),
             None => Ok(0),
             Some(session) => {
-                let n = session.write(data).map_err(tls::Error::reason)?;
+                let n = session.write(data)?;
                 Self::flush(session, socket)?;
                 Ok(n)
             }
+        }
+    }
+
+    /// Reads plain bytes into `out` from the session (after the
+    /// handshake); there is none without one.
+    pub fn read(&mut self, out: &mut [u8]) -> Result<tls::Read, Failure> {
+        match self.tls.as_mut() {
+            Some(session) => Ok(session.read(out)?),
+            None => Ok(tls::Read::Wait),
         }
     }
 
@@ -148,7 +190,7 @@ impl Link {
         net: &mut Net,
         more: &mut dyn FnMut() -> bool,
         take: &mut dyn FnMut(&[u8]),
-    ) -> Result<Received, &'static str> {
+    ) -> Result<Received, Failure> {
         let socket = net.socket(self.socket);
         let mut moved = false;
         match self.tls.as_mut() {
@@ -159,7 +201,7 @@ impl Link {
                             take(data);
                             (data.len(), ())
                         })
-                        .map_err(|_| "connection lost")?;
+                        .map_err(|_| Failure::Lost)?;
                     moved = true;
                     self.received = true;
                 }
@@ -170,7 +212,7 @@ impl Link {
             Some(session) => {
                 let mut part = [0u8; READ_PART];
                 while more() {
-                    match session.read(&mut part).map_err(tls::Error::reason)? {
+                    match session.read(&mut part)? {
                         tls::Read::Data(n) => {
                             take(&part[..n]);
                             moved = true;

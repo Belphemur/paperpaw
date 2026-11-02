@@ -94,6 +94,14 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   does not know shows as `Pane::FULL`. `Screen` grows at its end from now on: `Screen::revision` (never
   implemented by plugins) says which items a screen has, and newer ones are called only through
   `call_since`, so later screen items need no raise.
+- **X4, X4 Pro and X4 Classic: TLS for plugins' sockets** (#81): a socket made secure from the start or switched
+  to it (STARTTLS) is an mbedTLS session over the same connection HTTPS uses, the authorities of the firmware
+  (Mozilla's) or up to four pinned certificates or keys (the server's own, by the SHA-256 of its DER or of its
+  public key), the name asked for (SNI) and checked, the dates checked once the time is known (`Secured` says
+  whether they were). The X4 holds one TLS session at a time and the X4 Pro and
+  Classic two, shared with HTTPS and served in the order asked: a socket that waits longer than its timeout fails
+  `Busy`. Nothing is sent or read before `Secured`; a switch to TLS over bytes that came after the server's
+  go-ahead fails (`NotReady`, socket closed), as they might be injected.
 - Screens mirror in a user-interface language that runs right to left (#33): the switch, value rows and their
   chevrons, ticked rows, the number buttons, text fields, dialog buttons, list rows' icons, chips, the date
   and time pickers, headings and the reader's menu bar start at the right, and left/right follow them. The

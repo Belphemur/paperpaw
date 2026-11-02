@@ -78,6 +78,7 @@ mod sockets;
 mod stack;
 mod startup;
 mod tls;
+mod tls_slots;
 #[cfg(feature = "remote")]
 mod traced;
 mod usb_lines;
@@ -814,7 +815,10 @@ fn kernel(
         .power_off(true)
         // Buttons are read less often in Saving and Offline
         // (`buttons::read_interval_ms`); the clock stays (ADR 0025).
-        .power(power_controls());
+        .power(power_controls())
+        // TLS sockets (and HTTPS with them): one session at a time on the
+        // X4's 256 KiB, two on the X4 Pro and Classic (`tls_slots`).
+        .tls_sessions(tls_slots::SESSIONS);
     // The X4's row of hints under the screen (the X4 Classic has its
     // buttons); the X4 Pro is touched.
     #[cfg(feature = "x4")]

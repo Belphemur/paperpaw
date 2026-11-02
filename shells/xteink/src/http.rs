@@ -18,9 +18,11 @@ use paperpaw_core::sdk::HttpError;
 use paperpaw_core::{HttpCall, HttpResponse};
 use paperpaw_http::{Parser, Url};
 use paperpaw_platform::Storage;
+use paperpaw_sdk::Trust;
 
 use crate::link::{Link, Received};
 use crate::net::{self, Net, Resolve};
+use crate::tls_slots::{Slot, Waiter};
 
 /// How long a request waits for the network (e.g. while a network is
 /// joined after a start), and at most without any progress.
@@ -115,6 +117,11 @@ struct Call {
     replaced: bool,
     /// Made once more after its connection stalled without an answer.
     again: bool,
+    /// In line for one of the device's TLS sessions (a request over
+    /// TLS, once it may go on), and the one it was given until the
+    /// connection takes it.
+    waiter: Option<Waiter>,
+    slot: Option<Slot>,
 }
 
 /// The requests going on.
@@ -164,6 +171,8 @@ impl Calls {
             deadline,
             replaced: false,
             again: false,
+            waiter: None,
+            slot: None,
         });
     }
 
@@ -229,8 +238,11 @@ impl Calls {
                 continue;
             }
             let call = &mut self.calls[at];
-            // A TLS connection takes some 40 KB: one at a time.
-            let may_open = open < MAX_CALLS && (!call.secure() || (secure == 0 && clock_ready));
+            // A TLS connection takes some 40 KB: one request at a time, and
+            // within the device's TLS sessions, which plugins' sockets share
+            // (first asked, first served).
+            let may_open = open < MAX_CALLS
+                && (!call.secure() || (secure == 0 && clock_ready && call.slot_ready()));
             let outcome = match net.as_deref_mut() {
                 None => Some(Err("no network")),
                 Some(net) => call.step(net, storage, may_open),
@@ -280,6 +292,18 @@ impl Calls {
 }
 
 impl Call {
+    /// Whether it holds one of the device's TLS sessions, in line for it
+    /// until then.
+    fn slot_ready(&mut self) -> bool {
+        if self.slot.is_none() {
+            self.slot = self.waiter.get_or_insert_with(Waiter::ask).take();
+            if self.slot.is_some() {
+                self.waiter = None;
+            }
+        }
+        self.slot.is_some()
+    }
+
     /// It goes over TLS (`https://`).
     fn secure(&self) -> bool {
         Url::parse(&self.url).is_some_and(|url| url.https)
@@ -355,7 +379,7 @@ impl Call {
         };
         let mut progress = match link.pump(net) {
             Ok(moved) => moved,
-            Err(problem) => return Some(Err(problem)),
+            Err(problem) => return Some(Err(problem.reason())),
         };
         let body = self.call.body.as_deref().unwrap_or_default();
         if link.ready(net) {
@@ -451,9 +475,13 @@ impl Call {
         };
         let request = paperpaw_http::request(&self.call.method, &url, &self.call.headers, body_len);
         // The secure session first: it takes the most memory.
-        let tls = match url.https.then(|| crate::tls::Session::new(url.host)) {
-            Some(Ok(session)) => Some(alloc::boxed::Box::new(session)),
-            Some(Err(e)) => return Some(Err(e.reason())),
+        let tls = match url.https.then(|| self.slot.take()) {
+            Some(Some(slot)) => match crate::tls::Session::new(url.host, &Trust::Authorities, slot)
+            {
+                Ok(session) => Some(alloc::boxed::Box::new(session)),
+                Err(e) => return Some(Err(e.reason())),
+            },
+            Some(None) => return Some(Err("no secure connection was free")),
             None => None,
         };
         let socket = match net.open((address, port), BUFFERS) {
