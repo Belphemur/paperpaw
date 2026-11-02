@@ -51,7 +51,8 @@ pub(crate) fn index_details(env: &Env<'_>, path: &str) -> Book {
 
 /// What the library knows of the book at `path` (of size `size`) where
 /// it was read from the book: indexed, or its metadata read
-/// ([`index_details`]).
+/// ([`index_details`]). A book replaced by one of the same size keeps the
+/// details of the one before (as an indexed one always did).
 pub(crate) fn read_book(storage: &dyn Storage, path: &str, size: u64) -> Option<Book> {
     let source = load_details(storage, path).ok()??;
     let book = parse_details(&source);
