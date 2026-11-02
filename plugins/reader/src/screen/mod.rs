@@ -1223,6 +1223,7 @@ impl ReaderScreen {
         // or not from now on (the kernel's settings, so before those).
         if id == crate::settings::SMOOTH_TEXT.as_str()
             || id == crate::settings::TEXT_CONTRAST.as_str()
+            || id == crate::settings::TEXT_SHARPNESS.as_str()
         {
             self.smooth = cx.env().settings().read(&crate::settings::SMOOTH_TEXT);
             cx.request_redraw();

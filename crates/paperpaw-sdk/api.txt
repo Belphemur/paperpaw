@@ -1136,6 +1136,8 @@ pub const paperpaw_sdk::builtin::settings::TEXT_COLOR_OWN: paperpaw_sdk::setting
 pub const paperpaw_sdk::builtin::settings::TEXT_CONTRAST: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::TEXT_CONTRAST_LEVELS: &[&str]
 pub const paperpaw_sdk::builtin::settings::TEXT_CURVE: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
+pub const paperpaw_sdk::builtin::settings::TEXT_SHARPNESS: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
+pub const paperpaw_sdk::builtin::settings::TEXT_SHARPNESS_LEVELS: &[&str]
 pub const paperpaw_sdk::builtin::settings::TIME_ZONE: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::TIME_ZONE_RULE: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::UI_CONTRAST: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>

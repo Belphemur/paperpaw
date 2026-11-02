@@ -2,7 +2,9 @@
 //! white (`core.smooth-text`), and how dark (`core.text-contrast`). A page
 //! of text without smooth letters asks for no refresh in grays on a panel
 //! of black and white; sharp letters have no grays; darker steps ink
-//! more; the defaults draw as before. And drop capitals: a book's large
+//! more; the defaults draw as before. How crisp (`core.text-sharpness`):
+//! a step of contrast each way, sharp without grays, normal and unknown
+//! values as before, a text curve in its place. And drop capitals: a book's large
 //! first letter set over its first lines. And where lines are set: hanging
 //! punctuation (`core.hanging-punctuation`) moves marks, never lines, and
 //! a list item's lines hang after its marker.
@@ -115,6 +117,85 @@ fn the_default_page_is_drawn_as_before_on_black_and_white() {
     let ink = |image: &[Vec<u8>]| image.iter().flatten().filter(|g| **g < 128).count();
     let darkest = page("[core]\ntext-contrast = core.text-contrast.darkest\n");
     assert!(ink(&darkest) > ink(&before));
+}
+
+/// `[core]` lines with `text-sharpness` set to `level` (a level's last
+/// part, or any value), and `more` after them.
+fn sharpness(level: &str, more: &str) -> String {
+    format!("[core]\ntext-sharpness = core.text-sharpness.{level}\n{more}")
+}
+
+/// How much ink a page's text lines take: the sum of their darkness.
+fn ink_of(device: DeviceInfo, config: &str) -> u64 {
+    let grays = text_grays(&mut reading(device, config));
+    grays.iter().map(|g| u64::from(255 - g)).sum()
+}
+
+#[test]
+fn sharpness_normal_and_values_it_does_not_know_draw_as_before() {
+    for device in [BUTTONS, MONO] {
+        let page = |config: &str| reading(device, config).snapshot();
+        let before = page("");
+        assert_eq!(before, page(&sharpness("normal", "")));
+        for unknown in ["", "sharpest", "Sharp", "core.text-sharpness.sharp.x"] {
+            let config = format!("[core]\ntext-sharpness = {unknown}\n");
+            assert_eq!(before, page(&config), "{unknown:?}");
+        }
+        let junk = "[core]\ntext-sharpness = core.text-sharpness.\u{0}\u{ffff}\n";
+        assert_eq!(before, page(junk));
+    }
+}
+
+#[test]
+fn soft_is_lighter_and_sharp_is_fuller_without_grays() {
+    let between = |grays: &[u8]| grays.iter().filter(|g| !matches!(g, 0 | 255)).count();
+    // Where the panel has grays: soft smooth and lighter, sharp without
+    // grays even with smooth text on.
+    let soft = text_grays(&mut reading(BUTTONS, &sharpness("soft", "")));
+    assert!(between(&soft) > 1000, "{}", between(&soft));
+    let sharp = text_grays(&mut reading(BUTTONS, &sharpness("sharp", "")));
+    assert_eq!(between(&sharp), 0);
+    let inks = ["soft", "normal", "sharp"].map(|l| ink_of(BUTTONS, &sharpness(l, "")));
+    assert!(inks.windows(2).all(|w| w[0] < w[1]), "{inks:?}");
+    // A step of the contrast each way: soft at normal contrast is the
+    // lighter step, sharp the darker one without grays.
+    let contrast = |level: &str, more: &str| {
+        format!("[core]\ntext-contrast = core.text-contrast.{level}\n{more}")
+    };
+    assert_eq!(inks[0], ink_of(BUTTONS, &contrast("lighter", "")));
+    let darker_sharp = contrast("darker", "smooth-text = false\n");
+    assert_eq!(inks[2], ink_of(BUTTONS, &darker_sharp));
+}
+
+#[test]
+fn sharpness_on_black_and_white_moves_the_threshold() {
+    let page = |config: &str| reading(MONO, config).snapshot();
+    let ink = |image: &[Vec<u8>]| image.iter().flatten().filter(|g| **g < 128).count();
+    let [soft, normal, sharp] = ["soft", "normal", "sharp"].map(|l| page(&sharpness(l, "")));
+    assert!(ink(&soft) < ink(&normal) && ink(&normal) < ink(&sharp));
+    // The same pixels as a step of contrast each way.
+    let contrast = |level: &str| {
+        page(&format!(
+            "[core]\ntext-contrast = core.text-contrast.{level}\n"
+        ))
+    };
+    assert_eq!(soft, contrast("lighter"));
+    assert_eq!(sharp, contrast("darker"));
+    // At either end of the contrast it stays there, never past.
+    let darkest = "text-contrast = core.text-contrast.darkest\n";
+    assert_eq!(page(&sharpness("sharp", darkest)), contrast("darkest"));
+}
+
+#[test]
+fn a_text_curve_takes_the_place_of_sharpness() {
+    for device in [BUTTONS, MONO] {
+        let curve = "text-curve = contrast:-1\n";
+        let alone = reading(device, &format!("[core]\n{curve}")).snapshot();
+        for level in ["soft", "sharp"] {
+            let both = reading(device, &sharpness(level, curve)).snapshot();
+            assert_eq!(alone, both, "{level}");
+        }
+    }
 }
 
 /// A book of short words each ending in a comma, so justified lines end
