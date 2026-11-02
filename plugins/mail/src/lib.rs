@@ -15,6 +15,7 @@ pub mod html;
 pub mod imap;
 pub mod job;
 pub mod provider;
+pub(crate) mod reader;
 pub mod render;
 pub mod session;
 pub mod settings;
