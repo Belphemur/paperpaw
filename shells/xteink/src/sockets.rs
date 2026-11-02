@@ -634,22 +634,13 @@ impl Socket {
             return true;
         }
         // What came since the server's go-ahead was read (it should wait
-        // for the handshake) is thrown away: the session starts clean, and
-        // no byte the other side or someone between put in before it can
-        // pass for what came secure.
-        let mut dropped = self.gathered.len();
-        self.gathered.clear();
-        while socket.can_recv() {
-            match socket.recv(|data| (data.len(), data.len())) {
-                Ok(n) if n > 0 => dropped += n,
-                _ => break,
-            }
-        }
-        if dropped > 0 {
-            log::warn!(
-                "socket {}: {dropped} bytes before the TLS handshake thrown away",
-                self.number
-            );
+        // for the handshake) might be injected plaintext, which would pass
+        // for secure: the socket is closed, not started over it.
+        if let Some((error, reason)) =
+            tls_trust::starttls_refusal(socket.recv_queue() + self.gathered.len())
+        {
+            events.push(failed(self.number, error, reason));
+            return false;
         }
         let Phase::Switching { waiter, .. } = &mut self.phase else {
             return true;

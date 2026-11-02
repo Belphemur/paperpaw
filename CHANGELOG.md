@@ -46,8 +46,8 @@ before it are thrown away.
   (Mozilla's) or up to four pinned certificates (the server's own, by its SHA-256), the name asked for (SNI) and
   checked, the dates checked once the time is known. The X4 holds one TLS session at a time and the X4 Pro and
   Classic two, shared with HTTPS and served in the order asked: a socket that waits longer than its timeout fails
-  `Busy`. Nothing is sent or read before `Secured`; what came over a plain connection after the server's go-ahead
-  is thrown away before the handshake.
+  `Busy`. Nothing is sent or read before `Secured`; a switch to TLS over bytes that came after the server's
+  go-ahead fails (`NotReady`, socket closed), as they might be injected.
 - Screens mirror in a user-interface language that runs right to left (#33): the switch, value rows and their
   chevrons, ticked rows, the number buttons, text fields, dialog buttons, list rows' icons, chips, the date
   and time pickers, headings and the reader's menu bar start at the right, and left/right follow them. The
