@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 use paperpaw_core::sdk::{CertificateHash, KeyHash, SocketError};
 use paperpaw_core::{SocketEvent, TlsSetup};
 
-use crate::tls::{self, Env, Gate, Refusal, Secure, Secured, Slot};
+use crate::tls::{self, Env, Refusal, Secure, Secured, Slot};
 
 /// How long connecting may take.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
@@ -43,18 +43,23 @@ pub(crate) struct Link {
     pub stream: Arc<Mutex<Option<TcpStream>>>,
 }
 
-/// The sessions all sockets share.
-fn gate() -> &'static Arc<Gate> {
-    static GATE: OnceLock<Arc<Gate>> = OnceLock::new();
-    GATE.get_or_init(|| Arc::new(Gate::new(tls::SESSIONS)))
-}
-
 /// Why connecting failed with `e`.
 fn connect_error(e: &std::io::Error) -> SocketError {
     match e.kind() {
         std::io::ErrorKind::TimedOut => SocketError::Timeout,
         std::io::ErrorKind::OutOfMemory => SocketError::NoMemory,
         _ => SocketError::Refused,
+    }
+}
+
+/// Why reading or writing failed with `e`.
+fn io_error(e: &std::io::Error) -> SocketError {
+    match e.kind() {
+        // A write that moved nothing for the stall (`WouldBlock` is what a
+        // socket's timeout is on Unix).
+        std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock => SocketError::Timeout,
+        std::io::ErrorKind::InvalidData => SocketError::Tls,
+        _ => SocketError::Lost,
     }
 }
 
@@ -90,6 +95,12 @@ fn secured(socket: u32, shown: Secured) -> SocketEvent {
 
 /// Whether bytes of the server wait, unread, on `tcp`: sent past its
 /// go-ahead. Where that cannot be told, they do.
+///
+/// Non-blocking is a flag of the socket, so it holds for the reading
+/// handle too while it is set: that is safe only because the kernel asks
+/// for STARTTLS only with no read under way (`start_tls` in
+/// `paperpaw-core`'s `io/sockets.rs`), and the reading thread does
+/// nothing between reads.
 fn bytes_wait(tcp: &TcpStream) -> bool {
     if tcp.set_nonblocking(true).is_err() {
         return true;
@@ -146,7 +157,14 @@ impl Shared {
         deadline: Instant,
         slot: Slot,
     ) -> bool {
-        match tls::handshake(tcp, tls, self.env.verifier(tls), deadline, slot) {
+        match tls::handshake(
+            tcp,
+            tls,
+            self.env.verifier(tls),
+            deadline,
+            slot,
+            self.env.stall(),
+        ) {
             Ok((secure, shown)) => {
                 let _ = self.secure.set(secure);
                 (self.report)(secured(self.socket, shown));
@@ -255,7 +273,7 @@ fn connection(
         .map(|t| Instant::now() + Duration::from_millis(u64::from(t.timeout_ms)));
     // A secure session first, before the host is looked up.
     let slot = match deadline {
-        Some(deadline) => match gate().take(deadline) {
+        Some(deadline) => match shared.env.gate().take(deadline) {
             Some(slot) => Some(slot),
             None => {
                 let wait = "no secure session was free in time";
@@ -277,6 +295,10 @@ fn connection(
     if let Ok(mut held) = shared.stream.lock() {
         *held = reading.try_clone().ok();
     }
+    // Writes that make no progress for long end the connection: a server
+    // that never reads must not hold the writing thread (and a secure
+    // session) for ever. The option is the socket's: the clones share it.
+    let _ = writing.set_write_timeout(Some(shared.env.stall()));
     match (tls, deadline, slot) {
         (Some(setup), Some(deadline), Some(slot)) => {
             if !shared.secure_up(&mut reading, &setup, deadline, slot) {
@@ -307,12 +329,8 @@ fn connection(
                 });
             }
             Err(e) => {
-                let error = if e.kind() == std::io::ErrorKind::InvalidData {
-                    SocketError::Tls
-                } else {
-                    SocketError::Lost
-                };
-                return shared.end(failure(error, &e.to_string()));
+                shared.shut();
+                return shared.end(failure(io_error(&e), &e.to_string()));
             }
         }
     }
@@ -348,7 +366,7 @@ fn write_all(shared: &Arc<Shared>, mut writing: TcpStream, jobs: &Receiver<Job>)
                     shared.shut();
                     return shared.end(failure(error, reason));
                 }
-                let Some(slot) = gate().take(deadline) else {
+                let Some(slot) = shared.env.gate().take(deadline) else {
                     shared.shut();
                     let wait = "no secure session was free in time";
                     return shared.end(failure(SocketError::Busy, wait));
@@ -361,7 +379,11 @@ fn write_all(shared: &Arc<Shared>, mut writing: TcpStream, jobs: &Receiver<Job>)
         };
         match sent {
             Ok(()) => shared.tick(),
-            Err(e) => return shared.end(failure(SocketError::Lost, &e.to_string())),
+            Err(e) => {
+                // Shut, so that nothing waits on it: a read, the session.
+                shared.shut();
+                return shared.end(failure(io_error(&e), &e.to_string()));
+            }
         }
     }
     // Closed (its sender gone) once everything asked before was sent: the

@@ -141,7 +141,7 @@ impl Verifier {
         self.seen.lock().ok().and_then(|seen| *seen)
     }
 
-    fn remember(&self, leaf: Leaf) {
+    pub(crate) fn remember(&self, leaf: Leaf) {
         if let Ok(mut seen) = self.seen.lock() {
             *seen = Some(leaf);
         }
@@ -204,6 +204,15 @@ impl ServerCertVerifier for Verifier {
                 )?;
                 leaf.time_checked = clock.is_some();
             }
+            // The key pinned is found by `der::parts`, which is lenient (a
+            // length that is not minimal, bytes after the certificate). That
+            // is safe because the handshake's signature is checked next
+            // (`verify_tls12/13_signature`) against the key of this same
+            // certificate parsed strictly by webpki: a certificate that
+            // `parts` reads differently from webpki fails the handshake, and
+            // on strict DER both find the same SubjectPublicKeyInfo. The
+            // tests `a_certificate_not_in_strict_der_is_refused_even_with_the_pinned_key`
+            // keep it so.
             Mode::Certificates(pins) | Mode::Keys(pins) => {
                 let shown = if matches!(self.mode, Mode::Keys(_)) {
                     leaf.key

@@ -136,7 +136,7 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   four pinned certificates or keys; the name is checked for the authorities only, the dates (where the clock
   is believed, i.e. set after 2025) for both; there is no way to trust what is merely shown. A server's own
   certificate, a certificate authority's that it made itself, ends `Untrusted` (`UnknownIssuer`), so a plugin can
-  offer to pin its key. Up to eight sessions at once, a socket waits for one until its timeout. The Mail plugin
+  offer to pin its key. Up to eight sessions at once, a socket waits for one until its timeout; a write that moves nothing for 30 s ends the socket, `Timeout`, so a server that never reads cannot hold a session. The Mail plugin
   checks and sends mail against a real IMAP and SMTP server this way. The browser's emulator has no sockets and
   holds no TLS session.
 - Screens mirror in a user-interface language that runs right to left (#33): the switch, value rows and their

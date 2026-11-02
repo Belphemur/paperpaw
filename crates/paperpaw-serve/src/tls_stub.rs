@@ -12,6 +12,8 @@ use paperpaw_core::sdk::{Distrust, SocketError};
 
 pub const SESSIONS: u8 = 0;
 
+pub(crate) const WRITE_STALL: Duration = Duration::from_secs(30);
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Refusal {
     #[expect(dead_code, reason = "nothing is secured here: only Failed is made")]
@@ -62,11 +64,19 @@ impl Secure {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct Env;
+pub(crate) struct Env(Arc<Gate>);
 
 impl Env {
     pub(crate) fn system() -> Self {
-        Self
+        Self(Arc::new(Gate::new(0)))
+    }
+
+    pub(crate) fn gate(&self) -> &Arc<Gate> {
+        &self.0
+    }
+
+    pub(crate) fn stall(&self) -> Duration {
+        WRITE_STALL
     }
 
     pub(crate) fn verifier(&self, _setup: &TlsSetup) -> Option<()> {
@@ -80,6 +90,7 @@ pub(crate) fn handshake(
     _verifier: Option<()>,
     _deadline: Instant,
     _slot: Slot,
+    _stall: Duration,
 ) -> Result<(Arc<Secure>, Secured), Refusal> {
     Err(Refusal::Failed(
         SocketError::Unsupported,

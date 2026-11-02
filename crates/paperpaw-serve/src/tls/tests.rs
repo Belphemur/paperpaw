@@ -10,9 +10,10 @@
     reason = "tests panic on purpose when something is wrong"
 )]
 
-use std::io::{Read, Write};
+use std::io::{self, Read, Write};
 use std::net::{Ipv4Addr, TcpListener, TcpStream};
 use std::sync::Arc;
+use std::sync::mpsc;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
@@ -23,7 +24,8 @@ use rustls::client::WebPkiServerVerifier;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use rustls::{RootCertStore, ServerConfig, ServerConnection, StreamOwned};
 
-use super::{Gate, der};
+use super::verify::Leaf;
+use super::{Gate, Refusal, Verifier, der, refusal};
 use crate::Sockets;
 
 /// A certificate authority and the roots that trust it.
@@ -621,4 +623,276 @@ fn the_walk_through_a_certificate_finds_its_key_and_dates() {
     assert_eq!(parts.not_after, 1_956_441_600);
     // The authority's own: a self-signed certificate reads alike.
     assert!(der::parts(pki.ca.der()).is_some());
+}
+
+/// A server that finishes the handshake, then reads nothing until told.
+fn deaf_server(identity: &Identity, release: mpsc::Receiver<()>) -> (u16, JoinHandle<bool>) {
+    let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let config = identity.config();
+    let server = thread::spawn(move || {
+        let (mut tcp, _) = listener.accept().unwrap();
+        let mut session = ServerConnection::new(config).unwrap();
+        while session.is_handshaking() {
+            session.complete_io(&mut tcp).unwrap();
+        }
+        let _ = release.recv_timeout(Duration::from_secs(20));
+        // Now reads: until the client's end, if it ended the connection.
+        tcp.set_read_timeout(Some(Duration::from_secs(5))).unwrap();
+        let mut buffer = [0u8; 64 * 1024];
+        loop {
+            match tcp.read(&mut buffer) {
+                Ok(0) => return true,
+                Ok(_) => {}
+                Err(e) if e.kind() == io::ErrorKind::ConnectionReset => return true,
+                Err(_) => return false,
+            }
+        }
+    });
+    (port, server)
+}
+
+fn send_much(sockets: &mut Sockets) {
+    for _ in 0..10 {
+        sockets.apply(SocketCall::Send {
+            socket: 1,
+            data: vec![7u8; 1024 * 1024],
+        });
+    }
+}
+
+#[test]
+fn a_server_that_never_reads_cannot_hold_a_session_after_close() {
+    let pki = pki();
+    let identity = issued(&pki, "mail.test", key());
+    let (release, released) = mpsc::channel();
+    let (port, server) = deaf_server(&identity, released);
+    let gate = Arc::new(Gate::new(2));
+    let mut sockets = sockets_trusting(&pki);
+    sockets.tls = sockets
+        .tls
+        .clone()
+        .with_gate(gate.clone(), Duration::from_millis(300));
+    connect(&mut sockets, port, setup("mail.test", Trust::Authorities));
+    assert!(matches!(wait(&mut sockets), SocketEvent::Secured { .. }));
+    assert_eq!(gate.held(), 1);
+    // Ten megabytes to a server that reads none, and the plugin closes.
+    send_much(&mut sockets);
+    sockets.apply(SocketCall::Close { socket: 1 });
+    let until = Instant::now() + Duration::from_secs(5);
+    while gate.held() > 0 {
+        assert!(Instant::now() < until, "the session is held still");
+        thread::sleep(Duration::from_millis(20));
+    }
+    // The connection ended: the server finds its end, not an open stream.
+    release.send(()).unwrap();
+    assert!(server.join().unwrap(), "the connection was left open");
+}
+
+#[test]
+fn a_server_that_never_reads_ends_the_socket_with_a_timeout() {
+    let pki = pki();
+    let identity = issued(&pki, "mail.test", key());
+    let (release, released) = mpsc::channel();
+    let (port, server) = deaf_server(&identity, released);
+    let gate = Arc::new(Gate::new(2));
+    let mut sockets = sockets_trusting(&pki);
+    sockets.tls = sockets
+        .tls
+        .clone()
+        .with_gate(gate.clone(), Duration::from_millis(300));
+    connect(&mut sockets, port, setup("mail.test", Trust::Authorities));
+    assert!(matches!(wait(&mut sockets), SocketEvent::Secured { .. }));
+    send_much(&mut sockets);
+    let SocketEvent::Failed { error, .. } = wait(&mut sockets) else {
+        panic!("not failed");
+    };
+    assert_eq!(error, SocketError::Timeout);
+    assert!(!sockets.any());
+    let until = Instant::now() + Duration::from_secs(5);
+    while gate.held() > 0 {
+        assert!(Instant::now() < until, "the session is held still");
+        thread::sleep(Duration::from_millis(20));
+    }
+    release.send(()).unwrap();
+    assert!(server.join().unwrap(), "the connection was left open");
+}
+
+/// What a plugin is told, as a test can compare.
+#[derive(Debug, PartialEq)]
+enum Told {
+    Untrusted(Distrust),
+    Failed(SocketError),
+}
+
+#[test]
+fn what_the_chain_says_of_a_certificate_becomes_the_verdict_the_design_lists() {
+    use rustls::CertificateError as C;
+    let other = || {
+        C::Other(rustls::OtherError(Arc::new(io::Error::other(
+            "a chain rule",
+        ))))
+    };
+    // The table of the design (tls-sockets-sdk.md §7): the same rows.
+    let table: Vec<(rustls::Error, Told)> = vec![
+        (
+            C::UnknownIssuer.into(),
+            Told::Untrusted(Distrust::UnknownIssuer),
+        ),
+        (other().into(), Told::Untrusted(Distrust::UnknownIssuer)),
+        (
+            C::BadSignature.into(),
+            Told::Untrusted(Distrust::UnknownIssuer),
+        ),
+        (
+            C::InvalidPurpose.into(),
+            Told::Untrusted(Distrust::UnknownIssuer),
+        ),
+        (
+            C::UnhandledCriticalExtension.into(),
+            Told::Untrusted(Distrust::UnknownIssuer),
+        ),
+        (C::Revoked.into(), Told::Untrusted(Distrust::UnknownIssuer)),
+        (
+            C::UnsupportedSignatureAlgorithmContext {
+                signature_algorithm_id: Vec::new(),
+                supported_algorithms: Vec::new(),
+            }
+            .into(),
+            Told::Untrusted(Distrust::UnknownIssuer),
+        ),
+        (
+            C::NotValidForName.into(),
+            Told::Failed(SocketError::NameMismatch),
+        ),
+        (C::Expired.into(), Told::Failed(SocketError::Expired)),
+        (C::NotValidYet.into(), Told::Failed(SocketError::Expired)),
+        (C::BadEncoding.into(), Told::Failed(SocketError::Tls)),
+        (
+            rustls::Error::General(String::from("x")),
+            Told::Failed(SocketError::Tls),
+        ),
+    ];
+    let verifier = Verifier::new(&Trust::Authorities, super::system_clock).unwrap();
+    verifier.remember(Leaf {
+        certificate: [1; 32],
+        key: [2; 32],
+        time_checked: true,
+    });
+    for (error, told) in table {
+        let io = io::Error::new(io::ErrorKind::InvalidData, error.clone());
+        let got = match refusal(&io, &verifier) {
+            Refusal::Untrusted {
+                why,
+                certificate,
+                key,
+            } => {
+                assert_eq!((certificate, key), ([1; 32], [2; 32]), "{error:?}");
+                Told::Untrusted(why)
+            }
+            Refusal::Failed(error, _) => Told::Failed(error),
+        };
+        assert_eq!(got, told, "{error:?}");
+    }
+    // Not a rustls error: by the kind of the failure.
+    for (kind, told) in [
+        (io::ErrorKind::TimedOut, SocketError::Timeout),
+        (io::ErrorKind::UnexpectedEof, SocketError::Lost),
+        (io::ErrorKind::PermissionDenied, SocketError::Tls),
+    ] {
+        let Refusal::Failed(error, _) = refusal(&io::Error::from(kind), &verifier) else {
+            panic!("not failed");
+        };
+        assert_eq!(error, told, "{kind:?}");
+    }
+    // Where no certificate was shown, an untrusted one is a failure.
+    let unshown = Verifier::new(&Trust::Authorities, super::system_clock).unwrap();
+    let io = io::Error::new(
+        io::ErrorKind::InvalidData,
+        rustls::Error::from(C::UnknownIssuer),
+    );
+    assert!(matches!(
+        refusal(&io, &unshown),
+        Refusal::Failed(SocketError::Tls, _)
+    ));
+}
+
+/// Presents `chain` whatever it is.
+#[derive(Debug)]
+struct Raw(Arc<rustls::sign::CertifiedKey>);
+
+impl rustls::server::ResolvesServerCert for Raw {
+    fn resolve(
+        &self,
+        _: rustls::server::ClientHello<'_>,
+    ) -> Option<Arc<rustls::sign::CertifiedKey>> {
+        Some(self.0.clone())
+    }
+}
+
+/// A server that presents `der` for `identity`'s key, whatever it is.
+fn raw_server(identity: &Identity, der: Vec<u8>) -> (u16, JoinHandle<()>) {
+    let key = PrivateKeyDer::from(PrivatePkcs8KeyDer::from(identity.key.serialize_der()));
+    let key = rustls::crypto::ring::sign::any_supported_type(&key).unwrap();
+    let certified = rustls::sign::CertifiedKey::new(vec![CertificateDer::from(der)], key);
+    let config = ServerConfig::builder_with_provider(super::verify::provider())
+        .with_safe_default_protocol_versions()
+        .unwrap()
+        .with_no_client_auth()
+        .with_cert_resolver(Arc::new(Raw(Arc::new(certified))));
+    let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let config = Arc::new(config);
+    let server = thread::spawn(move || {
+        let (tcp, _) = listener.accept().unwrap();
+        let mut stream = StreamOwned::new(ServerConnection::new(config).unwrap(), tcp);
+        greets(&mut stream);
+    });
+    (port, server)
+}
+
+#[test]
+fn a_certificate_not_in_strict_der_is_refused_even_with_the_pinned_key() {
+    let own = self_signed("a.test", key());
+    let pinned = Trust::PinnedKeys(vec![key_hash(own.key_sha256())]);
+    let strict = own.der.to_vec();
+    // The same certificate, with bytes after it, and with its length
+    // written in more bytes than it needs.
+    let mut trailing = strict.clone();
+    trailing.extend_from_slice(&[0, 0, 0]);
+    assert_eq!(strict[1], 0x82, "a length of two bytes");
+    let mut padded = vec![0x30, 0x83, 0x00, strict[2], strict[3]];
+    padded.extend_from_slice(&strict[4..]);
+    // The walk reads all three alike: the handshake must not.
+    assert_eq!(der::parts(&strict), der::parts(&trailing));
+    assert_eq!(der::parts(&strict), der::parts(&padded));
+    for (name, der, secured) in [
+        ("strict", strict, true),
+        ("trailing", trailing, false),
+        ("padded", padded, false),
+    ] {
+        let (port, server) = raw_server(&own, der);
+        let mut sockets = Sockets::new(|| {});
+        connect(&mut sockets, port, setup("a.test", pinned.clone()));
+        let event = wait(&mut sockets);
+        if secured {
+            assert!(
+                matches!(event, SocketEvent::Secured { .. }),
+                "{name}: {event:?}"
+            );
+            sockets.apply(SocketCall::Close { socket: 1 });
+        } else {
+            assert!(
+                matches!(
+                    event,
+                    SocketEvent::Failed {
+                        error: SocketError::Tls,
+                        ..
+                    }
+                ),
+                "{name}: {event:?}"
+            );
+        }
+        server.join().unwrap();
+    }
 }

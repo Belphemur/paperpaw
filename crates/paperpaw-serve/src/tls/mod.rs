@@ -21,7 +21,7 @@ mod verify;
 
 use std::io::{self, Read, Write};
 use std::net::{Shutdown, TcpStream};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant};
 
 use paperpaw_core::TlsSetup;
@@ -36,6 +36,12 @@ use verify::{Leaf, NotPinned, Verifier};
 /// room for many, the number only keeps a plugin that opens sockets in a
 /// loop in bounds.
 pub const SESSIONS: u8 = 8;
+
+/// How long a write may make no progress before the connection ends,
+/// `Failed` with `Timeout`: a server that never reads must not hold a
+/// session (and the threads) for ever. A write that moves bytes, however
+/// slowly, is not cut off.
+pub(crate) const WRITE_STALL: Duration = Duration::from_secs(30);
 
 /// What a handshake that did not come about is: a certificate not
 /// trusted (its hashes go with the news), or a failure.
@@ -78,6 +84,12 @@ impl Gate {
             freed: Condvar::new(),
             limit,
         }
+    }
+
+    /// How many sessions are held (tests).
+    #[cfg(test)]
+    pub(crate) fn held(&self) -> u8 {
+        self.open.lock().map_or(0, |open| *open)
     }
 
     /// A session, once one is free, if that is before `deadline`.
@@ -159,13 +171,21 @@ impl Secure {
             // it was cut off.
             loop {
                 let used = session.read_tls(&mut bytes)?;
-                let processed = session.process_new_packets();
-                if let Err(e) = processed {
+                if let Err(e) = session.process_new_packets() {
                     let _ = self.flush(session);
                     return Err(io::Error::new(io::ErrorKind::InvalidData, e));
                 }
-                if used == 0 || bytes.is_empty() {
+                if bytes.is_empty() {
                     break;
+                }
+                // Bytes left that the session will not take (its buffer is
+                // empty here, so it should): they are not dropped, which
+                // would fail the stream later with a MAC error.
+                if used == 0 {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "the secure session took no more of what was read",
+                    ));
                 }
             }
             self.flush(session)?;
@@ -268,6 +288,7 @@ pub(crate) fn handshake(
     verifier: Option<Verifier>,
     deadline: Instant,
     slot: Slot,
+    stall: Duration,
 ) -> Result<(Arc<Secure>, Secured), Refusal> {
     let Some(verifier) = verifier else {
         return Err(Refusal::failed(SocketError::Tls, "no authorities to trust"));
@@ -313,7 +334,8 @@ pub(crate) fn handshake(
         session.write_tls(tcp).map_err(failed)?;
     }
     tcp.set_read_timeout(None).map_err(failed)?;
-    tcp.set_write_timeout(None).map_err(failed)?;
+    // Writes later on give up when they make no progress (`WRITE_STALL`).
+    tcp.set_write_timeout(Some(stall)).map_err(failed)?;
     let leaf = verifier
         .seen()
         .ok_or_else(|| Refusal::failed(SocketError::Tls, "the server showed no certificate"))?;
@@ -333,11 +355,18 @@ pub(crate) fn handshake(
     ))
 }
 
+fn shared_gate() -> &'static Arc<Gate> {
+    static GATE: OnceLock<Arc<Gate>> = OnceLock::new();
+    GATE.get_or_init(|| Arc::new(Gate::new(SESSIONS)))
+}
+
 /// What a socket's TLS depends on besides the server: the clock, and in
 /// tests the authorities.
 #[derive(Debug, Clone)]
 pub(crate) struct Env {
     clock: Clock,
+    gate: Arc<Gate>,
+    stall: Duration,
     #[cfg(test)]
     pub(crate) roots: Option<Arc<rustls::client::WebPkiServerVerifier>>,
 }
@@ -347,9 +376,29 @@ impl Env {
     pub(crate) fn system() -> Self {
         Self {
             clock: system_clock,
+            gate: shared_gate().clone(),
+            stall: WRITE_STALL,
             #[cfg(test)]
             roots: None,
         }
+    }
+
+    /// The sessions of this socket's computer, shared by all sockets.
+    pub(crate) fn gate(&self) -> &Arc<Gate> {
+        &self.gate
+    }
+
+    /// How long a write may make no progress.
+    pub(crate) fn stall(&self) -> Duration {
+        self.stall
+    }
+
+    /// With sessions of their own and a write stall of `stall` (tests).
+    #[cfg(test)]
+    pub(crate) fn with_gate(mut self, gate: Arc<Gate>, stall: Duration) -> Self {
+        self.gate = gate;
+        self.stall = stall;
+        self
     }
 
     /// With the clock `clock` (tests).
