@@ -44,6 +44,9 @@ pub(super) struct Publish {
     until: Option<(u64, usize)>,
     /// A checkpoint was done since [`Publish::take_news`] was asked.
     news: bool,
+    /// The checkpoint under way is the walk's end (views hear of the
+    /// catalog made, not of a checkpoint), however its steps are taken.
+    ending: bool,
 }
 
 impl Publish {
@@ -90,6 +93,7 @@ impl Publish {
                     return Ok(false);
                 }
                 self.until = Some(until);
+                self.ending = all;
                 until
             }
             None => return Ok(false),
@@ -102,7 +106,7 @@ impl Publish {
             self.books = books;
             self.at = now;
             // At the end, views hear of the catalog made.
-            self.news = !all;
+            self.news = !self.ending;
         }
         Ok(true)
     }

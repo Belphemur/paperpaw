@@ -687,7 +687,11 @@ impl Walk {
         // said to be those found so far until a walk ends.
         if making.same.is_none() && !env.storage().exists(&catalog_path()) {
             making.publish = Some(Publish::new(env.now().millis()));
-            env.storage().write(&first_path(), b"")?;
+            #[expect(
+                clippy::let_underscore_must_use,
+                reason = "not written, the books found are shown all the same, only not said to be so far"
+            )]
+            let _ = env.storage().write(&first_path(), b"");
         }
         Ok(Walk {
             making,
