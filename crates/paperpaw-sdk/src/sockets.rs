@@ -57,7 +57,11 @@ pub struct Tls {
     /// Nothing sent or read for this long, in milliseconds, ends the
     /// socket ([`SocketError::Timeout`], `reason` `idle`), at most
     /// [`MAX_TLS_IDLE_MS`]; 0: never. 60 s unless set: an open connection
-    /// holds memory and keeps the radio awake.
+    /// holds memory and keeps the radio awake. Where the device holds few
+    /// connections ([`Capabilities::tls_sessions`](crate::Capabilities)) and
+    /// another request or socket waits for one, a socket idle for a few
+    /// seconds is ended at once, whatever this says (`Timeout`, `reason`
+    /// `slot needed`).
     pub idle_ms: u32,
     /// Spare, zero now.
     spare: u32,

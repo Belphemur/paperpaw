@@ -43,6 +43,13 @@ impl Gate {
         self.queue.len()
     }
 
+    /// Whether someone waits and every slot is held: a socket that sits
+    /// idle may be asked to give its slot up.
+    #[must_use]
+    pub fn pressed(&self) -> bool {
+        !self.queue.is_empty() && self.held >= self.capacity
+    }
+
     /// Gets in line; the ticket to [`take`](Gate::take) with.
     pub fn ask(&mut self) -> u32 {
         let ticket = self.next;
@@ -120,6 +127,35 @@ mod tests {
         gate.cancel(third);
         gate.cancel(second);
         assert_eq!((gate.held(), gate.waiting()), (1, 0));
+    }
+
+    #[test]
+    fn the_gate_is_pressed_when_one_waits_and_none_is_free() {
+        let mut gate = Gate::new(1);
+        assert!(!gate.pressed());
+        let (first, second) = (gate.ask(), gate.ask());
+        // A slot is free: not pressed.
+        assert!(!gate.pressed());
+        assert!(gate.take(first));
+        // The first holds the one slot, the second waits.
+        assert!(gate.pressed());
+        gate.cancel(second);
+        assert!(!gate.pressed());
+        // Nobody waits: not pressed though the slot is held.
+        gate.release();
+        assert!(!gate.pressed());
+    }
+
+    #[test]
+    fn a_gate_of_two_is_not_pressed_with_one_free() {
+        let mut gate = Gate::new(2);
+        let (first, second, third) = (gate.ask(), gate.ask(), gate.ask());
+        assert!(gate.take(first));
+        assert!(!gate.pressed());
+        assert!(gate.take(second));
+        assert!(gate.pressed());
+        gate.cancel(third);
+        assert!(!gate.pressed());
     }
 
     #[test]

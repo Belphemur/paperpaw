@@ -71,6 +71,14 @@ impl Watch {
         }
     }
 
+    /// Whether a secure socket idle for longer than `grace_ms` gives its
+    /// slot up for one that waits for it (`Timeout`, `slot needed`).
+    #[must_use]
+    pub fn yields(&self, now: u64, grace_ms: u64) -> Option<(SocketError, &'static str)> {
+        (now.saturating_sub(self.active) > grace_ms)
+            .then_some((SocketError::Timeout, "slot needed"))
+    }
+
     /// The most that may pass from now until something is due: for the
     /// main loop to come by again.
     #[must_use]
@@ -144,6 +152,20 @@ mod tests {
         let mut watch = Watch::new(0, 1_000, 0);
         watch.secured(500);
         assert_eq!(watch.expired(10_000_000, Stage::Secure), None);
+    }
+
+    #[test]
+    fn an_idle_socket_gives_its_slot_up_after_the_grace_and_not_before() {
+        let mut watch = Watch::new(0, 20_000, 0);
+        watch.secured(1_000);
+        assert_eq!(watch.yields(6_000, 5_000), None);
+        assert_eq!(
+            watch.yields(6_001, 5_000),
+            Some((SocketError::Timeout, "slot needed"))
+        );
+        // Traffic keeps it.
+        watch.touch(6_000);
+        assert_eq!(watch.yields(10_000, 5_000), None);
     }
 
     #[test]

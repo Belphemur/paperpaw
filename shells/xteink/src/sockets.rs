@@ -46,6 +46,9 @@ const CONNECT_MS: u64 = 10_000;
 const KEEP_ALIVE_MS: u64 = 15_000;
 /// A connection whose other side answers nothing for this long ends.
 const GIVE_UP_MS: u64 = 45_000;
+/// A secure socket idle for this long gives its slot up where another
+/// request or socket waits for one (see `tls_slots::pressed`).
+const YIELD_AFTER_MS: u64 = 5_000;
 /// Plain bytes read from a secure connection at a time.
 const READ_PART: usize = 1024;
 /// Answers to a broadcast taken at most, and their bytes in all.
@@ -515,6 +518,17 @@ impl Socket {
             } else {
                 (error, reason)
             };
+            events.push(failed(number, error, reason));
+            return false;
+        }
+        // Every slot is held and someone waits: a socket that sits idle
+        // (a mail plugin gone quiet) makes room, instead of HTTPS failing
+        // `Busy` behind it.
+        if let (Some(secure), Phase::Secure(_)) = (&self.secure, &self.phase)
+            && crate::tls_slots::pressed()
+            && let Some((error, reason)) = secure.watch.yields(now.0, YIELD_AFTER_MS)
+        {
+            log::info!("socket {number}: closed, {reason}");
             events.push(failed(number, error, reason));
             return false;
         }

@@ -340,7 +340,12 @@ impl KernelBuilder {
 
     /// How many TLS connections the shell holds at once for plugins'
     /// sockets and HTTPS together (`SocketCall::Connect`'s `tls`,
-    /// `SocketCall::StartTls`); without, TLS sockets fail at once.
+    /// `SocketCall::StartTls`); without, TLS sockets fail at once. Where
+    /// every one is held and another waits, a shell may end a secure
+    /// socket that was idle for a few seconds
+    /// ([`SocketError::Timeout`](paperpaw_sdk::SocketError::Timeout),
+    /// `reason` `slot needed`), so that a plugin that goes quiet cannot
+    /// keep the only one of a small device from HTTPS for good.
     pub fn tls_sessions(mut self, sessions: u8) -> Self {
         self.0.caps.tls_sessions = sessions;
         self

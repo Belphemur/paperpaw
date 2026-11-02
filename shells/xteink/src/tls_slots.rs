@@ -61,3 +61,8 @@ impl Drop for Waiter {
         }
     }
 }
+
+/// Whether someone waits for a slot and none is free.
+pub fn pressed() -> bool {
+    critical_section::with(|cs| GATE.borrow_ref(cs).pressed())
+}
