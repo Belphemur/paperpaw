@@ -18,8 +18,10 @@
 //! note.
 
 use alloc::boxed::Box;
+use alloc::rc::Rc;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use core::cell::RefCell;
 
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::widgets::{
@@ -208,6 +210,7 @@ static SEARCH_SETTINGS: [SettingSpec; 3] = [
 ];
 
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
+    let made = Made::default();
     for (kind, settings, cells) in [
         (Kind::Recent, &RECENT_SETTINGS[..], CellSpan::new(2, 2)),
         (Kind::Pinned, &PINNED_SETTINGS[..], CellSpan::new(2, 1)),
@@ -219,8 +222,9 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_setting_group(group(kind))?;
         r.add_settings(settings)?;
         r.add_widget(
-            WidgetSpec::new(kind.id(), kind.name(), move |_| {
-                Box::new(NoteWidget::new(kind))
+            WidgetSpec::new(kind.id(), kind.name(), {
+                let made = made.clone();
+                move |_| Box::new(NoteWidget::new(kind, made.clone()))
             })
             .category(widgets::categories::PERSONAL)
             .cells(cells),
@@ -273,7 +277,18 @@ struct Line {
     command: Command,
 }
 
+/// What the widgets made, by where each is placed: the signature it was
+/// made from (see [`NoteWidget::signature`]) and its lines. The home screen
+/// lets its widgets go when a book covers it and makes them anew when it
+/// shows, so what they made is kept here, not in them: the index (hundreds
+/// of KiB on a big vault) is not read on every show.
+type Made = Rc<RefCell<Vec<(String, String, Vec<Line>)>>>;
+
+/// Placements kept in [`Made`] at most.
+const MAX_MADE: usize = 16;
+
 struct NoteWidget {
+    made: Made,
     kind: Kind,
     /// Where it is placed (`notes-vault.recent@2`), for its settings.
     placement: Option<String>,
@@ -285,14 +300,47 @@ struct NoteWidget {
 }
 
 impl NoteWidget {
-    fn new(kind: Kind) -> Self {
+    fn new(kind: Kind, made: Made) -> Self {
         Self {
+            made,
             kind,
             placement: None,
             lines: Vec::new(),
             read: false,
             random: None,
         }
+    }
+
+    /// What the lines are made from, as far as it can change them: the
+    /// index (its state, with the stamp that changes when a note comes,
+    /// goes or changes, and the size of the tags' file), the widget's
+    /// settings, the day and the language. `None` where there is nothing
+    /// to read (no vault, no index, the search, which reads none).
+    fn signature(&self, env: &Env<'_>) -> Option<String> {
+        let root = crate::vault(env);
+        if self.kind == Kind::Search || root.is_empty() {
+            return None;
+        }
+        let state = index::kept(env.storage(), &root)?;
+        let tags = env.storage().size(&index::tags_path()).ok();
+        let day = time::unix_seconds(env).unwrap_or(0) / 86_400;
+        // A random note stays for an hour.
+        let hour = if self.kind == Kind::Random {
+            env.now().0 / 3_600_000
+        } else {
+            0
+        };
+        Some(alloc::format!(
+            "{state:?}|{tags:?}|{day}|{hour}|{}|{}|{}|{}|{}|{}|{}|{}",
+            self.text(env, "folder"),
+            self.text(env, "title"),
+            self.count(env, 5, 12),
+            self.shows(env, "where"),
+            self.shows(env, "excerpt"),
+            self.shows(env, "heading"),
+            env.i18n().plural("notes-vault.notes", 2, &[]),
+            root,
+        ))
     }
 
     /// The setting `name` of this widget (of its placement, if it is one).
@@ -502,7 +550,28 @@ fn find_by_title(env: &Env<'_>, title: &str) -> Option<String> {
 
 impl Widget for NoteWidget {
     fn update(&mut self, env: &Env<'_>) -> bool {
-        let lines = self.lines(env);
+        let id = self.key("");
+        let made_from = self.signature(env);
+        // The same index and settings as when it was made last (by this
+        // widget or the one the home screen let go): the lines are the
+        // same.
+        let kept = made_from.as_ref().and_then(|signature| {
+            self.made
+                .borrow()
+                .iter()
+                .find(|(placed, from, _)| *placed == id && from == signature)
+                .map(|(_, _, lines)| lines.clone())
+        });
+        let made = kept.is_none();
+        let lines = kept.unwrap_or_else(|| self.lines(env));
+        if let (true, Some(signature)) = (made, made_from) {
+            let mut all = self.made.borrow_mut();
+            all.retain(|(placed, ..)| *placed != id);
+            if all.len() >= MAX_MADE {
+                all.remove(0);
+            }
+            all.push((id, signature, lines.clone()));
+        }
         let changed = !self.read || lines != self.lines;
         self.read = true;
         self.lines = lines;

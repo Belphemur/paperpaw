@@ -22,10 +22,14 @@ use std::rc::Rc;
 
 /// A storage the test looks into while the kernel has it.
 #[derive(Clone, Default)]
-struct Shared(Rc<MemoryStorage>);
+struct Shared(Rc<MemoryStorage>, Rc<std::cell::Cell<usize>>);
 
 impl Storage for Shared {
     fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
+        // How often the index is read from its start.
+        if offset == 0 && path.ends_with("/index.txt") {
+            self.1.set(self.1.get() + 1);
+        }
         self.0.read_at(path, offset, buf)
     }
     fn size(&self, path: &str) -> Result<u64, StorageError> {
@@ -532,6 +536,26 @@ fn the_widgets_say_what_is_missing_then_show_the_notes() {
     for expected in ["Inbox", "Plan", "#todo", "2 notes", "The plan, see Inbox."] {
         assert!(shown.contains(expected), "{expected} in {shown}");
     }
+}
+
+#[test]
+fn the_widgets_do_not_read_the_index_again_while_it_is_the_same() {
+    let page = "notes-vault.recent 0/0 4x2, notes-vault.tags 0/2 4x1, notes-vault.pinned 0/3 4x1";
+    let mut vault = with_widgets(&small_vault(), "pinned.title = plan\n", page);
+    vault.open(HOME, Params::new());
+    vault.run(actions::BACK);
+    vault.open(Id::new_static("home.dashboard"), Params::new());
+    assert!(vault.says("Plan"), "{:?}", vault.labels());
+    // The home screen shows again and again: the widgets' lines are as they
+    // were, and the index (hundreds of KiB on a big vault) is not read
+    // for them each time.
+    let reads = vault.storage.1.get();
+    for _ in 0..3 {
+        vault.open(Id::new_static("home.add-widget"), Params::new());
+        vault.run(actions::BACK);
+        assert!(vault.says("Plan"), "{:?}", vault.labels());
+    }
+    assert_eq!(vault.storage.1.get(), reads, "read for the widgets");
 }
 
 #[test]
