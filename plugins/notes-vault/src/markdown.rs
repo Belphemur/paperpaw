@@ -619,6 +619,10 @@ fn convert(storage: &dyn Storage, path: &str, to: &str) -> Result<(), DocumentEr
         vault: Some(Vault::new(storage, path)),
         ..State::default()
     };
+    // The pictures it embeds, looked for in one walk of the vault.
+    if let Some(vault) = &state.vault {
+        vault.prefetch(path);
+    }
     let mut out = String::new();
     let mut pending: Vec<u8> = Vec::new();
     // How much of `pending` is known to hold no line break.
