@@ -179,6 +179,21 @@ pub(crate) struct Loaded {
     /// What it says when read out (spoken focus, taps by name): its
     /// title first, then its details and how far it is read.
     pub(crate) spoken: String,
+    /// Its cover is not read from the book yet (the library's walk reads
+    /// a book's details alone): read when it shows, a book at a time
+    /// ([`Loaded::read_cover`]), made small to this size and variant.
+    pub(crate) unread_cover: Option<((u16, u16), String)>,
+}
+
+/// Reads the cover of the first book of `loaded` (in the order shown)
+/// whose cover was not read yet: whether there was one.
+pub(crate) fn read_next_cover(env: &Env<'_>, loaded: &mut [Loaded]) -> bool {
+    loaded.iter_mut().any(|book| book.read_cover(env))
+}
+
+/// Whether a cover of `loaded` is still to be read.
+pub(crate) fn covers_unread(loaded: &[Loaded]) -> bool {
+    loaded.iter().any(|book| book.unread_cover.is_some())
 }
 
 impl Loaded {
@@ -241,6 +256,10 @@ impl Loaded {
             (false, true) => series.clone(),
             (false, false) => format!("{series} {number}"),
         };
+        let unread_cover = book
+            .as_ref()
+            .filter(|book| !book.indexed)
+            .map(|_| (cover, String::from(variant)));
         Loaded {
             path,
             title,
@@ -254,8 +273,30 @@ impl Loaded {
             percent: format!("{progress} %"),
             badges,
             badge_icons,
+            unread_cover,
             ..Loaded::default()
         }
+    }
+
+    /// Reads its cover from the book where it was not yet (opening it:
+    /// a moment, a picture decoded), kept by the library; whether it was
+    /// to be read.
+    pub(crate) fn read_cover(&mut self, env: &Env<'_>) -> bool {
+        let Some(((width, height), variant)) = self.unread_cover.take() else {
+            return false;
+        };
+        let book = library::index(env, &self.path);
+        let format = env.device().display.format;
+        self.thumb = library::cover_variant(
+            env.storage(),
+            &self.path,
+            &book,
+            width,
+            height,
+            format,
+            &variant,
+        );
+        true
     }
 
     /// `note` with its badges of words after it.

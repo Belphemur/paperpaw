@@ -59,6 +59,9 @@ use index::{Filter, NEVER, hash};
 use paperpaw_sdk::library::sorted::{self, Entry, Sorted};
 use rows::{Loaded, Sizes};
 
+/// Between two covers read from their books: input comes between.
+pub(crate) const COVER_GAP_MS: u64 = 20;
+
 use crate::names::{self, Bound, Distinct, Firsts};
 
 /// Finds a book by a letter ([`find`]).
@@ -1185,23 +1188,8 @@ impl Screen for ListScreen {
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
-        let env = *cx.env();
-        if core::mem::take(&mut self.fresh) {
-            // The kernel makes the catalog where it is not there, or was
-            // not made since PaperPaw started; it shows once it is.
-            cx.command(library::request_catalog());
-        } else if core::mem::take(&mut self.covered) {
-            // Back from a book or a screen over the whole library: the
-            // sorted books read through again, with what changed
-            // meanwhile (the books read last, the status of those read).
-            self.archive = archive(&env);
-            self.reopen(&env);
-            self.collecting = collecting(&env);
-            let keep = self.kept_focus.take();
-            self.refilter_keeping(&env, keep, true);
-            cx.request_redraw();
-        }
-        self.ask(cx);
+        self.shown(cx);
+        self.wake_for_covers(cx);
     }
 
     /// Turned or resized: laid out anew for the size, the focus on its
@@ -1236,6 +1224,59 @@ impl Screen for ListScreen {
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
+        let handled = self.act(action, cx);
+        self.wake_for_covers(cx);
+        handled
+    }
+
+    fn on_gesture(&mut self, gesture: Gesture, cx: &mut Cx<'_, '_>) -> Handled {
+        let handled = self.gesture(gesture, cx);
+        self.wake_for_covers(cx);
+        handled
+    }
+
+    fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
+        self.heard(event, params, cx);
+        self.wake_for_covers(cx);
+    }
+
+    /// The covers of the page shown not read yet, one a tick (each opens
+    /// its book), the first shown first; drawn as each comes.
+    fn on_timer(&mut self, cx: &mut Cx<'_, '_>) {
+        let env = *cx.env();
+        if !self.covered && rows::read_next_cover(&env, &mut self.loaded) {
+            cx.request_redraw();
+        }
+        if !self.covered && rows::covers_unread(&self.loaded) {
+            cx.wake_at(env.now().add_millis(COVER_GAP_MS));
+        }
+    }
+}
+
+/// What the screen does, its covers looked for after each
+/// ([`ListScreen::wake_for_covers`]).
+impl ListScreen {
+    fn shown(&mut self, cx: &mut Cx<'_, '_>) {
+        let env = *cx.env();
+        if core::mem::take(&mut self.fresh) {
+            // The kernel makes the catalog where it is not there, or was
+            // not made since PaperPaw started; it shows once it is.
+            cx.command(library::request_catalog());
+        } else if core::mem::take(&mut self.covered) {
+            // Back from a book or a screen over the whole library: the
+            // sorted books read through again, with what changed
+            // meanwhile (the books read last, the status of those read).
+            self.archive = archive(&env);
+            self.reopen(&env);
+            self.collecting = collecting(&env);
+            let keep = self.kept_focus.take();
+            self.refilter_keeping(&env, keep, true);
+            cx.request_redraw();
+        }
+        self.ask(cx);
+    }
+
+    fn act(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let a = action;
         let touch = cx.env().device().input.touch;
         let side = *a == actions::LEFT || *a == actions::RIGHT;
@@ -1273,7 +1314,7 @@ impl Screen for ListScreen {
         Handled::Yes
     }
 
-    fn on_gesture(&mut self, gesture: Gesture, cx: &mut Cx<'_, '_>) -> Handled {
+    fn gesture(&mut self, gesture: Gesture, cx: &mut Cx<'_, '_>) -> Handled {
         let point = gesture.start;
         let hit = self
             .page_range(self.page_of(self.focus))
@@ -1331,7 +1372,7 @@ impl Screen for ListScreen {
         }
     }
 
-    fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
+    fn heard(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
         if let Some(picked) = SHOWN.read(event, params) {
             match SHOW_OPTIONS.iter().position(|o| *o == picked.option) {
                 Some(n) if n < SHOW_FILTERS.len() => {
@@ -1444,6 +1485,13 @@ impl Screen for ListScreen {
             if !self.covered {
                 cx.wake_at(env.now());
             }
+        }
+    }
+
+    /// Wakes for the covers of the page shown not read yet.
+    fn wake_for_covers(&self, cx: &mut Cx<'_, '_>) {
+        if !self.covered && rows::covers_unread(&self.loaded) {
+            cx.wake_at(cx.env().now());
         }
     }
 }

@@ -413,6 +413,48 @@ impl Screen for ShelfScreen {
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
+        self.shown(cx);
+        self.wake_for_covers(cx);
+    }
+
+    fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
+        self.heard(event, params, cx);
+        self.wake_for_covers(cx);
+    }
+
+    /// The covers of the page shown not read yet, one a tick, as the
+    /// library's list reads them.
+    fn on_timer(&mut self, cx: &mut Cx<'_, '_>) {
+        let env = *cx.env();
+        if rows::read_next_cover(&env, &mut self.loaded) {
+            cx.request_redraw();
+        }
+        if rows::covers_unread(&self.loaded) {
+            cx.wake_at(env.now().add_millis(super::COVER_GAP_MS));
+        }
+    }
+
+    fn on_hide(&mut self) {
+        self.loaded = Vec::new();
+        self.loaded_page = None;
+    }
+
+    fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
+        let handled = self.act(action, cx);
+        self.wake_for_covers(cx);
+        handled
+    }
+
+    fn on_gesture(&mut self, gesture: Gesture, cx: &mut Cx<'_, '_>) -> Handled {
+        let handled = self.gesture(gesture, cx);
+        self.wake_for_covers(cx);
+        handled
+    }
+}
+
+/// What the screen does, its covers looked for after each.
+impl ShelfScreen {
+    fn shown(&mut self, cx: &mut Cx<'_, '_>) {
         self.grays = crate::covers_in_grays(cx.env());
         if core::mem::take(&mut self.fresh) {
             return;
@@ -430,29 +472,7 @@ impl Screen for ShelfScreen {
         cx.request_redraw();
     }
 
-    fn on_event(&mut self, event: &Id, _: &Params, cx: &mut Cx<'_, '_>) {
-        // A new catalog (its books where their lines are now), or a book
-        // gone (noted beside it).
-        if [
-            events::CATALOG_CHANGED.id(),
-            events::BOOK_REMOVED.id(),
-            events::BOOK_MOVED.id(),
-        ]
-        .contains(&event)
-        {
-            let env = *cx.env();
-            self.find_again(&env);
-            cx.request_redraw();
-            cx.request_refresh(RefreshMode::Partial);
-        }
-    }
-
-    fn on_hide(&mut self) {
-        self.loaded = Vec::new();
-        self.loaded_page = None;
-    }
-
-    fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
+    fn act(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let a = action;
         let len = self.entries.len();
         if let Some(change) = self.list.navigate(a, len) {
@@ -476,7 +496,7 @@ impl Screen for ShelfScreen {
         Handled::Yes
     }
 
-    fn on_gesture(&mut self, gesture: Gesture, cx: &mut Cx<'_, '_>) -> Handled {
+    fn gesture(&mut self, gesture: Gesture, cx: &mut Cx<'_, '_>) -> Handled {
         let len = self.entries.len();
         let hit = self.list.hit(gesture.start, len);
         match gesture.kind {
@@ -507,6 +527,30 @@ impl Screen for ShelfScreen {
                 }
             }
             _ => Handled::No,
+        }
+    }
+
+    fn heard(&mut self, event: &Id, _: &Params, cx: &mut Cx<'_, '_>) {
+        // A new catalog (its books where their lines are now), or a book
+        // gone (noted beside it).
+        if [
+            events::CATALOG_CHANGED.id(),
+            events::BOOK_REMOVED.id(),
+            events::BOOK_MOVED.id(),
+        ]
+        .contains(&event)
+        {
+            let env = *cx.env();
+            self.find_again(&env);
+            cx.request_redraw();
+            cx.request_refresh(RefreshMode::Partial);
+        }
+    }
+
+    /// Wakes for the covers of the page shown not read yet.
+    fn wake_for_covers(&self, cx: &mut Cx<'_, '_>) {
+        if rows::covers_unread(&self.loaded) {
+            cx.wake_at(cx.env().now());
         }
     }
 }

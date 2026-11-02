@@ -6,6 +6,16 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+### Changed
+
+- The first walk of new books reads no covers (#398): a book's cover is read from it when a view first shows it (the
+  library's list and grid, its book sheet, the home screen's books, the sleep screen), one book at a time, the books
+  shown first; a book never shown never costs its cover. Until then the book shows as one without a cover does
+  (title and author). Plugins see such a book not yet indexed (`Book::indexed` off, its title and author there) and
+  read its cover with `library::index`, as for any book not indexed. On the bench's card the first walk of 1,000
+  books that all have covers writes 26,952 blocks instead of 139,557 and reads 75,974 instead of 152,975, its peak
+  26.2 KiB instead of 70.0 KiB.
+
 ## [0.6.0-beta.1] - 2026-11-02
 
 **Plugins of this release must be built from `6c4a19dc` or later** (plugin interface 6, #363). 0.6.0-beta.1 takes
