@@ -9,6 +9,7 @@ use paperpaw_platform::MemoryClass;
 use paperpaw_sdk::Env;
 use paperpaw_sdk::library::catalog::{self, Record, Show};
 use paperpaw_sdk::library::index::{self, letter, sort_key, surname};
+use paperpaw_sdk::library::sorted::{self, Sorted, View};
 use paperpaw_sdk::library::{self, index::Index};
 
 use super::{copy, measure, report};
@@ -28,6 +29,7 @@ pub(super) fn all(env: &Env<'_>, more: Option<&str>, walks: bool) {
     let size = env.storage().size(CATALOG).unwrap_or(0);
     println!("catalog on the card\t{:.1} KiB", size as f64 / 1024.0);
     list(env);
+    sorted_list(env);
     passes(env);
     search(env);
     if let Some(more) = more {
@@ -79,6 +81,71 @@ fn list(env: &Env<'_>) {
         "list: a page in the middle",
         &took,
         &format!("{lines} lines"),
+    );
+}
+
+/// The list as every device has it now: the books sorted on the card
+/// (made as the kernel makes them), opened, paged, a book found.
+fn sorted_list(env: &Env<'_>) {
+    let (steps, took) = measure(|| {
+        let mut build = sorted::Build::start(env, "").ok()?;
+        let mut steps = 0u64;
+        while !build.step(env).ok()? {
+            steps += 1;
+        }
+        Some(steps)
+    });
+    let note = steps.map_or_else(|| String::from("failed"), |s| format!("{s} steps"));
+    report("sorted: made (kernel)", &took, &note);
+    let (opened, took) = measure(|| Sorted::open(env, ""));
+    let Some(sorted) = opened else {
+        report("sorted: opened", &took, "failed");
+        return;
+    };
+    report(
+        "sorted: opened (read through)",
+        &took,
+        &format!("{} books", sorted.total()),
+    );
+    let storage = env.storage();
+    for (what, view) in [
+        ("by recent", View::new(Show::All, true, false)),
+        ("by title", View::new(Show::All, false, false)),
+        ("covers, stacked", View::new(Show::All, true, true)),
+    ] {
+        let len = sorted.len(view);
+        let (page, took) = measure(|| sorted.page(storage, view, 0, 10));
+        report(
+            &format!("sorted: first page, {what}"),
+            &took,
+            &format!("{} of {len}", page.len()),
+        );
+        let (page, took) = measure(|| sorted.page(storage, view, len / 2, 10));
+        report(
+            &format!("sorted: middle page, {what}"),
+            &took,
+            &format!("{} of {len}", page.len()),
+        );
+        let (page, took) = measure(|| sorted.page(storage, view, len.saturating_sub(10), 10));
+        report(
+            &format!("sorted: last page, {what}"),
+            &took,
+            &format!("{} of {len}", page.len()),
+        );
+        if let Some(entry) = page.last() {
+            let (at, took) = measure(|| sorted.find(storage, view, entry.item.hash));
+            report(
+                &format!("sorted: find a book, {what}"),
+                &took,
+                &format!("at {at:?}"),
+            );
+        }
+    }
+    let (next, took) = measure(|| sorted.next_in_series(storage, true));
+    report(
+        "sorted: next in series",
+        &took,
+        &format!("{} series", next.len()),
     );
 }
 
