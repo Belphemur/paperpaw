@@ -27,7 +27,9 @@ const UNKNOWN: u32 = u32::MAX;
 /// opened again.
 const FAILED: u32 = u32::MAX - 1;
 
-/// An open EPUB. The package is read once into the cache; chapters are
+/// An open EPUB. The package is read once into the cache, when the book is
+/// first read (its contents, stylesheets or a chapter wanted): opened only
+/// for its details (the library's walk), nothing is written. Chapters are
 /// converted on first use and read from the cache afterwards. In memory:
 /// 8 bytes per archive entry and 12 per chapter.
 #[derive(Debug)]
@@ -38,8 +40,13 @@ pub struct EpubDocument {
     /// Length of each converted chapter's text, once known.
     lengths: Vec<Cell<u32>>,
     metadata: Metadata,
-    toc_len: u32,
+    /// Entries of the contents, once the package is in the cache.
+    toc_len: Cell<u32>,
     cache: String,
+    /// The book's fingerprint, the package's in the cache; whether the
+    /// package is there (see [`EpubDocument::built`]).
+    book: String,
+    built: Cell<bool>,
     /// The book's path, and the stylesheets to apply after its own (e.g.
     /// the plugins'): for [`EpubDocument::styled`].
     path: String,
@@ -371,14 +378,17 @@ impl EpubDocument {
         let archive = ZipArchive::open(storage, path).map_err(package::error)?;
         let cache = book_cache(path);
         let book = crate::fingerprint(storage, path)?;
-        let package = match package::load(storage, &cache, &book)? {
-            Some(package) => package,
+        let (package, built) = match package::load(storage, &cache, &book)? {
+            Some(package) => (package, true),
             None => {
                 // Another book, file version or cache format: start over,
                 // also with its pictures and its chapters converted with
-                // stylesheets or without.
-                let _ = storage.remove_dir_all(&cache);
-                package::build(storage, &archive, &cache, &book)?
+                // stylesheets or without. Where there is none, a cover
+                // made for the library stays.
+                if package::cached(storage, &cache) {
+                    let _ = storage.remove_dir_all(&cache);
+                }
+                (package::read(storage, &archive)?, false)
             }
         };
         let styled = OnceCell::new();
@@ -399,10 +409,12 @@ impl EpubDocument {
             lengths,
             spine: package.spine,
             metadata,
-            toc_len: package.toc_len,
+            toc_len: Cell::new(package.toc_len),
             cover: package.cover,
             archive,
             cache,
+            book,
+            built: Cell::new(built),
             path: String::from(path),
             plugin_css: String::from(plugin_css),
             styled,
@@ -414,6 +426,18 @@ impl EpubDocument {
             anchors: cached::AnchorHint::default(),
             known: core::cell::RefCell::new(None),
         })
+    }
+
+    /// The package in the cache, written the first time the book is read
+    /// (see [`EpubDocument`]); an error where it cannot be.
+    fn built(&self, storage: &dyn Storage) -> Result<(), DocumentError> {
+        if self.built.get() {
+            return Ok(());
+        }
+        let package = package::build(storage, &self.archive, &self.cache, &self.book)?;
+        self.toc_len.set(package.toc_len);
+        self.built.set(true);
+        Ok(())
     }
 
     /// Where its chapters are converted to and one's own stylesheets:
@@ -447,6 +471,7 @@ impl EpubDocument {
         ) else {
             return Err(DocumentError::Malformed(Cow::Borrowed("no such chapter")));
         };
+        self.built(storage)?;
         let paths = self.paths(storage, section);
         let length = match cached::converted_length(storage, &paths) {
             Some(length) => length,
@@ -541,7 +566,7 @@ impl EpubDocument {
             here: Vec::new(),
         };
         let mut at = 0;
-        cached::lines_from(storage, &self.pages_path(), 0, |line, next| {
+        cached::lines_from(storage, &self.pages_path(storage), 0, |line, next| {
             let line_at = core::mem::replace(&mut at, next);
             let mut fields = line.splitn(3, '\t');
             let (Some(Ok(s)), Some(fragment)) =
@@ -563,7 +588,9 @@ impl EpubDocument {
         pages
     }
 
-    fn pages_path(&self) -> String {
+    fn pages_path(&self, storage: &dyn Storage) -> String {
+        // Listed with the contents.
+        let _ = self.built(storage);
         alloc::format!("{}/pages.txt", self.cache)
     }
 }
@@ -591,7 +618,7 @@ impl Document for EpubDocument {
             .map(|(_, line)| *line)
             .or(pages.before)?;
         let mut label = None;
-        cached::lines_from(storage, &self.pages_path(), line, |line, _| {
+        cached::lines_from(storage, &self.pages_path(storage), line, |line, _| {
             label = line.splitn(3, '\t').nth(2).map(String::from);
             false
         });
@@ -654,11 +681,14 @@ impl Document for EpubDocument {
             return Ok(None);
         };
         // Named by its size: decoded anew for a screen that shows it larger.
+        // Without the package in the cache, nothing says what is there is
+        // this book's (one replaced on the card since): decoded again.
         let base = alloc::format!("{}/cover-{}", self.cache, self.cover_fit.long);
-        if crate::pictures::failed(storage, &base) {
+        let known = self.built.get();
+        if known && crate::pictures::failed(storage, &base) {
             return Ok(None);
         }
-        if !crate::pictures::has(storage, &base, self.color) {
+        if !known || !crate::pictures::has(storage, &base, self.color) {
             convert::decode_image(
                 storage,
                 &self.archive,
@@ -780,7 +810,7 @@ impl Document for EpubDocument {
     }
 
     fn fonts(&self, storage: &dyn Storage) -> Vec<EmbeddedFont> {
-        if !self.styles {
+        if !self.styles || self.built(storage).is_err() {
             return Vec::new();
         }
         package::fonts(storage, &self.cache)
@@ -795,6 +825,7 @@ impl Document for EpubDocument {
     }
 
     fn font_data(&self, storage: &dyn Storage, index: usize) -> Result<Vec<u8>, DocumentError> {
+        self.built(storage)?;
         let (identifier, fonts) = package::fonts(storage, &self.cache);
         let font = fonts
             .get(index)
@@ -895,13 +926,17 @@ impl Document for EpubDocument {
         Some(Locator::new(section, offset))
     }
 
-    fn toc_len(&self, _: &dyn Storage) -> u32 {
-        self.toc_len
+    fn toc_len(&self, storage: &dyn Storage) -> u32 {
+        match self.built(storage) {
+            Ok(()) => self.toc_len.get(),
+            Err(_) => 0,
+        }
     }
 
     /// Points at the start of the entry's chapter; finding an anchor needs
     /// the chapter converted, which [`Document::toc_target`] does.
     fn toc_entry(&self, storage: &dyn Storage, index: u32) -> Option<TocEntry> {
+        self.built(storage).ok()?;
         let entry = package::toc_entry(storage, &self.cache, index)?;
         Some(TocEntry {
             title: entry.title,
@@ -911,6 +946,7 @@ impl Document for EpubDocument {
     }
 
     fn toc_target(&self, storage: &dyn Storage, index: u32) -> Option<Locator> {
+        self.built(storage).ok()?;
         let entry = package::toc_entry(storage, &self.cache, index)?;
         let offset = entry
             .fragment

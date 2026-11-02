@@ -14,5 +14,8 @@ paperpaw-platform.workspace = true
 paperpaw-fat.workspace = true
 paperpaw-plugin-format-epub.workspace = true
 
+[dev-dependencies]
+paperpaw-zip = { workspace = true, features = ["testing"] }
+
 [lints]
 workspace = true

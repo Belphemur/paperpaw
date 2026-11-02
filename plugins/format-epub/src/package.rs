@@ -598,6 +598,28 @@ impl<'a> TocWriter<'a> {
     }
 }
 
+/// What the package says of the book, read from the archive with
+/// nothing written: its metadata, chapters and cover. The contents and
+/// how long they are, the stylesheets and the fonts come with [`build`],
+/// once the book is read (a walk of the library needs none of them).
+pub(crate) fn read(storage: &dyn Storage, archive: &ZipArchive) -> Result<Package, DocumentError> {
+    let opf_path = package_path(storage, archive)?;
+    let opf = read_metadata(storage, archive, &opf_path)?;
+    let items = read_manifest(storage, archive, &opf_path, &opf)?;
+    Ok(Package {
+        metadata: opf.metadata,
+        spine: items.spine,
+        toc_len: 0,
+        cover: items.cover,
+    })
+}
+
+/// Whether a package of some book is in the cache: of another book or
+/// version where [`load`] found none.
+pub(crate) fn cached(storage: &dyn Storage, cache: &str) -> bool {
+    storage.exists(&path(cache, "package.ini"))
+}
+
 /// Reads the package from the archive and writes it to the cache, for
 /// the book of fingerprint `book`.
 pub(crate) fn build(

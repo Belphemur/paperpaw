@@ -6,6 +6,15 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+### Changed
+
+- The first walk of new books writes about a sixth of what it did (#98): an EPUB is opened for its details only (title,
+  authors, series, cover) and its package goes into the reader's cache the first time the book is read, instead of
+  a folder and its files written for every book the library finds. On the bench's card (FAT32, clusters of 32 KiB)
+  the first walk of 1,000 books writes 26,339 blocks instead of 154,555 and reads 74,524 instead of 144,467; the
+  X4 test of 3,000 small EPUBs (about 100 books a minute) is to be measured again. Covers are still made for the library during the walk; until
+  the book is first read, its cover is made anew for a book replaced on the card.
+
 ## [0.6.0-beta.1] - 2026-11-02
 
 **Plugins of this release must be built from `6c4a19dc` or later** (plugin interface 6, #363). 0.6.0-beta.1 takes
