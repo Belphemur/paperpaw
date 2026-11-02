@@ -41,6 +41,13 @@ before it are thrown away.
   UTF-8. `Capabilities::tls_sessions` says how many TLS
   connections fit at once, HTTPS among them; with none (every shell for now) TLS sockets fail at once,
   `SocketError::Unsupported`. The shells' TLS comes with the firmware's part of #81.
+- **X4, X4 Pro and X4 Classic: TLS for plugins' sockets** (#81): a socket made secure from the start or switched
+  to it (STARTTLS) is an mbedTLS session over the same connection HTTPS uses, the authorities of the firmware
+  (Mozilla's) or up to four pinned certificates (the server's own, by its SHA-256), the name asked for (SNI) and
+  checked, the dates checked once the time is known. The X4 holds one TLS session at a time and the X4 Pro and
+  Classic two, shared with HTTPS and served in the order asked: a socket that waits longer than its timeout fails
+  `Busy`. Nothing is sent or read before `Secured`; what came over a plain connection after the server's go-ahead
+  is thrown away before the handshake.
 - Screens mirror in a user-interface language that runs right to left (#33): the switch, value rows and their
   chevrons, ticked rows, the number buttons, text fields, dialog buttons, list rows' icons, chips, the date
   and time pickers, headings and the reader's menu bar start at the right, and left/right follow them. The

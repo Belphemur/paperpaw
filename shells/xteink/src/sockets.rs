@@ -187,30 +187,26 @@ impl Sockets {
             SocketCall::StartTls { socket, tls } => {
                 let at = self.sockets.iter().position(|s| s.number == socket)?;
                 let socket_ref = &mut self.sockets[at];
-                let refusal = match socket_ref.phase {
-                    Phase::Open(handle) if socket_ref.secure.is_none() => {
-                        let waiting = net.socket(handle).recv_queue() + socket_ref.gathered.len();
-                        tls_trust::starttls_refusal(waiting)
-                    }
-                    _ => Some((
-                        SocketError::NotReady,
-                        "the connection is not open and plain",
-                    )),
-                };
-                if let Some((error, reason)) = refusal {
-                    // Closed, not left plain: what it was to send secure
-                    // would go in the clear.
-                    self.sockets.remove(at).release(net);
-                    return Some(failed(socket, error, reason));
-                }
-                if let Phase::Open(handle) = socket_ref.phase {
+                // Only an open, plain connection with no read under way;
+                // else it is closed, not left plain: what it was to send
+                // secure would go in the clear.
+                if let Phase::Open(handle) = socket_ref.phase
+                    && socket_ref.secure.is_none()
+                    && socket_ref.reads.is_empty()
+                {
                     socket_ref.secure = Some(Secure::new(tls, now));
                     socket_ref.phase = Phase::Switching {
                         handle,
                         waiter: Waiter::ask(),
                     };
+                    return None;
                 }
-                None
+                self.sockets.remove(at).release(net);
+                Some(failed(
+                    socket,
+                    SocketError::NotReady,
+                    "the connection is not open and plain, or is being read",
+                ))
             }
             SocketCall::Connect {
                 socket,
@@ -242,12 +238,18 @@ impl Sockets {
                 None
             }
             SocketCall::Send { socket, data } => {
+                if let Some(refusal) = self.securing(socket, net) {
+                    return Some(refusal);
+                }
                 if let Some(s) = self.sockets.iter_mut().find(|s| s.number == socket) {
                     s.sends.push_back(data);
                 }
                 None
             }
             SocketCall::Read { socket, max } => {
+                if let Some(refusal) = self.securing(socket, net) {
+                    return Some(refusal);
+                }
                 if let Some(s) = self.sockets.iter_mut().find(|s| s.number == socket) {
                     s.reads.push_back(max.max(1));
                 }
@@ -271,6 +273,26 @@ impl Sockets {
                     .then_some(SocketEvent::Done { broadcast })
             }
         }
+    }
+
+    /// Closes `socket` and tells why, if it is being made secure: nothing
+    /// is sent or read on it until `Secured`, as the kernel keeps to
+    /// (the contract: bytes put on it now would go out before the
+    /// handshake, in the clear). `None` for any other.
+    fn securing(&mut self, socket: u32, net: &mut Net) -> Option<SocketEvent> {
+        let at = self.sockets.iter().position(|s| s.number == socket)?;
+        matches!(
+            self.sockets[at].stage(),
+            Some(Stage::Queued | Stage::Securing)
+        )
+        .then(|| {
+            self.sockets.remove(at).release(net);
+            failed(
+                socket,
+                SocketError::NotReady,
+                "nothing is sent or read before the connection is secure",
+            )
+        })
     }
 
     fn broadcast(
@@ -611,11 +633,23 @@ impl Socket {
         if !self.sends.is_empty() || socket.send_queue() > 0 || !clock_ready {
             return true;
         }
-        if let Some((error, reason)) =
-            tls_trust::starttls_refusal(socket.recv_queue() + self.gathered.len())
-        {
-            events.push(failed(self.number, error, reason));
-            return false;
+        // What came since the server's go-ahead was read (it should wait
+        // for the handshake) is thrown away: the session starts clean, and
+        // no byte the other side or someone between put in before it can
+        // pass for what came secure.
+        let mut dropped = self.gathered.len();
+        self.gathered.clear();
+        while socket.can_recv() {
+            match socket.recv(|data| (data.len(), data.len())) {
+                Ok(n) if n > 0 => dropped += n,
+                _ => break,
+            }
+        }
+        if dropped > 0 {
+            log::warn!(
+                "socket {}: {dropped} bytes before the TLS handshake thrown away",
+                self.number
+            );
         }
         let Phase::Switching { waiter, .. } = &mut self.phase else {
             return true;

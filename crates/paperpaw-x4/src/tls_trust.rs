@@ -148,17 +148,6 @@ pub fn outcome(fault: Fault, pinned: bool, shown: bool) -> Outcome {
     }
 }
 
-/// Why a switch to TLS is refused on a socket: bytes of the server wait
-/// unread (`waiting`: in the connection's buffer, or gathered for a read),
-/// which would pass for secure. It never starts the handshake over them.
-#[must_use]
-pub fn starttls_refusal(waiting: usize) -> Option<(SocketError, &'static str)> {
-    (waiting > 0).then_some((
-        SocketError::NotReady,
-        "the server sent bytes before the switch to TLS",
-    ))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -267,14 +256,5 @@ mod tests {
             assert_eq!(got, error);
             assert!(!reason.is_empty());
         }
-    }
-
-    #[test]
-    fn a_switch_over_bytes_that_came_is_refused() {
-        assert_eq!(starttls_refusal(0), None);
-        assert_eq!(
-            starttls_refusal(1).map(|(error, _)| error),
-            Some(SocketError::NotReady)
-        );
     }
 }
