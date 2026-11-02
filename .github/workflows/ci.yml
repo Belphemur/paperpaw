@@ -79,8 +79,9 @@ jobs:
         run: cargo doc --workspace --no-deps
         env:
           RUSTDOCFLAGS: -D warnings
-      # Builds without runtime font rendering use bitmap font packs.
-      - run: cargo test -p paperpaw-text -p paperpaw-plugin-fonts-default --no-default-features
+      # Builds without runtime font rendering use bitmap font packs; the plugins of the
+      # store that carry a copy of their card files for the apps read the card without it.
+      - run: cargo test -p paperpaw-text -p paperpaw-plugin-fonts-default -p paperpaw-plugin-reading-goal -p paperpaw-plugin-widgets -p paperpaw-plugin-vocabulary --no-default-features
 
   screens:
     name: Screens checked (paperpaw-dev)
