@@ -7,10 +7,14 @@
 # <baseline-ref> is the commit of the last interface raise (the tag
 # `interface-<n>` the raise leaves). A plugin built then calls the
 # firmware by index, and an index must keep meaning the same function with
-# the same behaviour. From the baseline this builds the test plugin
-# (crates/paperpaw-core/tests/native-plugin: the text calls of its
-# probe.rs) twice, and loads each into this tree's kernel
-# (crates/paperpaw-core/tests/native_plugin.rs):
+# the same behaviour. Against the baseline's crates this builds the test
+# plugin (crates/paperpaw-core/tests/native-plugin) twice, and loads each
+# into this tree's kernel (crates/paperpaw-core/tests/native_plugin.rs).
+# The plugin's code is this tree's (its probes: probe.rs, the text, list,
+# data and graphics calls; ui_probe.rs, every ui entry, mirrored, and text
+# drawn right to left), the SDK's code it carries or calls the baseline's,
+# as in a plugin built then: so a probe added later checks old plugins
+# too, and calls only what the baseline already has.
 #
 #  - A, with its own copies (as an unshared plugin): its calls must come
 #    out as this tree's own bodies give them. A body changed since the
@@ -45,6 +49,10 @@ lib="release/libpaperpaw_test_native_plugin.so"
 
 git worktree add --detach "$tree" "$base" > /dev/null
 trap 'git worktree remove --force "$tree" > /dev/null' EXIT
+plugin="$(dirname "$manifest")"
+rm -rf "${tree:?}/$plugin"
+mkdir -p "$tree/$plugin"
+tar -C "$plugin" --exclude=./target -cf - . | tar -C "$tree/$plugin" -xf -
 
 list() { sed -e 's/#.*//' "$1" | awk 'NF'; }
 echo "baseline ${base:0:12}: the shared list is a prefix of this tree's"
