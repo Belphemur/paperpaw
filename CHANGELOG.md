@@ -27,6 +27,15 @@ before it are thrown away.
   finds a place taken by another entry by its count. The catalog lists the library's folders so: the walk after
   a start reads a folder of 4,000 books (1,254 blocks) in 2,535 blocks instead of 66,460 (bench; the whole walk
   4,367 instead of 68,291).
+- **Plugin interface (next raise):** TLS for plugins' sockets (#81), as a mail plugin needs it (IMAP, SMTP):
+  `Command::connect_tls` is secure from the start, `Command::start_tls` switches an open socket (STARTTLS) once
+  everything the server sent was read, else it fails and closes. `Tls` sets it up: the authorities PaperPaw ships
+  (`Tls::new`) or up to `MAX_PINS` pinned certificates (`Tls::pinned`, `CertificateHash` as browsers and `openssl`
+  write it), the name checked, the time to connect, the time idle before it closes. `SocketNotice::Secured` and
+  `Untrusted` (reserved before) carry the server's certificate, `Untrusted` why (`Distrust`); `SocketNotice::Failed`
+  says why it failed (`SocketError`; `Other(0)` from older kernels). `Capabilities::tls_sessions` says how many TLS
+  connections fit at once, HTTPS among them; with none (every shell for now) TLS sockets fail at once,
+  `SocketError::Unsupported`. The shells' TLS comes with the firmware's part of #81.
 - Screens mirror in a user-interface language that runs right to left (#33): the switch, value rows and their
   chevrons, ticked rows, the number buttons, text fields, dialog buttons, list rows' icons, chips, the date
   and time pickers, headings and the reader's menu bar start at the right, and left/right follow them. The

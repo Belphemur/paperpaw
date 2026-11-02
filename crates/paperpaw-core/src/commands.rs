@@ -894,7 +894,8 @@ impl Kernel {
             | Command::SocketSend { .. }
             | Command::SocketRead { .. }
             | Command::Disconnect(_)
-            | Command::Broadcast(_)) => {
+            | Command::Broadcast(_)
+            | Command::StartTls { .. }) => {
                 self.io
                     .sockets
                     .command(command, network, screens, &*self.shared.storage, out);

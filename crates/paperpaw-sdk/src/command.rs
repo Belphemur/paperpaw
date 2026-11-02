@@ -5,6 +5,7 @@ use alloc::vec::Vec;
 use crate::id::Id;
 use crate::params::Params;
 use crate::settings::SettingValue;
+use crate::sockets::Tls;
 use paperpaw_platform::RefreshMode;
 
 /// An HTTP request of a plugin. When it is answered the kernel emits
@@ -473,13 +474,18 @@ pub mod socket_params {
     pub const ANSWER: &str = "answer";
     /// No more answers to a broadcast will come.
     pub const DONE: &str = "done";
-    /// The socket is encrypted from now on (reserved).
+    /// The socket is encrypted from now on; the server's certificate in
+    /// [`CERTIFICATE`].
     pub const SECURED: &str = "secured";
     /// The server's certificate is not trusted; its SHA-256 in
-    /// [`CERTIFICATE`] (reserved).
+    /// [`CERTIFICATE`], why in [`WHY`].
     pub const UNTRUSTED: &str = "untrusted";
-    /// A certificate's SHA-256, hex.
+    /// The server's certificate's SHA-256, hex.
     pub const CERTIFICATE: &str = "certificate";
+    /// Why a certificate was not trusted, as `Distrust::as_str` writes it.
+    pub const WHY: &str = "why";
+    /// Why it failed, as `SocketError`'s `Display` writes it.
+    pub const ERROR: &str = "error";
     pub const TEXT: &str = "text";
     pub const PATH: &str = "path";
     /// The address an answer came from, e.g. `192.168.1.20`.
@@ -900,12 +906,18 @@ pub enum Command {
     /// happened, a [`SocketNotice`](crate::SocketNotice): connected,
     /// received, saved, closed, failed. Nothing is read unasked ([`Command::SocketRead`]). A socket
     /// also closes when the screen showing as it was opened is closed.
+    ///
+    /// With `tls` the connection is secure from the start (e.g. IMAP on
+    /// 993): it comes as [`SocketNotice::Secured`](crate::SocketNotice::Secured) once the handshake is
+    /// done, instead of `Connected`; what is sent before goes after it.
+    /// Made with [`Command::connect`] or [`Command::connect_tls`].
     #[non_exhaustive]
     Connect {
         socket: Id,
         host: String,
         port: u16,
         events: Id,
+        tls: Option<alloc::boxed::Box<Tls>>,
     },
     /// Sends bytes on a socket.
     #[non_exhaustive]
@@ -961,6 +973,17 @@ pub enum Command {
     /// and the library is walked anew. The frame shown should say that the
     /// device is connected to a computer. Ignored elsewhere.
     UsbDrive,
+    /// Switches an open socket to TLS (STARTTLS, e.g. SMTP on 587), once
+    /// the server agreed and everything it sent before was read:
+    /// [`SocketNotice::Secured`](crate::SocketNotice::Secured) when the
+    /// handshake is done. Bytes come that were not read, or a read under
+    /// way, fail it ([`SocketError::NotReady`](crate::SocketError::NotReady)),
+    /// as they would pass as secure. Made with [`Command::start_tls`].
+    #[non_exhaustive]
+    StartTls {
+        socket: Id,
+        tls: alloc::boxed::Box<Tls>,
+    },
 }
 
 impl Command {
@@ -991,6 +1014,33 @@ impl Command {
             host: host.into(),
             port,
             events,
+            tls: None,
+        }
+    }
+
+    /// [`Command::Connect`] secure from the start, as `tls` sets up: socket
+    /// `socket` to `host` and `port`, heard as `events`.
+    pub fn connect_tls(
+        socket: Id,
+        host: impl Into<String>,
+        port: u16,
+        events: Id,
+        tls: Tls,
+    ) -> Self {
+        Command::Connect {
+            socket,
+            host: host.into(),
+            port,
+            events,
+            tls: Some(alloc::boxed::Box::new(tls)),
+        }
+    }
+
+    /// [`Command::StartTls`]: `socket` switched to TLS, as `tls` sets up.
+    pub fn start_tls(socket: Id, tls: Tls) -> Self {
+        Command::StartTls {
+            socket,
+            tls: alloc::boxed::Box::new(tls),
         }
     }
 

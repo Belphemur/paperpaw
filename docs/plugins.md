@@ -1740,6 +1740,23 @@ UDP datagram and their answers. Everything comes back as events
 (`SocketNotice`s); a socket closes when the screen
 that was open as it opened closes.
 
+A socket may be secure (TLS): `Command::connect_tls(socket, host, 993,
+events, Tls::new())` connects and says `SocketNotice::Secured` once the
+handshake is done (no `Connected` before), and what is sent before goes
+after it. For STARTTLS, connect plainly, send the server's command, read
+its go-ahead, then `Command::start_tls(socket, Tls::new())`: with a read
+under way or bytes come unread it fails and closes, as they would pass as
+secure. `Tls::new()` trusts the authorities PaperPaw ships; a server of
+one's own with a certificate no authority signed is trusted by
+`Tls::pinned(vec![hash])`. The first connection to it says
+`SocketNotice::Untrusted` with the certificate's `CertificateHash`: show
+it to the reader to compare, and keep it in the plugin's settings once
+they agree. `Capabilities::tls_sessions` says how many TLS connections fit
+at once (one on the X4, HTTPS counted): a socket waits for one up to its
+`Tls::timeout_ms`, then fails `SocketError::Busy`. A TLS connection holds
+about 40 KiB on the X4 and keeps the radio awake, so connect, fetch and
+close; `Tls::idle_ms` (60 s) closes a forgotten one.
+
 ### Firmware updates
 
 Where PaperPaw is the device's firmware (the X4s), `env.firmware()` says

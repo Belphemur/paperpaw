@@ -22,7 +22,9 @@ use paperpaw_sdk::work::{
     Importance, Moments, Progress, Reason, Refusal, Retry, Step, Why, Work, WorkRefused, WorkSpec,
     WorkState,
 };
-use paperpaw_sdk::{Command, Env, HttpReply, Id, Params, ServerNotice, SocketNotice, Uses};
+use paperpaw_sdk::{
+    Command, Env, HttpReply, Id, Params, ServerNotice, SocketError, SocketNotice, Uses,
+};
 
 use crate::Kernel;
 
@@ -889,12 +891,22 @@ impl Kernel {
             Command::Serve { server, events, .. } => {
                 (events, ServerNotice::Failed { server, reason }.to_params())
             }
-            Command::Connect { socket, events, .. } => {
-                (events, SocketNotice::Failed { socket, reason }.to_params())
-            }
+            Command::Connect { socket, events, .. } => (
+                events,
+                SocketNotice::Failed {
+                    socket,
+                    reason,
+                    error: SocketError::NotAllowed,
+                }
+                .to_params(),
+            ),
             Command::Broadcast(broadcast) => {
                 let socket = broadcast.id().clone();
-                let failed = SocketNotice::Failed { socket, reason };
+                let failed = SocketNotice::Failed {
+                    socket,
+                    reason,
+                    error: SocketError::NotAllowed,
+                };
                 (broadcast.events().clone(), failed.to_params())
             }
             _ => return None,

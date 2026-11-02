@@ -1,0 +1,299 @@
+//! TLS on plugins' sockets: secure from the start, switched to (STARTTLS),
+//! refused where it would not be secure, and what the shell reports.
+
+#![allow(clippy::unwrap_used, reason = "tests")]
+
+use super::*;
+use paperpaw_sdk::MemoryStorage;
+use paperpaw_sdk::socket_params as p;
+
+const EVENTS: Id = Id::new_static("test.mail-events");
+const SOCKET: Id = Id::new_static("test.imap");
+const HOST: &str = "mail.example.org";
+
+/// The value of `key` in the last event told.
+fn last(out: &[Command], key: &str) -> Option<String> {
+    match out.last()? {
+        Command::Emit(_, params) => params.get(key).map(String::from),
+        _ => None,
+    }
+}
+
+fn kinds(out: &[Command]) -> Vec<String> {
+    out.iter()
+        .filter_map(|c| match c {
+            Command::Emit(_, params) => params.get(p::KIND).map(String::from),
+            _ => None,
+        })
+        .collect()
+}
+
+fn certificate() -> CertificateHash {
+    CertificateHash::new([0x5a; 32])
+}
+
+/// A plain socket to `HOST`, connected, as socket 1.
+fn plain(storage: &MemoryStorage) -> (Sockets, Vec<Command>) {
+    let mut sockets = Sockets::new(1);
+    let mut out = Vec::new();
+    let connect = Command::connect(SOCKET, HOST, 587, EVENTS);
+    sockets.command(connect, true, 1, storage, &mut out);
+    sockets.calls.clear();
+    sockets.event(SocketEvent::Connected { socket: 1 }, storage, &mut out);
+    (sockets, out)
+}
+
+#[test]
+fn a_socket_secure_from_the_start_says_so_once_it_is() {
+    let storage = MemoryStorage::new();
+    let mut sockets = Sockets::new(1);
+    let mut out = Vec::new();
+    let connect = Command::connect_tls(SOCKET, HOST, 993, EVENTS, Tls::new());
+    sockets.command(connect, true, 1, &storage, &mut out);
+    let tls = TlsSetup {
+        server_name: String::from(HOST),
+        trust: Trust::Authorities,
+        timeout_ms: 20_000,
+        idle_ms: 60_000,
+    };
+    assert_eq!(
+        sockets.take(),
+        [SocketCall::Connect {
+            socket: 1,
+            host: String::from(HOST),
+            port: 993,
+            tls: Some(tls),
+        }]
+    );
+    // What is sent before goes to the shell, which sends it once secure.
+    let login = Command::socket_send(SOCKET, b"a1 LOGIN".to_vec());
+    sockets.command(login, true, 1, &storage, &mut out);
+    assert!(matches!(
+        sockets.take()[..],
+        [SocketCall::Send { socket: 1, .. }]
+    ));
+    // A shell that says it connected first is not heard: nothing is to be
+    // done before the handshake.
+    sockets.event(SocketEvent::Connected { socket: 1 }, &storage, &mut out);
+    assert!(out.is_empty());
+    let secured = SocketEvent::Secured {
+        socket: 1,
+        certificate: certificate(),
+    };
+    sockets.event(secured.clone(), &storage, &mut out);
+    assert_eq!(kinds(&out), [p::SECURED]);
+    assert_eq!(last(&out, p::CERTIFICATE), Some("5a".repeat(32)));
+    // Told once.
+    sockets.event(secured, &storage, &mut out);
+    assert_eq!(out.len(), 1);
+}
+
+#[test]
+fn the_name_checked_and_pins_go_to_the_shell() {
+    let storage = MemoryStorage::new();
+    let mut sockets = Sockets::new(1);
+    let mut out = Vec::new();
+    let tls = Tls::pinned(alloc::vec![certificate()])
+        .server_name("mail.lan")
+        .timeout_ms(5_000)
+        .idle_ms(0);
+    let connect = Command::connect_tls(SOCKET, "192.168.1.9", 993, EVENTS, tls);
+    sockets.command(connect, true, 1, &storage, &mut out);
+    let Some(SocketCall::Connect { tls: Some(tls), .. }) = sockets.take().pop() else {
+        panic!("no connect");
+    };
+    assert_eq!(tls.server_name, "mail.lan");
+    assert_eq!(tls.trust, Trust::Pinned(alloc::vec![certificate()]));
+    assert_eq!((tls.timeout_ms, tls.idle_ms), (5_000, 0));
+}
+
+#[test]
+fn tls_fails_at_once_where_the_shell_does_none_or_it_is_set_up_wrong() {
+    let storage = MemoryStorage::new();
+    let mut out = Vec::new();
+    let mut none = Sockets::new(0);
+    let connect = Command::connect_tls(SOCKET, HOST, 993, EVENTS, Tls::new());
+    none.command(connect, true, 1, &storage, &mut out);
+    assert_eq!(last(&out, p::ERROR).as_deref(), Some("unsupported"));
+    assert!(none.calls.is_empty() && !none.any());
+    let mut sockets = Sockets::new(1);
+    let wrong = Tls::pinned(Vec::new());
+    let connect = Command::connect_tls(SOCKET, HOST, 993, EVENTS, wrong);
+    sockets.command(connect, true, 1, &storage, &mut out);
+    assert_eq!(last(&out, p::ERROR).as_deref(), Some("options"));
+    assert!(sockets.calls.is_empty() && !sockets.any());
+    let connect = Command::connect_tls(SOCKET, HOST, 993, EVENTS, Tls::new());
+    sockets.command(connect, false, 1, &storage, &mut out);
+    assert_eq!(last(&out, p::ERROR).as_deref(), Some("no-network"));
+    assert_eq!(kinds(&out), [p::FAILED, p::FAILED, p::FAILED]);
+}
+
+#[test]
+fn a_plain_socket_switches_to_tls_once_everything_come_is_read() {
+    let storage = MemoryStorage::new();
+    let (mut sockets, mut out) = plain(&storage);
+    let read = Command::socket_read(SOCKET, SocketRead::Text { max: 512 });
+    sockets.command(read, true, 1, &storage, &mut out);
+    sockets.calls.clear();
+    let go_ahead = b"220 2.0.0 Ready to start TLS\r\n".to_vec();
+    let data = SocketEvent::Data {
+        socket: 1,
+        data: go_ahead,
+    };
+    sockets.event(data, &storage, &mut out);
+    sockets.command(
+        Command::start_tls(SOCKET, Tls::new()),
+        true,
+        1,
+        &storage,
+        &mut out,
+    );
+    let Some(SocketCall::StartTls { socket: 1, tls }) = sockets.take().pop() else {
+        panic!("no switch");
+    };
+    // The name checked is the host connected to.
+    assert_eq!(tls.server_name, HOST);
+    let secured = SocketEvent::Secured {
+        socket: 1,
+        certificate: certificate(),
+    };
+    sockets.event(secured, &storage, &mut out);
+    assert_eq!(kinds(&out), [p::CONNECTED, p::RECEIVED, p::SECURED]);
+    // Secure once: a second switch fails and closes.
+    sockets.command(
+        Command::start_tls(SOCKET, Tls::new()),
+        true,
+        1,
+        &storage,
+        &mut out,
+    );
+    assert_eq!(last(&out, p::ERROR).as_deref(), Some("not-ready"));
+    assert_eq!(sockets.take(), [SocketCall::Close { socket: 1 }]);
+    assert!(!sockets.any());
+}
+
+#[test]
+fn a_switch_while_reading_or_with_bytes_unread_fails_and_closes() {
+    let storage = MemoryStorage::new();
+    // While a read is under way: what it brings would pass as secure.
+    let (mut sockets, mut out) = plain(&storage);
+    let read = Command::socket_read(SOCKET, SocketRead::Text { max: 512 });
+    sockets.command(read, true, 1, &storage, &mut out);
+    sockets.calls.clear();
+    sockets.command(
+        Command::start_tls(SOCKET, Tls::new()),
+        true,
+        1,
+        &storage,
+        &mut out,
+    );
+    assert_eq!(last(&out, p::ERROR).as_deref(), Some("not-ready"));
+    assert_eq!(sockets.take(), [SocketCall::Close { socket: 1 }]);
+    assert!(!sockets.any());
+    // With the start of a character come and not told.
+    let (mut sockets, mut out) = plain(&storage);
+    let read = Command::socket_read(SOCKET, SocketRead::Text { max: 2 });
+    sockets.command(read, true, 1, &storage, &mut out);
+    let data = SocketEvent::Data {
+        socket: 1,
+        data: b"o\xc3".to_vec(),
+    };
+    sockets.event(data, &storage, &mut out);
+    sockets.calls.clear();
+    sockets.command(
+        Command::start_tls(SOCKET, Tls::new()),
+        true,
+        1,
+        &storage,
+        &mut out,
+    );
+    assert_eq!(last(&out, p::ERROR).as_deref(), Some("not-ready"));
+    assert!(!sockets.any());
+    // Before it connected.
+    let mut sockets = Sockets::new(1);
+    let connect = Command::connect(SOCKET, HOST, 587, EVENTS);
+    sockets.command(connect, true, 1, &storage, &mut out);
+    sockets.command(
+        Command::start_tls(SOCKET, Tls::new()),
+        true,
+        1,
+        &storage,
+        &mut out,
+    );
+    assert_eq!(last(&out, p::ERROR).as_deref(), Some("not-ready"));
+    assert!(!sockets.any());
+}
+
+#[test]
+fn a_switch_where_the_shell_does_no_tls_fails_and_closes() {
+    let storage = MemoryStorage::new();
+    let mut sockets = Sockets::new(0);
+    let mut out = Vec::new();
+    let connect = Command::connect(SOCKET, HOST, 587, EVENTS);
+    sockets.command(connect, true, 1, &storage, &mut out);
+    sockets.calls.clear();
+    sockets.event(SocketEvent::Connected { socket: 1 }, &storage, &mut out);
+    sockets.command(
+        Command::start_tls(SOCKET, Tls::new()),
+        true,
+        1,
+        &storage,
+        &mut out,
+    );
+    assert_eq!(last(&out, p::ERROR).as_deref(), Some("unsupported"));
+    assert_eq!(sockets.take(), [SocketCall::Close { socket: 1 }]);
+    assert!(!sockets.any());
+}
+
+#[test]
+fn an_untrusted_certificate_is_told_and_the_socket_is_gone() {
+    let storage = MemoryStorage::new();
+    let mut sockets = Sockets::new(1);
+    let mut out = Vec::new();
+    let connect = Command::connect_tls(SOCKET, HOST, 993, EVENTS, Tls::new());
+    sockets.command(connect, true, 1, &storage, &mut out);
+    let untrusted = SocketEvent::Untrusted {
+        socket: 1,
+        certificate: certificate(),
+        why: Distrust::UnknownIssuer,
+    };
+    sockets.event(untrusted, &storage, &mut out);
+    assert_eq!(kinds(&out), [p::UNTRUSTED]);
+    assert_eq!(last(&out, p::WHY).as_deref(), Some("unknown-issuer"));
+    let Some(Command::Emit(_, params)) = out.last() else {
+        panic!("no event");
+    };
+    let notice = SocketNotice::from_params(params).unwrap();
+    assert_eq!(
+        notice,
+        SocketNotice::Untrusted {
+            socket: SOCKET,
+            certificate: certificate(),
+            why: Distrust::UnknownIssuer,
+        }
+    );
+    assert!(!sockets.any());
+}
+
+#[test]
+fn why_the_shell_failed_reaches_the_plugin() {
+    let storage = MemoryStorage::new();
+    let mut sockets = Sockets::new(1);
+    let mut out = Vec::new();
+    let connect = Command::connect_tls(SOCKET, HOST, 993, EVENTS, Tls::new());
+    sockets.command(connect, true, 1, &storage, &mut out);
+    let busy = SocketEvent::Failed {
+        socket: 1,
+        error: SocketError::Busy,
+        reason: String::from("a secure connection is already open"),
+    };
+    sockets.event(busy, &storage, &mut out);
+    assert_eq!(last(&out, p::ERROR).as_deref(), Some("busy"));
+    assert!(!sockets.any());
+    // Calls that waited too long for a network.
+    let connect = Command::connect_tls(SOCKET, HOST, 993, EVENTS, Tls::new());
+    sockets.command(connect, true, 1, &storage, &mut out);
+    sockets.fail_waiting("no network", &storage, &mut out);
+    assert_eq!(last(&out, p::ERROR).as_deref(), Some("no-network"));
+    assert!(!sockets.any());
+}

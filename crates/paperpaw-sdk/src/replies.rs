@@ -21,6 +21,7 @@ use crate::command::{http_params, server_params, socket_params, speech_params};
 use crate::event::EventData;
 use crate::id::Id;
 use crate::params::Params;
+use crate::sockets::{CertificateHash, Distrust, SocketError};
 
 /// The parameters of `params` but `known`, as a plugin gave them.
 fn context(params: &Params, known: &[&str]) -> Params {
@@ -573,9 +574,12 @@ pub enum SocketNotice {
         socket: Id,
         reason: String,
     },
+    /// The socket failed and is closed (or never opened): `error` says
+    /// why, `reason` more, in English, for a log.
     Failed {
         socket: Id,
         reason: String,
+        error: SocketError,
     },
     /// An answer to a broadcast, and the address it came from.
     Answer {
@@ -590,17 +594,21 @@ pub enum SocketNotice {
         reason: String,
     },
     /// The socket is encrypted (TLS) from now on: what is sent and
-    /// received goes so. Reserved: no kernel opens TLS sockets yet.
+    /// received goes so ([`Command::connect_tls`](crate::Command::connect_tls),
+    /// [`Command::start_tls`](crate::Command::start_tls)). `certificate`
+    /// is the server's, trusted.
     Secured {
         socket: Id,
+        certificate: CertificateHash,
     },
-    /// The server's certificate is not trusted (not signed by a known
-    /// authority, nor the one pinned for it), and the socket closed;
-    /// `certificate` is its SHA-256 (hex), for the reader to check and pin.
-    /// Reserved: no kernel opens TLS sockets yet.
+    /// The server's certificate is not trusted, for `why`, and the socket
+    /// closed; `certificate` is its hash, for the reader to compare (e.g.
+    /// with what the server's admin says) before the plugin pins it
+    /// ([`Tls::pinned`](crate::Tls::pinned)).
     Untrusted {
         socket: Id,
-        certificate: String,
+        certificate: CertificateHash,
+        why: Distrust,
     },
 }
 
@@ -615,7 +623,7 @@ impl SocketNotice {
             | SocketNotice::Failed { socket, .. }
             | SocketNotice::Answer { socket, .. }
             | SocketNotice::Done { socket, .. }
-            | SocketNotice::Secured { socket }
+            | SocketNotice::Secured { socket, .. }
             | SocketNotice::Untrusted { socket, .. } => socket,
         }
     }
@@ -636,9 +644,9 @@ impl EventData for SocketNotice {
             SocketNotice::Closed { reason, .. } => {
                 kind(p, socket_params::CLOSED).with(socket_params::REASON, reason.clone())
             }
-            SocketNotice::Failed { reason, .. } => {
-                kind(p, socket_params::FAILED).with(socket_params::REASON, reason.clone())
-            }
+            SocketNotice::Failed { reason, error, .. } => kind(p, socket_params::FAILED)
+                .with(socket_params::REASON, reason.clone())
+                .with(socket_params::ERROR, alloc::format!("{error}")),
             SocketNotice::Answer { text, from, .. } => kind(p, socket_params::ANSWER)
                 .with(socket_params::TEXT, text.clone())
                 .with(socket_params::FROM, from.clone()),
@@ -650,9 +658,13 @@ impl EventData for SocketNotice {
                     p.with(socket_params::REASON, reason.clone())
                 }
             }
-            SocketNotice::Secured { .. } => kind(p, socket_params::SECURED),
-            SocketNotice::Untrusted { certificate, .. } => kind(p, socket_params::UNTRUSTED)
-                .with(socket_params::CERTIFICATE, certificate.clone()),
+            SocketNotice::Secured { certificate, .. } => kind(p, socket_params::SECURED)
+                .with(socket_params::CERTIFICATE, alloc::format!("{certificate}")),
+            SocketNotice::Untrusted {
+                certificate, why, ..
+            } => kind(p, socket_params::UNTRUSTED)
+                .with(socket_params::CERTIFICATE, alloc::format!("{certificate}"))
+                .with(socket_params::WHY, why.as_str()),
         }
     }
 
@@ -676,6 +688,11 @@ impl EventData for SocketNotice {
             socket_params::FAILED => SocketNotice::Failed {
                 socket,
                 reason: get(socket_params::REASON),
+                // From a kernel before errors were typed: not said.
+                error: p
+                    .get(socket_params::ERROR)
+                    .and_then(SocketError::parse)
+                    .unwrap_or(SocketError::Other(0)),
             },
             socket_params::ANSWER => SocketNotice::Answer {
                 socket,
@@ -686,10 +703,17 @@ impl EventData for SocketNotice {
                 socket,
                 reason: get(socket_params::REASON),
             },
-            socket_params::SECURED => SocketNotice::Secured { socket },
+            socket_params::SECURED => SocketNotice::Secured {
+                socket,
+                certificate: CertificateHash::parse(p.get(socket_params::CERTIFICATE)?)?,
+            },
             socket_params::UNTRUSTED => SocketNotice::Untrusted {
                 socket,
-                certificate: get(socket_params::CERTIFICATE),
+                certificate: CertificateHash::parse(p.get(socket_params::CERTIFICATE)?)?,
+                why: p
+                    .get(socket_params::WHY)
+                    .and_then(Distrust::parse)
+                    .unwrap_or(Distrust::UnknownIssuer),
             },
             _ => return None,
         })
@@ -923,18 +947,6 @@ mod tests {
             from: "192.168.1.2".into(),
         };
         assert_eq!(SocketNotice::from_params(&answer.to_params()), Some(answer));
-        let socket = Id::new_static("a.mail");
-        for notice in [
-            SocketNotice::Secured {
-                socket: socket.clone(),
-            },
-            SocketNotice::Untrusted {
-                socket,
-                certificate: "ab".repeat(32),
-            },
-        ] {
-            assert_eq!(SocketNotice::from_params(&notice.to_params()), Some(notice));
-        }
         let mut typed = Typed {
             text: "secret".into(),
             typing: false,
@@ -949,5 +961,56 @@ mod tests {
             assert_eq!(back, Some(confirmed));
         }
         assert_eq!(Confirmed::from_params(&Params::new()), None);
+    }
+
+    #[test]
+    fn tls_socket_notices_through_params_and_back() {
+        let socket = Id::new_static("a.mail");
+        let certificate = CertificateHash::new([0xab; 32]);
+        for notice in [
+            SocketNotice::Secured {
+                socket: socket.clone(),
+                certificate,
+            },
+            SocketNotice::Untrusted {
+                socket: socket.clone(),
+                certificate,
+                why: Distrust::NotPinned,
+            },
+            SocketNotice::Failed {
+                socket: socket.clone(),
+                reason: "too many".into(),
+                error: SocketError::TooMany,
+            },
+        ] {
+            assert_eq!(SocketNotice::from_params(&notice.to_params()), Some(notice));
+        }
+        // From a kernel before errors and reasons were typed.
+        let failed = Params::new()
+            .with(params::ID, "a.mail")
+            .with(socket_params::KIND, socket_params::FAILED)
+            .with(socket_params::REASON, "lost");
+        assert!(matches!(
+            SocketNotice::from_params(&failed),
+            Some(SocketNotice::Failed {
+                error: SocketError::Other(0),
+                ..
+            })
+        ));
+        let untrusted = Params::new()
+            .with(params::ID, "a.mail")
+            .with(socket_params::KIND, socket_params::UNTRUSTED)
+            .with(socket_params::CERTIFICATE, "AB".repeat(32));
+        assert_eq!(
+            SocketNotice::from_params(&untrusted),
+            Some(SocketNotice::Untrusted {
+                socket: socket.clone(),
+                certificate,
+                why: Distrust::UnknownIssuer,
+            })
+        );
+        // A certificate that is no hash is no notice.
+        let broken = untrusted.with(socket_params::CERTIFICATE, "ab");
+        assert_eq!(SocketNotice::from_params(&broken), None);
     }
 }

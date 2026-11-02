@@ -3,12 +3,19 @@
 //! that read only when asked (so what waits for the kernel is at most one
 //! part per socket), and UDP broadcasts that collect answers for a while
 //! (e.g. to find Calibre in the local network).
+//!
+//! No TLS for sockets yet (the kernel asks for none while the shell holds
+//! no TLS sessions for them, `KernelBuilder::tls_sessions`): a TLS
+//! connection or a switch to TLS fails, `SocketError::Unsupported`. To
+//! come: `tls::Session` over `link::Link`, its sessions shared with HTTPS
+//! (notes `designs/tls-sockets.md`).
 
 use alloc::collections::VecDeque;
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
+use paperpaw_core::sdk::SocketError;
 use paperpaw_core::{Effects, Kernel, SocketCall, SocketEvent};
 use paperpaw_platform::Instant;
 use smoltcp::socket::tcp;
@@ -99,17 +106,33 @@ impl Sockets {
             self.generation = net.generation();
         }
         match call {
-            SocketCall::Connect { socket, host, port } => {
+            SocketCall::Connect {
+                socket,
+                tls: Some(_),
+                ..
+            } => Some(no_tls(socket)),
+            SocketCall::StartTls { socket, .. } => {
+                if let Some(at) = self.sockets.iter().position(|s| s.number == socket) {
+                    self.sockets.remove(at).release(net);
+                }
+                Some(no_tls(socket))
+            }
+            SocketCall::Connect {
+                socket,
+                host,
+                port,
+                tls: None,
+            } => {
                 if self.sockets.len() >= MAX_SOCKETS {
-                    return Some(failed(socket, "too many connections"));
+                    return Some(failed(socket, SocketError::TooMany, "too many connections"));
                 }
                 let phase = match net.resolve(&host) {
                     Ok(Resolve::Done(address)) => match connect(net, address, port) {
                         Ok(phase) => phase,
-                        Err(reason) => return Some(failed(socket, reason)),
+                        Err(reason) => return Some(failed(socket, SocketError::Refused, reason)),
                     },
                     Ok(Resolve::Asking(query)) => Phase::Resolving { query, port },
-                    Err(_) => return Some(failed(socket, "no such host")),
+                    Err(_) => return Some(failed(socket, SocketError::Dns, "no such host")),
                 };
                 self.sockets.push(Socket {
                     number: socket,
@@ -197,7 +220,11 @@ impl Sockets {
             if let Some(net) = net.as_deref_mut() {
                 socket.release(net);
             }
-            let event = failed(socket.number, "the network went away");
+            let event = failed(
+                socket.number,
+                SocketError::NoNetwork,
+                "the network went away",
+            );
             effects.push(kernel.socket_event(now, event));
         }
         for broadcast in core::mem::take(&mut self.broadcasts) {
@@ -254,11 +281,18 @@ impl Sockets {
     }
 }
 
-fn failed(socket: u32, reason: &str) -> SocketEvent {
+fn failed(socket: u32, error: SocketError, reason: &str) -> SocketEvent {
     SocketEvent::Failed {
         socket,
+        error,
         reason: String::from(reason),
     }
+}
+
+/// TLS asked for `socket`: not done here yet.
+fn no_tls(socket: u32) -> SocketEvent {
+    let reason = "secure connections are not supported here";
+    failed(socket, SocketError::Unsupported, reason)
 }
 
 /// Starts connecting to `address`.
@@ -301,17 +335,17 @@ impl Socket {
                     }
                     Err(reason) => {
                         self.phase = Phase::Ended;
-                        events.push(failed(number, reason));
+                        events.push(failed(number, SocketError::Refused, reason));
                         false
                     }
                 },
                 Some(Err(_)) => {
                     self.phase = Phase::Ended;
-                    events.push(failed(number, "no such host"));
+                    events.push(failed(number, SocketError::Dns, "no such host"));
                     false
                 }
                 None if now.0 > self.until => {
-                    events.push(failed(number, "no answer"));
+                    events.push(failed(number, SocketError::Timeout, "no answer"));
                     false
                 }
                 None => true,
@@ -326,7 +360,7 @@ impl Socket {
                     }
                     tcp::State::SynSent | tcp::State::SynReceived if now.0 <= self.until => true,
                     _ => {
-                        events.push(failed(number, "could not connect"));
+                        events.push(failed(number, SocketError::Refused, "could not connect"));
                         false
                     }
                 }
@@ -350,7 +384,7 @@ impl Socket {
                     "socket {number}: lost (no more sending), {:?}",
                     socket.state()
                 );
-                events.push(failed(number, "connection lost"));
+                events.push(failed(number, SocketError::Lost, "connection lost"));
                 return false;
             }
             match socket.send_slice(&data[self.sent..]) {
@@ -360,7 +394,7 @@ impl Socket {
                         "socket {number}: lost (sending failed), {:?}",
                         socket.state()
                     );
-                    events.push(failed(number, "connection lost"));
+                    events.push(failed(number, SocketError::Lost, "connection lost"));
                     return false;
                 }
             }
@@ -407,7 +441,7 @@ impl Socket {
             } else if socket.state() == tcp::State::Closed {
                 // Reset (or gone after both sides closed).
                 log::info!("socket {number}: lost (closed), {:?}", socket.state());
-                events.push(failed(number, "connection lost"));
+                events.push(failed(number, SocketError::Lost, "connection lost"));
                 return false;
             } else if !socket.may_recv() {
                 // The other side closed: nothing more comes.

@@ -53,6 +53,7 @@ fn connect(sockets: &mut Sockets, socket: u32, port: u16) {
         socket,
         host: String::from("127.0.0.1"),
         port,
+        tls: None,
     });
     assert_eq!(wait(sockets), SocketEvent::Connected { socket });
 }

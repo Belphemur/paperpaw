@@ -16,7 +16,8 @@ mod common;
 use common::{DEVICE, Harness, REPLY};
 use paperpaw_core::sdk::wifi::{NETWORK_WAIT_MS, WifiState};
 use paperpaw_core::sdk::{
-    Command, HttpError, HttpRequest, Id, MemoryStorage, Params, ServerResponse, SocketRead, Speech,
+    CertificateHash, Command, HttpError, HttpRequest, Id, MemoryStorage, Params, ServerResponse,
+    SocketError, SocketRead, Speech, Tls,
 };
 use paperpaw_core::{
     HttpResponse, Io, Kernel, KernelBuilder, ServerCall, ServerEvent, SocketCall, SocketEvent,
@@ -472,6 +473,7 @@ fn socket_reports_after_it_closed_or_for_other_numbers_are_ignored() {
             32,
             SocketEvent::Failed {
                 socket: number,
+                error: SocketError::Refused,
                 reason: String::from("late"),
             },
         ),
@@ -503,6 +505,7 @@ fn a_socket_failing_twice_is_heard_of_once() {
             Instant(at),
             SocketEvent::Failed {
                 socket: number,
+                error: SocketError::Refused,
                 reason: String::from("refused"),
             },
         );
@@ -521,6 +524,56 @@ fn a_socket_failing_twice_is_heard_of_once() {
         ],
     );
     assert!(kernel.take_io().is_empty());
+}
+
+#[test]
+fn a_tls_socket_is_heard_of_once_secure() {
+    let harness = Harness::new();
+    let mut kernel = kernel(&harness, |b| b.network(true).tls_sessions(1));
+    let connect = Command::connect_tls(SOCKET, "mail.example.org", 993, REPLY, Tls::new());
+    harness.run(&mut kernel, 10, [connect]);
+    let calls = kernel.take_io();
+    let tls = calls.iter().find_map(|io| match io {
+        Io::Socket(SocketCall::Connect {
+            tls: Some(tls),
+            socket,
+            ..
+        }) => Some((*socket, tls.server_name.clone())),
+        _ => None,
+    });
+    let Some((number, name)) = tls else {
+        panic!("{calls:?}");
+    };
+    assert_eq!(name, "mail.example.org");
+    let certificate = CertificateHash::new([1; 32]);
+    kernel.socket_event(
+        Instant(20),
+        SocketEvent::Secured {
+            socket: number,
+            certificate,
+        },
+    );
+    let told = replies(&harness);
+    assert_eq!(told.len(), 1, "{told:?}");
+    assert!(told[0].contains("kind=secured"), "{told:?}");
+    assert!(
+        told[0].contains(&format!("certificate={certificate}")),
+        "{told:?}"
+    );
+}
+
+#[test]
+fn tls_sockets_fail_at_once_where_the_shell_does_no_tls() {
+    let harness = Harness::new();
+    let mut kernel = kernel(&harness, |b| b.network(true));
+    let connect = Command::connect_tls(SOCKET, "mail.example.org", 993, REPLY, Tls::new());
+    harness.run(&mut kernel, 10, [connect]);
+    assert!(kernel.take_io().is_empty());
+    let told = replies(&harness);
+    assert!(
+        told[0].contains("kind=failed") && told[0].contains("error=unsupported"),
+        "{told:?}"
+    );
 }
 
 #[test]

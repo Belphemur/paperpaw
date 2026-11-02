@@ -11,8 +11,8 @@
 
 use paperpaw_sdk::event::{Event, EventData, ParamValue};
 use paperpaw_sdk::{
-    Command, FolderChosen, HttpReply, Id, Instant, Params, ServerNotice, SocketNotice, Typed,
-    http_params,
+    CertificateHash, Command, Distrust, FolderChosen, HttpReply, Id, Instant, Params, ServerNotice,
+    SocketError, SocketNotice, Typed, http_params,
 };
 use proptest::prelude::*;
 
@@ -174,7 +174,9 @@ proptest! {
             SocketNotice::Received { socket: id.clone(), text: text.clone() },
             SocketNotice::Saved { socket: id.clone(), path: text.clone() },
             SocketNotice::Closed { socket: id.clone(), reason: text.clone() },
-            SocketNotice::Failed { socket: id.clone(), reason: text.clone() },
+            SocketNotice::Failed { socket: id.clone(), reason: text.clone(), error: SocketError::Lost },
+            SocketNotice::Secured { socket: id.clone(), certificate: CertificateHash::new([3; 32]) },
+            SocketNotice::Untrusted { socket: id.clone(), certificate: CertificateHash::new([4; 32]), why: Distrust::UnknownIssuer },
             SocketNotice::Answer { socket: id.clone(), text: text.clone(), from: other.clone() },
             SocketNotice::Done { socket: id.clone(), reason: text.clone() },
         ];

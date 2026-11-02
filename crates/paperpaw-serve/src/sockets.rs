@@ -4,6 +4,10 @@
 //! broadcasts have a thread that sends and collects the answers. Reads
 //! happen only when asked, one at a time per socket, so what waits for
 //! the kernel is at most one part per socket.
+//!
+//! No TLS yet (the kernel asks for none while the shell says it holds no
+//! TLS sessions, `KernelBuilder::tls_sessions`): a TLS connection or a
+//! switch to TLS fails, `SocketError::Unsupported`.
 
 use std::collections::HashMap;
 use std::io::{Read, Write};
@@ -14,7 +18,8 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use paperpaw_core::{SocketCall, SocketEvent};
+use paperpaw_core::sdk::SocketError;
+use paperpaw_core::{SocketCall, SocketEvent, TlsSetup};
 
 /// How long connecting may take.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
@@ -43,6 +48,15 @@ pub struct Sockets {
     wake: Wake,
 }
 
+/// Why connecting failed with `e`.
+fn connect_error(e: &std::io::Error) -> SocketError {
+    match e.kind() {
+        std::io::ErrorKind::TimedOut => SocketError::Timeout,
+        std::io::ErrorKind::OutOfMemory => SocketError::NoMemory,
+        _ => SocketError::Refused,
+    }
+}
+
 impl std::fmt::Debug for Sockets {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Sockets")
@@ -69,7 +83,21 @@ impl Sockets {
     /// Does what the kernel asks.
     pub fn apply(&mut self, call: SocketCall) {
         match call {
-            SocketCall::Connect { socket, host, port } => self.connect(socket, host, port),
+            SocketCall::Connect {
+                socket,
+                host,
+                port,
+                tls: None,
+            } => self.connect(socket, host, port),
+            SocketCall::Connect {
+                socket,
+                tls: Some(tls),
+                ..
+            } => self.no_tls(socket, &tls),
+            SocketCall::StartTls { socket, tls } => {
+                self.apply(SocketCall::Close { socket });
+                self.no_tls(socket, &tls);
+            }
             SocketCall::Send { socket, data } => {
                 if let Some(c) = self.open.get(&socket) {
                     let _ = c.writes.send(data);
@@ -99,6 +127,17 @@ impl Sockets {
                 wait_ms,
             } => self.broadcast(broadcast, ports, data, wait_ms),
         }
+    }
+
+    /// TLS as `tls` sets up for `socket`: not done here.
+    fn no_tls(&mut self, socket: u32, tls: &TlsSetup) {
+        let _ = tls;
+        let _ = self.events.send(SocketEvent::Failed {
+            socket,
+            error: SocketError::Unsupported,
+            reason: String::from("secure connections are not supported here"),
+        });
+        (self.wake)();
     }
 
     /// An event to pass to the kernel, if any.
@@ -142,28 +181,30 @@ impl Sockets {
             }
         };
         thread::spawn(move || {
+            let failure = move |error, reason| SocketEvent::Failed {
+                socket,
+                error,
+                reason,
+            };
             let connected = (host.as_str(), port)
                 .to_socket_addrs()
-                .map_err(|e| e.to_string())
+                .map_err(|e| (SocketError::Dns, e.to_string()))
                 .and_then(|mut addresses| {
-                    addresses.next().ok_or_else(|| String::from("no such host"))
+                    let none = (SocketError::Dns, String::from("no such host"));
+                    addresses.next().ok_or(none)
                 })
                 .and_then(|address: SocketAddr| {
-                    TcpStream::connect_timeout(&address, CONNECT_TIMEOUT).map_err(|e| e.to_string())
+                    TcpStream::connect_timeout(&address, CONNECT_TIMEOUT)
+                        .map_err(|e| (connect_error(&e), e.to_string()))
                 });
             let mut reading = match connected {
                 Ok(s) => s,
-                Err(reason) => return report(SocketEvent::Failed { socket, reason }),
+                Err((error, reason)) => return report(failure(error, reason)),
             };
             let _ = reading.set_nodelay(true);
             let writing = match reading.try_clone() {
                 Ok(w) => w,
-                Err(e) => {
-                    return report(SocketEvent::Failed {
-                        socket,
-                        reason: e.to_string(),
-                    });
-                }
+                Err(e) => return report(failure(SocketError::Other(0), e.to_string())),
             };
             if let Ok(mut held) = stream.lock() {
                 *held = reading.try_clone().ok();
@@ -180,10 +221,7 @@ impl Sockets {
                     for data in write_asks {
                         if let Err(e) = writing.write_all(&data).and_then(|()| writing.flush()) {
                             if !failed.swap(true, Ordering::Relaxed) {
-                                report(SocketEvent::Failed {
-                                    socket,
-                                    reason: e.to_string(),
-                                });
+                                report(failure(SocketError::Lost, e.to_string()));
                             }
                             return;
                         }
@@ -205,10 +243,7 @@ impl Sockets {
                     }
                     Err(e) => {
                         if !failed.swap(true, Ordering::Relaxed) {
-                            report(SocketEvent::Failed {
-                                socket,
-                                reason: e.to_string(),
-                            });
+                            report(failure(SocketError::Lost, e.to_string()));
                         }
                         return;
                     }
@@ -294,6 +329,7 @@ mod tests {
             socket: 1,
             host: String::from("127.0.0.1"),
             port,
+            tls: None,
         });
         assert_eq!(wait(&mut sockets), SocketEvent::Connected { socket: 1 });
         assert!(sockets.any());
@@ -321,6 +357,7 @@ mod tests {
             socket: 2,
             host: String::from("127.0.0.1"),
             port,
+            tls: None,
         });
         assert_eq!(wait(&mut sockets), SocketEvent::Connected { socket: 2 });
         server.join().unwrap();
@@ -339,12 +376,75 @@ mod tests {
             socket: 3,
             host: String::from("no-such-host.invalid"),
             port: 9,
+            tls: None,
         });
         assert!(matches!(
             wait(&mut sockets),
-            SocketEvent::Failed { socket: 3, .. }
+            SocketEvent::Failed {
+                socket: 3,
+                error: SocketError::Dns,
+                ..
+            }
         ));
         assert!(!sockets.any());
+        // A port no one listens on refuses.
+        let port = TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        sockets.apply(SocketCall::Connect {
+            socket: 4,
+            host: String::from("127.0.0.1"),
+            port,
+            tls: None,
+        });
+        assert!(matches!(
+            wait(&mut sockets),
+            SocketEvent::Failed {
+                socket: 4,
+                error: SocketError::Refused | SocketError::Timeout,
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn tls_is_not_done_here_yet() {
+        let tls = TlsSetup {
+            server_name: String::from("127.0.0.1"),
+            trust: paperpaw_core::sdk::Trust::Authorities,
+            timeout_ms: 1000,
+            idle_ms: 0,
+        };
+        let unsupported = |socket| SocketEvent::Failed {
+            socket,
+            error: SocketError::Unsupported,
+            reason: String::from("secure connections are not supported here"),
+        };
+        let mut sockets = Sockets::new(|| {});
+        sockets.apply(SocketCall::Connect {
+            socket: 5,
+            host: String::from("127.0.0.1"),
+            port: 993,
+            tls: Some(tls.clone()),
+        });
+        assert_eq!(wait(&mut sockets), unsupported(5));
+        // A plain socket switched to TLS fails and closes.
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = thread::spawn(move || drop(listener.accept().unwrap()));
+        sockets.apply(SocketCall::Connect {
+            socket: 6,
+            host: String::from("127.0.0.1"),
+            port,
+            tls: None,
+        });
+        assert_eq!(wait(&mut sockets), SocketEvent::Connected { socket: 6 });
+        sockets.apply(SocketCall::StartTls { socket: 6, tls });
+        assert_eq!(wait(&mut sockets), unsupported(6));
+        assert!(!sockets.any());
+        server.join().unwrap();
     }
 
     #[test]
