@@ -27,6 +27,19 @@ const UNKNOWN: u32 = u32::MAX;
 /// opened again.
 const FAILED: u32 = u32::MAX - 1;
 
+/// What of a book is in its cache, as [`EpubDocument::state`] says.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Held {
+    /// Nothing yet: what was there was another book's, or left over, and
+    /// went at the open.
+    Nothing,
+    /// A cover for the library (or its failure), with the book's stamp
+    /// ([`package::stamp`]).
+    Stamped,
+    /// The package.
+    Package,
+}
+
 /// An open EPUB. The package is read once into the cache, when the book is
 /// first read (its contents, stylesheets or a chapter wanted): opened only
 /// for its details (the library's walk), nothing is written. Chapters are
@@ -43,10 +56,13 @@ pub struct EpubDocument {
     /// Entries of the contents, once the package is in the cache.
     toc_len: Cell<u32>,
     cache: String,
-    /// The book's fingerprint, the package's in the cache; whether the
-    /// package is there (see [`EpubDocument::built`]).
+    /// The book's fingerprint, the package's in the cache; what of the
+    /// book is there (see [`EpubDocument::built`]).
     book: String,
-    built: Cell<bool>,
+    state: Cell<Held>,
+    /// The package could not be written (its contents or stylesheets are
+    /// unreadable): not tried again until the book is opened again.
+    broken: Cell<bool>,
     /// The book's path, and the stylesheets to apply after its own (e.g.
     /// the plugins'): for [`EpubDocument::styled`].
     path: String,
@@ -378,17 +394,21 @@ impl EpubDocument {
         let archive = ZipArchive::open(storage, path).map_err(package::error)?;
         let cache = book_cache(path);
         let book = crate::fingerprint(storage, path)?;
-        let (package, built) = match package::load(storage, &cache, &book)? {
-            Some(package) => (package, true),
+        let (package, state) = match package::load(storage, &cache, &book)? {
+            Some(package) => (package, Held::Package),
+            // A cover made for the library before the book was read stays
+            // (the library's details point at it).
+            None if !package::cached(storage, &cache)
+                && package::stamped(storage, &cache, &book) =>
+            {
+                (package::read(storage, &archive)?, Held::Stamped)
+            }
             None => {
-                // Another book, file version or cache format: start over,
-                // also with its pictures and its chapters converted with
-                // stylesheets or without. Where there is none, a cover
-                // made for the library stays.
-                if package::cached(storage, &cache) {
-                    let _ = storage.remove_dir_all(&cache);
-                }
-                (package::read(storage, &archive)?, false)
+                // Another book, file version or cache format, or what a
+                // removal cut off left: start over, also with its pictures
+                // and its chapters converted with stylesheets or without.
+                let _ = storage.remove_dir_all(&cache);
+                (package::read(storage, &archive)?, Held::Nothing)
             }
         };
         let styled = OnceCell::new();
@@ -414,7 +434,8 @@ impl EpubDocument {
             archive,
             cache,
             book,
-            built: Cell::new(built),
+            state: Cell::new(state),
+            broken: Cell::new(false),
             path: String::from(path),
             plugin_css: String::from(plugin_css),
             styled,
@@ -431,12 +452,36 @@ impl EpubDocument {
     /// The package in the cache, written the first time the book is read
     /// (see [`EpubDocument`]); an error where it cannot be.
     fn built(&self, storage: &dyn Storage) -> Result<(), DocumentError> {
-        if self.built.get() {
+        if self.state.get() == Held::Package {
             return Ok(());
         }
-        let package = package::build(storage, &self.archive, &self.cache, &self.book)?;
-        self.toc_len.set(package.toc_len);
-        self.built.set(true);
+        if self.broken.get() {
+            return Err(DocumentError::Malformed(Cow::Borrowed(
+                "contents cannot be read",
+            )));
+        }
+        match package::build(storage, &self.archive, &self.cache, &self.book) {
+            Ok(package) => {
+                self.toc_len.set(package.toc_len);
+                self.state.set(Held::Package);
+                Ok(())
+            }
+            // Perhaps with more room later.
+            Err(e @ DocumentError::OutOfMemory) => Err(e),
+            Err(e) => {
+                self.broken.set(true);
+                Err(e)
+            }
+        }
+    }
+
+    /// The cache marked as this book's before anything of it is written
+    /// without the package (see [`package::stamp`]).
+    fn stamped(&self, storage: &dyn Storage) -> Result<(), DocumentError> {
+        if self.state.get() == Held::Nothing {
+            package::stamp(storage, &self.cache, &self.book)?;
+            self.state.set(Held::Stamped);
+        }
         Ok(())
     }
 
@@ -681,14 +726,13 @@ impl Document for EpubDocument {
             return Ok(None);
         };
         // Named by its size: decoded anew for a screen that shows it larger.
-        // Without the package in the cache, nothing says what is there is
-        // this book's (one replaced on the card since): decoded again.
+        // What is in the cache is this book's (see `open_styled`).
         let base = alloc::format!("{}/cover-{}", self.cache, self.cover_fit.long);
-        let known = self.built.get();
-        if known && crate::pictures::failed(storage, &base) {
+        if crate::pictures::failed(storage, &base) {
             return Ok(None);
         }
-        if !known || !crate::pictures::has(storage, &base, self.color) {
+        if !crate::pictures::has(storage, &base, self.color) {
+            self.stamped(storage)?;
             convert::decode_image(
                 storage,
                 &self.archive,

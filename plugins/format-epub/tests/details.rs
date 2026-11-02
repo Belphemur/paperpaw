@@ -11,7 +11,7 @@
 
 mod common;
 
-use common::{Recording, blocks};
+use common::{Recording, blocks, container, opf, xhtml, zip};
 use paperpaw_plugin_format_epub::EpubDocument;
 use paperpaw_sdk::document::Document;
 use paperpaw_sdk::{MemoryStorage, Storage};
@@ -134,4 +134,152 @@ fn a_book_replaced_after_its_details_were_read_is_read_anew() {
             .iter()
             .all(|(_, block)| !block.text.contains("Samsa"))
     );
+}
+
+/// Its cover made during the walk, a book is replaced on the card and
+/// read before its cover is asked for: the cover is the new book's.
+#[test]
+fn a_book_replaced_and_read_before_its_cover_shows_its_own() {
+    let storage = MemoryStorage::new().with("books/book.epub", ALICE);
+    let alice = EpubDocument::open(&storage, "books/book.epub").unwrap();
+    let alice_cover = alice.cover(&storage).unwrap().unwrap();
+    let alice_picture = storage.size(&alice_cover.path).unwrap();
+    drop(alice);
+    storage.write("books/book.epub", KAFKA).unwrap();
+    let kafka = EpubDocument::open(&storage, "books/book.epub").unwrap();
+    assert!(!blocks(&kafka, &storage).is_empty());
+    let cover = kafka.cover(&storage).unwrap().unwrap();
+    let picture = storage.size(&cover.path).unwrap();
+    assert!(
+        (cover.width, cover.height, picture)
+            != (alice_cover.width, alice_cover.height, alice_picture),
+        "the old book's cover stays: {cover:?}"
+    );
+}
+
+/// A book of one chapter whose cover is `cover`.
+fn with_cover(cover: Vec<u8>) -> Vec<u8> {
+    let package = opf(
+        "<dc:title>Covered</dc:title><meta name=\"cover\" content=\"cov\"/>",
+        &[
+            ("cov", "cover.png", "image/png", "cover-image"),
+            ("a", "a.xhtml", "application/xhtml+xml", ""),
+        ],
+        &["a"],
+    );
+    zip(
+        &[
+            (
+                "META-INF/container.xml",
+                container("OEBPS/content.opf").into_bytes(),
+            ),
+            ("OEBPS/content.opf", package.into_bytes()),
+            ("OEBPS/cover.png", cover),
+            ("OEBPS/a.xhtml", xhtml("<p>Text</p>").into_bytes()),
+        ],
+        false,
+    )
+}
+
+/// The cover of a book could not be made; a good copy of it replaces it on
+/// the card: the walk makes its cover, and the book read keeps it.
+#[test]
+fn a_cover_that_failed_is_made_for_the_book_that_replaced_it() {
+    let storage = MemoryStorage::new().with("books/book.epub", with_cover(vec![1, 2, 3]));
+    let broken = EpubDocument::open(&storage, "books/book.epub").unwrap();
+    assert!(broken.cover(&storage).is_err());
+    assert_eq!(broken.cover(&storage).unwrap(), None);
+    drop(broken);
+    storage.write("books/book.epub", ALICE).unwrap();
+    let walked = EpubDocument::open(&storage, "books/book.epub").unwrap();
+    let cover = walked.cover(&storage).unwrap().unwrap();
+    drop(walked);
+    let read = EpubDocument::open(&storage, "books/book.epub").unwrap();
+    assert!(!blocks(&read, &storage).is_empty());
+    assert_eq!(read.cover(&storage).unwrap(), Some(cover));
+}
+
+/// A removal of a book's cache cut off (power gone) left its chapters
+/// without its package: they go, and another book copied there is read as
+/// itself.
+#[test]
+fn chapters_left_without_their_package_go() {
+    let storage = MemoryStorage::new().with("books/book.epub", ALICE);
+    let alice = EpubDocument::open(&storage, "books/book.epub").unwrap();
+    let _ = alice.cover(&storage).unwrap();
+    let alice_text = blocks(&alice, &storage);
+    drop(alice);
+    let package = package_of(&storage);
+    assert_eq!(package.len(), 1);
+    storage.remove(&package[0]).unwrap();
+    storage.write("books/book.epub", KAFKA).unwrap();
+    let kafka = EpubDocument::open(&storage, "books/book.epub").unwrap();
+    let text = blocks(&kafka, &storage);
+    assert_ne!(text, alice_text);
+    assert!(text.iter().all(|(_, block)| !block.text.contains("Alice")));
+    assert!(
+        text.iter()
+            .any(|(_, block)| block.text.contains("Gregor") || block.text.contains("Samsa"))
+    );
+}
+
+/// Contents that cannot be written into the cache (here the card refuses
+/// every write): the book's details are there, a chapter is an error, and
+/// it is not tried again on every look until the book is opened again.
+#[test]
+fn a_package_that_cannot_be_cached_is_not_tried_again_and_again() {
+    let storage = Recording::limited(MemoryStorage::new().with("books/alice.epub", ALICE), 0);
+    let doc = EpubDocument::open(&storage, "books/alice.epub").unwrap();
+    assert!(doc.metadata().title.is_some());
+    assert!(
+        doc.block_at(&storage, paperpaw_sdk::document::Locator::new(0, 0))
+            .is_err()
+    );
+    let tried = storage.written.borrow().len();
+    assert!(tried > 0);
+    assert!(
+        doc.block_at(&storage, paperpaw_sdk::document::Locator::new(0, 0))
+            .is_err()
+    );
+    assert_eq!(doc.toc_len(&storage), 0);
+    assert!(doc.toc_entry(&storage, 0).is_none());
+    assert!(doc.fonts(&storage).is_empty());
+    assert_eq!(storage.written.borrow().len(), tried);
+}
+
+/// A broken NCX (and no navigation document): the book opens with its
+/// details and is read, with no contents.
+#[test]
+fn a_broken_ncx_reads_without_contents() {
+    let package = opf(
+        "<dc:title>No contents</dc:title>",
+        &[
+            ("ncx", "toc.ncx", "application/x-dtbncx+xml", ""),
+            ("a", "a.xhtml", "application/xhtml+xml", ""),
+        ],
+        &["a"],
+    )
+    .replace("<spine>", "<spine toc=\"ncx\">");
+    let epub = zip(
+        &[
+            (
+                "META-INF/container.xml",
+                container("OEBPS/content.opf").into_bytes(),
+            ),
+            ("OEBPS/content.opf", package.into_bytes()),
+            (
+                "OEBPS/toc.ncx",
+                b"<ncx><navMap><navPoint><navLabel><te".to_vec(),
+            ),
+            ("OEBPS/a.xhtml", xhtml("<p>Text</p>").into_bytes()),
+        ],
+        false,
+    );
+    let storage = MemoryStorage::new().with("books/book.epub", epub);
+    let doc = EpubDocument::open(&storage, "books/book.epub").unwrap();
+    assert_eq!(doc.metadata().title.as_deref(), Some("No contents"));
+    assert_eq!(doc.toc_len(&storage), 0);
+    let text = blocks(&doc, &storage);
+    assert_eq!(text.len(), 1);
+    assert_eq!(text[0].1.text, "Text");
 }

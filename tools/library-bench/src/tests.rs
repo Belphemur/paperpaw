@@ -1,6 +1,6 @@
 //! The first walk of new books on the card as the X4 has it: what it
 //! reads and writes for each (#98). A book opened for its details
-//! writes nothing of its format's cache; what is written is the
+//! writes next to nothing of its format's cache; what is written is the
 //! library's own (each book's details, the catalog).
 
 #![allow(
@@ -70,7 +70,7 @@ fn written_to(taken: &str, kind: &str) -> u64 {
 }
 
 #[test]
-fn the_first_walk_writes_nothing_of_the_books_formats() {
+fn the_first_walk_writes_next_to_nothing_of_the_books_formats() {
     // FAT32 with clusters of 32 KiB, as in the bench.
     let card = Card::new(32 << 30).unwrap();
     for n in 0..BOOKS {
@@ -89,13 +89,18 @@ fn the_first_walk_writes_nothing_of_the_books_formats() {
     println!("{BOOKS} books: {taken}");
     let found = paperpaw_sdk::library::catalog::count(&card, &|_| true);
     assert_eq!(found, BOOKS, "{taken}");
-    // Before #98 the format's cache took about 130 blocks a book.
-    assert_eq!(written_to(&taken, ".paperpaw/plugins"), 0, "{taken}");
+    // Before #98 the format's cache took about 130 blocks a book. Now a
+    // block a book at most: a new book's folder is removed in case a cut
+    // removal left one (the card writes back what it kept, #385 S2).
+    assert!(
+        written_to(&taken, ".paperpaw/plugins") <= BOOKS as u64,
+        "{taken}"
+    );
     // All else written is the library's own: the books' details (a
     // folder of 32 KiB made for each of their 256 groups first), the
-    // catalog, the listings of the folders walked.
+    // catalog, the listings of the folders walked; and the above.
     let written: u64 = taken.split(' ').nth(2).unwrap().parse().unwrap();
-    let own: u64 = ["details", "library files", "books"]
+    let own: u64 = ["details", "library files", "books", ".paperpaw/plugins"]
         .iter()
         .map(|kind| written_to(&taken, kind))
         .sum();
