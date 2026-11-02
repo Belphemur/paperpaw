@@ -20,6 +20,13 @@ before it are thrown away.
 
 ### Added
 
+- **Plugin interface (next raise):** `Storage::list_from` lists a folder a piece at a time, each piece going on
+  where the last one stopped (#79): a folder of thousands of entries is read about twice in all, not once a
+  piece. Storages that cannot go on from a place count, as `paperpaw_platform::list_counted` does (the item's
+  default), so every storage keeps working; the memory card's (FAT) goes on from where the entry begins and
+  finds a place taken by another entry by its count. The catalog lists the library's folders so: the walk after
+  a start reads a folder of 4,000 books (1,254 blocks) in 2,535 blocks instead of 66,460 (bench; the whole walk
+  4,367 instead of 68,291).
 - Screens mirror in a user-interface language that runs right to left (#33): the switch, value rows and their
   chevrons, ticked rows, the number buttons, text fields, dialog buttons, list rows' icons, chips, the date
   and time pickers, headings and the reader's menu bar start at the right, and left/right follow them. The

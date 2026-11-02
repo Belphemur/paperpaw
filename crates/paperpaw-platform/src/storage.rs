@@ -213,6 +213,51 @@ pub trait Storage {
     fn local_path(&self, path: &str, with: &mut dyn FnMut(&str)) {
         let _ = (path, with);
     }
+
+    /// Lists a directory a piece at a time: calls `visit` for its entries
+    /// from place `from` on, as [`Storage::list`] shows them, until
+    /// `visit` answers `false` for one (which is not taken); returns the
+    /// place of that entry, where the next piece starts, or `None` once
+    /// every entry was visited. Place 0 is the first entry; any other is
+    /// one this returned for the same directory.
+    ///
+    /// A directory of thousands of entries is so read once in all, not
+    /// once a piece. An entry added or removed between pieces may be
+    /// visited twice or not at all (as with places counted); a place that
+    /// no longer holds starts the listing over at a place it can find,
+    /// never fails nor shows an entry that is not there. Storages that
+    /// cannot go on from a place count ([`list_counted`]), as by default.
+    fn list_from(
+        &self,
+        dir: &str,
+        from: u64,
+        visit: &mut dyn FnMut(DirEntry<'_>) -> bool,
+    ) -> Result<Option<u64>, StorageError> {
+        list_counted(self, dir, from, visit)
+    }
+}
+
+/// [`Storage::list_from`] for a storage that lists a directory whole
+/// only: a place is how many entries [`Storage::list`] showed before;
+/// each piece lists the directory from its start.
+pub fn list_counted<S: Storage + ?Sized>(
+    storage: &S,
+    dir: &str,
+    from: u64,
+    visit: &mut dyn FnMut(DirEntry<'_>) -> bool,
+) -> Result<Option<u64>, StorageError> {
+    let (mut at, mut stopped) = (0u64, None);
+    storage.list(dir, &mut |entry| {
+        if stopped.is_some() {
+            return;
+        }
+        if at >= from && !visit(entry) {
+            stopped = Some(at);
+            return;
+        }
+        at += 1;
+    })?;
+    Ok(stopped)
 }
 
 /// Storage for devices without any: everything is empty and read-only.
@@ -311,6 +356,20 @@ impl<B: Storage, M: Storage> Storage for Mounted<B, M> {
         }
         let (storage, dir) = self.route(dir);
         storage.list(dir, visit)
+    }
+
+    fn list_from(
+        &self,
+        dir: &str,
+        from: u64,
+        visit: &mut dyn FnMut(DirEntry<'_>) -> bool,
+    ) -> Result<Option<u64>, StorageError> {
+        // The root's places count the mount point too.
+        if dir.is_empty() {
+            return list_counted(self, dir, from, visit);
+        }
+        let (storage, dir) = self.route(dir);
+        storage.list_from(dir, from, visit)
     }
 
     fn remove(&self, path: &str) -> Result<(), StorageError> {

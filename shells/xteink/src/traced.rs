@@ -189,6 +189,18 @@ impl Storage for Traced {
         note(|| format!("list {dir}"), || self.0.list(dir, visit))
     }
 
+    fn list_from(
+        &self,
+        dir: &str,
+        from: u64,
+        visit: &mut dyn FnMut(DirEntry<'_>) -> bool,
+    ) -> Result<Option<u64>, StorageError> {
+        note(
+            || format!("list {dir} from {from}"),
+            || self.0.list_from(dir, from, visit),
+        )
+    }
+
     fn remove(&self, path: &str) -> Result<(), StorageError> {
         note(|| format!("remove {path}"), || self.0.remove(path))
     }
