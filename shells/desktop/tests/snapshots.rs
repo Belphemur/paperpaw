@@ -1402,8 +1402,21 @@ fn headers_are_centred_by_their_capitals() {
                 failures.push(format!("{profile} screen {n}: no ink in the title"));
                 continue;
             };
+            // Where the next letter touches the capital (a fitted *B* and
+            // a *y* do), the run is more than the capital: its own
+            // columns are those inked along its top row, from the first
+            // inked one. The next letter's descender is not in them.
+            let ink_at = |row: u32, col: u32| gray[(row * width + col) as usize] < 128;
+            let top = (y..end).find(|row| (start..stop).any(|col| ink_at(*row, col)));
+            let (start, stop) = top
+                .and_then(|top| {
+                    let from = (start..stop).find(|col| ink_at(top, *col))?;
+                    let to = (from..stop).find(|col| !ink_at(top, *col)).unwrap_or(stop);
+                    Some((from, to))
+                })
+                .unwrap_or((start, stop));
             let rows: Vec<u32> = (y..end)
-                .filter(|row| (start..stop).any(|col| gray[(row * width + col) as usize] < 128))
+                .filter(|row| (start..stop).any(|col| ink_at(*row, col)))
                 .collect();
             let (first, last) = (rows[0], rows[rows.len() - 1]);
             let above = first - y;

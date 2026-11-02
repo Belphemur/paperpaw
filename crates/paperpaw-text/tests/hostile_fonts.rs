@@ -140,15 +140,19 @@ fn an_outline_glyph_bitmap_is_bounded() {
     let font = OutlineFont::new(data, &[("wght", 400.0)]).unwrap();
 
     let size = 32.0;
-    let (glyph, largest) = largest_allocation(|| font.rasterize('H', size));
-    assert!(largest <= 4 * 1024 * 1024, "{largest} bytes");
-    let side = 8.0 * size;
-    assert!(
-        f32::from(glyph.width) <= side && f32::from(glyph.height) <= side,
-        "{}x{}",
-        glyph.width,
-        glyph.height
-    );
+    // Fitted to the grid or not.
+    for hinting in paperpaw_text::Hinting::ALL {
+        let font = font.clone().with_hinting(hinting);
+        let (glyph, largest) = largest_allocation(|| font.rasterize('H', size));
+        assert!(largest <= 4 * 1024 * 1024, "{hinting:?}: {largest} bytes");
+        let side = 8.0 * size;
+        assert!(
+            f32::from(glyph.width) <= side && f32::from(glyph.height) <= side,
+            "{hinting:?}: {}x{}",
+            glyph.width,
+            glyph.height
+        );
+    }
 }
 
 /// The bytes of table `tag` in font `data`: offset and length.

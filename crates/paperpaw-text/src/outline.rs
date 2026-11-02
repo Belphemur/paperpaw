@@ -5,9 +5,10 @@ use alloc::vec::Vec;
 use core::fmt;
 
 use skrifa::instance::{Location, Size};
-use skrifa::outline::{DrawSettings, OutlinePen};
+use skrifa::outline::{DrawSettings, HintingInstance, OutlinePen};
 use skrifa::{FontRef, GlyphId, MetadataProvider};
 
+use crate::Hinting;
 use crate::anchors::Anchors;
 use crate::font::{FontError, LineMetrics};
 use crate::glyph::{self, Glyph, pack_coverage};
@@ -24,6 +25,7 @@ use crate::raster::{self, Path, Pt};
 pub struct OutlineFont {
     data: Cow<'static, [u8]>,
     location: Location,
+    hinting: Hinting,
 }
 
 impl fmt::Debug for OutlineFont {
@@ -48,7 +50,25 @@ impl OutlineFont {
             return Err(FontError::NoCharmap);
         }
         let location = font.axes().location(variations.iter().copied());
-        Ok(OutlineFont { data, location })
+        Ok(OutlineFont {
+            data,
+            location,
+            hinting: Hinting::None,
+        })
+    }
+
+    /// This font rasterized with `hinting`: glyph ink fitted to the pixel
+    /// grid (see [`Hinting`]); advances and metrics are not changed.
+    #[must_use]
+    pub fn with_hinting(mut self, hinting: Hinting) -> OutlineFont {
+        self.hinting = hinting;
+        self
+    }
+
+    /// How it is rasterized: [`Hinting::None`] unless
+    /// [`OutlineFont::with_hinting`] said otherwise.
+    pub fn hinting(&self) -> Hinting {
+        self.hinting
     }
 
     fn font_ref(&self) -> Option<FontRef<'_>> {
@@ -176,8 +196,17 @@ impl OutlineFont {
             .unwrap_or(0.0)
             .max(0.0);
         let mut pen = Pen::default();
-        if let Some(outline) = font.outline_glyphs().get(id) {
-            let settings = DrawSettings::unhinted(Size::new(size), &self.location);
+        let outlines = font.outline_glyphs();
+        // A hinter that cannot be made for this font or size draws the
+        // outline as it is.
+        let hinter = self.hinting.options().and_then(|options| {
+            HintingInstance::new(&outlines, Size::new(size), &self.location, options).ok()
+        });
+        if let Some(outline) = outlines.get(id) {
+            let settings = match &hinter {
+                Some(hinter) => DrawSettings::hinted(hinter, false),
+                None => DrawSettings::unhinted(Size::new(size), &self.location),
+            };
             // A broken glyph renders as empty instead of failing the page.
             let _ = outline.draw(settings, &mut pen);
         }

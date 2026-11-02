@@ -45,6 +45,7 @@ fn main() {
     println!("cargo::rerun-if-changed=build.rs");
     println!("cargo::rerun-if-changed=fonts");
     println!("cargo::rerun-if-env-changed=PAPERPAW_FONT_SIZES");
+    println!("cargo::rerun-if-env-changed=PAPERPAW_FONT_HINT");
     println!("cargo::rerun-if-env-changed=PAPERPAW_FONT_LEAN");
     println!("cargo::rustc-check-cfg=cfg(paperpaw_lean_fonts)");
     // Lean (the firmware): no Literata bold, italic or bold italic (the
@@ -71,6 +72,15 @@ fn main() {
         })
         .collect();
 
+    // Letters fitted to the pixel grid, so that a black-and-white frame
+    // draws them even and crisp; `none` (or another mode) to compare.
+    let hinting = match std::env::var("PAPERPAW_FONT_HINT") {
+        Ok(name) => paperpaw_text::Hinting::parse(&name).unwrap_or_else(|| {
+            panic!("PAPERPAW_FONT_HINT: `{name}` is none, light, normal or mono")
+        }),
+        Err(_) => paperpaw_text::Hinting::Light,
+    };
+
     let out = PathBuf::from(
         std::env::var_os("OUT_DIR").unwrap_or_else(|| panic!("OUT_DIR is set by cargo")),
     );
@@ -80,7 +90,8 @@ fn main() {
         }
         let data = std::fs::read(path).unwrap_or_else(|e| panic!("{path}: {e}"));
         let font = paperpaw_text::OutlineFont::new(data, &[("wght", weight)])
-            .unwrap_or_else(|e| panic!("{path}: {e}"));
+            .unwrap_or_else(|e| panic!("{path}: {e}"))
+            .with_hinting(hinting);
         // Latin, and the ligatures where the font has them.
         let charset = paperpaw_text::charset::chars;
         let ligatures = charset(paperpaw_text::charset::named("ligatures").unwrap_or(&[]))
