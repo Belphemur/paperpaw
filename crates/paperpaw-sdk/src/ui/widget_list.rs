@@ -112,7 +112,7 @@ impl ListScreen {
         let top = header.area().height + style.gap as u16;
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         Self {
-            list: ListView::new(area, style.row).focus_on_keys(env),
+            list: ListView::readable(env, &style, area, style.row).focus_on_keys(env),
             reorder: Reorder::default(),
             style,
             header,
@@ -364,7 +364,7 @@ impl AddScreen {
         offered.sort_by_cached_key(|(id, _)| rank(id));
         Self {
             widgets: offered,
-            list: ListView::new(area, style.row).focus_on_keys(env),
+            list: ListView::readable(env, &style, area, style.row).focus_on_keys(env),
             style,
             header,
             target,

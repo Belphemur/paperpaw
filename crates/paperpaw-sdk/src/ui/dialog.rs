@@ -93,7 +93,9 @@ impl Dialog {
     ) -> Self {
         let display = env.device().display;
         let margin = style.margin as u16;
-        let width = display.width.saturating_sub(2 * margin);
+        // In the readable column where the screen is wider than that.
+        let column = super::readable(env, style, Rect::new(0, 0, display.width, display.height));
+        let width = column.width.saturating_sub(2 * margin);
         let inner = f32::from(width.saturating_sub(2 * margin));
         let wrap = |font: &crate::fonts::FontHandle<'_>, size: f32, paragraph: &str| {
             let wrapped = font.wrap(size, paragraph, inner);
@@ -153,7 +155,7 @@ impl Dialog {
             None => (0, 0, Vec::new()),
         };
         let mut dialog = Self {
-            panel: Rect::new(margin, 0, width, 0),
+            panel: Rect::new(column.x + margin, 0, width, 0),
             title: if title.is_empty() {
                 Vec::new()
             } else {

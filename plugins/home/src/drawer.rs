@@ -16,14 +16,17 @@ use paperpaw_sdk::{
 
 use crate::{blocks, pages};
 
-/// Columns of the overview.
-const COLUMNS: u32 = 4;
+/// Columns of the overview on a screen higher than wide; more on one that
+/// is wider ([`grid::columns_for`]).
+const COLUMNS: u8 = 4;
 
 pub(crate) struct DrawerScreen {
     style: UiStyle,
     header: ui::Header,
     list: ListView,
     tools: Vec<Id>,
+    /// Tools side by side.
+    columns: u32,
     /// The lines the longest name takes: every tool keeps room for them.
     lines: usize,
 }
@@ -42,11 +45,12 @@ impl DrawerScreen {
         );
         // About as high as a column is wide; a line higher where a tool's
         // name takes two (its icon as large as the others').
-        let row = (u32::from(area.width) / COLUMNS * 4 / 5).max(u32::from(style.row()));
+        let columns = u32::from(grid::columns_for(area, COLUMNS));
+        let row = (u32::from(area.width) / columns * 4 / 5).max(u32::from(style.row()));
         let tools: Vec<Id> = pages::tools(env).into_iter().map(|(id, _)| id).collect();
         // The names' lines as they fall in a row grown by that line.
         let line = u32::from(paperpaw_sdk::widgets::line_height(env, style.small()));
-        let width = (u32::from(area.width) / COLUMNS) as u16;
+        let width = (u32::from(area.width) / columns) as u16;
         let cell = Rect::new(0, 0, width, (row + line) as u16);
         let lines = tools
             .iter()
@@ -56,9 +60,10 @@ impl DrawerScreen {
         let more = if lines > 1 { line } else { 0 };
         Self {
             list: ListView::new(area, row + more)
-                .columns(COLUMNS)
+                .columns(columns)
                 .focus_on_keys(env),
             tools,
+            columns,
             lines,
             style,
             header,
@@ -116,7 +121,7 @@ impl Screen for DrawerScreen {
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let len = self.tools.len();
         let a = action;
-        let columns = COLUMNS as isize;
+        let columns = self.columns as isize;
         // Left and right are where the tools are: from the right, the next
         // one is to the left.
         let (back, on) = if self.style.is_rtl() {

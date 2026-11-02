@@ -9,7 +9,7 @@
 //! shown ([`super::rows::Loaded`]).
 
 use paperpaw_sdk::semantics::Role;
-use paperpaw_sdk::ui::{self, Focus, UiStyle};
+use paperpaw_sdk::ui::{self, Focus, ListView, UiStyle};
 use paperpaw_sdk::{Canvas, Color, Env, Rect};
 
 use super::rows::{self, Loaded, Sizes};
@@ -48,7 +48,7 @@ impl Grid {
         let columns = if sizes.compact {
             3
         } else {
-            (u32::from(width) / env.metrics().mm(COLUMN_MM).max(1)).max(3) as u16
+            ListView::fit_columns(env, Rect::new(0, 0, width, 0), COLUMN_MM).max(3) as u16
         };
         // Covers a gap apart, the first and the last on the margins; the
         // focus a little around each.
