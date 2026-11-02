@@ -36,10 +36,30 @@ pub(super) fn open(env: &Env<'_>, path: &str, anchor: Option<&str>, back: &[Stri
     }
 }
 
-/// Folders looked into at most while a note is looked for.
-const MAX_FOLDERS: usize = 1000;
-/// Entries read at most while a note is looked for.
-const MAX_ENTRIES: usize = 30_000;
+/// How far a note is looked for in a vault: the folders looked into and
+/// the entries read at most in one tap (it runs in a key handler, with
+/// the book open, so less where memory is small).
+#[derive(Debug, Clone, Copy)]
+pub(super) struct Limits {
+    folders: usize,
+    entries: usize,
+}
+
+impl Limits {
+    pub(super) fn of(env: &Env<'_>) -> Self {
+        if env.device().memory == paperpaw_sdk::MemoryClass::Small {
+            Self {
+                folders: 100,
+                entries: 2000,
+            }
+        } else {
+            Self {
+                folders: 200,
+                entries: 4000,
+            }
+        }
+    }
+}
 
 /// What a link to another note says.
 #[derive(Debug, PartialEq, Eq)]
@@ -81,8 +101,14 @@ pub(super) fn read(href: &str) -> Option<NoteLink> {
 }
 
 /// The file `link` leads to, from the note at `from`: `None` where there
-/// is none.
-pub(super) fn find(storage: &dyn Storage, from: &str, link: &NoteLink) -> Option<String> {
+/// is none. A name is looked for beside the note and, in a vault (a folder
+/// with `.obsidian` above the note), anywhere in it, within `limits`.
+pub(super) fn find(
+    storage: &dyn Storage,
+    from: &str,
+    link: &NoteLink,
+    limits: Limits,
+) -> Option<String> {
     let dir = from.rsplit_once('/').map_or("", |(dir, _)| dir);
     if !link.by_name {
         // A path from the root; a note without its ending too.
@@ -93,7 +119,8 @@ pub(super) fn find(storage: &dyn Storage, from: &str, link: &NoteLink) -> Option
     let name = link.what.trim_matches('/');
     let root = vault_root(storage, dir);
     // As written, from the note's folder or the vault's (`Folder/Note`).
-    for base in [dir, root.as_str()] {
+    let bases = [Some(dir), root.as_deref()];
+    for base in bases.into_iter().flatten() {
         for ending in ["", ".md", ".markdown"] {
             let path = join(base, &alloc::format!("{name}{ending}"));
             if storage.exists(&path) {
@@ -101,7 +128,7 @@ pub(super) fn find(storage: &dyn Storage, from: &str, link: &NoteLink) -> Option
             }
         }
     }
-    // By its name alone, anywhere in the vault: the nearest the top.
+    // By its name alone: beside the note first, whatever the case.
     let wanted = name.rsplit('/').next().unwrap_or(name).to_lowercase();
     let is_it = |file: &str| {
         let file = file.to_lowercase();
@@ -111,7 +138,6 @@ pub(super) fn find(storage: &dyn Storage, from: &str, link: &NoteLink) -> Option
                 .or_else(|| file.strip_suffix(".markdown"))
                 .is_some_and(|stem| stem == wanted)
     };
-    // Beside the note first, whatever the case.
     let mut beside = None;
     let listed = storage.list(dir, &mut |entry| {
         if beside.is_none() && !entry.is_dir && is_it(entry.name) {
@@ -121,37 +147,52 @@ pub(super) fn find(storage: &dyn Storage, from: &str, link: &NoteLink) -> Option
     if listed.is_ok() && beside.is_some() {
         return beside;
     }
-    let (mut folders, mut next, mut seen) = (alloc::vec![root], 0, 0);
+    // Anywhere in the vault, the nearest the top. Not outside a vault: any
+    // book's link could walk the whole card.
+    walk(storage, &root?, limits, is_it)
+}
+
+/// The first file `is_it` says is the one, in `root`'s folders level by
+/// level, reading `limits.entries` entries and keeping `limits.folders`
+/// folders to look into at most.
+fn walk(
+    storage: &dyn Storage,
+    root: &str,
+    limits: Limits,
+    is_it: impl Fn(&str) -> bool,
+) -> Option<String> {
+    let (mut folders, mut next, mut seen) = (alloc::vec![root.to_string()], 0, 0);
     while let Some(folder) = folders.get(next).cloned() {
         next += 1;
         let (mut hit, mut below) = (None, Vec::new());
         let listed = storage.list(&folder, &mut |entry| {
             seen += 1;
-            if seen > MAX_ENTRIES || entry.name.starts_with('.') {
+            if seen > limits.entries || entry.name.starts_with('.') {
                 return;
             }
             if entry.is_dir {
-                below.push(join(&folder, entry.name));
+                if folders.len() + below.len() < limits.folders {
+                    below.push(join(&folder, entry.name));
+                }
             } else if hit.is_none() && is_it(entry.name) {
                 hit = Some(join(&folder, entry.name));
             }
         });
-        if listed.is_ok() && hit.is_some() || seen > MAX_ENTRIES {
+        if listed.is_ok() && hit.is_some() || seen > limits.entries {
             return hit;
         }
-        let room = MAX_FOLDERS.saturating_sub(folders.len());
-        folders.extend(below.into_iter().take(room));
+        folders.append(&mut below);
     }
     None
 }
 
 /// The vault's folder: the nearest folder above `dir` (or `dir`) with an
-/// `.obsidian` folder in it, else `dir`.
-fn vault_root(storage: &dyn Storage, dir: &str) -> String {
+/// `.obsidian` folder in it; `None` where there is none.
+fn vault_root(storage: &dyn Storage, dir: &str) -> Option<String> {
     let mut up = dir;
     for _ in 0..8 {
         if paperpaw_sdk::files::is_dir(storage, &join(up, ".obsidian")) {
-            return up.to_string();
+            return Some(up.to_string());
         }
         match up.rsplit_once('/') {
             Some((above, _)) => up = above,
@@ -159,7 +200,7 @@ fn vault_root(storage: &dyn Storage, dir: &str) -> String {
             None => up = "",
         }
     }
-    dir.to_string()
+    None
 }
 
 fn join(dir: &str, name: &str) -> String {
@@ -174,6 +215,11 @@ fn join(dir: &str, name: &str) -> String {
 mod tests {
     use super::*;
     use paperpaw_sdk::MemoryStorage;
+
+    const LIMITS: Limits = Limits {
+        folders: 200,
+        entries: 4000,
+    };
 
     fn vault() -> MemoryStorage {
         MemoryStorage::new()
@@ -214,21 +260,21 @@ mod tests {
         let from = "v/Daily/2026-01-02.md";
         // Case does not matter; the ending is left out.
         assert_eq!(
-            find(&storage, from, &link("plan")).as_deref(),
+            find(&storage, from, &link("plan"), LIMITS).as_deref(),
             Some("v/Projects/Plan.md")
         );
         assert_eq!(
-            find(&storage, from, &link("TOP")).as_deref(),
+            find(&storage, from, &link("TOP"), LIMITS).as_deref(),
             Some("v/Top.md")
         );
         // Two of a name: the one nearest the top.
         assert_eq!(
-            find(&storage, from, &link("Idea")).as_deref(),
+            find(&storage, from, &link("Idea"), LIMITS).as_deref(),
             Some("v/Ideas/Idea.md")
         );
         // With its folder.
         assert_eq!(
-            find(&storage, from, &link("Projects/Deep/Idea")).as_deref(),
+            find(&storage, from, &link("Projects/Deep/Idea"), LIMITS).as_deref(),
             Some("v/Projects/Deep/Idea.md")
         );
         // Beside the note first.
@@ -237,13 +283,13 @@ mod tests {
             .with("v/A/Idea.md", b"x".to_vec())
             .with("v/B/Idea.md", b"x".to_vec());
         assert_eq!(
-            find(&beside, "v/B/n.md", &link("idea")).as_deref(),
+            find(&beside, "v/B/n.md", &link("idea"), LIMITS).as_deref(),
             Some("v/B/Idea.md")
         );
         // Not found; not in hidden folders; not past the vault.
-        assert_eq!(find(&storage, from, &link("Missing")), None);
-        assert_eq!(find(&storage, from, &link("Secret")), None);
-        assert_eq!(find(&storage, from, &link("")), None);
+        assert_eq!(find(&storage, from, &link("Missing"), LIMITS), None);
+        assert_eq!(find(&storage, from, &link("Secret"), LIMITS), None);
+        assert_eq!(find(&storage, from, &link(""), LIMITS), None);
     }
 
     #[test]
@@ -255,14 +301,77 @@ mod tests {
             anchor: None,
         };
         assert_eq!(
-            find(&storage, "v/a.md", &path("v/Top.md")).as_deref(),
+            find(&storage, "v/a.md", &path("v/Top.md"), LIMITS).as_deref(),
             Some("v/Top.md")
         );
         assert_eq!(
-            find(&storage, "v/a.md", &path("v/Top")).as_deref(),
+            find(&storage, "v/a.md", &path("v/Top"), LIMITS).as_deref(),
             Some("v/Top.md")
         );
-        assert_eq!(find(&storage, "v/a.md", &path("v/Nope.md")), None);
-        assert_eq!(find(&storage, "v/a.md", &path("")), None);
+        assert_eq!(find(&storage, "v/a.md", &path("v/Nope.md"), LIMITS), None);
+        assert_eq!(find(&storage, "v/a.md", &path(""), LIMITS), None);
+    }
+
+    #[test]
+    fn outside_a_vault_a_name_is_looked_for_beside_the_note_only() {
+        let link = NoteLink {
+            what: "Deep".into(),
+            by_name: true,
+            anchor: None,
+        };
+        // A library: no `.obsidian`, the file far below.
+        let books = MemoryStorage::new()
+            .with("books/a/b/c/Deep.md", b"x".to_vec())
+            .with("books/Near.md", b"x".to_vec())
+            .with("books/n.epub", b"x".to_vec());
+        assert_eq!(find(&books, "books/n.epub", &link, LIMITS), None);
+        let near = NoteLink {
+            what: "near".into(),
+            ..link
+        };
+        assert_eq!(
+            find(&books, "books/n.epub", &near, LIMITS).as_deref(),
+            Some("books/Near.md")
+        );
+    }
+
+    #[test]
+    fn the_walk_of_a_vault_ends_within_its_limits() {
+        // 2,000 folders side by side, one note in each, none the one.
+        let mut storage = MemoryStorage::new().with("v/.obsidian/app.json", b"{}".to_vec());
+        for n in 0..2000 {
+            storage = storage.with(&alloc::format!("v/f{n:04}/n.md"), b"x".to_vec());
+        }
+        let tested = core::cell::Cell::new(0);
+        let found = walk(&storage, "v", LIMITS, |_| {
+            tested.set(tested.get() + 1);
+            false
+        });
+        assert_eq!(found, None);
+        // At most the folders it keeps were looked into.
+        assert!(tested.get() <= LIMITS.folders, "{}", tested.get());
+        // A note in the last folder is not found: the walk is bounded, as
+        // `wiki.rs`'s is.
+        storage = storage.with("v/f1999/Wanted.md", b"x".to_vec());
+        let link = NoteLink {
+            what: "Wanted".into(),
+            by_name: true,
+            anchor: None,
+        };
+        assert_eq!(find(&storage, "v/a.md", &link, LIMITS), None);
+        // More entries than the room for them in one folder: it ends.
+        let mut many = MemoryStorage::new().with("v/.obsidian/app.json", b"{}".to_vec());
+        for n in 0..10_000 {
+            many = many.with(&alloc::format!("v/g{n:05}/x"), b"x".to_vec());
+        }
+        let tested = core::cell::Cell::new(0);
+        assert_eq!(
+            walk(&many, "v", LIMITS, |_| {
+                tested.set(tested.get() + 1);
+                false
+            }),
+            None
+        );
+        assert!(tested.get() <= LIMITS.folders);
     }
 }

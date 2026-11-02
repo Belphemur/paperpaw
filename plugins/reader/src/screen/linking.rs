@@ -188,7 +188,22 @@ impl ReaderScreen {
         let Ok(book) = &mut self.book else {
             return Handled::No;
         };
-        let Some(path) = notelinks::find(env.storage(), &book.path, &link) else {
+        // A path with an ending the reader cannot open (a broken link in
+        // an EPUB, say) is none of ours: no probing of the card for it.
+        let ending = link
+            .what
+            .rsplit('/')
+            .next()
+            .is_some_and(|n| n.contains('.'));
+        if !link.by_name && ending && !env.formats().supports(&link.what) {
+            return Handled::No;
+        }
+        let Some(path) = notelinks::find(
+            env.storage(),
+            &book.path,
+            &link,
+            notelinks::Limits::of(&env),
+        ) else {
             cx.command(Command::Notify(env.i18n().format(
                 "reader.note-missing",
                 &[("name", paperpaw_sdk::Arg::Str(link.what.as_str()))],
