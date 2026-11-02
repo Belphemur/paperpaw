@@ -452,10 +452,17 @@ impl KeyboardScreen {
             let high = (u32::from(touch_row) * high / 100) as u16;
             (high, ui::edge_room(&style, high))
         };
+        // Text of several lines keeps the status line at the top of the
+        // screen in sight: the panel never reaches into it.
+        let status = if multiline {
+            paperpaw_sdk::widgets::line_height(env, style.small()) + style.gap() / 2
+        } else {
+            0
+        };
         // On the screen whatever the rows: keys get smaller first.
         let room_for_keys = display
             .height
-            .saturating_sub(field_height.saturating_add(gap * 2 + room));
+            .saturating_sub(field_height.saturating_add(gap * 2 + room + status));
         let keys_height = key_height.saturating_mul(count as u16).min(room_for_keys);
         // Text of several lines takes what the keys leave, up to a number
         // of lines: it shows as much of the paragraph as fits.
@@ -468,7 +475,7 @@ impl KeyboardScreen {
                 .max(1.0);
             let spare = display
                 .height
-                .saturating_sub(field_height + keys_height + gap * 2 + room);
+                .saturating_sub(status + field_height + keys_height + gap * 2 + room);
             let more = ((f32::from(spare) / line) as u16).min(MORE_LINES);
             field_height += (f32::from(more) * line) as u16;
         }
