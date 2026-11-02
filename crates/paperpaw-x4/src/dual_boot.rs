@@ -16,7 +16,6 @@
 //! This is the part that decides, on a computer-tested footing; the firmware
 //! (`shells/xteink`) reads the flash and the card and does as it says.
 
-use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 
@@ -130,14 +129,10 @@ impl IniScan {
         if !self.inside || line.is_empty() {
             return;
         }
-        // The line read as the kernel reads it: under its own header, by
-        // the parser of the file's format (quotes, comments, escapes).
-        let mut text = String::from("[");
-        text.push_str(SECTION);
-        text.push_str("]\n");
-        text.push_str(line);
-        for entry in paperpaw_config::parse(&text).flatten() {
-            if entry.section == SECTION && entry.key == KEY {
+        // The line read as the kernel reads it: by the parser of the file's
+        // format (quotes, comments, escapes), in the section tracked here.
+        for entry in paperpaw_config::parse(line).flatten() {
+            if entry.key == KEY {
                 self.choice = Some(Choice::of(&entry.value.as_str()));
             }
         }
@@ -148,36 +143,42 @@ impl IniScan {
 /// inside it).
 #[derive(Debug, Default)]
 pub struct MarkerScan {
-    /// The last bytes of what came before, as many as the marker is long
-    /// less one.
-    tail: Vec<u8>,
-    found: bool,
+    /// How much of the marker the last bytes read are the start of.
+    matched: usize,
 }
 
 impl MarkerScan {
     /// More of the flash. Whether the marker has been seen by now.
     pub fn feed(&mut self, piece: &[u8]) -> bool {
-        if self.found {
-            return true;
+        for &byte in piece {
+            // On a mismatch, fall back to the longest start of the marker
+            // that the bytes before it end in, and try again.
+            while self.matched > 0 && MARKER[self.matched] != byte {
+                let m = self.matched;
+                self.matched = (0..m)
+                    .rev()
+                    .find(|&n| MARKER[..n] == MARKER[m - n..m])
+                    .unwrap_or(0);
+            }
+            if MARKER[self.matched] == byte {
+                self.matched += 1;
+                if self.matched == MARKER.len() {
+                    return true;
+                }
+            }
         }
-        let keep = MARKER.len() - 1;
-        let mut window = core::mem::take(&mut self.tail);
-        window.extend_from_slice(piece);
-        self.found = window.windows(MARKER.len()).any(|w| w == MARKER);
-        let from = window.len().saturating_sub(keep);
-        self.tail = window.split_off(from);
-        self.found
+        false
     }
 }
 
 /// Whether the bootloader's window of `flash` carries [`MARKER`], read in
-/// pieces of 4 KB (about 32 KB in all, so only where it is needed).
+/// pieces of 1 KB (about 32 KB in all, so only where it is needed).
 pub fn scan_marker(flash: &mut impl Flash) -> Result<bool, FlashError> {
-    let mut piece = Box::new([0u8; 4096]);
+    let mut piece = [0u8; 1024];
     let mut scan = MarkerScan::default();
     for at in (0..WINDOW).step_by(piece.len()) {
-        flash.read(at, &mut piece[..])?;
-        if scan.feed(&piece[..]) {
+        flash.read(at, &mut piece)?;
+        if scan.feed(&piece) {
             return Ok(true);
         }
     }
@@ -362,6 +363,26 @@ mod tests {
             let mut scan = MarkerScan::default();
             assert!(!scan.feed(text));
             assert!(!scan.feed(&[0xFF; 64]));
+        }
+    }
+
+    #[test]
+    fn a_false_start_of_the_marker_does_not_hide_it() {
+        // Bytes that begin like the marker, then the marker itself.
+        for lead in [
+            "p",
+            "pap",
+            "paperp",
+            "paperpaw-dualboot:",
+            "paperpaw-dualboot",
+        ] {
+            let mut flash = lead.as_bytes().to_vec();
+            flash.extend_from_slice(MARKER);
+            for size in [1, 3, 64] {
+                let mut scan = MarkerScan::default();
+                let found = flash.chunks(size).any(|piece| scan.feed(piece));
+                assert!(found, "{lead} in pieces of {size}");
+            }
         }
     }
 

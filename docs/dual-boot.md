@@ -51,7 +51,8 @@ of a release) raw, nothing else; keep both slots at least 6,553,600 bytes
   "undo" of an update that did not start.
 - Never reads the other partition for the web flasher's bundle of plugins.
 - Says so where an update would have been offered: the *Updates* page tells
-  that an update would replace the other firmware, and names this file. It
+  in two plain sentences that PaperPaw shares the device and installs no
+  updates here (the details are in this file, not on the screen). It
   leaves the note `.paperpaw/boot.txt` on the card (`dual-boot source=ini
   slot=1`) for plugins; the note is removed when PaperPaw is not declared
   any more.
