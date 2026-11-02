@@ -136,11 +136,18 @@ fn the_focus_stays_on_its_book_with_the_order_by_recent_reading() {
 }
 
 #[test]
-fn while_a_book_covers_it_the_library_keeps_its_index_in_a_file() {
+fn while_a_book_covers_it_the_library_keeps_nothing_and_finds_its_place_again() {
     let _turn = turn();
+    // An index an earlier version kept: removed, nothing kept instead
+    // (the books sorted on the card are read again).
     let mut app = library(X4, "", 5);
-    // Settled: the index is kept, to be read again instead of made anew.
-    assert!(app.storage.exists(".paperpaw/plugins/files/index.bin"));
+    app.kernel
+        .storage()
+        .write(".paperpaw/plugins/files/index.bin", b"PPI3")
+        .unwrap();
+    app.run(actions::BACK);
+    app.run(actions::LIBRARY);
+    assert!(!app.storage.exists(".paperpaw/plugins/files/index.bin"));
     app.run(actions::DOWN);
     app.run(actions::CONFIRM);
     assert_eq!(app.screen(), "reader.screen");

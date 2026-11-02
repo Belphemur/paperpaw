@@ -25,6 +25,7 @@ extern crate alloc;
 mod folders;
 mod info;
 mod list;
+mod names;
 mod shelves;
 
 use alloc::borrow::Cow;
@@ -90,7 +91,7 @@ const SEARCH_ENTERED: Event<Typed> = Event::new("files.search-entered");
 pub const INFO_SCREEN: Id = Id::new_static("files.info");
 /// The submenu with the views above ("Shelves").
 pub const SHELVES_MENU: Id = Id::new_static("files.shelves");
-const SHELF_SCREEN: Id = Id::new_static("files.shelf");
+pub(crate) const SHELF_SCREEN: Id = Id::new_static("files.shelf");
 
 /// The library plugin.
 #[derive(Debug, Default)]

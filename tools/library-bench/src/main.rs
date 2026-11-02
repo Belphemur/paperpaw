@@ -127,9 +127,9 @@ type Fat = FatStorage<SharedDisk<Bytes>>;
 struct Card(&'static Fat);
 
 impl Card {
-    fn new(size: usize) -> Result<Card, String> {
+    fn new(size: u64) -> Result<Card, String> {
         let bytes = Bytes {
-            blocks: (size / BLOCK) as u32,
+            blocks: u32::try_from(size / BLOCK as u64).map_err(|_| "card too large")?,
             kept: Rc::default(),
         };
         let mut disk = BlockDisk::new(bytes.clone()).map_err(|e| format!("disk: {e:?}"))?;
@@ -385,9 +385,10 @@ fn main() -> Result<(), String> {
         .next()
         .ok_or("usage: paperpaw-library-bench [--walks] <library-dir> [<more>]")?;
     let more = args.next();
-    // FAT32 with clusters of 32 KiB needs 65525 of them at least: 4 GiB
-    // (its memory is taken only where written).
-    let card = Card::new(4 << 30)?;
+    // FAT32 with clusters of 32 KiB, as large as a card of the X4 often
+    // is: 20,000 books, their details and covers in clusters of their own
+    // fill 4 GiB (its memory is taken only where written).
+    let card = Card::new(32 << 30)?;
     let (files, took) = measure(|| copy(&card, &Path::new(&library).join("books"), "books"));
     report("copy onto the card", &took, &format!("{} files", files?));
     let mut kernel = Kernel::builder(DEVICE)

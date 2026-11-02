@@ -166,13 +166,14 @@ fn nothing_is_done_while_a_book_is_read() {
     assert_eq!(paths(&kernel), ["books/a.txt", "books/b.txt"]);
 }
 
-/// On a device of little memory (the X4) the catalog waits while the
-/// library shows its books; on others it is made beside them.
+/// The catalog is made beside the library on every device, the X4 too:
+/// the library holds a few kilobytes of the sorted books, not an index of
+/// them all.
 #[test]
-fn on_small_devices_nothing_is_done_while_the_library_shows() {
-    for (memory, beside) in [
-        (paperpaw_platform::MemoryClass::Small, false),
-        (paperpaw_platform::MemoryClass::Large, true),
+fn the_catalog_is_made_beside_the_library() {
+    for memory in [
+        paperpaw_platform::MemoryClass::Small,
+        paperpaw_platform::MemoryClass::Large,
     ] {
         let device = DEVICE.with_memory(memory);
         let (mut kernel, log, now) = library_on(device, two_books());
@@ -180,10 +181,7 @@ fn on_small_devices_nothing_is_done_while_the_library_shows() {
         log.borrow_mut().clear();
         let effects = kernel.open_slot(Instant(now), slots::LIBRARY, Params::new());
         let now = run(&mut kernel, now, effects);
-        let now = want(&mut kernel, now, true);
-        assert_eq!(log.borrow().len(), usize::from(beside), "{memory:?}");
-        let effects = kernel.run_action(Instant(now), actions::BACK);
-        run(&mut kernel, now, effects);
+        want(&mut kernel, now, true);
         assert_eq!(log.borrow().len(), 1, "{memory:?}");
     }
 }
@@ -224,43 +222,18 @@ fn books_moved_removed_or_changed_are_caught_up() {
     assert_eq!(rating.as_deref(), Some("5"));
 }
 
-/// A catalog without books holds no index: on a small device the walk
-/// runs beside the library (books copied onto the card meanwhile show at
-/// once), where one with books, or with entries in its log, waits until
-/// the library is closed.
+/// On the X4 an empty catalog is walked beside the library: books
+/// copied onto the card meanwhile show at once.
 #[test]
 fn an_empty_catalog_is_walked_beside_the_library_on_small_devices() {
     let device = DEVICE.with_memory(paperpaw_platform::MemoryClass::Small);
-    let empty = || two_books().with(".paperpaw/library/catalog.txt", "\tcatalog\t2\t1\n");
-    let (mut kernel, log, now) = library_on(device, empty());
+    let empty = two_books().with(".paperpaw/library/catalog.txt", "\tcatalog\t2\t1\n");
+    let (mut kernel, log, now) = library_on(device, empty);
     let effects = kernel.open_slot(Instant(now), slots::LIBRARY, Params::new());
     let now = run(&mut kernel, now, effects);
     assert!(paths(&kernel).is_empty());
     want(&mut kernel, now, true);
     assert_eq!(*log.borrow(), ["catalog"]);
-    assert_eq!(paths(&kernel), ["books/a.txt", "books/b.txt"]);
-    // Once it lists books, a walk asked while the library shows waits.
-    let (mut kernel, log, now) = library_on(device, empty());
-    let now = want(&mut kernel, now, true);
-    log.borrow_mut().clear();
-    let effects = kernel.open_slot(Instant(now), slots::LIBRARY, Params::new());
-    let now = run(&mut kernel, now, effects);
-    want(&mut kernel, now, true);
-    assert!(
-        log.borrow().is_empty(),
-        "walked beside a library with books"
-    );
-    // No book in the catalog, one in its log (waiting to be folded in):
-    // a view holds an index, so the walk waits.
-    let noted = empty().with(".paperpaw/library/status.log", "1\t2\n");
-    let (mut kernel, log, now) = library_on(device, noted);
-    let effects = kernel.open_slot(Instant(now), slots::LIBRARY, Params::new());
-    let now = run(&mut kernel, now, effects);
-    want(&mut kernel, now, true);
-    assert!(log.borrow().is_empty(), "walked beside a log with entries");
-    assert!(paths(&kernel).is_empty());
-    let effects = kernel.run_action(Instant(now), actions::BACK);
-    run(&mut kernel, now, effects);
     assert_eq!(paths(&kernel), ["books/a.txt", "books/b.txt"]);
 }
 
@@ -483,4 +456,129 @@ fn an_old_folder_that_cannot_be_read_does_not_keep_the_catalog_from_being_made()
             .storage()
             .exists(".paperpaw/library/books/0123456789abcdef.ini")
     );
+}
+
+/// The file of the sorted books of the view leaving `archive` out.
+fn sorted_of(archive: &str) -> String {
+    alloc::format!(
+        ".paperpaw/library/sorted-{:08x}.idx",
+        library::index::hash(archive)
+    )
+}
+
+fn want_sorted(kernel: &mut Kernel, now: u64, archive: &str) -> u64 {
+    let wanted = events::SortedWanted::new(String::from(archive)).to_params();
+    send(kernel, now, events::SORTED_WANTED.id(), wanted)
+}
+
+/// The books sorted ([`library::sorted`]) are made once a view asks, and
+/// anew (before views hear of it) whenever the catalog is made anew; not
+/// again while they are of the catalog there is.
+#[test]
+fn the_sorted_books_are_made_when_asked_and_after_the_catalog_changed() {
+    let (mut kernel, log, now) = library(two_books());
+    let now = want(&mut kernel, now, false);
+    let sorted = sorted_of("books/Archive");
+    assert!(!kernel.storage().exists(&sorted), "made unasked");
+    log.borrow_mut().clear();
+    let now = want_sorted(&mut kernel, now, "books/Archive");
+    assert!(kernel.storage().exists(&sorted));
+    assert_eq!(*log.borrow(), ["catalog"]);
+    let made = kernel.storage().size(&sorted).unwrap();
+    // Asked again: as it is.
+    let now = want_sorted(&mut kernel, now, "books/Archive");
+    assert_eq!(log.borrow().len(), 1);
+    // A book came: the catalog anew, then the books sorted anew, then
+    // views hear of it, once.
+    kernel.storage().write("books/c.txt", b"three").unwrap();
+    want(&mut kernel, now, true);
+    assert_eq!(log.borrow().len(), 2);
+    assert!(kernel.storage().size(&sorted).unwrap() > made);
+    assert!(!kernel.storage().exists(".paperpaw/library/sorted.runs"));
+}
+
+/// On the X4 the books are sorted while the library shows (the view says
+/// they are being prepared until then); never while a book is read.
+#[test]
+fn on_small_devices_the_books_are_sorted_beside_the_library() {
+    let device = DEVICE.with_memory(paperpaw_platform::MemoryClass::Small);
+    let (mut kernel, log, now) = library_on(device, two_books());
+    let now = want(&mut kernel, now, false);
+    let effects = kernel.open_slot(Instant(now), slots::LIBRARY, Params::new());
+    let now = run(&mut kernel, now, effects);
+    log.borrow_mut().clear();
+    want_sorted(&mut kernel, now, "");
+    assert!(kernel.storage().exists(&sorted_of("")));
+    assert_eq!(*log.borrow(), ["catalog"]);
+}
+
+/// Every file of `storage` from `dir` on, copied into `to`.
+fn copied(storage: &dyn Storage, dir: &str, mut to: MemoryStorage) -> MemoryStorage {
+    let mut entries = Vec::new();
+    storage
+        .list(dir, &mut |e| entries.push((String::from(e.name), e.is_dir)))
+        .unwrap();
+    for (name, is_dir) in entries {
+        let path = paperpaw_sdk::files::join(dir, &name);
+        to = if is_dir {
+            copied(storage, &path, to)
+        } else {
+            let mut data = alloc::vec![0; storage.size(&path).unwrap() as usize];
+            storage.read_at(&path, 0, &mut data).unwrap();
+            to.with(&path, data)
+        };
+    }
+    to
+}
+
+/// Two views of two archive folders each have their sorted books: asked
+/// one after the other, both are made, and both anew (before views hear
+/// of it, once) when the catalog is made anew, also after a restart.
+#[test]
+fn the_sorted_books_of_two_archives_are_both_kept() {
+    let (mut kernel, log, now) = library(two_books());
+    let now = want(&mut kernel, now, false);
+    log.borrow_mut().clear();
+    let now = want_sorted(&mut kernel, now, "books/Archive");
+    let now = want_sorted(&mut kernel, now, "");
+    assert_eq!(log.borrow().len(), 2);
+    let (archived, all) = (sorted_of("books/Archive"), sorted_of(""));
+    let sizes = |kernel: &Kernel| {
+        let storage = kernel.storage();
+        (
+            storage.size(&archived).unwrap(),
+            storage.size(&all).unwrap(),
+        )
+    };
+    let made = sizes(&kernel);
+    // Asked again, each: as they are.
+    let now = want_sorted(&mut kernel, now, "books/Archive/");
+    let now = want_sorted(&mut kernel, now, "");
+    assert_eq!(log.borrow().len(), 2);
+    kernel.storage().write("books/c.txt", b"three").unwrap();
+    want(&mut kernel, now, true);
+    assert_eq!(log.borrow().len(), 3);
+    let grown = sizes(&kernel);
+    assert!(grown.0 > made.0 && grown.1 > made.1, "{made:?} {grown:?}");
+    // After a restart the kernel makes both anew, unasked.
+    let (mut kernel, log, now) = library(copied(kernel.storage(), "", MemoryStorage::new()));
+    kernel.storage().write("books/d.txt", b"four").unwrap();
+    log.borrow_mut().clear();
+    want(&mut kernel, now, true);
+    assert_eq!(*log.borrow(), ["catalog"]);
+    let again = sizes(&kernel);
+    assert!(
+        again.0 > grown.0 && again.1 > grown.1,
+        "{grown:?} {again:?}"
+    );
+}
+
+#[test]
+fn what_a_sorting_cut_short_left_goes_at_a_start() {
+    let storage = two_books()
+        .with(".paperpaw/library/sorted.runs", "runs")
+        .with(".paperpaw/library/sorted.tmp", "half");
+    let (kernel, _, _) = library(storage);
+    assert!(!kernel.storage().exists(".paperpaw/library/sorted.runs"));
+    assert!(!kernel.storage().exists(".paperpaw/library/sorted.tmp"));
 }

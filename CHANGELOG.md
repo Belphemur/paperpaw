@@ -92,6 +92,14 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   to the note before; embedded pictures (`![[picture.png]]`) show, front matter is hidden (its tags are shown),
   callouts (`> [!note] Title`) are quotes with their title, `#tags` stay as written and tables are rows of cells.
   The Markdown reader's HTML anchors the headings for those links.
+- **Plugin interface (next raise):** `library::sorted` (#79): every book of the library sorted by title on the card
+  (`.paperpaw/library/sorted-<hash>.idx`, one for each archive folder a view leaves out, two at most), paged by a view
+  in a few kilobytes, so the X4 lists every book instead of 2,000 at most. `Sorted::open` (`None` for a file of
+  another library version or archive, cut short or damaged: a view asks for it with `sorted::request` and says the
+  library is being prepared), `len`/`page`/`find` for a `View` (a filter, the books read last first or by title,
+  series stacked; as `Index::order` and `Index::stacked` list them), `next_in_series`, `refresh`, `hide`/`hide_all`;
+  the event `SORTED_WANTED`. The kernel makes the file (kernel feature: `sorted::Build`, a bounded merge sort of runs
+  of 512 books, written beside it and put in place whole; `sorted::wanted`, `asked`, `kept_archives`, `clean_up`).
 - **Plugin interface (next raise):** `Storage::list_from` lists a folder a piece at a time, each piece going on
   where the last one stopped (#79): a folder of thousands of entries is read about twice in all, not once a
   piece. Storages that cannot go on from a place count, as `paperpaw_platform::list_counted` does (the item's
@@ -403,6 +411,26 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   at the right (the count and the search at the left), the continue-reading card and the grid of covers start at the
   right (the left button on to the next cover), and the reader's menu shows the book's title and chapter at the
   right and the page's percentage at the left.
+- The library lists every book on the X4 too (#79), not 2,000 at most: the list pages the books sorted on the card
+  (`library::sorted`) and holds a few kilobytes (10,000 books: 3.7 KB held, 8 KB at most while opened or paged, on
+  the host; the index of 2,000 took 48 KB). Its order, filters, stacks of series as covers, the next book of each
+  series and where the focus goes are as before. Right after the catalog was made anew the list says *Preparing
+  the library …* until the kernel sorted the books (a moment); the index it kept while a book covered it
+  (`.paperpaw/plugins/files/index.bin`) is removed. On the X4 the catalog is now walked and caught up while the
+  library shows too (the reason it waited, the index's memory, is gone); still never while a book is read.
+- The library's shelves hold a bounded part of the memory however large the library (#79): the shelves in the
+  list show the first 200 series and folders on the X4 (2,000 on others) with an *All series* and *All folders*
+  row after them, and count the authors up to 2,048 (*more than 2048 authors*); the screens of authors, series,
+  tags and (new) folders hold 200 names at a time, the next taken when the focus moves on past the last. At
+  10,000 books of 5,000 authors and 2,500 series, showing the shelves took 1.26 MB on the host (about 600 KB on
+  the X4, more than its heap) and now takes 52 KB; the authors' screen 214 KB, now 25 KB. Each name is counted
+  exactly; the authors' screen showed the first 2,000 met before, now every author, in order. The list keeps its
+  index when the catalog is as it was.
+- A catalog walk that finds the library as it was writes nothing (#79): it compares what it makes with the old
+  catalog and writes a new one only from where they part (the lines before copied a piece a step), keeps the
+  catalog and its generation where they never do, and keeps a folder listed in one piece in memory instead of
+  in `walk.list`. The walk after every start at 10,000 books writes 975 blocks instead of 69,744 (bench); after
+  10 books came, 11,350 instead of 71,096.
 - `shape.txt` no longer holds what only the kernel builds (the SDK's `kernel` feature, ADR 0020): no plugin
   has it, so its types change with the firmware alone (ADR 0026, `tools/interface.py`).
 - *Keyboard: wider keys* (#91): the keys' side margin is a quarter of the margin other screens keep (at least

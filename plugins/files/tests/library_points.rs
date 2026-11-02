@@ -97,7 +97,8 @@ fn book_fields_show_on_a_books_information() {
     let _turn = turn();
     let mut app = library(X4);
     let path = "books/Book 01.txt";
-    library::set_field(app.storage.0.as_ref(), path, "adds.rating", "4 of 5");
+    // As a plugin does, through the kernel's storage.
+    library::set_field(app.kernel.storage(), path, "adds.rating", "4 of 5");
     app.open_slot(slots::BOOK_INFO, Params::new().with(params::PATH, path));
     assert!(app.shows("Rating"), "{}", app.described());
     assert!(app.shows("4 of 5"), "{}", app.described());

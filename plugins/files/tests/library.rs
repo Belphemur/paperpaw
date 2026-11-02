@@ -168,6 +168,25 @@ fn hidden_it_reads_nothing_until_it_shows() {
     assert!(focused(&mut kernel).contains("book 00"));
 }
 
+/// A walk that found nothing changed leaves the catalog as it was: the
+/// list keeps its index when it hears of it, reading the catalog's head
+/// only (made anew, it would read every line).
+#[test]
+fn a_catalog_as_it_was_keeps_the_index() {
+    let _turn = turn();
+    let (mut kernel, reads) = library(card(60), "");
+    for _ in 0..3 {
+        action(&mut kernel, "core.down");
+    }
+    let before = focused(&mut kernel);
+    reads.set(0);
+    let changed = events::CATALOG_CHANGED.id().clone();
+    let effects = kernel.send_event(Instant(0), changed, Params::new());
+    settle(&mut kernel, effects);
+    assert!(reads.get() <= 2, "{} reads", reads.get());
+    assert_eq!(focused(&mut kernel), before);
+}
+
 /// The tests' turns with the library: when its catalog was made is kept
 /// for the whole program, as on a device, so tests that make or read it
 /// take turns rather than run beside each other.
