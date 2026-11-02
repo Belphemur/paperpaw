@@ -213,8 +213,7 @@ fn the_catalog_is_made_beside_the_library() {
 }
 
 /// Woken with the library open (it asks no more: its view was made
-/// before the sleep), the library is walked at once; a walk under way at
-/// the sleep starts again rather than end as the walk after the wake.
+/// before the sleep), the library is walked at once.
 #[test]
 fn woken_with_the_library_open_it_is_walked_at_once() {
     let (mut kernel, log, now) = library(two_books());
@@ -238,6 +237,35 @@ fn woken_with_the_library_open_it_is_walked_at_once() {
         ["books/a.txt", "books/b.txt", "books/c.txt"]
     );
     assert_eq!(log.borrow().len(), 2);
+}
+
+/// A walk under way at the sleep (no library open) starts again after
+/// the wake, rather than end as the walk after it: it had passed where a
+/// book was copied while it slept.
+#[test]
+fn a_walk_under_way_at_the_sleep_starts_again_after_the_wake() {
+    const BOOKS: usize = 600;
+    const STEPS_BEFORE_SLEEP: u64 = 8;
+    let mut storage = MemoryStorage::new();
+    for n in 0..BOOKS {
+        storage = storage.with(&alloc::format!("books/b{n:03}.txt"), "x");
+    }
+    let (mut kernel, log, now) = library(storage);
+    let wanted = events::CatalogWanted::new(false).to_params();
+    kernel.send_event(Instant(now), events::CATALOG_WANTED.id().clone(), wanted);
+    // Under way, past the start of the folder: no catalog yet.
+    for at in 1..=STEPS_BEFORE_SLEEP {
+        kernel.tick(Instant(now + at * 10));
+    }
+    assert!(paths(&kernel).is_empty());
+    kernel.suspend(Instant(now + 1000));
+    kernel.storage().write("books/a.txt", b"new").unwrap();
+    let effects = kernel.resume(Instant(now + 60_000));
+    run(&mut kernel, now + 60_000, effects);
+    let found = paths(&kernel);
+    assert_eq!(found.len(), BOOKS + 1);
+    assert_eq!(found.first().map(String::as_str), Some("books/a.txt"));
+    assert_eq!(log.borrow().len(), 1);
 }
 
 /// A book copied while PaperPaw runs, with no word to it (the X4's
