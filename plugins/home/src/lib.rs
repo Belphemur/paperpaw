@@ -490,6 +490,13 @@ impl Screen for Dashboard {
         self.grid.draw(ui.canvas(), env);
     }
 
+    /// Turned or resized: the page, the editing and the focus stay, and the
+    /// parts are placed again for the new size.
+    fn on_resize(&mut self, cx: &mut Cx<'_, '_>) -> Handled {
+        self.relayout(cx);
+        Handled::Yes
+    }
+
     /// Hidden by a book or another screen: the widgets go with what they
     /// keep (covers made small), made anew when it shows again (or is
     /// drawn below an overlay left open).

@@ -665,3 +665,26 @@ fn the_start_card_takes_the_one_row_left_beside_a_tall_clock() {
     // In the last row, the screen's lower part.
     assert!(at.y >= 240 && at.y + at.height <= 480, "{at:?}");
 }
+
+#[test]
+fn turned_to_landscape_the_page_and_the_edit_mode_stay() {
+    let mut home = Home::new(
+        true,
+        "page-1 = tool:core.library 0/0 1x1\n\
+         page-2 = tool:core.settings 0/0 1x1\n",
+    );
+    home.run(actions::NEXT_PAGE);
+    assert!(home.says("Settings"), "the second page");
+    home.now += 100;
+    let effects = home.kernel.resize(Instant(home.now), 800, 480);
+    home.settle(effects);
+    assert!(home.says("Settings"), "still the second page, turned");
+    assert!(!home.says("Library"));
+    let shown = home.shown();
+    on_screen(&home, &shown);
+    // And back: the same page again.
+    home.now += 100;
+    let effects = home.kernel.resize(Instant(home.now), 480, 800);
+    home.settle(effects);
+    assert!(home.says("Settings"), "the second page, upright again");
+}

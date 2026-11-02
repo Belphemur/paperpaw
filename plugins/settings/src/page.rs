@@ -584,6 +584,18 @@ impl GroupPage {
 }
 
 impl Screen for GroupPage {
+    /// Turned or resized: the page laid out anew, the focus on its row.
+    fn on_resize(&mut self, cx: &mut Cx<'_, '_>) -> Handled {
+        let focus = self.rows.focus();
+        let mut fresh = Self::of(cx.env(), self.group.clone(), self.more);
+        fresh.rows.set_focus(focus);
+        fresh.keys = self.keys;
+        fresh.covered = core::mem::take(&mut self.covered);
+        *self = fresh;
+        cx.request_redraw();
+        Handled::Yes
+    }
+
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let mut ui = ui::Ui::new(canvas, env, &style);

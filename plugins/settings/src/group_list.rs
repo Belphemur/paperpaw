@@ -95,7 +95,6 @@ fn groups(env: &Env<'_>) -> Vec<(i32, bool, Entry)> {
 
 impl GroupList {
     pub(super) fn new(env: &Env<'_>) -> Self {
-        let (style, header, area) = page(env);
         let settings_menu = menus::SETTINGS;
         let menu = settings_menu.as_str();
         // (order, headings before entries of the same order, entry)
@@ -170,6 +169,22 @@ impl GroupList {
             index += 1;
             !empty[index - 1]
         });
+        let (style, header, rows, icon_room) = Self::fitted(env, &entries);
+        Self {
+            entries,
+            style,
+            header,
+            rows,
+            keys: ui::focus_shown(env),
+            icon_room,
+            covered: Covered::default(),
+        }
+    }
+
+    /// The parts placed for `env`'s screen: the style, the header, the rows
+    /// of `entries` and the room for icons.
+    fn fitted(env: &Env<'_>, entries: &[Entry]) -> (UiStyle, ui::Header, ui::Rows, u16) {
+        let (style, header, area) = page(env);
         let heading = ui::heading_height(env, &style);
         let heights = entries
             .iter()
@@ -187,15 +202,8 @@ impl GroupList {
             &style,
             entries.iter().any(|e| e.link.is_some() && e.icon.is_some()),
         );
-        Self {
-            entries,
-            style,
-            header,
-            rows: ui::Rows::new(area, heights, headings),
-            keys: ui::focus_shown(env),
-            icon_room,
-            covered: Covered::default(),
-        }
+        let rows = ui::Rows::new(area, heights, headings);
+        (style, header, rows, icon_room)
     }
 
     /// Makes the list anew (language, UI size or the advanced switch may
@@ -282,6 +290,15 @@ impl Screen for GroupList {
                         .draw(ui, rect);
                 }
             });
+    }
+
+    fn on_resize(&mut self, cx: &mut Cx<'_, '_>) -> Handled {
+        let focus = self.rows.focus();
+        let (style, header, rows, icon_room) = Self::fitted(cx.env(), &self.entries);
+        (self.style, self.header, self.rows, self.icon_room) = (style, header, rows, icon_room);
+        self.rows.set_focus(focus);
+        cx.request_redraw();
+        Handled::Yes
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
