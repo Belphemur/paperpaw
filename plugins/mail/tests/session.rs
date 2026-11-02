@@ -562,8 +562,10 @@ fn a_hostile_mail_header_keeps_the_index_and_the_folders_small() {
     let raw = format!(
         "From: \"{big}\" <{big}@x.org>\r\nTo: {many_to}\r\nSubject: {big}\r\nMessage-ID: <{big}>\r\nDate: Tue, 3 Nov 2026 09:15:00 +0100\r\n\r\nhi\r\n"
     );
-    let mut script = Script::default();
-    script.messages = vec![(10, String::new(), raw)];
+    let mut script = Script {
+        messages: vec![(10, String::new(), raw)],
+        ..Script::default()
+    };
     // A folder with a name no server has is left out.
     script.folders.push(("n".repeat(300), String::new()));
     let (events, fake) = imap(script, Security::Implicit, everything(1, 1));

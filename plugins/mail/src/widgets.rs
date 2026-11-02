@@ -323,7 +323,7 @@ fn newest(
         let mut all: Vec<(u8, store::Row)> = Vec::new();
         for &a in accounts {
             let rows = store::read_index(storage, &store::index_file(a, folder));
-            all.extend(rows.into_iter().filter(|r| wanted(r)).map(|r| (a, r)));
+            all.extend(rows.into_iter().filter(&wanted).map(|r| (a, r)));
             all.sort_by(|a, b| b.1.date.cmp(&a.1.date).then(b.1.uid.cmp(&a.1.uid)));
             all.truncate(keep);
         }
