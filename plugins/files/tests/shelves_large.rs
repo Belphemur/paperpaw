@@ -85,6 +85,11 @@ fn path(n: usize) -> String {
 /// the size the catalog says, so the walk after the start takes all
 /// from it.
 fn library(books: usize) -> App {
+    library_named(books, "")
+}
+
+/// [`library`], each author's and series' name ending in `long`.
+fn library_named(books: usize, long: &str) -> App {
     let paths: Vec<String> = (0..books).map(path).collect();
     let files: Vec<(&str, &[u8])> = paths.iter().map(|p| (p.as_str(), &b"t"[..])).collect();
     let storage = Shared::memory("", &files);
@@ -94,8 +99,8 @@ fn library(books: usize) -> App {
         .map(|(n, path)| {
             let book = Book::default()
                 .title(Some(format!("A book of the library {n:05}")))
-                .author(Some(format!("Somebody Writing {:04}", n / 2)))
-                .series(Some(format!("A series of books {:04}", n / 4)))
+                .author(Some(format!("Somebody Writing {:04}{long}", n / 2)))
+                .series(Some(format!("A series of books {:04}{long}", n / 4)))
                 .series_index(Some(format!("{}", n % 4 + 1)))
                 .size(1);
             Record::of(path, &book)
@@ -204,6 +209,44 @@ fn the_shelves_of_a_large_library_take_a_bounded_part_of_the_heap() {
     );
     for (peak, _) in screens {
         assert!(peak <= 32 * 1024, "a shelf took {peak} B");
+    }
+}
+
+/// Names of a kilobyte each (as long as a catalog keeps them): the
+/// shelves hold no more bytes of them than their budget (16 KB on the
+/// X4), however few names that is.
+#[test]
+fn the_shelves_of_long_names_take_a_bounded_part_of_the_heap() {
+    let _turn = turn();
+    let long = " and others".repeat(92);
+    let mut app = library_named(2_000, &long);
+    let shelves = paperpaw_sdk::ui::choice::Picked::new(String::new(), String::from("shelves"));
+    let (list, list_held) = growth(|| {
+        app.send(
+            paperpaw_sdk::Id::new_static("files.list.shown"),
+            shelves.to_params(),
+        );
+        app.render();
+    });
+    let mut screens = Vec::new();
+    for mode in ["authors", "series"] {
+        let open = Params::new().with(params::MODE, mode);
+        screens.push(growth(|| {
+            app.open_screen(paperpaw_sdk::Id::new_static("files.shelf"), open);
+            app.render();
+        }));
+        let focused = app.focused().unwrap_or_default();
+        assert!(focused.contains(" 0000 and"), "{focused}");
+        app.run(actions::BACK);
+    }
+    eprintln!(
+        "shelves of long names in the list: peak {list} B, held {list_held} B; authors: {:?}; series: {:?}",
+        screens[0], screens[1]
+    );
+    // Before the budget: 200 names of a kilobyte a window.
+    assert!(list <= 64 * 1024, "the list's shelves took {list} B");
+    for (peak, _) in screens {
+        assert!(peak <= 48 * 1024, "a shelf took {peak} B");
     }
 }
 

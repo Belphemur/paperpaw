@@ -13,17 +13,50 @@ use paperpaw_sdk::MemoryClass;
 /// Names held at most on devices of little memory (the X4), and on others.
 const SMALL: usize = 200;
 const LARGE: usize = 2000;
+/// Bytes of names held at most (values of up to a kilobyte each make a
+/// few names many bytes).
+const SMALL_BYTES: usize = 16 * 1024;
+const LARGE_BYTES: usize = 256 * 1024;
 /// Different names counted at most, by their hashes.
 const SMALL_COUNTED: usize = 2048;
 const LARGE_COUNTED: usize = 20_000;
 
-/// Names held at most on a device of `memory`.
-pub(crate) fn cap(memory: MemoryClass) -> usize {
-    if memory == MemoryClass::Small {
-        SMALL
-    } else {
-        LARGE
+/// How many names a window holds at most, and how many bytes of them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Budget {
+    pub(crate) names: usize,
+    pub(crate) bytes: usize,
+}
+
+impl Budget {
+    /// The budget of a window on a device of `memory`.
+    pub(crate) fn of(memory: MemoryClass) -> Budget {
+        if memory == MemoryClass::Small {
+            Budget {
+                names: SMALL,
+                bytes: SMALL_BYTES,
+            }
+        } else {
+            Budget {
+                names: LARGE,
+                bytes: LARGE_BYTES,
+            }
+        }
     }
+
+    /// A part of it, for one of `windows` held at once.
+    pub(crate) fn shared(self, windows: usize) -> Budget {
+        Budget {
+            names: self.names,
+            bytes: self.bytes / windows.max(1),
+        }
+    }
+}
+
+/// The bytes of a name held counted against a [`Budget`] (beside them,
+/// a few words a name, bounded by the number of names).
+fn held(name: &str) -> usize {
+    name.len()
 }
 
 /// Different names counted at most on a device of `memory`.
@@ -76,31 +109,39 @@ impl Bound {
     }
 }
 
-/// The first names (in [`order`]) within a [`Bound`], at most a number,
-/// each counted exactly: a name is taken when it is met first, or
-/// passed over for good. A name that would come after the last of a full
-/// window is passed over; one before it takes its place, and the last
-/// goes (the last only ever moves forward in the order, so a name gone
-/// never comes back, and every name kept was taken when it was met
-/// first).
+/// The first names (in [`order`]) within a [`Bound`], at most a
+/// [`Budget`] of them (one, however long, at least), each counted
+/// exactly: a name is taken when it is met first, or passed over for
+/// good. A name that would come after the last of a full window is passed
+/// over; one before it takes its place, and the last go until it fits
+/// (the last only ever moves back in the order, so a name gone never
+/// comes back, and every name kept was taken when it was met first).
 #[derive(Debug)]
 pub(crate) struct Firsts {
-    cap: usize,
+    budget: Budget,
+    /// Bytes of the names held ([`held`]).
+    bytes: usize,
     bound: Bound,
     /// In [`order`], or the other way for [`Bound::Before`].
     names: Vec<Named>,
-    /// Names were left out past the end (before the start for
+    /// The first name passed over or let go (the last for
+    /// [`Bound::Before`]): it and those after it are not taken any more.
+    /// Some where names were left out past the end (before the start for
     /// [`Bound::Before`]).
-    cut: bool,
+    passed: Option<String>,
 }
 
 impl Firsts {
-    pub(crate) fn new(cap: usize, bound: Bound) -> Firsts {
+    pub(crate) fn new(budget: Budget, bound: Bound) -> Firsts {
         Firsts {
-            cap: cap.max(1),
+            budget: Budget {
+                names: budget.names.max(1),
+                ..budget
+            },
+            bytes: 0,
             bound,
             names: Vec::new(),
-            cut: false,
+            passed: None,
         }
     }
 
@@ -137,13 +178,26 @@ impl Firsts {
             }
             Err(at) => at,
         };
-        if self.names.len() >= self.cap {
-            self.cut = true;
-            if at >= self.names.len() {
-                return;
-            }
-            self.names.pop();
+        if let Some(passed) = &self.passed
+            && self.order(name, passed) != Ordering::Less
+        {
+            return;
         }
+        let full = |len: usize, bytes: usize| {
+            len > 0 && (len >= self.budget.names || bytes + held(name) > self.budget.bytes)
+        };
+        // Room made: the last go while it does not fit.
+        while self.names.len() > at && full(self.names.len(), self.bytes) {
+            if let Some(last) = self.names.pop() {
+                self.bytes -= held(&last.name);
+                self.passed = Some(last.name);
+            }
+        }
+        if full(self.names.len(), self.bytes) {
+            self.passed = Some(name.to_string());
+            return;
+        }
+        self.bytes += held(name);
         self.names.insert(
             at,
             Named {
@@ -161,7 +215,7 @@ impl Firsts {
         if self.bound.backwards() {
             names.reverse();
         }
-        (names, self.cut)
+        (names, self.passed.is_some())
     }
 }
 
@@ -206,26 +260,46 @@ mod tests {
     use super::*;
     use alloc::format;
 
-    /// Every name of `names` in a window of `cap` from `bound`, as
-    /// [`Firsts`] keeps them, and as all of them sorted give them.
-    fn both(names: &[String], cap: usize, bound: Bound) -> ((Vec<Named>, bool), Vec<Named>) {
-        let mut firsts = Firsts::new(cap, bound.clone());
-        let mut all = Firsts::new(usize::MAX, Bound::First);
+    /// Every name of `names` in a window of `budget` from `bound`, as
+    /// [`Firsts`] keeps them, and as all of them sorted give them: as many
+    /// as fit from the bound on.
+    fn both(names: &[String], budget: Budget, bound: Bound) -> ((Vec<Named>, bool), Vec<Named>) {
+        let mut firsts = Firsts::new(budget, bound.clone());
+        let mut all = Firsts::new(unbounded(usize::MAX), Bound::First);
         for (n, name) in names.iter().enumerate() {
             firsts.add(name, n % 3 == 0);
             all.add(name, n % 3 == 0);
         }
         let (all, _) = all.into_names();
-        let within: Vec<Named> = all
+        let mut within: Vec<Named> = all
             .into_iter()
-            .filter(|n| Firsts::new(1, bound.clone()).within(&n.name))
+            .filter(|n| Firsts::new(budget, bound.clone()).within(&n.name))
             .collect();
-        let expected = if bound.backwards() {
-            within[within.len().saturating_sub(cap)..].to_vec()
-        } else {
-            within.into_iter().take(cap).collect()
-        };
+        if bound.backwards() {
+            within.reverse();
+        }
+        let mut bytes = 0;
+        let mut expected: Vec<Named> = within
+            .into_iter()
+            .enumerate()
+            .take_while(|(n, named)| {
+                bytes += held(&named.name);
+                *n == 0 || (*n < budget.names && bytes <= budget.bytes)
+            })
+            .map(|(_, named)| named)
+            .collect();
+        if bound.backwards() {
+            expected.reverse();
+        }
         (firsts.into_names(), expected)
+    }
+
+    /// A budget of `names` names, of any number of bytes.
+    fn unbounded(names: usize) -> Budget {
+        Budget {
+            names,
+            bytes: usize::MAX,
+        }
     }
 
     /// Names in a scrambled order, many met more than once.
@@ -254,14 +328,44 @@ mod tests {
             Bound::After("zzz".into()),
         ] {
             for cap in [1, 7, 50, 499, 600] {
-                let ((got, cut), expected) = both(&names, cap, bound.clone());
+                let ((got, cut), expected) = both(&names, unbounded(cap), bound.clone());
                 assert_eq!(got, expected, "{bound:?} {cap}");
                 let within = names
                     .iter()
-                    .filter(|n| Firsts::new(1, bound.clone()).within(n))
+                    .filter(|n| Firsts::new(unbounded(1), bound.clone()).within(n))
                     .collect::<alloc::collections::BTreeSet<_>>()
                     .len();
                 assert_eq!(cut, within > cap, "{bound:?} {cap}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_window_holds_no_more_bytes_than_its_budget() {
+        // Names of up to a kilobyte, in a scrambled order: the window
+        // holds as many as fit, each counted exactly, one at least.
+        let names: Vec<String> = scrambled(500)
+            .into_iter()
+            .enumerate()
+            .map(|(n, name)| {
+                let long = "x".repeat((n * 31) % 1024);
+                format!("{name} {long}")
+            })
+            .collect();
+        for bound in [
+            Bound::First,
+            Bound::From("Name 0100".into()),
+            Bound::Before("Name 0300".into()),
+            Bound::Last,
+        ] {
+            for bytes in [0, 1024, 16 * 1024, 64 * 1024] {
+                let budget = Budget { names: 200, bytes };
+                let ((got, cut), expected) = both(&names, budget, bound.clone());
+                assert_eq!(got, expected, "{bound:?} {bytes}");
+                assert!(!got.is_empty(), "{bound:?} {bytes}");
+                let held: usize = got.iter().map(|n| held(&n.name)).sum();
+                assert!(got.len() == 1 || held <= bytes, "{bound:?} {bytes}: {held}");
+                assert!(cut, "{bound:?} {bytes}");
             }
         }
     }

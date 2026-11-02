@@ -24,7 +24,7 @@ use paperpaw_sdk::{
 };
 
 use crate::list::shelf::{self as books, Kind};
-use crate::names::{Bound, Firsts};
+use crate::names::{Bound, Budget, Firsts};
 use paperpaw_sdk::library::{
     self,
     catalog::{self, Record, State},
@@ -110,16 +110,16 @@ fn keys<'a>(record: &'a Record, shelf: &Shelf) -> Vec<&'a str> {
 }
 
 /// A window of the names of the authors, series, tags or folders
-/// (`bound`, at most `cap`), alphabetically, and how many books each
+/// (`bound`, at most a `budget` of them), alphabetically, and how many books each
 /// has; and whether there are names past its end (before its start for
 /// [`Bound::Before`]).
 fn names(
     books: catalog::Books<'_>,
     shelf: &Shelf,
-    cap: usize,
+    budget: Budget,
     bound: Bound,
 ) -> (Vec<(String, usize)>, bool) {
-    let mut firsts = Firsts::new(cap, bound);
+    let mut firsts = Firsts::new(budget, bound);
     books(&mut |_, line| {
         for key in keys(&line, shelf) {
             // Books without series are no series; those without author
@@ -179,9 +179,9 @@ impl ShelfScreen {
         let first = bound == Bound::First;
         // The window there was goes first: never two at once.
         self.names = Vec::new();
-        let cap = crate::names::cap(env.device().memory);
+        let budget = Budget::of(env.device().memory);
         let each = &mut |f: &mut dyn FnMut(u64, Record)| library::service(env).each(env, f);
-        let (names, cut) = names(each, &self.shelf, cap, bound.clone());
+        let (names, cut) = names(each, &self.shelf, budget, bound.clone());
         self.names = names;
         (self.before, self.after) = match bound {
             Bound::First => (false, cut),
@@ -417,10 +417,14 @@ mod tests {
             })
             .collect();
         catalog::write(&storage, &records).unwrap();
+        let ten = Budget {
+            names: 10,
+            bytes: usize::MAX,
+        };
         let authors = names(
             &mut |f| catalog::each_at(&storage, f),
             &Shelf::Authors,
-            10,
+            ten,
             Bound::First,
         )
         .0;
@@ -436,7 +440,7 @@ mod tests {
             names(
                 &mut |f| catalog::each_at(&storage, f),
                 &Shelf::Series,
-                10,
+                ten,
                 Bound::First
             )
             .0,
@@ -446,7 +450,7 @@ mod tests {
             names(
                 &mut |f| catalog::each_at(&storage, f),
                 &Shelf::Tags,
-                10,
+                ten,
                 Bound::First
             )
             .0,

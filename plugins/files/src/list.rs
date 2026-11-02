@@ -618,8 +618,9 @@ impl ListScreen {
         // a number), the first series and folders held.
         let memory = env.device().memory;
         let mut authors = Distinct::new(names::counted(memory));
-        let mut series = Firsts::new(names::cap(memory), Bound::First);
-        let mut folders = Firsts::new(names::cap(memory), Bound::First);
+        let budget = names::Budget::of(memory).shared(2);
+        let mut series = Firsts::new(budget, Bound::First);
+        let mut folders = Firsts::new(budget, Bound::First);
         let prefix = crate::shelves::prefix(&self.root);
         library::service(env).each(env, &mut |_, line| {
             let finished = line.reading() == library::catalog::Reading::Finished;
