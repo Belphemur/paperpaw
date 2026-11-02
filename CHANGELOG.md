@@ -64,6 +64,13 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
 
 - Text: `TextInk::RIGHT_TO_LEFT`, a flag of the reserved ones: the lines a handle draws run right to left
   (`TextInk::is_right_to_left`). The kernel sets it for the interface's font where its language runs right to left.
+- **Plugin interface (next raise):** `Storage::list_from` lists a folder a piece at a time, each piece going on
+  where the last one stopped (#79): a folder of thousands of entries is read about twice in all, not once a
+  piece. Storages that cannot go on from a place count, as `paperpaw_platform::list_counted` does (the item's
+  default), so every storage keeps working; the memory card's (FAT) goes on from where the entry begins and
+  finds a place taken by another entry by its count. The catalog lists the library's folders so: the walk after
+  a start reads a folder of 4,000 books (1,254 blocks) in 2,535 blocks instead of 66,460 (bench; the whole walk
+  4,367 instead of 68,291).
 - Screens mirror in a user-interface language that runs right to left (#33): the switch, value rows and their
   chevrons, ticked rows, the number buttons, text fields, dialog buttons, list rows' icons, chips, the date
   and time pickers, headings and the reader's menu bar start at the right, and left/right follow them. The
@@ -328,6 +335,8 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   at the right (the count and the search at the left), the continue-reading card and the grid of covers start at the
   right (the left button on to the next cover), and the reader's menu shows the book's title and chapter at the
   right and the page's percentage at the left.
+- `shape.txt` no longer holds what only the kernel builds (the SDK's `kernel` feature, ADR 0020): no plugin
+  has it, so its types change with the firmware alone (ADR 0026, `tools/interface.py`).
 - *Keyboard: wider keys* (#91): the keys' side margin is a quarter of the margin other screens keep (at least
   4 pixels), so on small screens the keys get nearly the whole width. Every layout, tapped or chosen with buttons;
   the text field keeps its margin, the key order and the focus are as before. Round keys are as high as wide, so

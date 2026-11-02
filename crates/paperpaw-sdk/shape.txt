@@ -1,7 +1,7 @@
 # The shape of this crate's types and the values of its constants, as
 # tools/interface.py writes them: fields, variants and trait items in
 # the source's order, private fields and the private types they reach
-# too, every feature on (ADR 0026).
+# too, every feature on but the kernel's (ADR 0026).
 const paperpaw_sdk::bluetooth::AttError::INSUFFICIENT_AUTHENTICATION: paperpaw_sdk::bluetooth::AttError = AttError(0x05)
 const paperpaw_sdk::bluetooth::AttError::INSUFFICIENT_ENCRYPTION: paperpaw_sdk::bluetooth::AttError = AttError(0x0F)
 const paperpaw_sdk::bluetooth::AttError::INVALID_HANDLE: paperpaw_sdk::bluetooth::AttError = AttError(0x01)
@@ -442,7 +442,6 @@ const paperpaw_sdk::icons::PREV: &str = "core.icon.prev"
 const paperpaw_sdk::icons::SHIFT: &str = "core.icon.shift"
 const paperpaw_sdk::icons::SPACE: &str = "core.icon.space"
 const paperpaw_sdk::install::MAX_FILES: usize = 64usize
-const paperpaw_sdk::install::marks::FILE: &str = ".install-marks"
 const paperpaw_sdk::keys::EDGES: [&str; 4] = ["top", "bottom", "left", "right"]
 const paperpaw_sdk::keys::PINCHES: [&str; 2] = ["out", "in"]
 const paperpaw_sdk::keys::POLICIES: [&str; 3] = [ "core.gestures.standard", "core.gestures.own", "core.gestures.off", ]
@@ -476,7 +475,6 @@ const paperpaw_sdk::memory::Memory::NONE: Self = Self { read: None }
 const paperpaw_sdk::memory::Placement::FAST: Self = Self(1)
 const paperpaw_sdk::memory::Placement::LARGE: Self = Self(2)
 const paperpaw_sdk::native::CODE_FILES: &[&str] = &[ "code.ppn", "code.so", "code-host.dll", "code-host.so", "code-host.dylib", ]
-const paperpaw_sdk::native::CROSSING_CRATES: &[&str] = &[ "paperpaw_sdk", "paperpaw_platform", "paperpaw_graphics", "paperpaw_i18n", "paperpaw_config", "paperpaw_text", "paperpaw_document", "paperpaw_layout", "paperpaw_xml", "paperpaw_zip", "paperpaw_hyphen", "paperpaw_image", "paperpaw_update", "paperpaw_digest", "paperpaw_json", "paperpaw_qr", "paperpaw_native", "paperpaw_lang", "paperpaw_table", ]
 const paperpaw_sdk::native::FINGERPRINT: paperpaw_sdk::native::Fingerprint = Fingerprint::of(INTERFACE, { let mut hash = layout::Fnv::new()
 const paperpaw_sdk::native::INTERFACE: u16 = 5u16
 const paperpaw_sdk::native::LAYOUT: u64 = 6_362_093_542_602_679_775u64
@@ -689,14 +687,11 @@ enum paperpaw_sdk::firmware::FirmwareCommand { Install { path: alloc::string::St
 enum paperpaw_sdk::firmware::FirmwareState { Idle, Installing { done: u64, total: u64 }, Installed, Failed(0: paperpaw_sdk::firmware::InstallFailure) }
 enum paperpaw_sdk::firmware::InstallFailure { Unreadable, NotAnUpdate, NewerFormat, OtherDevice, TooLarge, Untrusted, NotNewer, Damaged, Write, LowBattery, Other(0: u16) }
 enum paperpaw_sdk::firmware::Signer { PaperPaw, Unknown }
-enum paperpaw_sdk::firmware::foreign::Walk { Header, Head(0: usize), Data(0: u32), Tail, Done }
 enum paperpaw_sdk::gesture::Direction { Left, Right, Up, Down }
 enum paperpaw_sdk::gesture::GestureKind { Tap, LongPress, Swipe(0: paperpaw_sdk::gesture::Direction), Pinch { out: bool }, DoubleTap, TwoFingerTap, Other(0: &'static str) }
 enum paperpaw_sdk::help::Input { Any, Touch, Buttons }
 enum paperpaw_sdk::install::Digest { Sha1(0: alloc::string::String), Sha256(0: alloc::string::String) }
 enum paperpaw_sdk::install::Received { Other, Next(0: paperpaw_sdk::install::Progress), Complete(0: paperpaw_sdk::install::Progress), Failed(0: paperpaw_sdk::install::Progress) }
-enum paperpaw_sdk::install::local::Refusal { Name, Damaged, Storage, NotThePlugin, BuiltIn, BadCode, NoCode, OtherBuild, NeedsApproval, Other(0: u16) }
-enum paperpaw_sdk::install::marks::From { Store(0: paperpaw_sdk::version::Version), Local }
 enum paperpaw_sdk::install::origin::Origin { Store, Local }
 enum paperpaw_sdk::keys::BindingOrigin { Plugin, Device, Preset, User }
 enum paperpaw_sdk::keys::InputKind { Input, Gesture }
@@ -865,9 +860,7 @@ struct paperpaw_sdk::chrome::ChromeSpec { id: paperpaw_sdk::id::Id, edge: paperp
 struct paperpaw_sdk::collections::VecMap<K, V> { entries: alloc::vec::Vec<(K, V)> }
 struct paperpaw_sdk::command::Broadcast { id: paperpaw_sdk::id::Id, ports: alloc::vec::Vec<u16>, data: alloc::vec::Vec<u8>, wait_ms: u32, events: paperpaw_sdk::id::Id }
 struct paperpaw_sdk::command::HttpOptions { timeout: core::option::Option<core::time::Duration>, want_headers: alloc::vec::Vec<alloc::string::String>, max_body: core::option::Option<usize>, max_file: core::option::Option<u64> }
-struct paperpaw_sdk::command::HttpParts { method: alloc::string::String, url: alloc::string::String, headers: alloc::vec::Vec<(alloc::string::String, alloc::string::String)>, body: core::option::Option<alloc::string::String>, body_from: core::option::Option<alloc::string::String>, save_to: core::option::Option<alloc::string::String>, reply: paperpaw_sdk::id::Id, params: paperpaw_sdk::params::Params, options: paperpaw_sdk::command::HttpOptions }
 struct paperpaw_sdk::command::HttpRequest { method: alloc::string::String, url: alloc::string::String, headers: alloc::vec::Vec<(alloc::string::String, alloc::string::String)>, body: core::option::Option<alloc::string::String>, body_from: core::option::Option<alloc::string::String>, save_to: core::option::Option<alloc::string::String>, reply: paperpaw_sdk::id::Id, params: paperpaw_sdk::params::Params, options: core::option::Option<alloc::boxed::Box<paperpaw_sdk::command::HttpOptions>> }
-struct paperpaw_sdk::command::ResponseParts { request: u32, status: u16, content_type: alloc::string::String, headers: alloc::vec::Vec<(alloc::string::String, alloc::string::String)>, body: alloc::vec::Vec<u8>, body_from: core::option::Option<alloc::string::String> }
 struct paperpaw_sdk::command::ServerResponse { request: u32, status: u16, content_type: alloc::string::String, headers: alloc::vec::Vec<(alloc::string::String, alloc::string::String)>, body: alloc::vec::Vec<u8>, body_from: core::option::Option<alloc::string::String> }
 struct paperpaw_sdk::command::Speech { text: alloc::string::String, language: alloc::string::String, rate: u16, reply: paperpaw_sdk::id::Id, params: paperpaw_sdk::params::Params, queue: bool }
 struct paperpaw_sdk::commands::Commands { queued: alloc::vec::Vec<paperpaw_sdk::command::Command> }
@@ -900,9 +893,6 @@ struct paperpaw_sdk::filters::RefreshFilters { filters: alloc::vec::Vec<paperpaw
 struct paperpaw_sdk::filters::TextFilterSpec { id: paperpaw_sdk::id::Id, title: alloc::borrow::Cow<'static, str>, filter: paperpaw_sdk::filters::TextFilterFn, signature: paperpaw_sdk::filters::TextFilterSignatureFn, block: core::option::Option<paperpaw_sdk::filters::BlockFilterFn> }
 struct paperpaw_sdk::filters::TextFilters { filters: alloc::vec::Vec<paperpaw_sdk::filters::TextFilterSpec> }
 struct paperpaw_sdk::firmware::Firmware { version: alloc::string::String, project: alloc::string::String, chip: u16, keys: alloc::vec::Vec<[u8; 32]>, room: u64, undone: bool, state: paperpaw_sdk::firmware::FirmwareState, plugins: paperpaw_update::plugins::Plugins }
-struct paperpaw_sdk::firmware::Update { path: alloc::string::String, info: paperpaw_update::AppInfo, trailer: paperpaw_update::Trailer, plugins: core::option::Option<paperpaw_update::plugins::Plugins> }
-struct paperpaw_sdk::firmware::foreign::ForeignCheck { chip: u16, board: &'static str, len: u64, at: u64, first: [u8; 36], walk: paperpaw_sdk::firmware::foreign::Walk, segments: u8, head: [u8; 8], xor: u8, body_end: u64, checksum: core::option::Option<bool>, sha: paperpaw_digest::sha256::Sha256, hash: [u8; 32], tag_at: usize, name: core::option::Option<alloc::string::String>, tagged: core::option::Option<alloc::string::String>, problem: core::option::Option<paperpaw_sdk::firmware::InstallFailure> }
-struct paperpaw_sdk::firmware::foreign::ForeignImage { path: alloc::string::String, info: paperpaw_update::AppInfo, len: u64 }
 struct paperpaw_sdk::fonts::Entry { id: paperpaw_sdk::id::Id, font: core::option::Option<paperpaw_text::font::Font>, family: core::option::Option<alloc::borrow::Cow<'static, str>>, bold: bool, italic: bool, weight: u16, file: core::option::Option<alloc::string::String>, extends: core::option::Option<paperpaw_sdk::id::Id>, face: bool }
 struct paperpaw_sdk::fonts::FontFace { id: paperpaw_sdk::id::Id, path: alloc::string::String, family: alloc::borrow::Cow<'static, str>, bold: bool, italic: bool }
 struct paperpaw_sdk::fonts::FontHandle<'a> { id: &'a paperpaw_sdk::id::Id, font: &'a paperpaw_text::font::Font, cache: &'a core::cell::RefCell<paperpaw_text::cache::GlyphCache>, drawing: &'a paperpaw_sdk::fonts::missing::Drawing, index: u16, others: [core::option::Option<(&'a paperpaw_text::font::Font, u16)>; 4], larger: core::option::Option<(&'a paperpaw_text::font::Font, u16)>, display: bool, kerning: bool, ligatures: bool, ink: paperpaw_text::ink::TextInk }
@@ -927,10 +917,6 @@ struct paperpaw_sdk::install::Installer { owner: paperpaw_sdk::id::Id, reply: pa
 struct paperpaw_sdk::install::Package { plugin: alloc::string::String, name: alloc::string::String, files: alloc::vec::Vec<paperpaw_sdk::install::PackageFile> }
 struct paperpaw_sdk::install::PackageFile { path: alloc::string::String, url: alloc::string::String, size: u64, digest: paperpaw_sdk::install::Digest }
 struct paperpaw_sdk::install::Progress { plugin: alloc::string::String, name: alloc::string::String, done: usize, total: usize }
-struct paperpaw_sdk::install::local::Commit { approved: core::option::Option<[u8; 32]> }
-struct paperpaw_sdk::install::local::Committed { plugin: alloc::string::String, code: bool }
-struct paperpaw_sdk::install::local::Staging { plugin: alloc::string::String, place: &'static str }
-struct paperpaw_sdk::install::marks::Marks { from: paperpaw_sdk::install::marks::From, code: core::option::Option<[u8; 32]>, author: core::option::Option<[u8; 32]>, recovery: core::option::Option<[u8; 32]> }
 struct paperpaw_sdk::install::origin::Origins { kept: alloc::vec::Vec<(alloc::string::String, paperpaw_sdk::version::Version, alloc::string::String)> }
 struct paperpaw_sdk::keys::GestureSpec { id: paperpaw_sdk::id::Id, title: alloc::borrow::Cow<'static, str>, factory: paperpaw_sdk::keys::RecognizerFactory }
 struct paperpaw_sdk::keys::InputSpec { id: paperpaw_sdk::id::Id, title: alloc::borrow::Cow<'static, str>, need: core::option::Option<paperpaw_sdk::menus::MenuNeed>, kind: paperpaw_sdk::keys::InputKind }
@@ -944,13 +930,9 @@ struct paperpaw_sdk::library::Book { size: u64, indexed: bool, title: core::opti
 struct paperpaw_sdk::library::BookData { folder: alloc::borrow::Cow<'static, str>, prefix: alloc::borrow::Cow<'static, str>, kind: paperpaw_sdk::library::BookDataKind }
 struct paperpaw_sdk::library::Provided { title: core::option::Option<alloc::string::String>, author: core::option::Option<alloc::string::String>, series: core::option::Option<alloc::string::String>, series_index: core::option::Option<alloc::string::String>, tags: alloc::vec::Vec<alloc::string::String> }
 struct paperpaw_sdk::library::catalog::Changes { entries: alloc::vec::Vec<(u32, u32, core::option::Option<paperpaw_sdk::library::catalog::Status>)> }
-struct paperpaw_sdk::library::catalog::Making { log_from: u64, changes: paperpaw_sdk::library::catalog::Changes, favourites: alloc::vec::Vec<u32>, opened: alloc::vec::Vec<u32>, fields: alloc::vec::Vec<alloc::string::String>, found: usize, paused: bool }
-struct paperpaw_sdk::library::catalog::OldCatalog { at: core::option::Option<u64>, ahead: alloc::vec::Vec<u8>, from: u64, end: bool, missed: usize, found: usize }
 struct paperpaw_sdk::library::catalog::Query { show: paperpaw_sdk::library::catalog::Show, words: alloc::vec::Vec<alloc::string::String>, author: core::option::Option<alloc::string::String>, series: core::option::Option<alloc::string::String>, tag: core::option::Option<alloc::string::String>, folder: core::option::Option<alloc::string::String>, added_since: core::option::Option<u32>, sort: paperpaw_sdk::library::catalog::Sort }
 struct paperpaw_sdk::library::catalog::Record { path: alloc::string::String, author: alloc::string::String, title: alloc::string::String, series: alloc::string::String, number: alloc::string::String, tags: alloc::string::String, status: paperpaw_sdk::library::catalog::Status, added: core::option::Option<u32>, fields: alloc::string::String, size: core::option::Option<u64> }
-struct paperpaw_sdk::library::catalog::Rewrite { making: paperpaw_sdk::library::catalog::Making, fresh: alloc::vec::Vec<alloc::string::String>, at: core::option::Option<u64> }
 struct paperpaw_sdk::library::catalog::Status { progress: core::option::Option<u8>, favourite: bool, opened: bool }
-struct paperpaw_sdk::library::catalog::Walk { making: paperpaw_sdk::library::catalog::Making, old: paperpaw_sdk::library::catalog::OldCatalog, fresh: alloc::vec::Vec<alloc::string::String>, dirs: alloc::vec::Vec<alloc::string::String>, dir: core::option::Option<alloc::string::String>, at: u64, listed: core::option::Option<usize> }
 struct paperpaw_sdk::library::fingerprint::Fingerprint { size: u64, md5: alloc::string::String }
 struct paperpaw_sdk::library::index::Index { items: alloc::vec::Vec<paperpaw_sdk::library::index::Item>, series: alloc::vec::Vec<alloc::string::String>, total: usize, archived: usize, dirty: bool, version: core::option::Option<u64> }
 struct paperpaw_sdk::library::index::Item { offset: u32, hash: u32, key: [u8; 8], series: u16, number: u16, progress: u8, recent: u8, flags: u8 }
@@ -961,7 +943,6 @@ struct paperpaw_sdk::library::service::BookField { id: paperpaw_sdk::id::Id, tit
 struct paperpaw_sdk::library::service::Deleted { commands: alloc::vec::Vec<paperpaw_sdk::command::Command>, failed: alloc::vec::Vec<(alloc::string::String, paperpaw_platform::storage::StorageError)>, refused: alloc::vec::Vec<alloc::string::String> }
 struct paperpaw_sdk::library::service::Kept
 struct paperpaw_sdk::library::service::LibraryService(0: alloc::boxed::Box<dyn paperpaw_sdk::library::service::Library>)
-struct paperpaw_sdk::library::split::Split { folder: usize, listed: alloc::string::String, taken: usize, stuck: usize, moved: u32 }
 struct paperpaw_sdk::lookup::Asked { entries: alloc::vec::Vec<paperpaw_sdk::lookup::LookupEntry>, pending: alloc::vec::Vec<paperpaw_sdk::id::Id>, commands: alloc::vec::Vec<paperpaw_sdk::command::Command> }
 struct paperpaw_sdk::lookup::LookupEntry { source: alloc::string::String, text: alloc::string::String, more: core::option::Option<paperpaw_sdk::id::Id> }
 struct paperpaw_sdk::lookup::LookupProviderSpec { id: paperpaw_sdk::id::Id, title: alloc::borrow::Cow<'static, str>, languages: alloc::vec::Vec<alloc::borrow::Cow<'static, str>>, online: bool, lookup: paperpaw_sdk::lookup::LookupFn }
@@ -984,7 +965,6 @@ struct paperpaw_sdk::native::Fingerprint(0: u64)
 struct paperpaw_sdk::native::Native { fingerprint: paperpaw_sdk::native::Fingerprint, toolchain: alloc::borrow::Cow<'static, str>, compiler: u32, file: alloc::borrow::Cow<'static, str>, safe_mode: core::option::Option<paperpaw_sdk::native::SafeMode>, not_installed: alloc::vec::Vec<paperpaw_sdk::native::NotInstalled>, api_size: u32, family_revs: paperpaw_table::Revisions, family_min: paperpaw_table::Revisions }
 struct paperpaw_sdk::native::NotInstalled { plugin: paperpaw_sdk::id::Id, reason: paperpaw_sdk::native::NotInstalledReason }
 struct paperpaw_sdk::native::SafeMode { reason: paperpaw_sdk::native::SafeModeReason, last_loaded: core::option::Option<alloc::string::String>, crashed: core::option::Option<alloc::string::String>, switched_off: alloc::vec::Vec<paperpaw_sdk::id::Id> }
-struct paperpaw_sdk::native::installed::InstalledCodes { entries: alloc::vec::Vec<(paperpaw_sdk::id::Id, [u8; 32])> }
 struct paperpaw_sdk::native::keys::Revocation { plugin: alloc::string::String, key: [u8; 32], signature: [u8; 64] }
 struct paperpaw_sdk::params::Params { values: alloc::vec::Vec<(alloc::borrow::Cow<'static, str>, alloc::string::String)>, carried: core::option::Option<alloc::rcs::rc::Rc<dyn core::any::Any>> }
 struct paperpaw_sdk::pattern::Class { negated: bool, items: alloc::vec::Vec<paperpaw_sdk::pattern::Item> }
@@ -1068,7 +1048,6 @@ struct paperpaw_sdk::settings::Settings { specs: paperpaw_sdk::settings::specs::
 struct paperpaw_sdk::settings::specs::Specs { owned: alloc::vec::Vec<paperpaw_sdk::settings::SettingSpec>, lists: alloc::vec::Vec<(&'static [paperpaw_sdk::settings::SettingSpec], u16)>, order: alloc::vec::Vec<u16>, by_id: alloc::vec::Vec<u16> }
 struct paperpaw_sdk::setup::SetupStepSpec { id: paperpaw_sdk::id::Id, title: alloc::borrow::Cow<'static, str>, help: alloc::borrow::Cow<'static, str>, order: i32, page: paperpaw_sdk::setup::SetupPage, applies: core::option::Option<paperpaw_sdk::setup::AppliesFn> }
 struct paperpaw_sdk::setup::SetupSteps { steps: alloc::vec::Vec<paperpaw_sdk::setup::SetupStepSpec> }
-struct paperpaw_sdk::shared::Addresses<N>(0: [*const (); N])
 struct paperpaw_sdk::shared_str::Str(0: paperpaw_sdk::id::Text)
 struct paperpaw_sdk::sound::Sound { path: alloc::string::String, volume: u8, reply: paperpaw_sdk::id::Id, params: paperpaw_sdk::params::Params }
 struct paperpaw_sdk::status::Place { id: paperpaw_sdk::id::Id, title: alloc::borrow::Cow<'static, str>, parts: [paperpaw_sdk::id::Id; 3], line: core::option::Option<paperpaw_sdk::id::Id> }

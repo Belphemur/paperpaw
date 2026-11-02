@@ -93,9 +93,8 @@ pub const CROSSING_CRATES: &[&str] = &[
 /// this build lays them out: a digest of their sizes and alignments, and
 /// of where the firmware's table keeps each of its entries. Part of the
 /// fingerprint, so made for each chip as it lays them out: a plugin whose
-/// layouts differ from the firmware's is not loaded.
-#[cfg(any(test, feature = "kernel"))]
-#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+/// layouts differ from the firmware's is not loaded. Not only the
+/// kernel's: `shape.txt` pins its value, which changes with a layout.
 pub const LAYOUT: u64 = layout::DIGEST;
 
 /// What this build of the SDK makes plugins fit: the plugin interface, the

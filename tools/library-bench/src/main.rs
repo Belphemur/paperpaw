@@ -171,6 +171,14 @@ impl Storage for Card {
     fn list(&self, dir: &str, visit: &mut dyn FnMut(DirEntry<'_>)) -> Result<(), StorageError> {
         tally(dir, || self.0.list(dir, visit))
     }
+    fn list_from(
+        &self,
+        dir: &str,
+        from: u64,
+        visit: &mut dyn FnMut(DirEntry<'_>) -> bool,
+    ) -> Result<Option<u64>, StorageError> {
+        tally(dir, || self.0.list_from(dir, from, visit))
+    }
     fn remove(&self, path: &str) -> Result<(), StorageError> {
         tally(path, || self.0.remove(path))
     }

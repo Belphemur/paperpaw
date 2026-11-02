@@ -1326,9 +1326,9 @@ pub struct Walk {
     /// the next entry of it is there.
     dir: Option<String>,
     at: u64,
-    /// While its folder is listed (a piece a step): its entries listed so
-    /// far.
-    listed: Option<usize>,
+    /// While its folder is listed (a piece a step): where the next piece
+    /// starts (see [`Storage::list_from`]).
+    listed: Option<u64>,
 }
 
 #[cfg(any(test, feature = "kernel"))]
@@ -1456,27 +1456,21 @@ impl Walk {
     }
 
     /// Lists a piece of folder `dir` into the listing kept, the entries
-    /// after the first `listed`: its folders and the files a format plugin
-    /// opens, but hidden ones; `None` once all are. The piece is written
-    /// after the folder was listed (never while it is). A library folder
-    /// that is not there is empty; a folder in it gone meanwhile is left
-    /// out.
-    fn list(env: &Env<'_>, dir: &str, listed: usize) -> Result<Option<usize>, StorageError> {
+    /// from place `from` on (see [`Storage::list_from`]): its folders and
+    /// the files a format plugin opens, but hidden ones; where the next
+    /// piece starts, `None` once all are. The piece is written after it
+    /// was listed (never while it is). A library folder that is not there
+    /// is empty; a folder in it gone meanwhile is left out.
+    fn list(env: &Env<'_>, dir: &str, from: u64) -> Result<Option<u64>, StorageError> {
         use core::fmt::Write as _;
         let storage = env.storage();
         let mut piece = String::with_capacity(LISTED_PIECE);
-        let (mut at, mut more) = (0, false);
-        let result = storage.list(dir, &mut |entry| {
-            if more || !super::listing::shown(env.formats(), entry.name, entry.is_dir) {
-                return;
-            }
-            if at < listed {
-                at += 1;
-                return;
+        let result = storage.list_from(dir, from, &mut |entry| {
+            if !super::listing::shown(env.formats(), entry.name, entry.is_dir) {
+                return true;
             }
             if !piece.is_empty() && piece.len() + entry.name.len() + LISTED_LINE > LISTED_PIECE {
-                more = true;
-                return;
+                return false;
             }
             let kind = if entry.is_dir { 'd' } else { 'f' };
             #[expect(
@@ -1484,15 +1478,15 @@ impl Walk {
                 reason = "writing into a String does not fail"
             )]
             let _ = writeln!(piece, "{kind}\t{}\t{}", entry.size, entry.name);
-            at += 1;
+            true
         });
-        match result {
-            Ok(()) => {}
+        let next = match result {
+            Ok(next) => next,
             Err(StorageError::NotFound) => return Ok(None),
             Err(e) => return Err(e),
-        }
+        };
         storage.append(&listed_path(), piece.as_bytes())?;
-        Ok(more.then_some(at))
+        Ok(next)
     }
 
     /// The book at `path` as the old catalog has it, where its file is as

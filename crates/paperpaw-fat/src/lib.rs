@@ -85,6 +85,7 @@ extern crate alloc;
 mod disk;
 mod found;
 mod free;
+mod listed;
 mod settle;
 
 pub use disk::{BLOCK, BlockDisk, Blocks, DiskError, SharedDisk, VolumeError};
@@ -1231,21 +1232,19 @@ impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
         for entry in entries(&folder) {
             let entry = entry?;
             read.met(&entry);
-            let name = entry.file_name();
-            // Nor the storage's own (see `check`).
-            let own = is_temp_name(&name) || (dir.is_empty() && same_path(&name, JOURNAL));
-            if name == "." || name == ".." || own {
-                continue;
-            }
-            let is_dir = entry.is_dir();
-            let modified = Some(seconds(entry.modified()));
-            visit(
-                DirEntry::new(&name, is_dir, if is_dir { 0 } else { entry.len() })
-                    .with_modified(modified),
-            );
+            listed::shown(dir, &entry, &mut |shown| visit(shown));
         }
         read.note(&folder);
         Ok(())
+    }
+
+    fn list_from(
+        &self,
+        dir: &str,
+        from: u64,
+        visit: &mut dyn FnMut(DirEntry<'_>) -> bool,
+    ) -> Result<Option<u64>, StorageError> {
+        self.list_piece(dir, from, visit)
     }
 
     fn modified(&self, path: &str) -> Option<i64> {

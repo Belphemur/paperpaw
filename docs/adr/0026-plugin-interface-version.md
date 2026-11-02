@@ -81,7 +81,10 @@ with that before the betas of 0.5:
   reach, in the source's order, private fields too, each with its type,
   functions' pointers with their ABI; and the values of its public and
   associated constants (`tools/interface.py`, from rustdoc's JSON with
-  every feature on, on the nightly and the cargo-public-api of CI).
+  every feature a plugin may turn on, on the nightly and the
+  cargo-public-api of CI). Not the SDK's `kernel` feature: what only the
+  kernel and the shells build (ADR 0020) is in no plugin, so its types
+  change with the firmware alone, like any type of the firmware's own.
   `api.txt` alone does not do: it is sorted, so an inserted variant or
   two fields of one type swapped do not show, and it shows no private
   field and no value. `interface/` keeps both as they were when the
