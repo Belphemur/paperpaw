@@ -88,7 +88,9 @@ pub(super) fn register_sorted(
     r.on(
         paperpaw_sdk::builtin::events::SORTED_WANTED,
         move |env, wanted, out| {
-            *catalog.archive.borrow_mut() = Some(wanted.archive.clone());
+            let mut archives = catalog.archives.borrow_mut();
+            library::sorted::asked(env.storage(), &mut archives, &wanted.archive);
+            drop(archives);
             if catalog.sort_wanted(env).is_some() {
                 catalog.declare(true, out);
             }

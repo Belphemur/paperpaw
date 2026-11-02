@@ -458,7 +458,13 @@ fn an_old_folder_that_cannot_be_read_does_not_keep_the_catalog_from_being_made()
     );
 }
 
-const SORTED: &str = ".paperpaw/library/sorted.idx";
+/// The file of the sorted books of the view leaving `archive` out.
+fn sorted_of(archive: &str) -> String {
+    alloc::format!(
+        ".paperpaw/library/sorted-{:08x}.idx",
+        library::index::hash(archive)
+    )
+}
 
 fn want_sorted(kernel: &mut Kernel, now: u64, archive: &str) -> u64 {
     let wanted = events::SortedWanted::new(String::from(archive)).to_params();
@@ -472,12 +478,13 @@ fn want_sorted(kernel: &mut Kernel, now: u64, archive: &str) -> u64 {
 fn the_sorted_books_are_made_when_asked_and_after_the_catalog_changed() {
     let (mut kernel, log, now) = library(two_books());
     let now = want(&mut kernel, now, false);
-    assert!(!kernel.storage().exists(SORTED), "made unasked");
+    let sorted = sorted_of("books/Archive");
+    assert!(!kernel.storage().exists(&sorted), "made unasked");
     log.borrow_mut().clear();
     let now = want_sorted(&mut kernel, now, "books/Archive");
-    assert!(kernel.storage().exists(SORTED));
+    assert!(kernel.storage().exists(&sorted));
     assert_eq!(*log.borrow(), ["catalog"]);
-    let made = kernel.storage().size(SORTED).unwrap();
+    let made = kernel.storage().size(&sorted).unwrap();
     // Asked again: as it is.
     let now = want_sorted(&mut kernel, now, "books/Archive");
     assert_eq!(log.borrow().len(), 1);
@@ -486,7 +493,7 @@ fn the_sorted_books_are_made_when_asked_and_after_the_catalog_changed() {
     kernel.storage().write("books/c.txt", b"three").unwrap();
     want(&mut kernel, now, true);
     assert_eq!(log.borrow().len(), 2);
-    assert!(kernel.storage().size(SORTED).unwrap() > made);
+    assert!(kernel.storage().size(&sorted).unwrap() > made);
     assert!(!kernel.storage().exists(".paperpaw/library/sorted.runs"));
 }
 
@@ -501,8 +508,69 @@ fn on_small_devices_the_books_are_sorted_beside_the_library() {
     let now = run(&mut kernel, now, effects);
     log.borrow_mut().clear();
     want_sorted(&mut kernel, now, "");
-    assert!(kernel.storage().exists(SORTED));
+    assert!(kernel.storage().exists(&sorted_of("")));
     assert_eq!(*log.borrow(), ["catalog"]);
+}
+
+/// Every file of `storage` from `dir` on, copied into `to`.
+fn copied(storage: &dyn Storage, dir: &str, mut to: MemoryStorage) -> MemoryStorage {
+    let mut entries = Vec::new();
+    storage
+        .list(dir, &mut |e| entries.push((String::from(e.name), e.is_dir)))
+        .unwrap();
+    for (name, is_dir) in entries {
+        let path = paperpaw_sdk::files::join(dir, &name);
+        to = if is_dir {
+            copied(storage, &path, to)
+        } else {
+            let mut data = alloc::vec![0; storage.size(&path).unwrap() as usize];
+            storage.read_at(&path, 0, &mut data).unwrap();
+            to.with(&path, data)
+        };
+    }
+    to
+}
+
+/// Two views of two archive folders each have their sorted books: asked
+/// one after the other, both are made, and both anew (before views hear
+/// of it, once) when the catalog is made anew, also after a restart.
+#[test]
+fn the_sorted_books_of_two_archives_are_both_kept() {
+    let (mut kernel, log, now) = library(two_books());
+    let now = want(&mut kernel, now, false);
+    log.borrow_mut().clear();
+    let now = want_sorted(&mut kernel, now, "books/Archive");
+    let now = want_sorted(&mut kernel, now, "");
+    assert_eq!(log.borrow().len(), 2);
+    let (archived, all) = (sorted_of("books/Archive"), sorted_of(""));
+    let sizes = |kernel: &Kernel| {
+        let storage = kernel.storage();
+        (
+            storage.size(&archived).unwrap(),
+            storage.size(&all).unwrap(),
+        )
+    };
+    let made = sizes(&kernel);
+    // Asked again, each: as they are.
+    let now = want_sorted(&mut kernel, now, "books/Archive/");
+    let now = want_sorted(&mut kernel, now, "");
+    assert_eq!(log.borrow().len(), 2);
+    kernel.storage().write("books/c.txt", b"three").unwrap();
+    want(&mut kernel, now, true);
+    assert_eq!(log.borrow().len(), 3);
+    let grown = sizes(&kernel);
+    assert!(grown.0 > made.0 && grown.1 > made.1, "{made:?} {grown:?}");
+    // After a restart the kernel makes both anew, unasked.
+    let (mut kernel, log, now) = library(copied(kernel.storage(), "", MemoryStorage::new()));
+    kernel.storage().write("books/d.txt", b"four").unwrap();
+    log.borrow_mut().clear();
+    want(&mut kernel, now, true);
+    assert_eq!(*log.borrow(), ["catalog"]);
+    let again = sizes(&kernel);
+    assert!(
+        again.0 > grown.0 && again.1 > grown.1,
+        "{grown:?} {again:?}"
+    );
 }
 
 #[test]

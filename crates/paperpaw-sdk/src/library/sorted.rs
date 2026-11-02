@@ -2,9 +2,10 @@
 //! page at a time, so that a list of any length takes a few kilobytes
 //! (the X4 holds no more than 2,000 books of an [`Index`](super::index::Index)).
 //!
-//! The kernel makes the file ([`SORTED_FILE`]) after the catalog was
-//! written anew, or when a view asks for it ([`request`]): every book
-//! but those in the archive folder, sorted by its title's first letters
+//! The kernel makes the file of a view's archive folder (one for each,
+//! for two at most) after the catalog was written anew, or when a
+//! view asks for it ([`request`]): every book but those in the archive
+//! folder, sorted by its title's first letters
 //! ([`sort_key`](super::index::sort_key)) and where its line starts, each
 //! with its series (a hash of the name), its place among the books of
 //! its series and how many there are. It is written to a file beside it
@@ -32,12 +33,16 @@ use crate::{Env, Storage};
 mod build;
 #[cfg(any(test, feature = "kernel"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
-pub use build::{Build, clean_up, kept_archive, wanted};
+pub use build::{Build, asked, clean_up, kept_archives, wanted};
 
 mod view;
 
-/// The file of the sorted books.
-const SORTED_FILE: &str = ".paperpaw/library/sorted.idx";
+/// The folder of the files of the sorted books, one for each archive
+/// folder a view leaves out ([`file_of`]).
+const FOLDER: &str = ".paperpaw/library";
+/// Files of the sorted books kept at most, for as many archive folders:
+/// the views of all others ask for theirs anew.
+const KEPT_FILES: usize = 2;
 /// Where it is written before it is put in place.
 const BUILDING: &str = ".paperpaw/library/sorted.tmp";
 /// The runs sorted in memory, merged into it.
@@ -59,6 +64,19 @@ const CHUNK: usize = 64;
 const MAX_APART: usize = 1024;
 /// Series whose next book is found at most ([`Sorted::next_in_series`]).
 const MAX_NEXT: usize = 512;
+
+/// The file of the sorted books for a view leaving `archive` out
+/// (trimmed of `/`), named by its hash.
+fn file_of(archive: &str) -> String {
+    alloc::format!("{FOLDER}/sorted-{:08x}.idx", index::hash(archive))
+}
+
+/// Whether `name` (in the folder) is that of a file of the sorted books.
+fn is_file_name(name: &str) -> bool {
+    name.strip_prefix("sorted-")
+        .and_then(|rest| rest.strip_suffix(".idx"))
+        .is_some_and(|hex| hex.len() == 8 && hex.bytes().all(|b| b.is_ascii_hexdigit()))
+}
 
 /// A book as the file keeps it.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -332,6 +350,8 @@ struct Counts {
 /// the [module](self)).
 #[derive(Debug)]
 pub struct Sorted {
+    /// The file read ([`file_of`]).
+    path: String,
     version: u64,
     count: usize,
     archived: usize,
@@ -360,17 +380,20 @@ impl Sorted {
     /// short or damaged: then ask for it ([`request`]) and say the library
     /// is being prepared.
     pub fn open(env: &Env<'_>, archive: &str) -> Option<Sorted> {
+        let archive = archive.trim_matches('/');
         let version = super::service(env).version(env)?;
         let storage = env.storage();
-        let trailer = trailer_of(storage, SORTED_FILE)?;
+        let path = file_of(archive);
+        let trailer = trailer_of(storage, &path)?;
         if trailer.version != version || trailer.archive != index::hash(archive) {
             return None;
         }
         // The name it keeps is the one it was made for (else damaged).
-        if archive_of(storage, SORTED_FILE, &trailer)? != archive.trim_matches('/') {
+        if archive_of(storage, &path, &trailer)? != archive {
             return None;
         }
         let mut sorted = Sorted {
+            path,
             version,
             count: trailer.count as usize,
             archived: trailer.archived as usize,
@@ -407,8 +430,18 @@ impl Sorted {
     /// Hides the book hashing to `hash` (gone, until the file is made
     /// anew).
     pub fn hide(&mut self, storage: &dyn Storage, hash: u32) {
-        if !self.hidden.contains(&hash) {
-            self.hidden.push(hash);
+        self.hide_all(storage, &[hash]);
+    }
+
+    /// Hides the books hashing to `hashes`, the file read through once.
+    pub fn hide_all(&mut self, storage: &dyn Storage, hashes: &[u32]) {
+        let before = self.hidden.len();
+        for &hash in hashes {
+            if !self.hidden.contains(&hash) {
+                self.hidden.push(hash);
+            }
+        }
+        if self.hidden.len() > before {
             self.refresh(storage);
         }
     }

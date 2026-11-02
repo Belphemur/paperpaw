@@ -11,7 +11,7 @@ use alloc::vec::Vec;
 
 use super::{
     BLOCK, CHECK_START, CHUNK, Counts, Entry, MAX_APART, MAX_NEXT, RECORD, Rec, Recent, SHOWN,
-    SHOWS, SORTED_FILE, Sorted, View, checked, show_index,
+    SHOWS, Sorted, View, checked, show_index,
 };
 use crate::Storage;
 use crate::library::catalog::{self, Show};
@@ -22,11 +22,12 @@ fn being_read(item: &Item) -> bool {
     (1..100).contains(&item.progress)
 }
 
-/// Reads the books of the file from book `from` to `to`, `f` called with
-/// each and its place until it says stop; `Some(check)` of the bytes
-/// read where all were read whole.
+/// Reads the books of the file at `path` from book `from` to `to`, `f`
+/// called with each and its place until it says stop; `Some(check)` of
+/// the bytes read where all were read whole.
 fn each_rec(
     storage: &dyn Storage,
+    path: &str,
     from: usize,
     to: usize,
     f: &mut dyn FnMut(usize, &Rec) -> bool,
@@ -38,7 +39,7 @@ fn each_rec(
         let n = (to - at).min(CHUNK);
         let want = &mut buf[..n * RECORD];
         let offset = (at * RECORD) as u64;
-        if storage.read_at(SORTED_FILE, offset, want).ok()? != want.len() {
+        if storage.read_at(path, offset, want).ok()? != want.len() {
             return None;
         }
         sum = checked(sum, want);
@@ -147,7 +148,7 @@ impl Sorted {
         let mut apart: Vec<(u32, u32)> = Vec::new();
         // How many books apart of each series with some were met.
         let mut met: Vec<(u32, u16)> = Vec::new();
-        let sum = each_rec(storage, 0, self.count, &mut |pos, rec| {
+        let sum = each_rec(storage, &self.path, 0, self.count, &mut |pos, rec| {
             let Some(counts) = blocks.get_mut(pos / BLOCK) else {
                 return false;
             };
@@ -156,7 +157,7 @@ impl Sorted {
             let at = met.binary_search_by_key(&rec.series, |&(s, _)| s);
             let before = at.map_or(0, |at| met[at].1);
             let mut apart_now = false;
-            if in_series(rec) && alone && (at.is_ok() || met.len() < MAX_APART) {
+            if in_series(rec) && alone && apart.len() < MAX_APART {
                 apart.push((rec.series, pos as u32));
                 apart_now = true;
                 match at {
@@ -220,7 +221,7 @@ impl Sorted {
         if self.heads.is_empty() {
             return Some(());
         }
-        each_rec(storage, 0, self.count, &mut |pos, rec| {
+        each_rec(storage, &self.path, 0, self.count, &mut |pos, rec| {
             if self.head_rank(rec.series).is_none()
                 || !self.stacked_in(rec.series, rec.members, pos)
             {
@@ -350,16 +351,22 @@ impl Sorted {
             skip -= count;
             block += 1;
         }
-        each_rec(storage, block * BLOCK, self.count, &mut |pos, rec| {
-            if let Some(entry) = self.title_entry(view, pos, rec) {
-                if skip > 0 {
-                    skip -= 1;
-                } else {
-                    page.push(entry);
+        each_rec(
+            storage,
+            &self.path,
+            block * BLOCK,
+            self.count,
+            &mut |pos, rec| {
+                if let Some(entry) = self.title_entry(view, pos, rec) {
+                    if skip > 0 {
+                        skip -= 1;
+                    } else {
+                        page.push(entry);
+                    }
                 }
-            }
-            page.len() < n
-        });
+                page.len() < n
+            },
+        );
         page
     }
 
@@ -376,7 +383,7 @@ impl Sorted {
             }
         }
         let mut at = None;
-        each_rec(storage, 0, self.count, &mut |pos, rec| {
+        each_rec(storage, &self.path, 0, self.count, &mut |pos, rec| {
             if rec.hash == hash {
                 at = Some((pos, *rec));
                 return false;
@@ -387,7 +394,7 @@ impl Sorted {
         self.title_entry(view, pos, &rec)?;
         let block = pos / BLOCK;
         let mut index: usize = (0..block).map(|b| self.block_count(view, b)).sum();
-        each_rec(storage, block * BLOCK, pos, &mut |p, r| {
+        each_rec(storage, &self.path, block * BLOCK, pos, &mut |p, r| {
             index += usize::from(self.title_entry(view, p, r).is_some());
             true
         })?;
@@ -400,7 +407,7 @@ impl Sorted {
     pub fn next_in_series(&self, storage: &dyn Storage, by_recent: bool) -> Vec<Entry> {
         // The series begun, each with the place its book read last has.
         let mut begun: Vec<(u32, u8)> = Vec::new();
-        each_rec(storage, 0, self.count, &mut |_, rec| {
+        each_rec(storage, &self.path, 0, self.count, &mut |_, rec| {
             let Some(item) = self.as_now(rec).filter(|_| rec.series != 0) else {
                 return true;
             };
@@ -415,7 +422,7 @@ impl Sorted {
             true
         });
         let mut next: Vec<Option<Item>> = alloc::vec![None; begun.len()];
-        each_rec(storage, 0, self.count, &mut |_, rec| {
+        each_rec(storage, &self.path, 0, self.count, &mut |_, rec| {
             let Ok(at) = begun.binary_search_by_key(&rec.series, |&(s, _)| s) else {
                 return true;
             };

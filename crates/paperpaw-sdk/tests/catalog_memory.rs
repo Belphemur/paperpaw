@@ -282,7 +282,11 @@ fn sorting_the_books_of_a_large_library_takes_a_bounded_part_of_the_heap() {
         let mut build = sorted::Build::start(&env, "").unwrap();
         while !build.step(&env).unwrap() {}
     });
-    assert!(storage.exists(".paperpaw/library/sorted.idx"));
+    let file = format!(
+        ".paperpaw/library/sorted-{:08x}.idx",
+        paperpaw_sdk::library::index::hash("")
+    );
+    assert!(storage.exists(&file));
     eprintln!("sorting 10,000 books took {took} B");
     assert!(took <= SORT_BOUND, "sorting took {took} bytes");
 }

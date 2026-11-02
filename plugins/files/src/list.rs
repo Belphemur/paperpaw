@@ -478,9 +478,7 @@ impl ListScreen {
             self.asked = false;
         }
         if let Some(sorted) = &mut self.sorted {
-            for &hash in &self.gone {
-                sorted.hide(env.storage(), hash);
-            }
+            sorted.hide_all(env.storage(), &self.gone);
         }
     }
 

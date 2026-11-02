@@ -375,9 +375,9 @@ struct Catalog {
     /// What earlier versions kept for books is to be moved
     /// ([`library::split`]): first, before a walk or catching up.
     split: core::cell::Cell<bool>,
-    /// The archive folder the view of the sorted books leaves out
-    /// ([`library::sorted`]); none until one asked.
-    archive: core::cell::RefCell<Option<String>>,
+    /// The archive folders the views of the sorted books leave out
+    /// ([`library::sorted`]), those asked for last first.
+    archives: core::cell::RefCell<Vec<String>>,
 }
 
 impl Catalog {
@@ -425,11 +425,12 @@ impl Catalog {
         ));
     }
 
-    /// The archive of the view the sorted books are to be made for, where
+    /// The archive of a view the sorted books are to be made for, where
     /// they are not of the library there is now.
     fn sort_wanted(&self, env: &Env<'_>) -> Option<String> {
-        let archive = self.archive.borrow().clone()?;
-        library::sorted::wanted(env, &archive).then_some(archive)
+        let archives = self.archives.borrow();
+        let mut wanted = archives.iter().filter(|a| library::sorted::wanted(env, a));
+        wanted.next().cloned()
     }
 
     /// Gives what the job under way took back, for the next.
@@ -523,13 +524,12 @@ impl Catalog {
         match result {
             Ok(false) => Step::Continue,
             Ok(true) => {
-                let sorted = matches!(*job, Some(CatalogJob::Sort(_)));
                 *job = None;
                 self.taken.borrow_mut().clear();
                 self.walked.set(self.walked.get() || walk);
                 // Views hear of a catalog made anew once its books are
-                // sorted.
-                let sorting = !sorted && self.sort_wanted(env).is_some();
+                // sorted for each (a file made is wanted no more).
+                let sorting = self.sort_wanted(env).is_some();
                 if !sorting {
                     out.push(events::CATALOG_CHANGED.emit(()));
                 }
@@ -569,9 +569,9 @@ fn register_library(r: &mut Registrar) -> Result<(), RegisterError> {
         let catalog = Rc::clone(&catalog);
         r.on(events::STARTED, move |env, _, out| {
             // What a making of the sorted books cut short left goes; the
-            // view it was for is the one it is made anew for.
+            // views they were for are those they are made anew for.
             library::sorted::clean_up(env.storage());
-            *catalog.archive.borrow_mut() = library::sorted::kept_archive(env.storage());
+            *catalog.archives.borrow_mut() = library::sorted::kept_archives(env.storage());
             if library::split::wanted(env.storage()) {
                 catalog.split.set(true);
                 catalog.declare(false, out);
