@@ -3445,6 +3445,9 @@ pub paperpaw_sdk::replies::SocketNotice::Answer
 pub paperpaw_sdk::replies::SocketNotice::Answer::from: alloc::string::String
 pub paperpaw_sdk::replies::SocketNotice::Answer::socket: paperpaw_sdk::Id
 pub paperpaw_sdk::replies::SocketNotice::Answer::text: alloc::string::String
+pub paperpaw_sdk::replies::SocketNotice::Bytes
+pub paperpaw_sdk::replies::SocketNotice::Bytes::data: alloc::vec::Vec<u8>
+pub paperpaw_sdk::replies::SocketNotice::Bytes::socket: paperpaw_sdk::Id
 pub paperpaw_sdk::replies::SocketNotice::Closed
 pub paperpaw_sdk::replies::SocketNotice::Closed::reason: alloc::string::String
 pub paperpaw_sdk::replies::SocketNotice::Closed::socket: paperpaw_sdk::Id
@@ -3454,6 +3457,7 @@ pub paperpaw_sdk::replies::SocketNotice::Done
 pub paperpaw_sdk::replies::SocketNotice::Done::reason: alloc::string::String
 pub paperpaw_sdk::replies::SocketNotice::Done::socket: paperpaw_sdk::Id
 pub paperpaw_sdk::replies::SocketNotice::Failed
+pub paperpaw_sdk::replies::SocketNotice::Failed::error: paperpaw_sdk::SocketError
 pub paperpaw_sdk::replies::SocketNotice::Failed::reason: alloc::string::String
 pub paperpaw_sdk::replies::SocketNotice::Failed::socket: paperpaw_sdk::Id
 pub paperpaw_sdk::replies::SocketNotice::Received
@@ -3463,10 +3467,15 @@ pub paperpaw_sdk::replies::SocketNotice::Saved
 pub paperpaw_sdk::replies::SocketNotice::Saved::path: alloc::string::String
 pub paperpaw_sdk::replies::SocketNotice::Saved::socket: paperpaw_sdk::Id
 pub paperpaw_sdk::replies::SocketNotice::Secured
+pub paperpaw_sdk::replies::SocketNotice::Secured::certificate: paperpaw_sdk::CertificateHash
+pub paperpaw_sdk::replies::SocketNotice::Secured::key: paperpaw_sdk::KeyHash
 pub paperpaw_sdk::replies::SocketNotice::Secured::socket: paperpaw_sdk::Id
+pub paperpaw_sdk::replies::SocketNotice::Secured::time_checked: bool
 pub paperpaw_sdk::replies::SocketNotice::Untrusted
-pub paperpaw_sdk::replies::SocketNotice::Untrusted::certificate: alloc::string::String
+pub paperpaw_sdk::replies::SocketNotice::Untrusted::certificate: paperpaw_sdk::CertificateHash
+pub paperpaw_sdk::replies::SocketNotice::Untrusted::key: paperpaw_sdk::KeyHash
 pub paperpaw_sdk::replies::SocketNotice::Untrusted::socket: paperpaw_sdk::Id
+pub paperpaw_sdk::replies::SocketNotice::Untrusted::why: paperpaw_sdk::Distrust
 impl paperpaw_sdk::replies::SocketNotice
 pub fn paperpaw_sdk::replies::SocketNotice::socket(&self) -> &paperpaw_sdk::Id
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::SocketNotice
@@ -5645,6 +5654,7 @@ pub paperpaw_sdk::Command::Connect::events: paperpaw_sdk::Id
 pub paperpaw_sdk::Command::Connect::host: alloc::string::String
 pub paperpaw_sdk::Command::Connect::port: u16
 pub paperpaw_sdk::Command::Connect::socket: paperpaw_sdk::Id
+pub paperpaw_sdk::Command::Connect::tls: core::option::Option<alloc::boxed::Box<paperpaw_sdk::Tls>>
 pub paperpaw_sdk::Command::Developer(alloc::boxed::Box<paperpaw_sdk::developer::DevRequest>)
 pub paperpaw_sdk::Command::Disconnect(paperpaw_sdk::Id)
 pub paperpaw_sdk::Command::Emit(paperpaw_sdk::Id, paperpaw_sdk::Params)
@@ -5702,6 +5712,9 @@ pub paperpaw_sdk::Command::SocketRead::socket: paperpaw_sdk::Id
 pub paperpaw_sdk::Command::SocketSend::data: alloc::vec::Vec<u8>
 pub paperpaw_sdk::Command::SocketSend::socket: paperpaw_sdk::Id
 pub paperpaw_sdk::Command::Speak(alloc::boxed::Box<paperpaw_sdk::Speech>)
+#[non_exhaustive] pub paperpaw_sdk::Command::StartTls
+pub paperpaw_sdk::Command::StartTls::socket: paperpaw_sdk::Id
+pub paperpaw_sdk::Command::StartTls::tls: alloc::boxed::Box<paperpaw_sdk::Tls>
 pub paperpaw_sdk::Command::StopServing(paperpaw_sdk::Id)
 pub paperpaw_sdk::Command::StopSound
 pub paperpaw_sdk::Command::StopSpeaking
@@ -5714,6 +5727,7 @@ impl paperpaw_sdk::Command
 pub fn paperpaw_sdk::Command::bind(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>, core::option::Option<paperpaw_sdk::Id>) -> Self
 pub fn paperpaw_sdk::Command::broadcast(paperpaw_sdk::Id, alloc::vec::Vec<u16>, alloc::vec::Vec<u8>, u32, paperpaw_sdk::Id) -> Self
 pub fn paperpaw_sdk::Command::connect(paperpaw_sdk::Id, impl core::convert::Into<alloc::string::String>, u16, paperpaw_sdk::Id) -> Self
+pub fn paperpaw_sdk::Command::connect_tls(paperpaw_sdk::Id, impl core::convert::Into<alloc::string::String>, u16, paperpaw_sdk::Id, paperpaw_sdk::Tls) -> Self
 pub fn paperpaw_sdk::Command::http(paperpaw_sdk::HttpRequest) -> Self
 pub fn paperpaw_sdk::Command::play_sound(paperpaw_sdk::sound::Sound) -> Self
 pub fn paperpaw_sdk::Command::request_plugins(impl core::convert::Into<paperpaw_sdk::Id>, impl core::iter::traits::collect::IntoIterator<Item = paperpaw_sdk::Id>) -> Self
@@ -5723,6 +5737,7 @@ pub fn paperpaw_sdk::Command::set_secret(paperpaw_sdk::secrets::SecretChange) ->
 pub fn paperpaw_sdk::Command::socket_read(paperpaw_sdk::Id, paperpaw_sdk::SocketRead) -> Self
 pub fn paperpaw_sdk::Command::socket_send(paperpaw_sdk::Id, alloc::vec::Vec<u8>) -> Self
 pub fn paperpaw_sdk::Command::speak(paperpaw_sdk::Speech) -> Self
+pub fn paperpaw_sdk::Command::start_tls(paperpaw_sdk::Id, paperpaw_sdk::Tls) -> Self
 pub fn paperpaw_sdk::Command::work(paperpaw_sdk::work::Work) -> Self
 impl paperpaw_sdk::Command
 pub fn paperpaw_sdk::Command::open_slot(paperpaw_sdk::Id) -> paperpaw_sdk::Command
@@ -5739,6 +5754,12 @@ pub paperpaw_sdk::Direction::Right
 pub paperpaw_sdk::Direction::Up
 impl paperpaw_sdk::Direction
 pub const fn paperpaw_sdk::Direction::id(self) -> &'static str
+#[non_exhaustive] pub enum paperpaw_sdk::Distrust
+pub paperpaw_sdk::Distrust::NotPinned
+pub paperpaw_sdk::Distrust::UnknownIssuer
+impl paperpaw_sdk::Distrust
+pub fn paperpaw_sdk::Distrust::as_str(self) -> &'static str
+pub fn paperpaw_sdk::Distrust::parse(&str) -> core::option::Option<Self>
 #[non_exhaustive] pub enum paperpaw_sdk::Editor
 pub paperpaw_sdk::Editor::Screen(paperpaw_sdk::Id)
 pub paperpaw_sdk::Editor::Slot(paperpaw_sdk::Id)
@@ -5907,11 +5928,37 @@ pub fn paperpaw_sdk::SettingValue::to_config_text(&self) -> alloc::string::Strin
 pub paperpaw_sdk::ShowsThrough::All
 pub paperpaw_sdk::ShowsThrough::FullScreen
 pub paperpaw_sdk::ShowsThrough::Nothing
+#[non_exhaustive] pub enum paperpaw_sdk::SocketError
+pub paperpaw_sdk::SocketError::Busy
+pub paperpaw_sdk::SocketError::Dns
+pub paperpaw_sdk::SocketError::Expired
+pub paperpaw_sdk::SocketError::Io
+pub paperpaw_sdk::SocketError::Lost
+pub paperpaw_sdk::SocketError::NameMismatch
+pub paperpaw_sdk::SocketError::NoMemory
+pub paperpaw_sdk::SocketError::NoNetwork
+pub paperpaw_sdk::SocketError::NotAllowed
+pub paperpaw_sdk::SocketError::NotReady
+pub paperpaw_sdk::SocketError::Options
+pub paperpaw_sdk::SocketError::Other(u16)
+pub paperpaw_sdk::SocketError::Refused
+pub paperpaw_sdk::SocketError::Timeout
+pub paperpaw_sdk::SocketError::Tls
+pub paperpaw_sdk::SocketError::TooMany
+pub paperpaw_sdk::SocketError::Unsupported
+impl paperpaw_sdk::SocketError
+pub fn paperpaw_sdk::SocketError::as_str(self) -> &'static str
+pub fn paperpaw_sdk::SocketError::parse(&str) -> core::option::Option<Self>
+impl core::fmt::Display for paperpaw_sdk::SocketError
+pub fn paperpaw_sdk::SocketError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[non_exhaustive] pub enum paperpaw_sdk::SocketNotice
 pub paperpaw_sdk::SocketNotice::Answer
 pub paperpaw_sdk::SocketNotice::Answer::from: alloc::string::String
 pub paperpaw_sdk::SocketNotice::Answer::socket: paperpaw_sdk::Id
 pub paperpaw_sdk::SocketNotice::Answer::text: alloc::string::String
+pub paperpaw_sdk::SocketNotice::Bytes
+pub paperpaw_sdk::SocketNotice::Bytes::data: alloc::vec::Vec<u8>
+pub paperpaw_sdk::SocketNotice::Bytes::socket: paperpaw_sdk::Id
 pub paperpaw_sdk::SocketNotice::Closed
 pub paperpaw_sdk::SocketNotice::Closed::reason: alloc::string::String
 pub paperpaw_sdk::SocketNotice::Closed::socket: paperpaw_sdk::Id
@@ -5921,6 +5968,7 @@ pub paperpaw_sdk::SocketNotice::Done
 pub paperpaw_sdk::SocketNotice::Done::reason: alloc::string::String
 pub paperpaw_sdk::SocketNotice::Done::socket: paperpaw_sdk::Id
 pub paperpaw_sdk::SocketNotice::Failed
+pub paperpaw_sdk::SocketNotice::Failed::error: paperpaw_sdk::SocketError
 pub paperpaw_sdk::SocketNotice::Failed::reason: alloc::string::String
 pub paperpaw_sdk::SocketNotice::Failed::socket: paperpaw_sdk::Id
 pub paperpaw_sdk::SocketNotice::Received
@@ -5930,10 +5978,15 @@ pub paperpaw_sdk::SocketNotice::Saved
 pub paperpaw_sdk::SocketNotice::Saved::path: alloc::string::String
 pub paperpaw_sdk::SocketNotice::Saved::socket: paperpaw_sdk::Id
 pub paperpaw_sdk::SocketNotice::Secured
+pub paperpaw_sdk::SocketNotice::Secured::certificate: paperpaw_sdk::CertificateHash
+pub paperpaw_sdk::SocketNotice::Secured::key: paperpaw_sdk::KeyHash
 pub paperpaw_sdk::SocketNotice::Secured::socket: paperpaw_sdk::Id
+pub paperpaw_sdk::SocketNotice::Secured::time_checked: bool
 pub paperpaw_sdk::SocketNotice::Untrusted
-pub paperpaw_sdk::SocketNotice::Untrusted::certificate: alloc::string::String
+pub paperpaw_sdk::SocketNotice::Untrusted::certificate: paperpaw_sdk::CertificateHash
+pub paperpaw_sdk::SocketNotice::Untrusted::key: paperpaw_sdk::KeyHash
 pub paperpaw_sdk::SocketNotice::Untrusted::socket: paperpaw_sdk::Id
+pub paperpaw_sdk::SocketNotice::Untrusted::why: paperpaw_sdk::Distrust
 impl paperpaw_sdk::replies::SocketNotice
 pub fn paperpaw_sdk::replies::SocketNotice::socket(&self) -> &paperpaw_sdk::Id
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::SocketNotice
@@ -5941,6 +5994,8 @@ pub fn paperpaw_sdk::replies::SocketNotice::from_params(&paperpaw_sdk::Params) -
 pub fn paperpaw_sdk::replies::SocketNotice::into_params(self) -> paperpaw_sdk::Params
 pub fn paperpaw_sdk::replies::SocketNotice::to_params(&self) -> paperpaw_sdk::Params
 #[non_exhaustive] pub enum paperpaw_sdk::SocketRead
+pub paperpaw_sdk::SocketRead::Bytes
+pub paperpaw_sdk::SocketRead::Bytes::max: u32
 pub paperpaw_sdk::SocketRead::File
 pub paperpaw_sdk::SocketRead::File::len: u64
 pub paperpaw_sdk::SocketRead::File::path: alloc::string::String
@@ -5966,6 +6021,10 @@ pub type paperpaw_sdk::setting::Text::Input = alloc::borrow::Cow<'static, str>
 pub type paperpaw_sdk::setting::Text::Value<'a> = &'a str
 pub fn paperpaw_sdk::setting::Text::read(core::option::Option<&paperpaw_sdk::SettingValue>) -> &str
 pub fn paperpaw_sdk::setting::Text::write(alloc::borrow::Cow<'static, str>) -> paperpaw_sdk::SettingValue
+#[non_exhaustive] pub enum paperpaw_sdk::Trust
+pub paperpaw_sdk::Trust::Authorities
+pub paperpaw_sdk::Trust::Pinned(alloc::vec::Vec<paperpaw_sdk::CertificateHash>)
+pub paperpaw_sdk::Trust::PinnedKeys(alloc::vec::Vec<paperpaw_sdk::KeyHash>)
 #[non_exhaustive] pub struct paperpaw_sdk::ActionOverride
 pub paperpaw_sdk::ActionOverride::action: paperpaw_sdk::Id
 pub paperpaw_sdk::ActionOverride::handler: paperpaw_sdk::ActionHandler
@@ -6021,6 +6080,7 @@ pub paperpaw_sdk::Capabilities::rotation: bool
 pub paperpaw_sdk::Capabilities::sleep: bool
 pub paperpaw_sdk::Capabilities::speech: bool
 pub paperpaw_sdk::Capabilities::system_clipboard: bool
+pub paperpaw_sdk::Capabilities::tls_sessions: u8
 pub paperpaw_sdk::Capabilities::touch: bool
 pub paperpaw_sdk::Capabilities::wifi: bool
 impl paperpaw_sdk::Capabilities
@@ -6044,6 +6104,13 @@ pub const paperpaw_sdk::Capability::RENDER_REGIONS: Self
 pub const paperpaw_sdk::Capability::USB_DRIVE: Self
 pub const paperpaw_sdk::Capability::USB_LINK: Self
 pub const paperpaw_sdk::Capability::WARMTH: Self
+pub struct paperpaw_sdk::CertificateHash(_)
+impl paperpaw_sdk::CertificateHash
+pub const fn paperpaw_sdk::CertificateHash::new([u8; 32]) -> Self
+pub fn paperpaw_sdk::CertificateHash::parse(&str) -> core::option::Option<Self>
+pub const fn paperpaw_sdk::CertificateHash::sha256(&self) -> &[u8; 32]
+impl core::fmt::Display for paperpaw_sdk::CertificateHash
+pub fn paperpaw_sdk::CertificateHash::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct paperpaw_sdk::Commands
 impl paperpaw_sdk::Commands
 pub fn paperpaw_sdk::Commands::as_slice(&self) -> &[paperpaw_sdk::Command]
@@ -6484,6 +6551,13 @@ pub fn paperpaw_sdk::ItemState::shown(self, bool) -> Self
 pub fn paperpaw_sdk::ItemState::text(&self, &str) -> alloc::string::String
 impl core::default::Default for paperpaw_sdk::ItemState
 pub fn paperpaw_sdk::ItemState::default() -> Self
+pub struct paperpaw_sdk::KeyHash(_)
+impl paperpaw_sdk::KeyHash
+pub const fn paperpaw_sdk::KeyHash::new([u8; 32]) -> Self
+pub fn paperpaw_sdk::KeyHash::parse(&str) -> core::option::Option<Self>
+pub const fn paperpaw_sdk::KeyHash::sha256(&self) -> &[u8; 32]
+impl core::fmt::Display for paperpaw_sdk::KeyHash
+pub fn paperpaw_sdk::KeyHash::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[non_exhaustive] pub struct paperpaw_sdk::Manifest
 pub paperpaw_sdk::Manifest::description: paperpaw_sdk::Str
 pub paperpaw_sdk::Manifest::how: &'static [(&'static str, &'static str)]
@@ -7043,6 +7117,21 @@ pub fn paperpaw_sdk::Str::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt
 impl core::ops::deref::Deref for paperpaw_sdk::Str
 pub type paperpaw_sdk::Str::Target = str
 pub fn paperpaw_sdk::Str::deref(&self) -> &str
+#[non_exhaustive] pub struct paperpaw_sdk::Tls
+pub paperpaw_sdk::Tls::idle_ms: u32
+pub paperpaw_sdk::Tls::server_name: core::option::Option<alloc::string::String>
+pub paperpaw_sdk::Tls::timeout_ms: u32
+pub paperpaw_sdk::Tls::trust: paperpaw_sdk::Trust
+impl paperpaw_sdk::Tls
+pub fn paperpaw_sdk::Tls::check(&self) -> core::result::Result<(), paperpaw_sdk::SocketError>
+pub fn paperpaw_sdk::Tls::idle_ms(self, u32) -> Self
+pub fn paperpaw_sdk::Tls::new() -> Self
+pub fn paperpaw_sdk::Tls::pinned(alloc::vec::Vec<paperpaw_sdk::CertificateHash>) -> Self
+pub fn paperpaw_sdk::Tls::pinned_keys(alloc::vec::Vec<paperpaw_sdk::KeyHash>) -> Self
+pub fn paperpaw_sdk::Tls::server_name(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn paperpaw_sdk::Tls::timeout_ms(self, u32) -> Self
+impl core::default::Default for paperpaw_sdk::Tls
+pub fn paperpaw_sdk::Tls::default() -> Self
 #[non_exhaustive] pub struct paperpaw_sdk::Typed
 pub paperpaw_sdk::Typed::context: paperpaw_sdk::Params
 pub paperpaw_sdk::Typed::text: alloc::string::String
@@ -7088,7 +7177,10 @@ pub const paperpaw_sdk::COVER_FIT: paperpaw_image::Fit
 pub const paperpaw_sdk::DATA_FORMATS: u32
 pub const paperpaw_sdk::IMAGE_FIT: paperpaw_image::Fit
 pub const paperpaw_sdk::MAX_CLIPBOARD: usize
+pub const paperpaw_sdk::MAX_PINS: usize
 pub const paperpaw_sdk::MAX_REQUESTED_PLUGINS: usize
+pub const paperpaw_sdk::MAX_TLS_IDLE_MS: u32
+pub const paperpaw_sdk::MAX_TLS_TIMEOUT_MS: u32
 pub const paperpaw_sdk::SDK_VERSION: paperpaw_sdk::Version
 pub trait paperpaw_sdk::EventData: core::clone::Clone + core::marker::Sized + 'static
 pub fn paperpaw_sdk::EventData::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>

@@ -223,7 +223,12 @@ fn a_session_with_calibre() {
     assert!(socket_calls(&mut kernel).is_empty());
     press(&mut kernel, "confirm");
     let calls = socket_calls(&mut kernel);
-    let [SocketCall::Connect { socket, host, port }] = calls.as_slice() else {
+    let [
+        SocketCall::Connect {
+            socket, host, port, ..
+        },
+    ] = calls.as_slice()
+    else {
         panic!("{calls:?}");
     };
     assert_eq!((host.as_str(), *port), ("192.168.1.5", 9091));
@@ -341,7 +346,12 @@ fn a_path_out_of_the_library_is_dropped() {
     let config = format!("{CONFIG}[calibre]\naddress = 10.0.0.2\n");
     let mut kernel = kernel(&storage, &config);
     let calls = socket_calls(&mut kernel);
-    let [SocketCall::Connect { socket, host, port }] = calls.as_slice() else {
+    let [
+        SocketCall::Connect {
+            socket, host, port, ..
+        },
+    ] = calls.as_slice()
+    else {
         panic!("{calls:?}");
     };
     assert_eq!((host.as_str(), *port), ("10.0.0.2", protocol::DEFAULT_PORT));

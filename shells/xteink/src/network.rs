@@ -268,10 +268,13 @@ impl Network {
             }
             for call in core::mem::take(&mut self.socket_calls) {
                 let event = match call {
-                    SocketCall::Connect { socket, .. } => SocketEvent::Failed {
-                        socket,
-                        reason: String::from(NO_NETWORK),
-                    },
+                    SocketCall::Connect { socket, .. } | SocketCall::StartTls { socket, .. } => {
+                        SocketEvent::Failed {
+                            socket,
+                            error: paperpaw_core::sdk::SocketError::NoNetwork,
+                            reason: String::from(NO_NETWORK),
+                        }
+                    }
                     SocketCall::Broadcast { broadcast, .. } => SocketEvent::Done { broadcast },
                     _ => continue,
                 };

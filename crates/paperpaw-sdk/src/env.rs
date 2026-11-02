@@ -61,6 +61,12 @@ pub struct Capabilities {
     /// where the system decides (Android) or that never switches off (the
     /// emulator).
     pub power_off: bool,
+    /// How many TLS connections may be open at once, HTTPS requests among
+    /// them: sockets wait for one to be free ([`Tls::timeout_ms`](crate::Tls::timeout_ms)).
+    /// One on the X4, two on the X4 Pro; 0 where the shell does no TLS for
+    /// sockets ([`Command::connect_tls`](crate::Command::connect_tls) fails,
+    /// [`SocketError::Unsupported`](crate::SocketError::Unsupported)).
+    pub tls_sessions: u8,
     /// What the shell changes by the power level (ADR 0025): the power
     /// settings show only what applies here.
     pub power: crate::power::PowerControls,

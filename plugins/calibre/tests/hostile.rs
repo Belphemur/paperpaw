@@ -353,6 +353,7 @@ fn a_book_cut_short_leaves_no_part_behind() {
         } else {
             s.event(SocketEvent::Failed {
                 socket,
+                error: paperpaw_core::sdk::SocketError::Lost,
                 reason: String::from("connection reset"),
             });
         }

@@ -123,6 +123,7 @@ pub mod setup;
 #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub mod shared;
 mod shared_str;
+mod sockets;
 pub mod sound;
 pub mod status;
 pub mod time;
@@ -193,6 +194,10 @@ pub use settings::{
     SettingGroupSpec, SettingKind, SettingSpec, SettingValue, Settings,
 };
 pub use shared_str::Str;
+pub use sockets::{
+    CertificateHash, Distrust, KeyHash, MAX_PINS, MAX_TLS_IDLE_MS, MAX_TLS_TIMEOUT_MS, SocketError,
+    Tls, Trust,
+};
 pub use version::{DATA_FORMATS, SDK_VERSION, Version};
 
 /// Round shapes' geometry: angles as on a clock face, points around a
