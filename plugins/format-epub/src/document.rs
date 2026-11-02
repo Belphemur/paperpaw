@@ -234,6 +234,13 @@ fn position(line: &str) -> Option<(u32, &str)> {
 /// is past the chapter.
 const MAX_SPAN: u32 = 16 * 1024;
 
+/// Whether anything is in folder `dir`.
+fn left_in(storage: &dyn Storage, dir: &str) -> bool {
+    let mut any = false;
+    let _ = storage.list(dir, &mut |_| any = true);
+    any
+}
+
 /// The cache of a book.
 fn book_cache(path: &str) -> String {
     paperpaw_sdk::library::kept_path(&Env::plugin_dir(PLUGIN.as_str()), "", path)
@@ -415,7 +422,10 @@ impl EpubDocument {
                 // and its chapters converted with stylesheets or without.
                 let state = match storage.remove_dir_all(&cache) {
                     Ok(()) => Held::Nothing,
-                    Err(e) => Held::Uncleared(e),
+                    // Not there, or empty (a storage that removes no
+                    // folders): nothing to read from.
+                    Err(e) if left_in(storage, &cache) => Held::Uncleared(e),
+                    Err(_) => Held::Nothing,
                 };
                 (package::read(storage, &archive)?, state)
             }
