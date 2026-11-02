@@ -597,10 +597,28 @@ pub(crate) fn size(storage: &dyn Storage) -> Option<u64> {
     storage.size(&catalog_path()).ok()
 }
 
+/// Generations a stamp of the catalog tells apart (an index of it keeps
+/// the low 24 bits, see [`super::index::catalog_version`]).
+const GENERATIONS: u64 = (1 << 24) - 1;
+
+/// The generation of a catalog made where there is none: drawn at random
+/// (else from the time, else the first), so that it is not the one of a
+/// catalog gone, and what was kept of that one (a sorted index of it,
+/// where its lines start) is not taken for this one's.
+pub(crate) fn first_generation(env: &crate::Env<'_>) -> u64 {
+    let mut drawn = [0u8; 8];
+    let start = if env.random().fill(&mut drawn) {
+        u64::from_le_bytes(drawn)
+    } else {
+        crate::time::unix_seconds(env).map_or(0, i64::unsigned_abs)
+    };
+    (start & GENERATIONS).max(1)
+}
+
 /// The header of the catalog written next: of the generation after the
-/// one there is.
-fn next_header(storage: &dyn Storage) -> String {
-    let generation = generation(storage).map_or(1, |g| g.wrapping_add(1));
+/// one there is, `first` where there is none.
+fn next_header(storage: &dyn Storage, first: u64) -> String {
+    let generation = generation(storage).map_or(first, |g| g.wrapping_add(1));
     format!("{HEADER}\t{generation}\n")
 }
 
@@ -918,7 +936,7 @@ pub fn search_after(
 #[cfg(any(test, feature = "kernel"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub fn write(storage: &dyn Storage, records: &[Record]) -> Result<(), crate::data::Error> {
-    let mut text = next_header(storage);
+    let mut text = next_header(storage, 1);
     text.extend(records.iter().map(Record::text));
     storage.write(&catalog_path(), text.as_bytes())?;
     match storage.remove(&log_path()) {

@@ -8,8 +8,8 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use super::{
-    Changes, HEADER, Record, Status, building_path, catalog_path, count_lines, lines, lines_from,
-    log_path, next_header, read_changes,
+    Changes, HEADER, Record, Status, building_path, catalog_path, count_lines, first_generation,
+    lines, lines_from, log_path, next_header, read_changes,
 };
 use crate::library::{self, DIR};
 use crate::{Env, Storage, StorageError, files};
@@ -109,6 +109,9 @@ struct Making {
     /// other than the one written, a book removed found again): the
     /// catalog is written anew even where its lines stay, the log cut.
     noted_differs: bool,
+    /// The generation of the catalog made where there is none
+    /// ([`first_generation`]).
+    first: u64,
 }
 
 /// The old catalog's lines up to where a walk found it changed, copied
@@ -144,6 +147,7 @@ impl Making {
                 .filter(|f| f.in_catalog)
                 .map(|f| f.id.as_str().to_string())
                 .collect(),
+            first: first_generation(env),
             ..Making::default()
         };
         making.read(storage)?;
@@ -156,7 +160,10 @@ impl Making {
                     storage.remove(&building_path())?;
                 }
             }
-            None => storage.write(&building_path(), next_header(storage).as_bytes())?,
+            None => storage.write(
+                &building_path(),
+                next_header(storage, making.first).as_bytes(),
+            )?,
         }
         Ok(making)
     }
@@ -249,7 +256,10 @@ impl Making {
         };
         // Held while the copy takes steps: no more than it needs.
         text.shrink_to_fit();
-        storage.write(&building_path(), next_header(storage).as_bytes())?;
+        storage.write(
+            &building_path(),
+            next_header(storage, self.first).as_bytes(),
+        )?;
         self.parting = Some(Parting {
             at: head,
             until: at,

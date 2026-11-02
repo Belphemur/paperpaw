@@ -18,7 +18,7 @@ use std::cell::Cell;
 use paperpaw_sdk::builtin::events::Reading;
 use paperpaw_sdk::document::DocumentError;
 use paperpaw_sdk::library::catalog::{self, Rewrite, Status, Walk};
-use paperpaw_sdk::library::{self, index::Index};
+use paperpaw_sdk::library::{self, index, index::Index};
 use paperpaw_sdk::{DirEntry, Env, FormatSpec, Formats, Id, MemoryStorage, Storage, StorageError};
 
 fn harness(storage: MemoryStorage) -> common::Harness {
@@ -63,6 +63,39 @@ fn details(path: &str) -> String {
 
 fn reading(path: &str, progress: f32) -> Reading {
     Reading::new(path.into(), String::new(), progress, 0, 0, String::new())
+}
+
+/// Bytes of a source that never draws the same twice.
+fn drawn(buf: &mut [u8]) -> bool {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT: AtomicU64 = AtomicU64::new(0x5eed);
+    let next = NEXT.fetch_add(0x9e37_79b9_7f4a_7c15, Ordering::Relaxed);
+    for (byte, b) in buf.iter_mut().zip(next.to_le_bytes().iter().cycle()) {
+        *byte = *b;
+    }
+    true
+}
+
+#[test]
+fn a_catalog_made_where_one_went_is_not_taken_for_it() {
+    let mut h = harness(MemoryStorage::new().with("books/a.txt", "one"));
+    h.random = paperpaw_sdk::random::Random::new(drawn);
+    let env = h.env();
+    walk(&env);
+    let generation = catalog::generation(&h.storage).unwrap();
+    let version = index::catalog_version(&h.storage).unwrap();
+    // The catalog gone (the books as they were): made anew of the same
+    // length, but not of the same generation, so not of the same version
+    // to what kept the old one's (a sorted index of it).
+    h.storage.remove(".paperpaw/library/catalog.txt").unwrap();
+    walk(&env);
+    assert_ne!(catalog::generation(&h.storage), Some(generation));
+    assert_ne!(index::catalog_version(&h.storage), Some(version));
+    // Made again from one there is: the generation after.
+    let made = catalog::generation(&h.storage).unwrap();
+    h.storage.write("books/a.txt", b"one more").unwrap();
+    walk(&env);
+    assert_eq!(catalog::generation(&h.storage), Some(made + 1));
 }
 
 #[test]
