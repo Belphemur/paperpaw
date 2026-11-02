@@ -285,14 +285,38 @@ impl Reading {
 
     /// A kernel over `storage` as it is (the book may be missing).
     pub fn on(device: DeviceInfo, storage: Shared, path: &str, config: &str, speech: bool) -> Self {
+        Self::with_vault(device, storage, path, config, speech, true)
+    }
+
+    /// The same without the Notes vault: the built-in Markdown opens `.md`.
+    pub fn without_vault(device: DeviceInfo, storage: Shared, path: &str, config: &str) -> Self {
+        Self::with_vault(device, storage, path, config, false, false)
+    }
+
+    fn with_vault(
+        device: DeviceInfo,
+        storage: Shared,
+        path: &str,
+        config: &str,
+        speech: bool,
+        vault: bool,
+    ) -> Self {
         let heard = Rc::new(RefCell::new(Heard::default()));
-        let kernel = Kernel::builder(device)
+        let builder = Kernel::builder(device)
             .storage(storage.clone())
             .user_config(format!("{CONFIG}{config}"))
             .speech(speech)
             .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
             .plugin(paperpaw_plugin_format_txt::TxtFormat)
             .plugin(paperpaw_plugin_format_epub::EpubFormat)
+            .plugin(paperpaw_plugin_format_epub::MarkdownFormat);
+        // Later: its Markdown, with wikilinks, is the one used.
+        let builder = if vault {
+            builder.plugin(paperpaw_plugin_notes_vault::NotesVault)
+        } else {
+            builder
+        };
+        let kernel = builder
             .plugin(paperpaw_plugin_reader::Reader)
             .plugin(Recorder(heard.clone()))
             .build()
@@ -334,6 +358,15 @@ impl Reading {
             .open_slot(Instant(self.now), slots::READER, params);
         self.settle(effects);
         assert_eq!(self.screen(), "reader.screen");
+    }
+
+    /// The screen turned or resized to `width` by `height`.
+    pub fn resize(&mut self, width: u16, height: u16) {
+        self.now += 10;
+        let effects = self.kernel.resize(Instant(self.now), width, height);
+        // The picture of the screen is made again at its new size.
+        self.image.clear();
+        self.settle(effects);
     }
 
     /// The screen shown.

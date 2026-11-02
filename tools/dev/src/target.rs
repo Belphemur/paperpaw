@@ -116,6 +116,28 @@ pub struct Source {
     /// without `paperpaw-plugin-`.
     pub id: String,
     pub dir: PathBuf,
+    /// Why the plugin may embed large files: `embedded-assets` under
+    /// `[package.metadata.paperpaw]` in its `Cargo.toml` (a plugin built
+    /// into the firmware has no installer to bring files to the card).
+    pub embedded_assets: Option<String>,
+}
+
+/// The reason `embedded-assets = "…"` gives under
+/// `[package.metadata.paperpaw]` in a `Cargo.toml`'s `text`.
+pub(crate) fn embedded_assets(text: &str) -> Option<String> {
+    let mut inside = false;
+    for line in text.lines().map(str::trim) {
+        if line.starts_with('[') {
+            inside = line == "[package.metadata.paperpaw]";
+        } else if inside
+            && let Some(value) = line.strip_prefix("embedded-assets")
+            && let Some(value) = value.trim_start().strip_prefix('=')
+        {
+            let reason = value.trim().trim_matches('"').trim();
+            return (!reason.is_empty()).then(|| reason.to_string());
+        }
+    }
+    None
 }
 
 impl Source {
@@ -138,9 +160,13 @@ impl Source {
             let id = name.strip_prefix("paperpaw-plugin-").unwrap_or(&name);
             is_plugin_name(id).then(|| id.to_string())
         });
+        let embedded_assets = std::fs::read_to_string(dir.join("Cargo.toml"))
+            .ok()
+            .and_then(|text| embedded_assets(&text));
         id.map(|id| Source {
             id,
             dir: dir.to_path_buf(),
+            embedded_assets,
         })
         .ok_or_else(|| {
             format!(

@@ -14,7 +14,7 @@ use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::ui::{self, Thumbnail, UiStyle};
 use paperpaw_sdk::widgets::{self, CellSpan, Frame, Padding, Widget, WidgetSpec, WidgetTarget};
 use paperpaw_sdk::{
-    Arg, Canvas, Command, Env, Id, Params, Rect, RegisterError, Registrar, SettingSpec,
+    Arg, Canvas, Color, Command, Env, Id, Params, Rect, RegisterError, Registrar, SettingSpec,
 };
 
 use crate::{GOAL, Kept, OFFERED, PICTURES, Statistics, Today, pictures};
@@ -86,6 +86,25 @@ pub(crate) fn tapped(env: &Env<'_>, today: &Today) -> Command {
     paperpaw_sdk::ask::choice(env.i18n().tr("reading-goal.offer"), &OFFERED)
         .options("reading-goal.offer.", options)
         .command()
+}
+
+/// `text` in the middle of `room`, on one line.
+pub(crate) fn says(
+    ui: &mut ui::Ui<'_>,
+    font: &paperpaw_sdk::FontHandle<'_>,
+    style: &UiStyle,
+    text: &str,
+    room: Rect,
+) {
+    let width = f32::from(room.width);
+    let text = ui::fit(font, style.small(), text, width);
+    let x = f32::from(room.x) + (width - font.measure(style.small(), &text)).max(0.0) / 2.0;
+    let line = font.line_metrics(style.small()).line_height as u16;
+    let y = room.y + room.height.saturating_sub(line) / 2;
+    ui::Label::new(&text)
+        .px(style.small())
+        .color(Color::BLACK)
+        .draw_from(ui, x, Rect::new(room.x, y, room.width, line));
 }
 
 /// What the picture of `today`'s mood says, for screen readers.
@@ -192,14 +211,25 @@ impl Widget for Cat {
             canvas.describe(Role::Image, &described(env, today), at);
         }
         let line = Self::line(env);
-        if line == 0 {
-            return;
-        }
         let style = UiStyle::new(env);
         let mut ui = ui::Ui::new(canvas, env, &style);
         let Some(font) = ui.font() else {
             return;
         };
+        if self.picture.is_none() {
+            // The cat's file is not on the card: its mood in words, in the
+            // picture's place.
+            let room = Rect::new(
+                inner.x,
+                inner.y,
+                inner.width,
+                inner.height.saturating_sub(line),
+            );
+            says(&mut ui, &font, &style, &described(env, today), room);
+        }
+        if line == 0 {
+            return;
+        }
         let text = progress(env, today);
         let width = f32::from(inner.width);
         let text = ui::fit(&font, style.small(), &text, width);

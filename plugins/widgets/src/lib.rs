@@ -6,7 +6,8 @@
 //! - words and pictures: quotes, notes, to-dos, pictures (`words`);
 //! - books: covers, progress, what to read next, highlights (`books`).
 //!
-//! Each part brings its own translations (`i18n/<part>.<language>.ini`).
+//! The parts share one catalog a language (`i18n/<language>.ini`), as one
+//! namespace.
 
 #![no_std]
 
@@ -21,6 +22,8 @@ mod words;
 mod draw_tests;
 #[cfg(test)]
 mod harness;
+
+use alloc::borrow::Cow;
 
 use paperpaw_sdk::{Env, Id, Manifest, Plugin, RegisterError, Registrar};
 
@@ -44,6 +47,8 @@ impl Plugin for Widgets {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
+        r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         time::register(r)?;
         words::register(r)?;
         books::register(r)?;
@@ -69,39 +74,9 @@ mod tests {
 
     #[test]
     fn translations_are_complete() {
-        let parts = [
-            (
-                include_str!("../i18n/time.en.ini"),
-                include_str!("../i18n/time.de.ini"),
-            ),
-            (
-                include_str!("../i18n/words.en.ini"),
-                include_str!("../i18n/words.de.ini"),
-            ),
-            (
-                include_str!("../i18n/books.en.ini"),
-                include_str!("../i18n/books.de.ini"),
-            ),
-        ];
-        for (en, de) in parts {
-            let en = Catalog::parse(en).unwrap();
-            let de = Catalog::parse(de).unwrap();
-            let issues = check::compare(&en, &de);
-            assert!(issues.is_empty(), "{issues:?}");
-        }
-        // The parts share one namespace: a key in two of them says the
-        // same in both (the later would hide the earlier).
-        let mut seen: alloc::vec::Vec<(&str, &str)> = alloc::vec::Vec::new();
-        for (en, _) in parts {
-            for line in en.lines() {
-                let Some((key, text)) = line.split_once(" = ") else {
-                    continue;
-                };
-                match seen.iter().find(|(k, _)| *k == key) {
-                    Some((_, before)) => assert_eq!(*before, text, "{key}"),
-                    None => seen.push((key, text)),
-                }
-            }
-        }
+        let en = Catalog::parse(include_str!("../i18n/en.ini")).unwrap();
+        let de = Catalog::parse(include_str!("../i18n/de.ini")).unwrap();
+        let issues = check::compare(&en, &de);
+        assert!(issues.is_empty(), "{issues:?}");
     }
 }

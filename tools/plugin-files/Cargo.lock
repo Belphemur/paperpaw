@@ -179,9 +179,11 @@ dependencies = [
  "paperpaw-plugin-keys",
  "paperpaw-plugin-koreader",
  "paperpaw-plugin-kosync",
+ "paperpaw-plugin-mail",
  "paperpaw-plugin-menu-editor",
  "paperpaw-plugin-news",
  "paperpaw-plugin-notes-overview",
+ "paperpaw-plugin-notes-vault",
  "paperpaw-plugin-profiles",
  "paperpaw-plugin-read-later-cloud",
  "paperpaw-plugin-reading-goal",
@@ -207,6 +209,14 @@ dependencies = [
 name = "paperpaw-plugin-format-docx"
 version = "1.0.0"
 dependencies = [
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-format-epub"
+version = "1.0.3"
+dependencies = [
+ "miniz_oxide",
  "paperpaw-sdk",
 ]
 
@@ -350,6 +360,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "paperpaw-plugin-mail"
+version = "1.0.0"
+dependencies = [
+ "paperpaw-sdk",
+]
+
+[[package]]
 name = "paperpaw-plugin-menu-editor"
 version = "1.0.3"
 dependencies = [
@@ -371,6 +388,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "paperpaw-plugin-notes-vault"
+version = "1.0.0"
+dependencies = [
+ "paperpaw-plugin-format-epub",
+ "paperpaw-sdk",
+]
+
+[[package]]
 name = "paperpaw-plugin-profiles"
 version = "1.0.5"
 dependencies = [
@@ -386,7 +411,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-reading-goal"
-version = "1.0.4"
+version = "1.0.5"
 dependencies = [
  "paperpaw-sdk",
 ]
@@ -422,7 +447,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-vocabulary"
-version = "1.1.0"
+version = "1.1.1"
 dependencies = [
  "paperpaw-sdk",
  "paperpaw-sqlite",
@@ -445,7 +470,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-widgets"
-version = "1.0.4"
+version = "1.0.5"
 dependencies = [
  "paperpaw-sdk",
 ]

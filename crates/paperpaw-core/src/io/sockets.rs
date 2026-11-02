@@ -2,7 +2,9 @@
 //! TCP connections and UDP broadcasts the shell makes, numbered for it,
 //! and what it reports turned into the plugins' events. A file read goes
 //! to storage in parts as they come; text keeps its characters whole
-//! where a read ends inside one.
+//! where a read ends inside one. TLS is the shell's: the kernel checks
+//! what a plugin set up, says when a socket may switch to it, and tells
+//! the plugin what the shell reports.
 
 use alloc::format;
 use alloc::string::String;
@@ -10,20 +12,70 @@ use alloc::vec::Vec;
 
 use paperpaw_platform::Storage;
 use paperpaw_sdk::event::EventData;
-use paperpaw_sdk::{Command, Id, SocketNotice, SocketRead};
+use paperpaw_sdk::{
+    CertificateHash, Command, Distrust, Id, KeyHash, SocketError, SocketNotice, SocketRead, Tls,
+    Trust,
+};
 
 /// The most a shell is asked to read at once; a file read goes in such
 /// parts.
 pub const SOCKET_PART: u32 = 64 * 1024;
 
+/// How a shell sets up a socket's TLS (`SocketCall::Connect`'s `tls`,
+/// `SocketCall::StartTls`), as the plugin asked, checked
+/// ([`Tls::check`]) and with the defaults filled in.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TlsSetup {
+    /// The name asked for (SNI) and the certificate is checked for: the
+    /// host, unless the plugin named another.
+    pub server_name: String,
+    /// Which certificates are trusted: the authorities the shell ships
+    /// (chain, name and dates checked), or those pinned (the leaf's
+    /// SHA-256 one of them, or its key's, its dates checked).
+    pub trust: Trust,
+    /// How long the connection and handshake may take, waiting for a free
+    /// TLS session counted (then `Failed`, `Timeout` or `Busy`).
+    pub timeout_ms: u32,
+    /// Nothing sent or read for this long: close the socket and report
+    /// `Failed` with `Timeout` and the reason `idle`; 0: never.
+    pub idle_ms: u32,
+}
+
+impl TlsSetup {
+    fn new(tls: Tls, host: &str) -> Self {
+        Self {
+            server_name: tls.server_name.unwrap_or_else(|| String::from(host)),
+            trust: tls.trust,
+            timeout_ms: tls.timeout_ms,
+            idle_ms: tls.idle_ms,
+        }
+    }
+}
+
 /// What a shell does for plugins' sockets ([`Io::Socket`](super::Io::Socket)).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SocketCall {
-    /// Open a TCP connection; report `Connected` or `Failed`.
+    /// Open a TCP connection; report `Connected` or `Failed`. With `tls`,
+    /// make it secure first and report `Secured`, `Untrusted` or `Failed`
+    /// instead of `Connected`. A shell with no TLS ([`tls_sessions`] 0) is
+    /// never asked.
+    ///
+    /// TLS, here and in `StartTls`: **nothing goes out or is read until
+    /// `Secured`**. The kernel sends no `Send` or `Read` for the socket
+    /// before it (a plugin's fail it, `NotReady`, and close it), and the
+    /// shell passes no byte of the plugin's out, nor one it received to
+    /// the kernel, before the handshake is done. The certificate is
+    /// checked as `TlsSetup::trust` says, its dates where the shell knows
+    /// the time: where it does not (no clock, no network time yet), it
+    /// checks the rest and reports `Secured` with `time_checked` false;
+    /// `Failed` with `Expired` only for a time known and outside the dates.
+    ///
+    /// [`tls_sessions`]: crate::KernelBuilder::tls_sessions
     Connect {
         socket: u32,
         host: String,
         port: u16,
+        tls: Option<TlsSetup>,
     },
     Send {
         socket: u32,
@@ -47,6 +99,15 @@ pub enum SocketCall {
         data: Vec<u8>,
         wait_ms: u32,
     },
+    /// Switch the connected socket to TLS (STARTTLS); report `Secured`,
+    /// `Untrusted` or `Failed`. Nothing is read or waits to be read: the
+    /// kernel asks only so. Bytes that come before the handshake starts
+    /// (a server sending past its go-ahead) fail it, `NotReady`: they
+    /// would pass as secure.
+    StartTls {
+        socket: u32,
+        tls: TlsSetup,
+    },
 }
 
 /// What happened with a socket or a broadcast (see `Kernel::socket_event`).
@@ -55,14 +116,35 @@ pub enum SocketEvent {
     Connected {
         socket: u32,
     },
+    /// The handshake is done, `certificate` (the server's, by the SHA-256
+    /// of its DER) and its `key` (of its SubjectPublicKeyInfo) trusted;
+    /// `time_checked` false where its dates could not be checked (the
+    /// time unknown).
+    Secured {
+        socket: u32,
+        certificate: CertificateHash,
+        key: KeyHash,
+        time_checked: bool,
+    },
+    /// The server's certificate was not trusted, for `why`. The shell has
+    /// closed the socket already: no `Close` comes for it.
+    Untrusted {
+        socket: u32,
+        certificate: CertificateHash,
+        key: KeyHash,
+        why: Distrust,
+    },
     /// What a `Read` brought; empty when the other side closed.
     Data {
         socket: u32,
         data: Vec<u8>,
     },
-    /// The connection ended or could not be made.
+    /// The connection ended or could not be made: `error` says why,
+    /// `reason` more, for a log. The shell has closed the socket already:
+    /// no `Close` comes for it.
     Failed {
         socket: u32,
+        error: SocketError,
         reason: String,
     },
     Answer {
@@ -80,8 +162,41 @@ pub enum SocketEvent {
 enum Reading {
     /// Text, up to `max` bytes a read.
     Text { max: u32 },
+    /// Bytes as they come.
+    Bytes,
     /// Into `path`, `left` bytes still to come.
     File { path: String, left: u64 },
+}
+
+/// How far a socket is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Phase {
+    /// Connecting, without TLS.
+    Connecting,
+    /// Connected, without TLS.
+    Open,
+    /// Connecting with TLS, or switching to it: `Connected` is not told.
+    Securing,
+    /// Encrypted.
+    Secure,
+}
+
+/// What a socket is of: the screens open when it was opened (it closes
+/// once fewer are), or a run of background work (it closes when the run
+/// ends, whatever screens open and close meanwhile).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Owner {
+    Screens(usize),
+    Run(u32),
+}
+
+/// A plugin's [`Command::Connect`], taken apart.
+struct Connect {
+    socket: Id,
+    host: String,
+    port: u16,
+    events: Id,
+    tls: Option<alloc::boxed::Box<Tls>>,
 }
 
 #[derive(Debug)]
@@ -89,8 +204,11 @@ struct Socket {
     number: u32,
     id: Id,
     events: Id,
-    /// Screens open when it was opened; it closes once fewer are.
-    screens: usize,
+    /// What it connected to: the name a switch to TLS checks, unless the
+    /// plugin names another.
+    host: String,
+    phase: Phase,
+    owner: Owner,
     reading: Option<Reading>,
     /// The start of a character a text read ended in (at most 3 bytes),
     /// kept for the next one.
@@ -105,6 +223,8 @@ pub(crate) struct Sockets {
     broadcasts: Vec<(u32, Id, Id)>,
     next: u32,
     calls: Vec<SocketCall>,
+    /// How many TLS sessions the shell holds (0: no TLS).
+    tls_sessions: u8,
 }
 
 /// The command that tells a plugin `notice` on `events`.
@@ -113,6 +233,15 @@ fn emit(events: &Id, notice: SocketNotice) -> Command {
 }
 
 impl Sockets {
+    /// The sockets of a shell that holds `tls_sessions` TLS sessions at
+    /// once (0: it does no TLS).
+    pub fn new(tls_sessions: u8) -> Self {
+        Self {
+            tls_sessions,
+            ..Self::default()
+        }
+    }
+
     /// What the shell is to do.
     pub fn take(&mut self) -> Vec<SocketCall> {
         core::mem::take(&mut self.calls)
@@ -131,8 +260,10 @@ impl Sockets {
                 SocketCall::Connect { socket, .. }
                 | SocketCall::Send { socket, .. }
                 | SocketCall::Read { socket, .. }
-                | SocketCall::Close { socket } => SocketEvent::Failed {
+                | SocketCall::Close { socket }
+                | SocketCall::StartTls { socket, .. } => SocketEvent::Failed {
                     socket,
+                    error: SocketError::NoNetwork,
                     reason: String::from(reason),
                 },
                 SocketCall::Broadcast { broadcast, .. } => SocketEvent::Done { broadcast },
@@ -151,17 +282,13 @@ impl Sockets {
     }
 
     /// Carries out a plugin's socket command, with `network` whether the
-    /// device has one and `screens` the screens open now; events to emit
-    /// go to `out`.
-    #[expect(
-        clippy::too_many_lines,
-        reason = "longer than the limit from before it was set; split it when it is next changed"
-    )]
-    pub fn command(
+    /// device has one and `owner` what a socket it opens is of; events to
+    /// emit go to `out`.
+    pub(crate) fn command(
         &mut self,
         command: Command,
         network: bool,
-        screens: usize,
+        owner: Owner,
         storage: &dyn Storage,
         out: &mut Vec<Command>,
     ) {
@@ -171,34 +298,23 @@ impl Sockets {
                 host,
                 port,
                 events,
+                tls,
                 ..
             } => {
-                if let Some(at) = self.at(&socket) {
-                    let old = self.sockets.remove(at);
-                    self.calls.push(SocketCall::Close { socket: old.number });
-                }
-                if !network {
-                    let reason = String::from("no network");
-                    out.push(emit(&events, SocketNotice::Failed { socket, reason }));
-                    return;
-                }
-                let number = self.number();
-                self.sockets.push(Socket {
-                    number,
-                    id: socket,
-                    events,
-                    screens,
-                    reading: None,
-                    partial: Vec::new(),
-                });
-                self.calls.push(SocketCall::Connect {
-                    socket: number,
+                let connect = Connect {
+                    socket,
                     host,
                     port,
-                });
+                    events,
+                    tls,
+                };
+                self.connect(connect, network, owner, out);
             }
             Command::SocketSend { socket, data, .. } => {
                 if let Some(at) = self.at(&socket) {
+                    if self.securing(at, out) {
+                        return;
+                    }
                     let number = self.sockets[at].number;
                     self.calls.push(SocketCall::Send {
                         socket: number,
@@ -207,45 +323,17 @@ impl Sockets {
                 }
             }
             Command::SocketRead { socket, read, .. } => {
-                let Some(at) = self.at(&socket) else {
-                    return;
-                };
-                let s = &mut self.sockets[at];
-                if s.reading.is_some() {
-                    let reason = String::from("already reading");
-                    out.push(s.notice(|socket| SocketNotice::Failed { socket, reason }));
-                    return;
-                }
-                let max = match read {
-                    SocketRead::Text { max } => {
-                        let max = max.clamp(1, SOCKET_PART);
-                        s.reading = Some(Reading::Text { max });
-                        max
-                    }
-                    SocketRead::File { path, len } => {
-                        if let Err(e) = storage.write(&path, &[]) {
-                            let reason = format!("{e}");
-                            out.push(s.notice(|socket| SocketNotice::Failed { socket, reason }));
-                            return;
-                        }
-                        if len == 0 {
-                            out.push(s.notice(|socket| SocketNotice::Saved { socket, path }));
-                            return;
-                        }
-                        let max = len.min(u64::from(SOCKET_PART)) as u32;
-                        s.reading = Some(Reading::File { path, left: len });
-                        max
-                    }
-                    _ => {
-                        let reason = String::from("a way of reading not known");
-                        out.push(s.notice(|socket| SocketNotice::Failed { socket, reason }));
+                if let Some(at) = self.at(&socket) {
+                    if self.securing(at, out) {
                         return;
                     }
-                };
-                self.calls.push(SocketCall::Read {
-                    socket: s.number,
-                    max,
-                });
+                    self.read(at, read, storage, out);
+                }
+            }
+            Command::StartTls { socket, tls, .. } => {
+                if let Some(at) = self.at(&socket) {
+                    self.start_tls(at, *tls, out);
+                }
             }
             Command::Disconnect(socket) => {
                 if let Some(at) = self.at(&socket) {
@@ -275,6 +363,191 @@ impl Sockets {
         }
     }
 
+    /// Opens a socket, in place of one with its id; secure from the start
+    /// where `tls` says, if the shell does TLS and it is set up right.
+    fn connect(&mut self, connect: Connect, network: bool, owner: Owner, out: &mut Vec<Command>) {
+        let Connect {
+            socket,
+            host,
+            port,
+            events,
+            tls,
+        } = connect;
+        if let Some(at) = self.at(&socket) {
+            let old = self.sockets.remove(at);
+            self.calls.push(SocketCall::Close { socket: old.number });
+        }
+        let refused = if !network {
+            Some((SocketError::NoNetwork, "no network"))
+        } else {
+            tls.as_deref().and_then(|tls| self.tls_refused(tls, owner))
+        };
+        if let Some((error, reason)) = refused {
+            let reason = String::from(reason);
+            let failed = SocketNotice::Failed {
+                socket,
+                reason,
+                error,
+            };
+            out.push(emit(&events, failed));
+            return;
+        }
+        let number = self.number();
+        let tls = tls.map(|tls| TlsSetup::new(*tls, &host));
+        self.sockets.push(Socket {
+            number,
+            id: socket,
+            events,
+            host: host.clone(),
+            phase: if tls.is_some() {
+                Phase::Securing
+            } else {
+                Phase::Connecting
+            },
+            owner,
+            reading: None,
+            partial: Vec::new(),
+        });
+        self.calls.push(SocketCall::Connect {
+            socket: number,
+            host,
+            port,
+            tls,
+        });
+    }
+
+    /// Whether socket `at` waits for its handshake: then what a plugin
+    /// sends or reads fails it, `NotReady`, and closes it. Nothing goes
+    /// out or is read until `Secured`: sent, it could go in the clear, and
+    /// read, bytes from before the handshake would pass as secure.
+    fn securing(&mut self, at: usize, out: &mut Vec<Command>) -> bool {
+        if self.sockets[at].phase != Phase::Securing {
+            return false;
+        }
+        let socket = self.sockets.remove(at);
+        self.calls.push(SocketCall::Close {
+            socket: socket.number,
+        });
+        let reason = String::from("nothing is sent or read before the connection is secure");
+        out.push(socket.notice(|socket| SocketNotice::Failed {
+            socket,
+            reason,
+            error: SocketError::NotReady,
+        }));
+        true
+    }
+
+    /// Why TLS as `tls` sets it up is refused here for a socket of
+    /// `owner`, if it is. A run of background work's socket ends when
+    /// idle: one never ending (`idle_ms` 0) would hold a connection (on
+    /// the X4 its one TLS session) for good, the run being no screen that
+    /// closes.
+    fn tls_refused(&self, tls: &Tls, owner: Owner) -> Option<(SocketError, &'static str)> {
+        if self.tls_sessions == 0 {
+            return Some((
+                SocketError::Unsupported,
+                "secure connections are not supported here",
+            ));
+        }
+        if matches!(owner, Owner::Run(_)) && tls.idle_ms == 0 {
+            return Some((
+                SocketError::Options,
+                "background work's secure connections end when idle (idle_ms 0)",
+            ));
+        }
+        tls.check()
+            .err()
+            .map(|error| (error, "the secure connection is set up wrong"))
+    }
+
+    /// Asks socket `at` for what comes next, as `read` says.
+    fn read(&mut self, at: usize, read: SocketRead, storage: &dyn Storage, out: &mut Vec<Command>) {
+        let s = &mut self.sockets[at];
+        // A read that cannot start fails, the socket left as it was.
+        let fail = |s: &Socket, error, reason: String| {
+            s.notice(|socket| SocketNotice::Failed {
+                socket,
+                reason,
+                error,
+            })
+        };
+        if s.reading.is_some() {
+            let reason = String::from("already reading");
+            out.push(fail(s, SocketError::NotReady, reason));
+            return;
+        }
+        let max = match read {
+            SocketRead::Text { max } => {
+                let max = max.clamp(1, SOCKET_PART);
+                s.reading = Some(Reading::Text { max });
+                max
+            }
+            SocketRead::Bytes { max } => {
+                let max = max.clamp(1, SOCKET_PART);
+                s.reading = Some(Reading::Bytes);
+                max
+            }
+            SocketRead::File { path, len } => {
+                if let Err(e) = storage.write(&path, &[]) {
+                    out.push(fail(s, SocketError::Io, format!("{e}")));
+                    return;
+                }
+                if len == 0 {
+                    out.push(s.notice(|socket| SocketNotice::Saved { socket, path }));
+                    return;
+                }
+                let max = len.min(u64::from(SOCKET_PART)) as u32;
+                s.reading = Some(Reading::File { path, left: len });
+                max
+            }
+            _ => {
+                let reason = String::from("a way of reading not known");
+                out.push(fail(s, SocketError::Unsupported, reason));
+                return;
+            }
+        };
+        self.calls.push(SocketCall::Read {
+            socket: s.number,
+            max,
+        });
+    }
+
+    /// Switches socket `at` to TLS, as `tls` sets up, where it may: TLS
+    /// done here and set up right, the socket connected without it,
+    /// nothing being read nor come unread (the start of a character a
+    /// text read ended in). Else it fails and closes: going on unsecured
+    /// would send in the clear what the plugin means to send secured.
+    fn start_tls(&mut self, at: usize, tls: Tls, out: &mut Vec<Command>) {
+        let s = &self.sockets[at];
+        let refused = self.tls_refused(&tls, s.owner).or_else(|| {
+            let ready = s.phase == Phase::Open && s.reading.is_none() && s.partial.is_empty();
+            (!ready).then_some((
+                SocketError::NotReady,
+                "not ready for a secure connection: not connected, already secure, or reading",
+            ))
+        });
+        if let Some((error, reason)) = refused {
+            let socket = self.sockets.remove(at);
+            self.calls.push(SocketCall::Close {
+                socket: socket.number,
+            });
+            let reason = String::from(reason);
+            out.push(socket.notice(|socket| SocketNotice::Failed {
+                socket,
+                reason,
+                error,
+            }));
+            return;
+        }
+        let s = &mut self.sockets[at];
+        s.phase = Phase::Securing;
+        let tls = TlsSetup::new(tls, &s.host);
+        self.calls.push(SocketCall::StartTls {
+            socket: s.number,
+            tls,
+        });
+    }
+
     /// Closes socket `at` for the shell and tells its plugin, with why if
     /// it was not asked to.
     fn close(&mut self, at: usize, reason: Option<String>, out: &mut Vec<Command>) {
@@ -287,11 +560,24 @@ impl Sockets {
     }
 
     /// Closes the sockets opened while more than `screens` screens were
-    /// open.
+    /// open (not those of background work).
     pub fn close_for_closed_screens(&mut self, screens: usize, out: &mut Vec<Command>) {
-        while let Some(at) = self.sockets.iter().position(|s| s.screens > screens) {
+        let closed = |s: &Socket| matches!(s.owner, Owner::Screens(n) if n > screens);
+        while let Some(at) = self.sockets.iter().position(closed) {
             self.close(at, Some(String::from("screen closed")), out);
         }
+    }
+
+    /// Closes the sockets of the run of background work `run`: it ended.
+    pub(crate) fn close_for_run(&mut self, run: u32, out: &mut Vec<Command>) {
+        while let Some(at) = self.sockets.iter().position(|s| s.owner == Owner::Run(run)) {
+            self.close(at, Some(String::from("work ended")), out);
+        }
+    }
+
+    /// Whether the run of background work `run` has sockets open.
+    pub(crate) fn of_run(&self, run: u32) -> bool {
+        self.sockets.iter().any(|s| s.owner == Owner::Run(run))
     }
 
     /// Whether a socket or broadcast is open, e.g. to keep polling.
@@ -303,14 +589,57 @@ impl Sockets {
     pub fn event(&mut self, event: SocketEvent, storage: &dyn Storage, out: &mut Vec<Command>) {
         match event {
             SocketEvent::Connected { socket } => {
-                if let Some(s) = self.sockets.iter().find(|s| s.number == socket) {
+                // A socket secure from the start says so once it is.
+                if let Some(s) = self.socket_in(socket, Phase::Connecting) {
+                    s.phase = Phase::Open;
                     out.push(s.notice(|socket| SocketNotice::Connected { socket }));
                 }
             }
-            SocketEvent::Failed { socket, reason } => {
+            SocketEvent::Secured {
+                socket,
+                certificate,
+                key,
+                time_checked,
+            } => {
+                if let Some(s) = self.socket_in(socket, Phase::Securing) {
+                    s.phase = Phase::Secure;
+                    out.push(s.notice(|socket| SocketNotice::Secured {
+                        socket,
+                        certificate,
+                        key,
+                        time_checked,
+                    }));
+                }
+            }
+            // The shell closed it (as for `Failed`).
+            SocketEvent::Untrusted {
+                socket,
+                certificate,
+                key,
+                why,
+            } => {
                 if let Some(at) = self.sockets.iter().position(|s| s.number == socket) {
                     let s = self.sockets.remove(at);
-                    out.push(s.notice(|socket| SocketNotice::Failed { socket, reason }));
+                    out.push(s.notice(|socket| SocketNotice::Untrusted {
+                        socket,
+                        certificate,
+                        key,
+                        why,
+                    }));
+                }
+            }
+            SocketEvent::Failed {
+                socket,
+                error,
+                reason,
+            } => {
+                if let Some(at) = self.sockets.iter().position(|s| s.number == socket) {
+                    let s = self.sockets.remove(at);
+                    out.push(s.notice(|socket| SocketNotice::Failed {
+                        socket,
+                        reason,
+                        error,
+                    }));
                 }
             }
             SocketEvent::Data { socket, data } => {
@@ -342,6 +671,13 @@ impl Sockets {
         }
     }
 
+    /// Socket number `socket`, if it is in `phase`.
+    fn socket_in(&mut self, socket: u32, phase: Phase) -> Option<&mut Socket> {
+        self.sockets
+            .iter_mut()
+            .find(|s| s.number == socket && s.phase == phase)
+    }
+
     /// What a read of socket `at` brought.
     fn received(
         &mut self,
@@ -357,6 +693,14 @@ impl Sockets {
                 s.partial.clear();
                 let text = String::new();
                 out.push(s.notice(|socket| SocketNotice::Received { socket, text }));
+            }
+            // As they came, with the start of a character a text read
+            // before left.
+            Some(Reading::Bytes) => {
+                let mut bytes = core::mem::take(&mut s.partial);
+                bytes.extend_from_slice(&data);
+                let data = bytes;
+                out.push(s.notice(|socket| SocketNotice::Bytes { socket, data }));
             }
             Some(Reading::Text { max }) => {
                 let mut bytes = core::mem::take(&mut s.partial);
@@ -432,6 +776,9 @@ impl Socket {
 }
 
 #[cfg(test)]
+mod tls_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use paperpaw_sdk::MemoryStorage;
@@ -451,16 +798,17 @@ mod tests {
     }
 
     fn connected(storage: &MemoryStorage) -> (Sockets, Vec<Command>) {
-        let mut sockets = Sockets::default();
+        let mut sockets = Sockets::new(1);
         let mut out = Vec::new();
         let connect = Command::connect(SOCKET, String::from("calibre.local"), 9090, EVENTS);
-        sockets.command(connect, true, 2, storage, &mut out);
+        sockets.command(connect, true, Owner::Screens(2), storage, &mut out);
         assert_eq!(
             sockets.calls.pop(),
             Some(SocketCall::Connect {
                 socket: 1,
                 host: String::from("calibre.local"),
-                port: 9090
+                port: 9090,
+                tls: None,
             })
         );
         sockets.event(SocketEvent::Connected { socket: 1 }, storage, &mut out);
@@ -472,9 +820,9 @@ mod tests {
         let storage = MemoryStorage::new();
         let (mut sockets, mut out) = connected(&storage);
         let read = Command::socket_read(SOCKET, SocketRead::Text { max: 100 });
-        sockets.command(read.clone(), true, 2, &storage, &mut out);
+        sockets.command(read.clone(), true, Owner::Screens(2), &storage, &mut out);
         // A second read before the first came fails.
-        sockets.command(read, true, 2, &storage, &mut out);
+        sockets.command(read, true, Owner::Screens(2), &storage, &mut out);
         assert_eq!(
             sockets.calls,
             [SocketCall::Read {
@@ -507,7 +855,7 @@ mod tests {
             out.clear();
             let read = Command::socket_read(SOCKET, SocketRead::Text { max: 4 });
             if sockets.calls.is_empty() {
-                sockets.command(read, true, 2, &storage, &mut out);
+                sockets.command(read, true, Owner::Screens(2), &storage, &mut out);
             }
             assert_eq!(
                 sockets.calls.pop(),
@@ -525,7 +873,7 @@ mod tests {
         assert_eq!(texts, ["Gr", "ü", "ße ", "🐾"]);
         // An invalid byte is replaced, as before.
         let read = Command::socket_read(SOCKET, SocketRead::Text { max: 4 });
-        sockets.command(read, true, 2, &storage, &mut out);
+        sockets.command(read, true, Owner::Screens(2), &storage, &mut out);
         let data = SocketEvent::Data {
             socket: 1,
             data: b"a\xffb".to_vec(),
@@ -549,7 +897,7 @@ mod tests {
                 len,
             },
         );
-        sockets.command(read, true, 2, &storage, &mut out);
+        sockets.command(read, true, Owner::Screens(2), &storage, &mut out);
         assert_eq!(
             sockets.calls.pop(),
             Some(SocketCall::Read {
@@ -595,7 +943,7 @@ mod tests {
                 len: 5,
             },
         );
-        sockets.command(read, true, 2, &storage, &mut out);
+        sockets.command(read, true, Owner::Screens(2), &storage, &mut out);
         sockets.calls.clear();
         sockets.event(
             SocketEvent::Data {
@@ -627,9 +975,9 @@ mod tests {
         let mut sockets = Sockets::default();
         let mut out = Vec::new();
         let connect = Command::connect(SOCKET, String::from("h"), 1, EVENTS);
-        sockets.command(connect, false, 1, &storage, &mut out);
+        sockets.command(connect, false, Owner::Screens(1), &storage, &mut out);
         let broadcast = Command::broadcast(SOCKET, alloc::vec![54982], b"hi".to_vec(), 100, EVENTS);
-        sockets.command(broadcast, false, 1, &storage, &mut out);
+        sockets.command(broadcast, false, Owner::Screens(1), &storage, &mut out);
         assert_eq!(kinds(&out), [p::FAILED, p::DONE]);
         assert!(sockets.calls.is_empty());
     }
@@ -646,7 +994,7 @@ mod tests {
             500,
             EVENTS,
         );
-        sockets.command(broadcast, true, 1, &storage, &mut out);
+        sockets.command(broadcast, true, Owner::Screens(1), &storage, &mut out);
         assert!(matches!(
             sockets.calls[0],
             SocketCall::Broadcast { broadcast: 1, .. }

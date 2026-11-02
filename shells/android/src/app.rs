@@ -487,6 +487,8 @@ fn start_kernel(
         .random(random)
         .plugin_dir("plugins")
         .network(true)
+        // Plugins' secure sockets (rustls with ring).
+        .tls_sessions(paperpaw_serve::TLS_SESSIONS)
         .catalog_device("android")
         .system_clipboard(true)
         .speech(true)
@@ -811,6 +813,15 @@ impl Storage for Volumes {
 
     fn list(&self, dir: &str, visit: &mut dyn FnMut(DirEntry<'_>)) -> Result<(), StorageError> {
         self.0.list(dir, visit)
+    }
+
+    fn list_from(
+        &self,
+        dir: &str,
+        from: u64,
+        visit: &mut dyn FnMut(DirEntry<'_>) -> bool,
+    ) -> Result<Option<u64>, StorageError> {
+        self.0.list_from(dir, from, visit)
     }
 
     fn remove(&self, path: &str) -> Result<(), StorageError> {

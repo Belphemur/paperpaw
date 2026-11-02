@@ -49,7 +49,18 @@ const CAPTION: &str = "caption";
 /// The next quote, asked for with a tap.
 const NEXT: Event<()> = Event::new("widgets.quote.next");
 
+/// Where PaperPaw's quotes are on the card, installed with the plugin:
+/// `quotes.<language>.txt`, a quote per line, as the reader's own are.
+const FOLDER: &str = "plugins/widgets/data";
+
+/// The same quotes carried in the code, for where the plugin is part of
+/// the app (a shell with room: there is no installed folder to read
+/// from). A plugin file for a reader leaves them out
+/// (`default-features = false` in tools/plugin-files): its package brings
+/// them on the card.
+#[cfg(feature = "embedded-quotes")]
 const ENGLISH: &str = include_str!("../../data/quotes.en.txt");
+#[cfg(feature = "embedded-quotes")]
 const GERMAN: &str = include_str!("../../data/quotes.de.txt");
 
 /// Where the reader's own quotes are.
@@ -170,16 +181,81 @@ fn parse(line: &str) -> Option<(&str, &str)> {
     (!text.is_empty()).then_some((text, author.trim()))
 }
 
-/// The quotes PaperPaw brings in `language`, English where it brings none.
-fn shipped(language: &str) -> &'static str {
-    if language.starts_with("de") {
-        GERMAN
-    } else {
-        ENGLISH
+/// Where a list of quotes is: carried in the code, or a file.
+#[derive(Clone, Copy)]
+enum Source<'a> {
+    Text(&'a str),
+    File(&'a str),
+}
+
+impl Source<'_> {
+    /// Hands each line on until `each` breaks.
+    fn lines(
+        self,
+        storage: &dyn paperpaw_sdk::Storage,
+        each: &mut dyn FnMut(&str) -> ControlFlow<()>,
+    ) {
+        match self {
+            Source::Text(text) => {
+                for line in text.lines() {
+                    if each(line).is_break() {
+                        break;
+                    }
+                }
+            }
+            // No file: no quotes.
+            Source::File(path) => {
+                let _ = for_each_line(storage, path, each);
+            }
+        }
+    }
+
+    /// How many quotes there are.
+    fn count(self, storage: &dyn paperpaw_sdk::Storage) -> usize {
+        let mut count = 0;
+        self.lines(storage, &mut |line| {
+            count += usize::from(parse(line).is_some());
+            ControlFlow::Continue(())
+        });
+        count
+    }
+
+    /// The quote after `skip` others.
+    fn nth(self, storage: &dyn paperpaw_sdk::Storage, skip: usize) -> Option<Quote> {
+        let mut found = None;
+        let mut index = 0;
+        self.lines(storage, &mut |line| {
+            let Some((text, author)) = parse(line) else {
+                return ControlFlow::Continue(());
+            };
+            if index == skip {
+                found = Some(Quote {
+                    text: String::from(text),
+                    author: String::from(author),
+                });
+                return ControlFlow::Break(());
+            }
+            index += 1;
+            ControlFlow::Continue(())
+        });
+        found
     }
 }
 
+/// The file of PaperPaw's quotes in `language` (German, else English) on
+/// the card, if it is there.
+fn card_file(storage: &dyn paperpaw_sdk::Storage, language: &str) -> Option<String> {
+    let tongue = if language.starts_with("de") {
+        "de"
+    } else {
+        "en"
+    };
+    let path = alloc::format!("{FOLDER}/quotes.{tongue}.txt");
+    storage.exists(&path).then_some(path)
+}
+
 /// The quotes of `text`, the shipped ones' file.
+#[cfg(test)]
 fn quotes_in(text: &str) -> impl Iterator<Item = (&str, &str)> {
     text.lines().filter_map(parse)
 }
@@ -189,45 +265,46 @@ fn quotes_in(text: &str) -> impl Iterator<Item = (&str, &str)> {
 /// `None` without any.
 fn quote_at(
     storage: &dyn paperpaw_sdk::Storage,
-    shipped: Option<&str>,
+    shipped: Option<Source<'_>>,
     own: Option<&str>,
     position: impl Fn(usize) -> usize,
 ) -> Option<Quote> {
-    let from_shipped = shipped.map_or(0, |s| quotes_in(s).count());
-    let mut from_own = 0;
-    if let Some(own) = own {
-        // No file of one's own: none of one's own.
-        let _ = for_each_line(storage, own, &mut |line| {
-            from_own += usize::from(parse(line).is_some());
-            ControlFlow::Continue(())
-        });
-    }
+    let own = own.map(Source::File);
+    let from_shipped = shipped.map_or(0, |s| s.count(storage));
+    let from_own = own.map_or(0, |s| s.count(storage));
     let total = from_shipped + from_own;
     if total == 0 {
         return None;
     }
     let at = position(total) % total;
-    let quote = |(text, author): (&str, &str)| Quote {
-        text: String::from(text),
-        author: String::from(author),
-    };
     if at < from_shipped {
-        return shipped.and_then(|s| quotes_in(s).nth(at)).map(quote);
+        return shipped?.nth(storage, at);
     }
-    let mut found = None;
-    let mut index = from_shipped;
-    let _ = for_each_line(storage, own?, &mut |line| {
-        let Some(parsed) = parse(line) else {
-            return ControlFlow::Continue(());
-        };
-        if index == at {
-            found = Some(quote(parsed));
-            return ControlFlow::Break(());
-        }
-        index += 1;
-        ControlFlow::Continue(())
-    });
-    found
+    own?.nth(storage, at - from_shipped)
+}
+
+/// The quotes PaperPaw brings in `language`: the card's file, else those
+/// the code carries (English where it brings none); `None` for neither.
+fn shipped<'a>(card: Option<&'a str>, language: &str) -> Option<Source<'a>> {
+    if let Some(path) = card {
+        return Some(Source::File(path));
+    }
+    carried(language).map(Source::Text)
+}
+
+#[cfg(feature = "embedded-quotes")]
+fn carried(language: &str) -> Option<&'static str> {
+    Some(if language.starts_with("de") {
+        GERMAN
+    } else {
+        ENGLISH
+    })
+}
+
+/// A plugin file for a reader carries none.
+#[cfg(not(feature = "embedded-quotes"))]
+fn carried(_language: &str) -> Option<&'static str> {
+    None
 }
 
 /// Today's quote, turned on as often as tapped (and, where another
@@ -238,7 +315,9 @@ fn quote_of_the_day(env: &Env<'_>, day: i64, showing: u32) -> Option<Quote> {
     let turns = Turns::load(env.storage(), &turns_file())
         .on(day, daily)
         .wrapping_add(showing);
-    let shipped = (source != SOURCES[1]).then(|| shipped(env.i18n().language()));
+    let card = card_file(env.storage(), env.i18n().language());
+    let shipped = (source != SOURCES[1]).then(|| shipped(card.as_deref(), env.i18n().language()));
+    let shipped = shipped.flatten();
     let own = own_file();
     let own = (source != SOURCES[0]).then_some(own.as_str());
     quote_at(env.storage(), shipped, own, |total| {
@@ -544,7 +623,9 @@ mod tests {
 
     #[test]
     fn enough_quotes_come_with_paperpaw() {
-        for (text, language) in [(ENGLISH, "en"), (GERMAN, "de")] {
+        let english = include_str!("../../data/quotes.en.txt");
+        let german = include_str!("../../data/quotes.de.txt");
+        for (text, language) in [(english, "en"), (german, "de")] {
             let quotes: Vec<_> = quotes_in(text).collect();
             assert!(quotes.len() >= 60, "{language}: {}", quotes.len());
             for (quote, author) in &quotes {
@@ -555,8 +636,40 @@ mod tests {
                 assert!(!quote.contains(['\u{2013}', '\u{2014}']), "{quote}");
             }
         }
-        assert_eq!(shipped("de-AT"), GERMAN);
-        assert_eq!(shipped("fr"), ENGLISH);
+    }
+
+    /// The card's file of PaperPaw's quotes is the language's, German or
+    /// else English; the code's are the same where the plugin carries them.
+    #[test]
+    fn the_quotes_come_from_the_card_or_the_code() {
+        let english = include_str!("../../data/quotes.en.txt");
+        let german = include_str!("../../data/quotes.de.txt");
+        let storage = MemoryStorage::new()
+            .with("plugins/widgets/data/quotes.en.txt", english)
+            .with("plugins/widgets/data/quotes.de.txt", german);
+        assert_eq!(
+            card_file(&storage, "de-AT").as_deref(),
+            Some("plugins/widgets/data/quotes.de.txt")
+        );
+        assert_eq!(
+            card_file(&storage, "fr").as_deref(),
+            Some("plugins/widgets/data/quotes.en.txt")
+        );
+        let path = card_file(&storage, "de").unwrap();
+        let from_card = quote_at(&storage, shipped(Some(&path), "de"), None, |_| 0).unwrap();
+        assert_eq!(
+            from_card.text,
+            quotes_in(german).next().map(|(t, _)| t).unwrap()
+        );
+        // Without the files: the code's, where it carries them, else none.
+        let bare = MemoryStorage::new();
+        assert_eq!(card_file(&bare, "en"), None);
+        let carried = quote_at(&bare, shipped(None, "de"), None, |_| 0);
+        if cfg!(feature = "embedded-quotes") {
+            assert_eq!(carried.unwrap().text, from_card.text);
+        } else {
+            assert!(carried.is_none());
+        }
     }
 
     #[test]
@@ -581,7 +694,7 @@ mod tests {
         let path = own_file();
         let shipped = "One | X\nTwo | Y\n";
         let at = |shipped: Option<&str>, own: Option<&str>, n: usize| {
-            quote_at(&storage, shipped, own, |_| n).map(|q| q.text)
+            quote_at(&storage, shipped.map(Source::Text), own, |_| n).map(|q| q.text)
         };
         // Shipped first, then the own ones, round again.
         let both: Vec<_> = (0..5)
@@ -618,9 +731,12 @@ mod tests {
     fn a_quote_a_day() {
         let storage = MemoryStorage::new();
         let pick = |day: i64| {
-            quote_at(&storage, Some(ENGLISH), None, |total| {
-                of_the_day(day, total)
-            })
+            quote_at(
+                &storage,
+                Some(Source::Text(include_str!("../../data/quotes.en.txt"))),
+                None,
+                |total| of_the_day(day, total),
+            )
             .unwrap()
         };
         assert_eq!(pick(20_375), pick(20_375));

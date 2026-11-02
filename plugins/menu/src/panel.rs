@@ -816,7 +816,32 @@ fn inset(area: Rect, g: &Geometry) -> Rect {
     area.inset(g.margin(), pad)
 }
 
+impl PanelScreen {
+    /// Laid out anew, the focus on the control it was on (where it stays).
+    fn remake(&mut self, env: &Env<'_>) {
+        let focused = self
+            .focus
+            .and_then(|at| self.controls().nth(at).map(|(c, _)| c.clone()));
+        let (page, editing) = (self.page, self.editing);
+        let opened = self.params.clone();
+        *self = PanelScreen::open(env, &opened);
+        // A number being edited goes on.
+        self.editing = editing;
+        self.focus = focused.and_then(|c| self.controls().position(|(d, _)| *d == c));
+        self.page = page.min(self.pages().saturating_sub(1));
+    }
+}
+
 impl Screen for PanelScreen {
+    /// Turned or resized: laid out anew for the size, the focus and page
+    /// kept.
+    fn on_resize(&mut self, cx: &mut Cx<'_, '_>) -> Handled {
+        let env = *cx.env();
+        self.remake(&env);
+        cx.request_redraw();
+        Handled::Yes
+    }
+
     fn region(&self, _: &Env<'_>) -> Option<Rect> {
         Some(self.region)
     }
@@ -1098,15 +1123,7 @@ impl Screen for PanelScreen {
             let env = *cx.env();
             let before = self.region;
             if env.settings().governs(changed.id.as_str()) {
-                // Anew, the focus on the control it was on (where it stays).
-                let focused = self
-                    .focus
-                    .and_then(|at| self.controls().nth(at).map(|(c, _)| c.clone()));
-                let page = self.page;
-                let opened = self.params.clone();
-                *self = PanelScreen::open(&env, &opened);
-                self.focus = focused.and_then(|c| self.controls().position(|(d, _)| *d == c));
-                self.page = page.min(self.pages().saturating_sub(1));
+                self.remake(&env);
                 // What it covered before too, should it have shrunk.
                 cx.request_redraw_area(before.union(&self.region));
                 self.redraw(cx);

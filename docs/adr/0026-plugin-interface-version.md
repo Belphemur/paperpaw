@@ -81,7 +81,10 @@ with that before the betas of 0.5:
   reach, in the source's order, private fields too, each with its type,
   functions' pointers with their ABI; and the values of its public and
   associated constants (`tools/interface.py`, from rustdoc's JSON with
-  every feature on, on the nightly and the cargo-public-api of CI).
+  every feature a plugin may turn on, on the nightly and the
+  cargo-public-api of CI). Not the SDK's `kernel` feature: what only the
+  kernel and the shells build (ADR 0020) is in no plugin, so its types
+  change with the firmware alone, like any type of the firmware's own.
   `api.txt` alone does not do: it is sorted, so an inserted variant or
   two fields of one type swapped do not show, and it shows no private
   field and no value. `interface/` keeps both as they were when the
@@ -119,6 +122,15 @@ with that before the betas of 0.5:
      drops the last handle frees what the firmware allocated, with the
      size the table gives.
 
+  `Screen` (interface 6) is the first such trait plugins implement
+  rather than the firmware: its `revision()` is a default method, so a
+  plugin's screens say the revision of the SDK it was built with, and
+  plugins never implement it. The kernel calls every item newer than
+  revision 1 through one helper, `paperpaw_sdk::call_since`. A screen
+  that passes items on to another it holds (a host, the sleep screen
+  showing another plugin's) says no higher a revision than that one
+  (`revision_holding`), so it is never asked what it could not pass on.
+
   Any other new item of a trait is never free: the firmware would call
   it through the table of a plugin built before, which does not have it,
   and the same holds for the firmware's own trait objects a plugin is
@@ -138,13 +150,16 @@ with that before the betas of 0.5:
      before take it up without a rebuild, which is the point of sharing.
   2. **Free as well**, where a result does change (a height, a position,
      a hit, a line break, a focus or page, a parsed value), when every
-     function that must agree with it is an entry of the same family,
-     changed in the same commit, and no value a plugin keeps (a cache, a
-     file, a page index, a revision such as `paperpaw_layout::VERSION`)
-     and no promise of the documentation rests on the old result. A
-     plugin built before then calls all of them anew, and they agree.
-     Example: `Row::height`, `Row::draw` and `Row::hit` are all ui
-     entries, so a row 4 pixels taller is free.
+     function that must agree with it is an entry too, of any family (all
+     of them run the one firmware's bodies, whichever family a plugin's
+     calls go through), changed in the same commit, and no value a plugin
+     keeps (a cache, a file, a page index, a revision such as
+     `paperpaw_layout::VERSION`) and no promise of the documentation rests
+     on the old result. A plugin built before then calls all of them
+     anew, and they agree. Examples: `Row::height`, `Row::draw` and
+     `Row::hit` are all ui entries, so a row 4 pixels taller is free; the
+     ui entry `fit` shortening Arabic as the text entry `measure` sets it
+     is free too.
   3. **A bump** otherwise: a line `bump <family> <revision>` appended to
      `shared.list` in the same commit, at the family's next revision.
      The firmware then refuses the plugins of that family built before

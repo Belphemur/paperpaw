@@ -183,6 +183,56 @@ impl<'a, IO: ReadWriteSeek, TP, OCC> File<'a, IO, TP, OCC> {
         }
     }
 
+    // Modified for PaperPaw: `chain_at` and `seek_from` added.
+    /// Where the position stands in the cluster chain: how many clusters from the start the
+    /// cluster holding the byte before it is (1 for the first) and that cluster. `None` at the
+    /// start or where the file has no cluster. `seek_from` takes it.
+    pub(crate) fn chain_at(&self) -> Option<(u32, u32)> {
+        let cluster = self.current_cluster?;
+        let n = self.fs.clusters_from_bytes(u64::from(self.offset));
+        (n > 0).then_some((n, cluster))
+    }
+
+    /// Seeks to `offset` from the start, walking the chain on from `at` (a place `chain_at` gave
+    /// for this very chain) where that is ahead of the position and not past `offset`: a seek
+    /// far into a long chain does not read the FAT from its first cluster again.
+    pub(crate) fn seek_from(&mut self, offset: u64, at: Option<(u32, u32)>) -> Result<u64, Error<IO::Error>> {
+        if let (Some((n, cluster)), Some(_)) = (at, self.first_cluster) {
+            let ahead = n > self.fs.clusters_from_bytes(u64::from(self.offset));
+            let bytes = self.fs.bytes_from_clusters(n);
+            let inside = !matches!(self.size(), Some(size) if bytes > u64::from(size));
+            if ahead && inside && n <= self.fs.clusters_from_bytes(offset) {
+                if let Ok(bytes) = u32::try_from(bytes) {
+                    #[cfg(debug_assertions)]
+                    self.debug_check_chain_at(n, cluster);
+                    self.offset = bytes;
+                    self.current_cluster = Some(cluster);
+                }
+            }
+        }
+        self.seek(SeekFrom::Start(offset))
+    }
+
+    /// In debug builds, where the file system is told to (`FileSystem::check_kept_places`): that
+    /// the `n`th cluster of the chain (1 for the first) is `cluster`, as a place kept for it says
+    /// (see `DirNote`).
+    #[cfg(debug_assertions)]
+    fn debug_check_chain_at(&self, n: u32, cluster: u32) {
+        let Some(first) = self.first_cluster.filter(|_| self.fs.checks_kept_places()) else {
+            return;
+        };
+        let mut walked = first;
+        let mut iter = self.fs.cluster_iter(first);
+        for _ in 1..n {
+            match iter.next() {
+                Some(Ok(next)) => walked = next,
+                // What the disk does not give cannot be told here.
+                _ => return,
+            }
+        }
+        debug_assert_eq!(walked, cluster, "the place kept for cluster {} of the chain from {}", n, first);
+    }
+
     /// Returns the attributes of this file.
     ///
     /// The root directory, which has no directory entry, reports `FileAttributes::DIRECTORY`.

@@ -1,7 +1,7 @@
 # The shape of this crate's types and the values of its constants, as
 # tools/interface.py writes them: fields, variants and trait items in
 # the source's order, private fields and the private types they reach
-# too, every feature on (ADR 0026).
+# too, every feature on but the kernel's (ADR 0026).
 enum paperpaw_config::ErrorKind { InvalidLine, InvalidSection, InvalidKey, UnterminatedString, InvalidEscape, Other(0: u16) }
 struct paperpaw_config::Entry<'a> { section: &'a str, key: &'a str, value: paperpaw_config::Value<'a>, line: u32 }
 struct paperpaw_config::ParseError { line: u32, kind: paperpaw_config::ErrorKind }

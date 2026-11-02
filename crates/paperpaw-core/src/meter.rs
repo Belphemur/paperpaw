@@ -224,6 +224,15 @@ impl Storage for Metered {
         self.inner.list(dir, visit)
     }
 
+    fn list_from(
+        &self,
+        dir: &str,
+        from: u64,
+        visit: &mut dyn FnMut(DirEntry<'_>) -> bool,
+    ) -> Result<Option<u64>, StorageError> {
+        self.inner.list_from(dir, from, visit)
+    }
+
     fn remove(&self, path: &str) -> Result<(), StorageError> {
         self.inner.remove(path)
     }

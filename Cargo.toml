@@ -56,6 +56,7 @@ members = [
     "plugins/reading-goal",
     "plugins/end-of-book",
     "plugins/notes-overview",
+    "plugins/notes-vault",
     "plugins/wifi",
     "plugins/bluetooth",
     "plugins/power",
@@ -76,6 +77,7 @@ members = [
     "plugins/read-later-cloud",
     "plugins/joplin",
     "plugins/koreader",
+    "plugins/mail",
     "plugins/wallabag",
     "plugins/about",
     "plugins/setup",
@@ -166,6 +168,7 @@ paperpaw-plugin-help = { path = "plugins/help", version = "1.0.2" }
 paperpaw-plugin-reading-goal = { path = "plugins/reading-goal", version = "1.0.3" }
 paperpaw-plugin-end-of-book = { path = "plugins/end-of-book", version = "1.0.0" }
 paperpaw-plugin-notes-overview = { path = "plugins/notes-overview", version = "1.0.0" }
+paperpaw-plugin-notes-vault = { path = "plugins/notes-vault", version = "1.0.0" }
 paperpaw-plugin-format-mobi = { path = "plugins/format-mobi", version = "1.0.0" }
 paperpaw-plugin-format-docx = { path = "plugins/format-docx", version = "1.0.0" }
 paperpaw-plugin-format-images = { path = "plugins/format-images", version = "1.0.0" }
@@ -180,6 +183,7 @@ paperpaw-plugin-fonts-browser = { path = "plugins/fonts-browser", version = "1.0
 paperpaw-plugin-store = { path = "plugins/store", version = "1.0.2" }
 paperpaw-plugin-rules = { path = "plugins/rules", version = "1.0.3" }
 paperpaw-plugin-lock = { path = "plugins/lock", version = "1.0.3" }
+paperpaw-plugin-mail = { path = "plugins/mail", version = "1.0.0" }
 paperpaw-plugin-profiles = { path = "plugins/profiles", version = "1.0.4" }
 paperpaw-plugin-keys = { path = "plugins/keys", version = "1.0.3" }
 paperpaw-plugin-wikipedia = { path = "plugins/wikipedia", version = "1.0.1" }
@@ -198,7 +202,7 @@ paperpaw-plugin-update = { path = "plugins/update", version = "1.0.2" }
 paperpaw-plugin-news = { path = "plugins/news", version = "1.0.5" }
 paperpaw-plugin-weather = { path = "plugins/weather", version = "1.0.2" }
 paperpaw-plugin-widgets = { path = "plugins/widgets", version = "1.0.3" }
-paperpaw-plugin-keyboard = { path = "plugins/keyboard", version = "1.0.1" }
+paperpaw-plugin-keyboard = { path = "plugins/keyboard", version = "1.1.0" }
 paperpaw-plugin-plugin-manager = { path = "plugins/plugin-manager", version = "1.0.4" }
 paperpaw-plugin-hyphenation = { path = "plugins/hyphenation", version = "1.1.1" }
 paperpaw-plugin-hyphenation-da = { path = "plugins/hyphenation-da", version = "1.0.0" }
@@ -283,7 +287,8 @@ jni-macros = { path = "patches/jni-macros" }
 # entry before it removes the old one (rename, `Dir::replace`) and adds
 # `Dir::unlink`; it moves and removes an entry found without looking for it
 # again (`Dir::rename_found`, `remove_found`), lists a folder from an entry
-# on (`Dir::iter_from`) and keeps notes about folders until an entry is
+# on (`Dir::iter_from`, seeking from a place in the folder's cluster chain
+# kept with its note) and keeps notes about folders until an entry is
 # added to them (`Dir::note`), for lookups in big folders (patches/fatfs,
 # "Modified for PaperPaw"). The X4's
 # firmware, a workspace of its own, patches it the same way.

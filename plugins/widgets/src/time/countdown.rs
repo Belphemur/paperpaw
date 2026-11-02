@@ -552,8 +552,8 @@ mod tests {
     #[test]
     fn kind_words() {
         let mut t = paperpaw_sdk::Translator::new();
-        t.add(Catalog::parse(include_str!("../../i18n/time.en.ini")).unwrap());
-        t.add(Catalog::parse(include_str!("../../i18n/time.de.ini")).unwrap());
+        t.add(Catalog::parse(include_str!("../../i18n/en.ini")).unwrap());
+        t.add(Catalog::parse(include_str!("../../i18n/de.ini")).unwrap());
         t.set_language("en");
         assert_eq!(shown(&t, 12, "Holiday").sentence, "12 days until Holiday");
         assert_eq!(shown(&t, 12, "Holiday").note, "days until Holiday");

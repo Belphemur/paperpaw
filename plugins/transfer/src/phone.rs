@@ -31,7 +31,7 @@ const SERVER_EVENT: Event<ServerNotice> = Event::new("transfer.phone-server-even
 pub(crate) const MAX_TEXT: usize = 4096;
 
 /// The web page; its texts come from the translations.
-const PAGE: &str = include_str!("phone.html");
+const PAGE: &str = include_str!("../data/phone.html");
 
 #[derive(Debug)]
 enum State {

@@ -1,9 +1,9 @@
 """Writes the notices that every copy of PaperPaw must carry, from the
 lockfiles: NOTICE at the top of the repository, and the licences the app
 shows (Settings, About PaperPaw), one file for the firmware of the Xteink
-readers (plugins/about/licences-firmware.md) and one for the apps
+readers (plugins/about/data/licences-firmware.md) and one for the apps
 (Android, the desktop emulator, the web emulator:
-plugins/about/licences-app.md).
+plugins/about/data/licences-app.md).
 
 What ships is read with `cargo metadata`, per shipped target, following
 normal dependencies only (no build scripts, proc macros or dev
@@ -282,7 +282,7 @@ def outputs():
         union.update(found)
     out = {"NOTICE": notice_text(union)}
     for product, found in packages.items():
-        out[f"plugins/about/licences-{product}.md"] = app_text(product, found)
+        out[f"plugins/about/data/licences-{product}.md"] = app_text(product, found)
     return out
 
 

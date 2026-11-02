@@ -46,8 +46,6 @@ use paperpaw_sdk::{
 pub(crate) use crate::{frame_height, today};
 
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    r.add_translations(Cow::Borrowed(include_str!("../i18n/books.en.ini")))?;
-    r.add_translations(Cow::Borrowed(include_str!("../i18n/books.de.ini")))?;
     // What was read of the catalog is read again once it was made anew
     // (books came, went or moved), a book changed (finished, a favourite)
     // or its annotations did.

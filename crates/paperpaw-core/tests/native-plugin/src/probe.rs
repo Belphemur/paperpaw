@@ -23,7 +23,7 @@ use paperpaw_text::{
     draw_text_in, is_mark, measure, measure_in, wrap_lines_kerned,
 };
 
-const PACK: &[u8] = include_bytes!("../../../../paperpaw-text/testdata/pack.ppfp.v1");
+pub const PACK: &[u8] = include_bytes!("../../../../paperpaw-text/testdata/pack.ppfp.v1");
 
 /// What the calls came to.
 #[repr(C)]

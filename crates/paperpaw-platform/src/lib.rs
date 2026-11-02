@@ -25,7 +25,7 @@ pub use input::{
 };
 pub use pixel::{Color, PixelFormat};
 pub use status::{Battery, SystemStatus, WallClock};
-pub use storage::{DirEntry, Mounted, NoStorage, Storage, StorageError};
+pub use storage::{DirEntry, Mounted, NoStorage, Storage, StorageError, list_counted};
 
 /// Static description of a device, provided by its shell.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

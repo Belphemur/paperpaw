@@ -53,6 +53,7 @@ fn connect(sockets: &mut Sockets, socket: u32, port: u16) {
         socket,
         host: String::from("127.0.0.1"),
         port,
+        tls: None,
     });
     assert_eq!(wait(sockets), SocketEvent::Connected { socket });
 }
@@ -251,4 +252,52 @@ fn many_broadcasts_are_counted_until_each_is_done() {
     done.sort_unstable();
     assert_eq!(done, [0, 1, 2]);
     assert!(!sockets.any());
+}
+
+/// The shell's half of the STARTTLS rule (`SocketCall::StartTls`): a server
+/// that sends more right after its go-ahead (an attacker's injection, to
+/// pass as secure) fails the switch, `NotReady`, and the socket closes.
+/// The kernel cannot see bytes the shell holds unread: only the shell can
+/// check this.
+#[test]
+fn bytes_sent_past_a_starttls_go_ahead_fail_the_switch() {
+    use paperpaw_core::TlsSetup;
+    use paperpaw_core::sdk::{SocketError, Trust};
+    let (listener, port) = listener();
+    let server = thread::spawn(move || {
+        let (mut peer, _) = listener.accept().unwrap();
+        peer.write_all(b"220 Go ahead\r\n* injected\r\n").unwrap();
+        // Until the client gives up.
+        let _ = peer.read(&mut [0u8; 64]);
+    });
+    let mut sockets = Sockets::new(|| {});
+    connect(&mut sockets, 1, port);
+    let go_ahead = b"220 Go ahead\r\n";
+    sockets.apply(SocketCall::Read {
+        socket: 1,
+        max: go_ahead.len() as u32,
+    });
+    let SocketEvent::Data { data, .. } = wait(&mut sockets) else {
+        panic!("no go-ahead");
+    };
+    assert!(go_ahead.starts_with(&data));
+    // Let the injected line arrive behind it, unread.
+    thread::sleep(Duration::from_millis(100));
+    let tls = TlsSetup {
+        server_name: String::from("127.0.0.1"),
+        trust: Trust::Authorities,
+        timeout_ms: 2_000,
+        idle_ms: 0,
+    };
+    sockets.apply(SocketCall::StartTls { socket: 1, tls });
+    assert!(matches!(
+        wait(&mut sockets),
+        SocketEvent::Failed {
+            socket: 1,
+            error: SocketError::NotReady,
+            ..
+        }
+    ));
+    assert!(!sockets.any());
+    server.join().unwrap();
 }

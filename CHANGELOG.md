@@ -8,11 +8,11 @@ change the plugin SDK.
 
 ## [0.6.0-beta.1] - 2026-11-02
 
-**Plugins of this release must be built from `e5f4a41a` or later** (the interface 5 amendment, #259). The plugin
-fingerprint changed with its bless, so plugins built at `60752ff6` are refused; shared UI and text bodies changed
-after the bless without changing the fingerprint (the right-to-left mirroring, digits, Hangul composition), and the
-fingerprint changed once more with the pen and TLS reservations (`e5f4a41a`, #81), so plugins built before it are
-refused too. Store, test-card and Workshop builds from commits before `e5f4a41a` are thrown away.
+**Plugins of this release must be built from `6c4a19dc` or later** (plugin interface 6, #363). 0.6.0-beta.1 takes
+the interface-6 round too (TLS sockets, screens that fit another size, libraries of any size), so plugins change
+once: from interface 4 of 0.5.0-beta.12 to interface 6. Interface 5 was never released; plugins built for it (the
+earlier release candidate's store files, test cards and Workshop builds) are refused as built for an older
+interface, and are thrown away.
 
 **Plugins that read the library must also be built from the split of the library's folders (#280) or later**:
 calibre, end-of-book, file-manager, files, the format plugins, home, notes-overview, opds, sleep, stats, transfer,
@@ -47,7 +47,10 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   checked, how it looks to a reader and how it feels on a device are not. Tell us what is wrong.
 - **A wider keyboard** (#91). The keys reach nearer to the sides of the screen; on small screens they get nearly the
   whole width.
-- **The landscape home screen** (#88). Turned on its side, the home screen keeps the start card beside the clock.
+- **The landscape home screen** (#88). Turned on its side, the home screen keeps the start card beside the clock. On a wide
+  screen it shows the same items with more columns, each page filled before the next, and cards no wider than about
+  110 mm; arranging it on its side keeps that layout for that orientation, and *Reset landscape layout* (in Add)
+  goes back. The SDK gets `grid::refit` for it.
 - **A power menu** (#78). Hold the power button: *Sleep*, *Switch off*, *Restart* and, on touch devices, *Lock touch*
   or *Unlock touch*. A short press still sleeps.
 - **All six language packs are in the store**: Arabic, Hebrew, Greek, Cyrillic, Korean (2,350 syllables) and
@@ -58,14 +61,102 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   Anki decks, your own fonts, hanging punctuation, drop capitals, lists that hang under their marker, line breaking for
   Korean, Chinese and Japanese. Book text in Arabic and Hebrew is set right to left.
 - **Updating:** books, reading positions and settings are kept. Every book is laid out again once, the first time it
-  is opened. Plugins with code need a build for plugin interface 5; the store offers PaperPaw's own.
+  is opened. Plugins with code need a build for plugin interface 6; the store offers PaperPaw's own.
 - **Not in this release:** exFAT cards. The X4 Pro, X4 Classic and X3 are built and checked by the tests on a
   computer; the owner tests the X4 and X4 Pro by hand.
 
 ### Added
 
+- UI: `UiStyle::flip` and `UiStyle::flip_x` are public (#33): a screen lays a row or a grid out once from the left
+  and mirrors each part where the interface runs right to left, as the SDK's own parts do. New functions, no
+  change of what plugins built before see; their api.txt lines come with the next bless. The library's rows and
+  covers, the reader's menu bar and the home screen's drawer mirror with them now, no copies of their own.
 - Text: `TextInk::RIGHT_TO_LEFT`, a flag of the reserved ones: the lines a handle draws run right to left
   (`TextInk::is_right_to_left`). The kernel sets it for the interface's font where its language runs right to left.
+- **Text of several lines** (#81). The keyboard can ask for a message of several lines (`ask::text(…).multiline()`):
+  it has an *Enter* key, the field shows the end of the text on as many wrapped lines as fit above the keys, and a
+  text from a phone or the clipboard keeps its line breaks. (A plain question still gets one line.)
+- **Mail (#81):** a plugin that reads and sends e-mail over IMAP and SMTP with a password or an app password, no
+  browser login. Up to three accounts under Settings, Mail, with presets for ten providers that fill in the
+  servers; the folders with how many mails wait, a folder's latest mails, a mail (text, or the text of a simple
+  HTML mail; attachments are named, not fetched), *Reply*, *Reply all*, *Star*, and writing a mail on the keyboard.
+  It connects, fetches and closes (the X4 holds one secure connection), keeps what it fetched on the card, and asks
+  once before trusting a server no authority vouches for. Five home widgets: unread mail, latest mail, starred
+  mail, one mailbox and a shortcut to write. Needs the TLS sockets of the next interface raise; background
+  fetching and a Sent copy are not in this first version.
+- **Notes vault (#87):** a plugin that reads a folder of Markdown notes (works with Obsidian vaults) without
+  changing it: the vault's folders as they are on the card, its latest changes, its tags and a search in the
+  notes' titles, each list shown a hundred rows at a time so that a vault of thousands of notes costs a window of
+  memory (5,000 notes tested), from an index kept on the card and made in the background. Six home widgets: recent
+  notes, a pinned note, the note of the day, a random note, the tags and a search, each with its own settings
+  (how many, which folder). Notes open in the reader: `[[wikilinks]]` (`[[note|words]]`, `[[note#heading]]`) and
+  links to other note files open that note by its name, anywhere in the vault, at its heading, and *Back* returns
+  to the note before; embedded pictures (`![[picture.png]]`) show, front matter is hidden (its tags are shown),
+  callouts (`> [!note] Title`) are quotes with their title, `#tags` stay as written and tables are rows of cells.
+  The Markdown reader's HTML anchors the headings for those links.
+- **Plugin interface (next raise):** `library::sorted` (#79): every book of the library sorted by title on the card
+  (`.paperpaw/library/sorted-<hash>.idx`, one for each archive folder a view leaves out, two at most), paged by a view
+  in a few kilobytes, so the X4 lists every book instead of 2,000 at most. `Sorted::open` (`None` for a file of
+  another library version or archive, cut short or damaged: a view asks for it with `sorted::request` and says the
+  library is being prepared), `len`/`page`/`find` for a `View` (a filter, the books read last first or by title,
+  series stacked; as `Index::order` and `Index::stacked` list them), `next_in_series`, `refresh`, `hide`/`hide_all`;
+  the event `SORTED_WANTED`. The kernel makes the file (kernel feature: `sorted::Build`, a bounded merge sort of runs
+  of 512 books, written beside it and put in place whole; `sorted::wanted`, `asked`, `kept_archives`, `clean_up`).
+- **Plugin interface (next raise):** `Storage::list_from` lists a folder a piece at a time, each piece going on
+  where the last one stopped (#79): a folder of thousands of entries is read about twice in all, not once a
+  piece. Storages that cannot go on from a place count, as `paperpaw_platform::list_counted` does (the item's
+  default), so every storage keeps working; the memory card's (FAT) goes on from where the entry begins and
+  finds a place taken by another entry by its count. The catalog lists the library's folders so: the walk after
+  a start reads a folder of 4,000 books (1,254 blocks) in 2,535 blocks instead of 66,460 (bench; the whole walk
+  4,367 instead of 68,291).
+- **Plugin interface (next raise):** TLS for plugins' sockets (#81), as a mail plugin needs it (IMAP, SMTP):
+  `Command::connect_tls` is secure from the start, `Command::start_tls` switches an open socket (STARTTLS) once
+  everything the server sent was read, else it fails and closes. Nothing is sent or read until it is secure: a send or
+  read before fails `NotReady` and closes the socket. `Tls` sets it up: the authorities PaperPaw ships (`Tls::new`),
+  or up to `MAX_PINS` pinned certificates (`Tls::pinned`, `CertificateHash` as browsers and `openssl` write it) or
+  keys (`Tls::pinned_keys`, `KeyHash` of the SubjectPublicKeyInfo: renewals of the same key stay trusted), the name
+  checked, the time to connect, the time idle before it closes. `SocketNotice::Secured` and `Untrusted` (reserved
+  before) carry the server's certificate and key, `Untrusted` why (`Distrust`); `Secured::time_checked` is false
+  where the device did not know the time yet, so the certificate's dates were not checked (an X4 just after a cold
+  start). `SocketNotice::Failed` says why it failed (`SocketError`; `Other(0)` from older kernels).
+  `SocketRead::Bytes` reads bytes as they come (`SocketNotice::Bytes`), for 8-bit protocol lines that are no
+  UTF-8. `Capabilities::tls_sessions` says how many TLS
+  connections fit at once, HTTPS among them; with none (the browser's emulator) TLS sockets fail at once,
+  `SocketError::Unsupported`.
+- **Sockets of background work are the run's** (#81, owner decision 52): a socket, plain or TLS, that a work's event
+  handlers or a job's step open no longer closes with the screen that was showing then (a run is no screen's: a
+  mail fetch begun while a book was open lost its connection when the book closed). It closes when the run ends:
+  the job done or failed, the work run again (an event's run ends with the next), taken back or refused, or its
+  plugin gone. Only the work's own plugin's sockets count; one connected from a socket's event is the screens'
+  (several connections are a job's steps). A secure one ends when idle: `idle_ms(0)` is refused for it
+  (`SocketError::Options`); `MAX_TLS_IDLE_MS` is 30 minutes (was 10), so that waiting for new mail (IMAP IDLE)
+  keeps it open. Sockets a plugin opens for the reader still close with their screen.
+- **Plugin interface (next raise):** screens fit another size in place (#88). `Screen::on_resize` lays a screen out
+  anew when its part of the screen changes size (turned, a window resized, the row of hints): answering
+  `Handled::Yes` it keeps everything (a book open, a list scrolled, a connection); by default it is made anew as
+  before. The old screen is now dropped before the new one is made, so a turn never holds both in memory.
+  `Screen::pane` says `Pane::DETAIL` for a screen that shows one thing of the list below it, to show beside it on
+  wide screens (the placement comes later); `Pane` is a number with constants, as `Instances`, and a value a kernel
+  does not know shows as `Pane::FULL`. `Screen` grows at its end from now on: `Screen::revision` (never
+  implemented by plugins) says which items a screen has, and newer ones are called only through
+  `call_since`, so later screen items need no raise.
+- **X4, X4 Pro and X4 Classic: TLS for plugins' sockets** (#81): a socket made secure from the start or switched
+  to it (STARTTLS) is an mbedTLS session over the same connection HTTPS uses, the authorities of the firmware
+  (Mozilla's) or up to four pinned certificates or keys (the server's own, by the SHA-256 of its DER or of its
+  public key), the name asked for (SNI) and checked, the dates checked once the time is known (`Secured` says
+  whether they were). The X4 holds one TLS session at a time and the X4 Pro and
+  Classic two, shared with HTTPS and served in the order asked: a socket that waits longer than its timeout fails
+  `Busy`. Nothing is sent or read before `Secured`; a switch to TLS over bytes that came after the server's
+  go-ahead fails (`NotReady`, socket closed), as they might be injected.
+- **Emulator on Linux, macOS and Windows, and the Android app: TLS for plugins' sockets** (#81, owner decision 52):
+  rustls with ring, over the same sockets, with the same rules as the X4's. The authorities are Mozilla's list
+  (`webpki-roots`, the same as the X4's, not the computer's store, so a plugin behaves alike everywhere), or up to
+  four pinned certificates or keys; the name is checked for the authorities only, the dates (where the clock
+  is believed, i.e. set after 2025) for both; there is no way to trust what is merely shown. A server's own
+  certificate, a certificate authority's that it made itself, ends `Untrusted` (`UnknownIssuer`), so a plugin can
+  offer to pin its key. Up to eight sessions at once, a socket waits for one until its timeout; a write that moves nothing for 30 s ends the socket, `Timeout`, so a server that never reads cannot hold a session. The Mail plugin
+  checks and sends mail against a real IMAP and SMTP server this way. The browser's emulator has no sockets and
+  holds no TLS session.
 - Screens mirror in a user-interface language that runs right to left (#33): the switch, value rows and their
   chevrons, ticked rows, the number buttons, text fields, dialog buttons, list rows' icons, chips, the date
   and time pickers, headings and the reader's menu bar start at the right, and left/right follow them. The
@@ -330,6 +421,28 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   at the right (the count and the search at the left), the continue-reading card and the grid of covers start at the
   right (the left button on to the next cover), and the reader's menu shows the book's title and chapter at the
   right and the page's percentage at the left.
+- The library lists every book on the X4 too (#79), not 2,000 at most: the list pages the books sorted on the card
+  (`library::sorted`) and holds a few kilobytes (10,000 books: 3.7 KB held, 8 KB at most while opened or paged, on
+  the host; the index of 2,000 took 48 KB). Its order, filters, stacks of series as covers, the next book of each
+  series and where the focus goes are as before. Right after the catalog was made anew the list says *Preparing
+  the library …* until the kernel sorted the books (a moment); the index it kept while a book covered it
+  (`.paperpaw/plugins/files/index.bin`) is removed. On the X4 the catalog is now walked and caught up while the
+  library shows too (the reason it waited, the index's memory, is gone); still never while a book is read.
+- The library's shelves hold a bounded part of the memory however large the library (#79): the shelves in the
+  list show the first 200 series and folders on the X4 (2,000 on others) with an *All series* and *All folders*
+  row after them, and count the authors up to 2,048 (*more than 2048 authors*); the screens of authors, series,
+  tags and (new) folders hold 200 names at a time, the next taken when the focus moves on past the last. At
+  10,000 books of 5,000 authors and 2,500 series, showing the shelves took 1.26 MB on the host (about 600 KB on
+  the X4, more than its heap) and now takes 52 KB; the authors' screen 214 KB, now 25 KB. Each name is counted
+  exactly; the authors' screen showed the first 2,000 met before, now every author, in order. The list keeps its
+  index when the catalog is as it was.
+- A catalog walk that finds the library as it was writes nothing (#79): it compares what it makes with the old
+  catalog and writes a new one only from where they part (the lines before copied a piece a step), keeps the
+  catalog and its generation where they never do, and keeps a folder listed in one piece in memory instead of
+  in `walk.list`. The walk after every start at 10,000 books writes 975 blocks instead of 69,744 (bench); after
+  10 books came, 11,350 instead of 71,096.
+- `shape.txt` no longer holds what only the kernel builds (the SDK's `kernel` feature, ADR 0020): no plugin
+  has it, so its types change with the firmware alone (ADR 0026, `tools/interface.py`).
 - *Keyboard: wider keys* (#91): the keys' side margin is a quarter of the margin other screens keep (at least
   4 pixels), so on small screens the keys get nearly the whole width. Every layout, tapped or chosen with buttons;
   the text field keeps its margin, the key order and the focus are as before. Round keys are as high as wide, so
@@ -355,7 +468,9 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   cleans up both, and with the move takes away once what folders of caches hold in the folder itself (made again
   from the book when needed: each book's first opening after the update takes a little longer). On FAT
   (the X4's card), a folder of 256 entries or more read whole is looked through from where the last name was
-  found (for up to 8 such folders at a time), so names taken out of it in its order take a few blocks each;
+  found (for up to 8 such folders at a time), so names taken out of it in its order take a few blocks each, deep
+  in a folder of thousands too (where it was in the folder's chain of clusters is kept: the FAT is not read along
+  the chain from its start again for each name);
   rust-fatfs, as patched, moves and removes an entry found without looking for it again. EPUB books look for one's
   own stylesheets (`styles.css`, `<book>.css`) only when a chapter is first needed, not when opened: the catalog,
   which opens every book for its details, no longer searches each book's folder for files mostly not there. With
@@ -709,6 +824,10 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
 
 ### Fixed
 
+- The store no longer counts code plugins that are switched off as taking room (#70): the next start skips their
+  code and their room is free, so an install that fits then is offered (its page says it fits while the code
+  plugins you switched off stay off), instead of asking to remove a plugin that could have been switched off.
+  The update does the same when it fetches code plugins for a new version.
 - The reader no longer keeps pages counted while a font pack on the card could not be read (a card pulled, a
   hiccup): the letters it could not measure were 0 wide, and a page index of them sent later pages to the
   wrong place. Such a step is made again (`Fonts::failed_reads` is taken before and after it); after three in a

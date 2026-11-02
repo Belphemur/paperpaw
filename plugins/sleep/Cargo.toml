@@ -19,5 +19,9 @@ paperpaw-i18n.workspace = true
 paperpaw-platform.workspace = true
 paperpaw-plugin-fonts-default = { workspace = true, features = ["packs"] }
 
+[package.metadata.paperpaw]
+# Large files embedded on purpose (`paperpaw-dev package` says nothing of them).
+embedded-assets = "built into the firmware: the sleeping cat is drawn on the way to sleep, before any installed file could be read, and the firmware has room for it"
+
 [lints]
 workspace = true

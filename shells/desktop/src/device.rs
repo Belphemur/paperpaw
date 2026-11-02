@@ -129,6 +129,19 @@ impl Storage for Card {
             Card::Memory(files) => files.list(dir, visit),
         }
     }
+
+    fn list_from(
+        &self,
+        dir: &str,
+        from: u64,
+        visit: &mut dyn FnMut(DirEntry<'_>) -> bool,
+    ) -> Result<Option<u64>, StorageError> {
+        // As `list`.
+        match self {
+            Card::Dir(storage) => storage.list_from(dir, from, visit),
+            Card::Memory(files) => files.list_from(dir, from, visit),
+        }
+    }
     fn remove(&self, path: &str) -> Result<(), StorageError> {
         self.on(|s| s.remove(path))
     }
@@ -968,6 +981,8 @@ fn build_kernel(
             ))
             .colors(profile.colors)
             .network(true)
+            // Plugins' secure sockets (rustls); none in the browser.
+            .tls_sessions(paperpaw_serve::TLS_SESSIONS)
             .wifi(profile.wifi)
             .bluetooth(profile.bluetooth)
             .speech(profile.speech)

@@ -282,6 +282,13 @@ impl App {
         }
     }
 
+    /// The screen turned or resized to `width` by `height`.
+    pub fn resize(&mut self, width: u16, height: u16) {
+        self.now += 100;
+        let effects = self.kernel.resize(Instant(self.now), width, height);
+        self.settle(effects);
+    }
+
     /// Runs `action` as a button bound to it would.
     pub fn run(&mut self, action: Id) {
         self.now += 100;

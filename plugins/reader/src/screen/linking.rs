@@ -3,6 +3,9 @@
 
 use super::*;
 
+/// Notes remembered for *Back*, from the one opened last.
+const NOTES_KEPT: usize = 16;
+
 /// Choosing a link with the buttons: which of the page's links that can
 /// be followed has the focus (`None` if the page has none).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -164,10 +167,61 @@ impl ReaderScreen {
             return Handled::Yes;
         }
         let Some(target) = book.document.link_target(env.storage(), href) else {
-            return Handled::No;
+            return self.follow_note(href, cx);
         };
         let start = book.page_start(&env, target);
         book.jump(cx, start);
+        Handled::Yes
+    }
+}
+
+impl ReaderScreen {
+    /// Follows a link that leads to another note (a wikilink, or the path
+    /// of a note): the note opens over this book, at its heading if the
+    /// link names one, and *Back* returns here. Said when it is not
+    /// found.
+    fn follow_note(&mut self, href: &str, cx: &mut Cx<'_, '_>) -> Handled {
+        let Some(link) = notelinks::read(href) else {
+            return Handled::No;
+        };
+        let env = *cx.env();
+        let Ok(book) = &mut self.book else {
+            return Handled::No;
+        };
+        // A path with an ending the reader cannot open (a broken link in
+        // an EPUB, say) is none of ours: no probing of the card for it.
+        let ending = link
+            .what
+            .rsplit('/')
+            .next()
+            .is_some_and(|n| n.contains('.'));
+        if !link.by_name && ending && !env.formats().supports(&link.what) {
+            return Handled::No;
+        }
+        let Some(path) = notelinks::find(
+            env.storage(),
+            &book.path,
+            &link,
+            notelinks::Limits::of(&env),
+        ) else {
+            cx.command(Command::Notify(env.i18n().format(
+                "reader.note-missing",
+                &[("name", paperpaw_sdk::Arg::Str(link.what.as_str()))],
+            )));
+            return Handled::Yes;
+        };
+        // Where it was left: what is kept, as with any book.
+        book.save_due(cx, true);
+        let mut before = book.notes_back.clone();
+        before.push(book.path.clone());
+        // The farthest forgotten, as far back as one goes.
+        let skip = before.len().saturating_sub(NOTES_KEPT);
+        cx.command(notelinks::open(
+            &env,
+            &path,
+            link.anchor.as_deref(),
+            &before[skip..],
+        ));
         Handled::Yes
     }
 }

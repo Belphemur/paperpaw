@@ -6,6 +6,7 @@ mod draw;
 mod hands_free;
 mod linking;
 mod marks;
+mod notelinks;
 mod sample;
 mod script_hint;
 mod selecting;
@@ -422,6 +423,31 @@ impl Screen for ReaderScreen {
         Handled::Yes
     }
 
+    /// Turned or resized: the book stays open and its pages are laid out
+    /// anew for the new size from the page shown, as when its type changes.
+    /// Reading aloud pauses (as at any button), where it was kept to
+    /// go on from. A book being prepared, waited for or let go of has no
+    /// pages to lay out; it is opened at the new size when it is.
+    fn on_resize(&mut self, cx: &mut Cx<'_, '_>) -> Handled {
+        self.selection = None;
+        self.linking = None;
+        if self.aloud.is_some() {
+            self.pause_aloud(cx);
+        }
+        let env = *cx.env();
+        if let Ok(book) = &mut self.book {
+            book.relayout(&env);
+            // Kept to go on from only where the page is the one it was.
+            if self.resume.is_some_and(|(page, _)| page != book.page.start) {
+                self.resume = None;
+            }
+            self.status_shown = None;
+            cx.wake_at(env.now());
+        }
+        cx.request_redraw();
+        Handled::Yes
+    }
+
     fn on_close(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         self.unsqueeze(&env);
@@ -672,6 +698,8 @@ impl Screen for ReaderScreen {
         } else if *action == actions::BACK && !book.returns.is_empty() {
             book.go_back(cx);
             Handled::Yes
+        } else if *action == actions::BACK && book.back_to_note(cx) {
+            Handled::Yes
         } else if *action == actions::MENU || *action == actions::CONFIRM {
             // As a bar at the top, with the book and where one is in it.
             let env = *cx.env();
@@ -812,8 +840,11 @@ impl Screen for ReaderScreen {
             {
                 if let Ok(book) = &mut self.book {
                     if book.returns.is_empty() {
-                        // Out of the web page, to the one before.
-                        cx.command(Command::Back);
+                        // To the note before, else out of the web page, to
+                        // the one before.
+                        if !book.back_to_note(cx) {
+                            cx.command(Command::Back);
+                        }
                     } else {
                         book.go_back(cx);
                     }

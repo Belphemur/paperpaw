@@ -7,8 +7,13 @@
 //! by name, the signature checked with its key), as ESP-IDF's certificate
 //! bundle does.
 //!
-//! Name constraints of roots are not applied (none of Mozilla's TLS roots
-//! has any at present).
+//! Name constraints and path-length limits of roots are not applied:
+//! mbedTLS is given no roots (see `tls::Contexts::no_roots`), so it never
+//! sees them, and a root here only vouches for the certificate it signed.
+//! (None of Mozilla's TLS roots has a name constraint at present, and a few
+//! carry path-length limits. To apply them, the roots would have to be
+//! given to `mbedtls_ssl_conf_ca_chain`, which costs memory for all of
+//! them or a loader for the one found.)
 
 use alloc::vec::Vec;
 

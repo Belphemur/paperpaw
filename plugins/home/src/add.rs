@@ -38,6 +38,8 @@ enum Row {
     Add(What, String),
     AddPage,
     RemovePage,
+    /// Empties the layout kept for a screen on its side.
+    ResetWide,
 }
 
 /// The icon of a kind of widgets (any plugin's), or of the tools.
@@ -53,7 +55,7 @@ fn kind_icon<'e>(env: &Env<'e>, kind: &str) -> &'e str {
 /// translation key of its name: a widget may be placed more than once,
 /// each placement with settings of its own.
 fn addable(env: &Env<'_>, page: usize) -> Vec<(String, What, String)> {
-    let all = pages::pages(env);
+    let all = crate::shown(env).2;
     let shown = all
         .get(page)
         .map(|p| pages::expand(env, &p.items))
@@ -89,16 +91,11 @@ fn addable(env: &Env<'_>, page: usize) -> Vec<(String, What, String)> {
         .collect()
 }
 
-/// A placement of widget `id` (`id@n`) that no page holds and that has
-/// no values set: each widget added gets one, so that its settings are
-/// its own.
-fn placement(env: &Env<'_>, pages: &[pages::Page], id: &str) -> String {
-    widgets::free_placement(env, id, |placed| {
-        pages
-            .iter()
-            .flat_map(|p| &p.items)
-            .any(|i| matches!(&i.what, What::Widget(w) if w == placed))
-    })
+/// A placement of widget `id` (`id@n`) that no page of either layout holds
+/// and that has no values set: each widget added gets one, so that its
+/// settings are its own.
+fn placement(env: &Env<'_>, id: &str) -> String {
+    widgets::free_placement(env, id, |placed| pages::holds(env, placed))
 }
 
 /// The kinds that have something to add, in the order of
@@ -169,12 +166,15 @@ impl AddScreen {
                     .into_iter()
                     .map(|(kind, count)| Row::Kind(kind, count))
                     .collect();
-                let all = pages::pages(env).len();
+                let all = crate::shown(env).2.len();
                 if all < MAX_PAGES {
                     rows.push(Row::AddPage);
                 }
                 if all > 1 {
                     rows.push(Row::RemovePage);
+                }
+                if pages::wide_kept(env) {
+                    rows.push(Row::ResetWide);
                 }
                 rows
             }
@@ -229,7 +229,7 @@ impl AddScreen {
     /// ([`Self::make_page`]).
     fn lay_out(&self, env: &Env<'_>, area: Rect) -> Vec<Preview> {
         let style = self.style;
-        let (_, geometry, _) = crate::frame(env);
+        let geometry = crate::shown(env).1;
         let title_h = widgets::line_height(env, style.title()) + style.gap() / 2;
         let gap = style.gap();
         let bottom = area.y + area.height;
@@ -283,7 +283,10 @@ impl AddScreen {
 
     fn choose(&self, index: usize, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        let mut all = pages::pages(&env);
+        let (wide, geometry, mut all) = crate::shown(&env);
+        // The layout shown is kept; for a screen on its side that is the
+        // whole derived layout, from the first change on.
+        let in_layout = wide.then_some(&geometry);
         match self.rows.get(index) {
             Some(Row::Kind(kind, _)) => {
                 let params = Params::new()
@@ -294,21 +297,27 @@ impl AddScreen {
             }
             Some(Row::Add(what, _)) => {
                 let what = match what {
-                    What::Widget(id) => What::Widget(placement(&env, &all, id)),
+                    What::Widget(id) => What::Widget(placement(&env, id)),
                     other => other.clone(),
                 };
                 let Some(page) = all.get(self.page) else {
                     return;
                 };
-                let (_, geometry, _) = crate::frame(&env);
                 // The page as shown, every item with its place, and the new one.
                 let shown = pages::expand(&env, &page.items);
-                let Some(added) = grid::add(&env, &geometry, &shown, what) else {
+                let Some(added) = grid::add(&env, &geometry, &shown, what.clone()) else {
                     let message = env.i18n().tr("home.grid.no-room").to_string();
                     cx.command(Command::Notify(message));
                     return;
                 };
-                cx.command(pages::store(&env, page.slot, &added));
+                for command in pages::store(&env, page.slot, &added, in_layout) {
+                    cx.command(command);
+                }
+                // It is in the other layout too, where the grid puts it in
+                // the first free cells.
+                for command in pages::add_to_other(&env, wide, page.slot, what) {
+                    cx.command(command);
+                }
             }
             Some(Row::AddPage) => {
                 // After the others, kept as a space until it is filled.
@@ -316,23 +325,39 @@ impl AddScreen {
                     slot: all.len(),
                     items: Vec::new(),
                 });
-                for command in pages::store_all(&all) {
+                for command in pages::store_all(&env, &all, wide) {
                     cx.command(command);
                 }
             }
             Some(Row::RemovePage) => {
                 if self.page < all.len() && all.len() > 1 {
-                    // What its widgets' placements set goes with them.
-                    for item in all.remove(self.page).items {
-                        if let What::Widget(id) = item.what {
+                    let gone = all.remove(self.page).items;
+                    for command in pages::store_all(&env, &all, wide) {
+                        cx.command(command);
+                    }
+                    // What its widgets' placements set goes with them, unless
+                    // the other layout still shows them.
+                    let other = pages::other_layer(&env, wide);
+                    let held = |id: &str| {
+                        all.iter()
+                            .chain(&other)
+                            .flat_map(|p| &p.items)
+                            .any(|i| matches!(&i.what, What::Widget(w) if w == id))
+                    };
+                    for item in gone {
+                        if let What::Widget(id) = item.what
+                            && !held(&id)
+                        {
                             for value in env.settings().placement_values(&id) {
                                 cx.command(Command::ResetSetting(value));
                             }
                         }
                     }
-                    for command in pages::store_all(&all) {
-                        cx.command(command);
-                    }
+                }
+            }
+            Some(Row::ResetWide) => {
+                for command in pages::reset_wide() {
+                    cx.command(command);
                 }
             }
             None => return,
@@ -376,6 +401,11 @@ impl AddScreen {
                 Row::RemovePage => (
                     Some("trash"),
                     env.i18n().tr("home.edit.remove-page").to_string(),
+                    String::new(),
+                ),
+                Row::ResetWide => (
+                    Some("refresh"),
+                    env.i18n().tr("home.edit.reset-wide").to_string(),
                     String::new(),
                 ),
             };

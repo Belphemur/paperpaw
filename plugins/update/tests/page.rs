@@ -927,6 +927,11 @@ fn offer_with_code(size: usize, code: &[u8]) -> String {
 /// PaperPaw `version` with the statistics built in, loading code
 /// plugins, the card as `storage` has it.
 fn with_code(storage: Shared, version: &str) -> Device {
+    with_code_config(storage, version, "")
+}
+
+/// [`with_code`] with `config` read.
+fn with_code_config(storage: Shared, version: &str, config: &str) -> Device {
     let firmware = Firmware::new(version, PROJECT, CHIP)
         .keys(vec![paperpaw_update::public_key(&SEED)])
         .room(1_000_000)
@@ -935,6 +940,7 @@ fn with_code(storage: Shared, version: &str) -> Device {
         .storage(storage.clone())
         .network(true)
         .firmware(firmware)
+        .user_config(config)
         .code_plugins(
             paperpaw_sdk::native::Native::new("code.ppn"),
             Box::new(NoCode),
@@ -965,6 +971,48 @@ fn fetch_begun(device: &mut Device) -> Vec<u8> {
     let call = device.request();
     device.answer(&call, 200, &file);
     code
+}
+
+/// The room for code plugins on a device with one plugin installed, the
+/// dictionary: a build of the statistics fits beside it only while the
+/// dictionary is switched off (the loader skips its code at the next
+/// start). Room only after that, and not enough at all.
+#[test]
+fn a_code_plugin_switched_off_makes_room_for_a_fetch() {
+    let code = code_file();
+    let probe = paperpaw_sdk::native::CodeRoom::new(0, 0, 1);
+    // What the dictionary (its header says 128 bytes, aligned to 16) and
+    // the statistics' file take.
+    let dict = probe.needs(128, 16);
+    let stats = probe.needs(u64::try_from(code.len()).unwrap(), 0);
+    // (the dictionary, room for code beyond the dictionary, fetched)
+    for (config, spare, fetched) in [
+        ("", 0, false),
+        ("[plugins]\ndict-xl = off\n", 0, true),
+        ("", dict, true),
+        ("[plugins]\ndict-xl = off\n", dict, true),
+    ] {
+        let storage = Shared::default();
+        storage
+            .0
+            .write("plugins/dict-xl/plugin.ini", DICT_INI.as_bytes())
+            .unwrap();
+        storage.0.write("plugins/dict-xl/code.ppn", &code).unwrap();
+        // Room for the statistics' file, less than the dictionary's beside it.
+        let room = paperpaw_sdk::native::CodeRoom::new(stats + dict / 2 + spare, 0, 1);
+        assert!(paperpaw_sdk::native::keep_code_room(&storage, Some(&room)));
+        let mut device = with_code_config(storage, "0.4.0", config);
+        fetch_begun(&mut device);
+        let io = device.kernel.take_io();
+        let asked = io.iter().any(|io| matches!(io, Io::Http(_)));
+        assert_eq!(asked, fetched, "{config:?} spare {spare}: {io:?}");
+        let shown = device.shown().replace(" | ", " ");
+        assert_eq!(
+            shown.contains("cannot come along: paperpaw-plugin-stats"),
+            !fetched,
+            "{config:?} spare {spare}: {shown}"
+        );
+    }
 }
 
 #[test]

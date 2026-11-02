@@ -64,7 +64,7 @@ impl ItemsScreen {
         Self {
             setting,
             items,
-            list: ListView::new(area, style.row).focus_on_keys(env),
+            list: ListView::readable(env, &style, area, style.row).focus_on_keys(env),
             reorder: Reorder::default(),
             moving: false,
             style,

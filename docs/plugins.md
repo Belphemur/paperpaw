@@ -159,6 +159,20 @@ next wake. `on_close_request` may keep a screen open, for example to
 ask first. `on_pointer` takes a finger whole, for drawing or moving
 rows.
 
+When its part of the screen changes size (the device turned, a window
+resized, the row of hints or a bar came or went), a screen is made anew
+by its factory for the new size, after `on_close`, which keeps what it
+would lose. A screen that has much to keep (a book open, a long list
+scrolled, a connection) lays itself out anew in `on_resize` instead,
+from `cx.env().content()`, and answers `Handled::Yes`: it stays as it
+is. A screen that shows one thing of the list below it (a book's
+details, a message) says `Pane::DETAIL` in `pane`; where the screen is
+wide that will show it beside the list. `Screen::revision` is never
+implemented: the kernel calls items added later only on screens built
+with them. A screen that shows another inside it (`host::ScreenHost`)
+answers `ScreenHost::revision` there, and calls the newer items of the
+one it holds through `call_since`.
+
 Some rules every screen should follow:
 
 - **Touch and buttons alike.** Some devices have only buttons (the
@@ -1422,7 +1436,10 @@ Plugins keep passwords, API keys and tokens with
 with `env.secrets().get(id)`. They are all listed in *Settings, Passwords
 and keys*, where the user changes or removes them. Ask for one on the
 keyboard in password mode (`ask::text(…).password()`); the keyboard
-offers to type it on a phone. Ask for web and e-mail addresses with
+offers to type it on a phone. Ask for a message or a note of several
+lines with `.multiline()`: the keyboard gets a key for the line break, shows
+the text on as many wrapped lines as fit above the keys, and the answer
+has `\n` between its lines. Ask for web and e-mail addresses with
 `.url()` and `.email()`: the keyboard types them as they are, without
 capitals of its own. They are kept apart from the settings and
 not readable at a glance, but not encrypted: the devices have no safe
@@ -1738,7 +1755,38 @@ it comes (`SocketRead::File`), so files of any size never need to fit in
 memory. `Command::Broadcast` finds services in the local network by a
 UDP datagram and their answers. Everything comes back as events
 (`SocketNotice`s); a socket closes when the screen
-that was open as it opened closes.
+that was open as it opened closes. One that background work opens (its
+event's handlers, a job's step) is the run's instead: it closes when the
+run ends (the job done or failed, the work run again, taken back or
+refused, or its plugin gone), whatever screens open and close meanwhile.
+One connected from a socket's event is the screens': several connections
+in the background are a job's steps. A secure one of background work
+ends when idle: `idle_ms(0)` is refused for it (`SocketError::Options`),
+at most 30 minutes (`MAX_TLS_IDLE_MS`, as long as IMAP IDLE waits).
+
+A socket may be secure (TLS): `Command::connect_tls(socket, host, 993,
+events, Tls::new())` connects and says `SocketNotice::Secured` once the
+handshake is done (no `Connected` before). Send and read nothing before:
+until `Secured` that fails the socket (`SocketError::NotReady`) and
+closes it. For STARTTLS, connect plainly, send the server's command, read
+its go-ahead, then `Command::start_tls(socket, Tls::new())`: with a read
+under way or bytes come unread it fails and closes, as they would pass as
+secure. `Tls::new()` trusts the authorities PaperPaw ships; a server of
+one's own with a certificate no authority signed is trusted by
+`Tls::pinned_keys(vec![key])` (its key, which a renewed certificate
+usually keeps) or `Tls::pinned(vec![hash])` (that certificate alone).
+The first connection to it says `SocketNotice::Untrusted` with the
+certificate's `CertificateHash` and `KeyHash`: show one to the reader to
+compare, and keep it in the plugin's settings once they agree.
+`Secured`'s `time_checked` is false where the device did not know the
+time yet (an X4 just after a cold start): the certificate's dates were
+not checked, so a plugin that must be sure closes and tries again later.
+`SocketRead::Bytes` reads what came as bytes (`SocketNotice::Bytes`), for
+lines that are no UTF-8. `Capabilities::tls_sessions` says how many TLS connections fit
+at once (one on the X4, HTTPS counted): a socket waits for one up to its
+`Tls::timeout_ms`, then fails `SocketError::Busy`. A TLS connection holds
+about 40 KiB on the X4 and keeps the radio awake, so connect, fetch and
+close; `Tls::idle_ms` (60 s) closes a forgotten one.
 
 ### Firmware updates
 
@@ -1896,8 +1944,9 @@ format's linker script keeps, and a device loads the file only where
 that compiler built the firmware too. A beta or a release that keeps
 the interface runs the plugin as it is. The store and the update check
 show which plugins wait for a build. Interface 4 came with 0.5.0-beta.8
-(reading, settings and real-time screens), interface 5 with 0.6.0-beta.1
-(right-to-left text, shared functions, plugin files of format 4): a plugin
+(reading, settings and real-time screens), interface 6 with 0.6.0-beta.1
+(right-to-left text, shared functions, plugin files of format 4, TLS
+sockets, screens that fit another size; interface 5 was never released): a plugin
 built for an earlier interface is to be built again for it.
 
 ### The file in the emulator

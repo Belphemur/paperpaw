@@ -10,20 +10,29 @@
 //! ([`roots`](crate::roots), checked in mbedTLS's verify callback) and be
 //! for the host asked; mbedTLS checks the rest of the chain. Their dates
 //! are checked in the same callback against the time set over the
-//! network ([`crate::clock`]). Secure requests wait until that time is
+//! network ([`crate::clock`]). A plugin's socket may instead pin the
+//! certificates it trusts (`paperpaw_x4::tls_trust`): then the server's
+//! own is looked at, its dates and whether it is one of them, not its
+//! chain or name. Secure requests wait until that time is
 //! known or a try to get it failed; then they go ahead with the dates
 //! unchecked rather than not at all (ADR 0017: the X4 has no clock that
 //! runs while it is off).
 //!
 //! A session takes about 40 KB of heap (two record buffers of 16 KB,
 //! which TLS needs: a server may send records that long), only while it
-//! is open.
+//! is open, and holds one of the device's few TLS slots
+//! ([`tls_slots`](crate::tls_slots)) for as long.
 
 use alloc::boxed::Box;
 use alloc::ffi::CString;
 use alloc::vec::Vec;
 use core::convert::Infallible;
 use core::ffi::{c_int, c_uchar, c_void};
+
+use paperpaw_sdk::{CertificateHash, KeyHash, Trust};
+use paperpaw_x4::tls_trust::{Checks, Fault, Leaf};
+
+use crate::tls_slots::Slot;
 
 use mbedtls_rs::sys::{
     MBEDTLS_ERR_SSL_ALLOC_FAILED, MBEDTLS_ERR_SSL_CONN_EOF, MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY,
@@ -37,6 +46,14 @@ use mbedtls_rs::sys::{
     mbedtls_ssl_get_verify_result, mbedtls_ssl_handshake, mbedtls_ssl_init, mbedtls_ssl_read,
     mbedtls_ssl_set_bio, mbedtls_ssl_set_hostname, mbedtls_ssl_setup, mbedtls_ssl_write,
     mbedtls_x509_crt, mbedtls_x509_crt_free, mbedtls_x509_crt_init, mbedtls_x509_time,
+};
+
+// The flags `paperpaw_x4::tls_trust` works with are mbedTLS's.
+const _: () = {
+    assert!(MBEDTLS_X509_BADCERT_EXPIRED == paperpaw_x4::tls_trust::EXPIRED);
+    assert!(MBEDTLS_X509_BADCERT_CN_MISMATCH == paperpaw_x4::tls_trust::CN_MISMATCH);
+    assert!(MBEDTLS_X509_BADCERT_NOT_TRUSTED == paperpaw_x4::tls_trust::NOT_TRUSTED);
+    assert!(MBEDTLS_X509_BADCERT_FUTURE == paperpaw_x4::tls_trust::FUTURE);
 };
 
 /// Bytes received and not yet taken by mbedTLS, at most: the socket is
@@ -61,6 +78,17 @@ pub enum Error {
 }
 
 impl Error {
+    /// What it is to the socket layer.
+    pub fn fault(self) -> Fault {
+        match self {
+            Error::Untrusted => Fault::Untrusted,
+            Error::OtherHost => Fault::OtherHost,
+            Error::Dates => Fault::Dates,
+            Error::Memory => Fault::Memory,
+            Error::Tls(code) => Fault::Other(code),
+        }
+    }
+
     /// The reason, for the plugin that asked.
     pub fn reason(self) -> &'static str {
         match self {
@@ -169,9 +197,15 @@ pub enum Read {
 pub struct Session {
     contexts: Box<Contexts>,
     pipes: Box<Pipes>,
+    /// What the certificates are checked by; mbedTLS's verify callback
+    /// works on it.
+    checks: Box<Checks>,
     /// The host's name, for mbedTLS (which keeps a pointer to it).
     host: CString,
     handshaken: bool,
+    /// The device's TLS slot it holds: dropped last, after mbedTLS gave
+    /// its memory back.
+    _slot: Slot,
 }
 
 /// mbedTLS sends: into the outgoing pipe, as much as there is room for.
@@ -214,38 +248,50 @@ unsafe extern "C" fn receive(ctx: *mut c_void, buf: *mut c_uchar, len: usize) ->
 }
 
 /// mbedTLS's verify callback, for each certificate of the chain, from its
-/// top down. mbedTLS knows no trusted certificates (see
+/// top down, `ctx` the session's [`Checks`] ([`Checks::flags`] says what
+/// becomes of the findings). mbedTLS knows no trusted certificates (see
 /// [`Contexts::no_roots`]), so it finds the top untrusted: it is trusted if
 /// it is one of the roots itself (sent along, maybe signed by another, as
 /// a cross-signed root is), or if one of the roots signed it. Every other
 /// finding stays.
 unsafe extern "C" fn verify(
-    _: *mut c_void,
+    ctx: *mut c_void,
     crt: *mut mbedtls_x509_crt,
-    _depth: c_int,
+    depth: c_int,
     flags: *mut u32,
 ) -> c_int {
-    if crt.is_null() || flags.is_null() {
+    if ctx.is_null() || crt.is_null() || flags.is_null() {
         return 0;
     }
-    // SAFETY: mbedTLS passes a parsed certificate and its flags.
+    // SAFETY: mbedTLS passes a parsed certificate and its flags; `ctx` is the
+    // session's checks, which outlive its contexts.
     unsafe {
-        *flags |= dates((*crt).valid_from, (*crt).valid_to);
-        if *flags & MBEDTLS_X509_BADCERT_NOT_TRUSTED != 0
-            && (crate::roots::is_root(&*crt) || crate::roots::signed(&*crt))
-        {
-            *flags &= !MBEDTLS_X509_BADCERT_NOT_TRUSTED;
-        }
+        let checks = &mut *ctx.cast::<Checks>();
+        let crt = &*crt;
+        *flags = checks.flags(
+            u32::try_from(depth).unwrap_or(u32::MAX),
+            || {
+                let der = core::slice::from_raw_parts(crt.raw.p, crt.raw.len);
+                // Its SubjectPublicKeyInfo, whole: what browsers pin a key by.
+                let key = core::slice::from_raw_parts(crt.pk_raw.p, crt.pk_raw.len);
+                (
+                    CertificateHash::new(paperpaw_digest::sha256::digest(der)),
+                    KeyHash::new(paperpaw_digest::sha256::digest(key)),
+                )
+            },
+            *flags,
+            dates(crt.valid_from, crt.valid_to),
+            || crate::roots::is_root(crt) || crate::roots::signed(crt),
+        );
     }
     0
 }
 
-/// The flags of a certificate valid from `from` to `to`, now (none while
-/// the time is not known, so its dates go unchecked: see the module).
-fn dates(from: mbedtls_x509_time, to: mbedtls_x509_time) -> u32 {
-    let Some(now) = crate::clock::unix_ms(crate::now()).map(|ms| ms / 1000) else {
-        return 0;
-    };
+/// The flags of a certificate valid from `from` to `to`, now; `None`
+/// while the time is not known, so its dates go unchecked (see the
+/// module).
+fn dates(from: mbedtls_x509_time, to: mbedtls_x509_time) -> Option<u32> {
+    let now = crate::clock::unix_ms(crate::now()).map(|ms| ms / 1000)?;
     let seconds = |t: mbedtls_x509_time| {
         paperpaw_x4::sntp::unix_seconds(
             t.year,
@@ -256,13 +302,13 @@ fn dates(from: mbedtls_x509_time, to: mbedtls_x509_time) -> u32 {
             t.sec as u32,
         )
     };
-    if now < seconds(from) {
+    Some(if now < seconds(from) {
         MBEDTLS_X509_BADCERT_FUTURE
     } else if now > seconds(to) {
         MBEDTLS_X509_BADCERT_EXPIRED
     } else {
         0
-    }
+    })
 }
 
 /// `Ok` for mbedTLS's results that are not errors; `Err` with the code.
@@ -275,16 +321,20 @@ fn check(code: c_int) -> Result<c_int, Error> {
 }
 
 impl Session {
-    /// A client session for `host` (for its certificate and SNI).
-    pub fn new(host: &str) -> Result<Self, Error> {
+    /// A client session in `slot` for the server `name` (for its
+    /// certificate, which `trust` says how to check, and SNI).
+    pub fn new(name: &str, trust: &Trust, slot: Slot) -> Result<Self, Error> {
         init();
-        let host = CString::new(host).map_err(|_| Error::Tls(0))?;
+        let host = CString::new(name).map_err(|_| Error::Tls(0))?;
         let mut session = Self {
             contexts: zeroed_contexts().ok_or(Error::Memory)?,
             pipes: Box::default(),
+            checks: Box::new(Checks::new(trust)),
             host,
             handshaken: false,
+            _slot: slot,
         };
+        let checks = core::ptr::from_mut::<Checks>(&mut *session.checks).cast::<c_void>();
         let c = &mut *session.contexts;
         let bio = core::ptr::from_mut::<Pipes>(&mut *session.pipes).cast::<c_void>();
         // SAFETY: mbedTLS's set-up of its contexts, which stay where they are
@@ -302,7 +352,7 @@ impl Session {
             ))?;
             mbedtls_ssl_conf_authmode(&mut c.conf, MBEDTLS_SSL_VERIFY_REQUIRED as c_int);
             mbedtls_ssl_conf_ca_chain(&mut c.conf, &mut c.no_roots, core::ptr::null_mut());
-            mbedtls_ssl_conf_verify(&mut c.conf, Some(verify), core::ptr::null_mut());
+            mbedtls_ssl_conf_verify(&mut c.conf, Some(verify), checks);
             mbedtls_ssl_conf_rng(&mut c.conf, Some(random), core::ptr::null_mut());
             // Allocates the record buffers (about 33 KB).
             check(mbedtls_ssl_setup(&mut c.ssl, &c.conf)).map_err(|e| match e {
@@ -313,6 +363,11 @@ impl Session {
             mbedtls_ssl_set_bio(&mut c.ssl, bio, Some(send), Some(receive), None);
         }
         Ok(session)
+    }
+
+    /// The server's own certificate, as far as the handshake showed it.
+    pub fn leaf(&self) -> Option<Leaf> {
+        self.checks.leaf()
     }
 
     /// How many more received bytes it takes now: the rest stays in the

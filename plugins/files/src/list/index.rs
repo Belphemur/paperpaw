@@ -1,12 +1,11 @@
-//! What the calm list shows (its filters) on the library's index
-//! ([`paperpaw_sdk::library::index`]): every book of the catalog with
-//! what it is sorted and filtered by, how far each is read included, in
-//! one pass over the catalog.
-
-use alloc::vec::Vec;
+//! What the calm list shows (its filters) of the library's books sorted
+//! ([`paperpaw_sdk::library::sorted`]): every book of the catalog with
+//! what it is sorted and filtered by, how far each is read included,
+//! read from the card a page at a time.
 
 use paperpaw_sdk::library::catalog::Show;
-pub(crate) use paperpaw_sdk::library::index::{Index, NEVER, cap, hash, letter, sort_key, surname};
+pub(crate) use paperpaw_sdk::library::index::{NEVER, hash, letter, sort_key, surname};
+use paperpaw_sdk::library::sorted::View;
 
 /// What the library shows: all books, those by how far they are read,
 /// the next book of each series being read, or the shelves (favourites,
@@ -58,18 +57,19 @@ impl Filter {
         Self::ALL[(at + steps).rem_euclid(len) as usize]
     }
 
-    /// The books of `index` it shows, in their order: the books read last
-    /// first (`by_recent`), the others by title.
-    pub(crate) fn order(self, index: &Index, by_recent: bool) -> Vec<u16> {
+    /// How it lists the sorted books: the books read last first
+    /// (`by_recent`), the others by title; as covers (`covers`) all books
+    /// with each series as one stack. None for the next books of the
+    /// series and the shelves, which are not a view of them.
+    pub(crate) fn view(self, by_recent: bool, covers: bool) -> Option<View> {
         let show = match self {
             Filter::Reading => Show::Reading,
             Filter::Unread => Show::Unread,
             Filter::Finished => Show::Finished,
-            Filter::Next => return index.next_in_series(by_recent),
-            Filter::Shelves => return Vec::new(),
+            Filter::Next | Filter::Shelves => return None,
             Filter::All => Show::All,
         };
-        index.order(show, by_recent)
+        Some(View::new(show, by_recent, covers && self == Filter::All))
     }
 }
 

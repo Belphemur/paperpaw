@@ -37,6 +37,9 @@ pub const DEVICE: DeviceInfo = DeviceInfo::new(
     MemoryClass::Large,
 );
 
+/// [`DEVICE`] of little memory, as the X4.
+pub const SMALL_DEVICE: DeviceInfo = DEVICE.with_memory(MemoryClass::Small);
+
 struct NoKeys;
 
 impl paperpaw_sdk::keys::KeyBindings for NoKeys {
@@ -70,6 +73,9 @@ pub struct Harness {
     pub secrets: Secrets,
     pub storage: MemoryStorage,
     pub now: Instant,
+    /// None drawn, as on a shell that gives no source.
+    pub random: paperpaw_sdk::random::Random,
+    pub device: &'static DeviceInfo,
 }
 
 impl Harness {
@@ -99,6 +105,8 @@ impl Harness {
             secrets: Secrets::default(),
             storage: MemoryStorage::new(),
             now: Instant(0),
+            random: paperpaw_sdk::random::Random::NONE,
+            device: &DEVICE,
         }
     }
 
@@ -116,9 +124,9 @@ impl Harness {
     /// [`Harness::env`] over another storage (one that fails, say).
     pub fn env_on<'a>(&'a self, storage: &'a dyn paperpaw_sdk::Storage) -> Env<'a> {
         Env::from(EnvParts {
-            device: &DEVICE,
+            device: self.device,
             now: self.now,
-            random: paperpaw_sdk::random::Random::NONE,
+            random: self.random,
             memory: paperpaw_sdk::memory::Memory::NONE,
             clock: paperpaw_sdk::time::Clock::NONE,
             started: paperpaw_sdk::power::Start::Unknown,

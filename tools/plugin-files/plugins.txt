@@ -28,9 +28,11 @@ joplin notes
 keys system
 koreader sync
 kosync sync
+mail news
 menu-editor look
 news news
 notes-overview notes
+notes-vault notes
 profiles reading
 reading-goal reading
 readwise notes

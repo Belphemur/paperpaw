@@ -306,6 +306,7 @@ impl Kernel {
             }
             self.from_guard = false;
             self.from_guard_own = false;
+            self.works.runs.round_done();
         }
         if !self.output.commands.is_empty() {
             self.output.commands.clear();
@@ -894,11 +895,8 @@ impl Kernel {
             | Command::SocketSend { .. }
             | Command::SocketRead { .. }
             | Command::Disconnect(_)
-            | Command::Broadcast(_)) => {
-                self.io
-                    .sockets
-                    .command(command, network, screens, &*self.shared.storage, out);
-            }
+            | Command::Broadcast(_)
+            | Command::StartTls { .. }) => self.socket_command(command),
             Command::Http(request) => {
                 let reader = self.shared.reader;
                 self.io

@@ -206,15 +206,22 @@ pub(crate) fn comes_back(storage: &dyn Storage, wanted: &[Build], crate_name: &s
 /// Of `builds`, those that fit the room for code beside the code plugins
 /// that stay (where the room is known: an X4 has little), in order; and
 /// the names of those that do not. A build's file is taken as its size,
-/// at most what it needs.
+/// at most what it needs. Code plugins switched off take no room: the
+/// loader skips their code at the next start; nor does a build of one.
 fn fitting(env: &Env<'_>, builds: Vec<Build>) -> (Vec<Build>, Vec<String>) {
     let (Some(native_build), Some(room)) = (env.native(), native::code_room(env.storage())) else {
         return (builds, Vec::new());
     };
     let storage = env.storage();
-    let (mut taken, mut count) = native::installed_code_need(storage, &room, &native_build.file);
+    let installed = native::installed_code_need(storage, &room, &native_build.file, &|id| {
+        switched_off(env, id)
+    });
+    let (mut taken, mut count) = (installed.taken, installed.plugins);
     // Code plugins these builds replace make room for them.
-    for build in &builds {
+    for build in builds
+        .iter()
+        .filter(|b| !switched_off(env, &b.package.plugin))
+    {
         let path = native_build.path(&paperpaw_sdk::files::join(
             paperpaw_sdk::builtin::PLUGIN_DIR,
             &build.package.plugin,
@@ -226,6 +233,10 @@ fn fitting(env: &Env<'_>, builds: Vec<Build>) -> (Vec<Build>, Vec<String>) {
     }
     let (mut fit, mut left_out) = (Vec::new(), Vec::new());
     for build in builds {
+        if switched_off(env, &build.package.plugin) {
+            fit.push(build);
+            continue;
+        }
         let size = build
             .package
             .files
@@ -242,6 +253,12 @@ fn fitting(env: &Env<'_>, builds: Vec<Build>) -> (Vec<Build>, Vec<String>) {
         }
     }
     (fit, left_out)
+}
+
+/// Whether the plugin `id` is switched off (one the kernel does not list
+/// is taken to be on: it runs once installed).
+fn switched_off(env: &Env<'_>, id: &str) -> bool {
+    env.plugins().get(id).is_some_and(|info| !info.enabled)
 }
 
 /// Which of `builds` this device takes: where it loads code plugins, those

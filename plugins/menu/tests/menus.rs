@@ -712,3 +712,43 @@ fn the_reader_menu_title_starts_at_the_right_where_the_interface_runs_right_to_l
     assert!(l_left > l_right, "{l_left}/{l_right}");
     assert!(r_right > r_left, "{r_left}/{r_right}");
 }
+
+#[test]
+fn turned_the_main_menu_stays_open_with_its_focus() {
+    let mut app = main_menu(X4);
+    app.repeat(actions::DOWN, 2);
+    let focused = app.focused().expect("an entry has the focus");
+    app.resize(800, 480);
+    assert_eq!(app.screen(), MENU);
+    assert_eq!(app.focused(), Some(focused.clone()), "landscape");
+    for part in app.parts() {
+        let area = part.area;
+        assert!(
+            u32::from(area.x) + u32::from(area.width) <= 800
+                && u32::from(area.y) + u32::from(area.height) <= 480,
+            "{} is off the screen: {area:?}",
+            part.label
+        );
+    }
+    app.resize(480, 800);
+    assert_eq!(app.focused(), Some(focused), "upright again");
+}
+
+#[test]
+fn turned_the_reader_menu_and_its_panel_stay_open() {
+    let mut app = reading(X4);
+    reader_menu(&mut app);
+    let entry = app.focused();
+    let bar = app.screen();
+    app.resize(800, 480);
+    assert_eq!(app.screen(), bar, "the bar stays");
+    assert_eq!(app.focused(), entry, "its focus stays");
+    bar_choose(&mut app, "Font");
+    assert_eq!(app.screen(), PANEL);
+    let control = focused_control(&mut app);
+    app.resize(480, 800);
+    assert_eq!(app.screen(), PANEL, "the panel stays");
+    assert_eq!(focused_control(&mut app), control, "its focus stays");
+    app.run(actions::BACK);
+    assert_eq!(app.screen(), "reader.screen");
+}

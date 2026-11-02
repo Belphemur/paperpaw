@@ -31,6 +31,7 @@ mod fingerprint;
 pub mod index;
 pub mod listing;
 pub mod service;
+pub mod sorted;
 #[cfg(any(test, feature = "kernel"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub mod split;

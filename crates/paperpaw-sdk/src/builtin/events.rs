@@ -211,6 +211,14 @@ impl PluginsAnswered {
 }
 
 crate::event_data! {
+    /// The sorted books wanted ([`SORTED_WANTED`]).
+    pub struct SortedWanted {
+        /// The archive folder the view leaves out.
+        pub archive: String,
+    }
+}
+
+crate::event_data! {
     /// The catalog wanted ([`CATALOG_WANTED`]).
     pub struct CatalogWanted {
         /// Made anew in any case, not only where it was not made since
@@ -580,6 +588,12 @@ pub const CATALOG_FAILED: Event<()> = Event::new("core.catalog-failed");
 /// [`library::request_catalog`](crate::library::request_catalog)):
 /// the kernel walks the library in the background where needed.
 pub const CATALOG_WANTED: Event<CatalogWanted> = Event::new("core.catalog-wanted");
+/// The library's books sorted are wanted for a view leaving an archive
+/// folder out ([`SortedWanted`],
+/// [`library::sorted::request`](crate::library::sorted::request)): the
+/// kernel makes the file in the background where it is not of the
+/// library there is now, then says [`CATALOG_CHANGED`].
+pub const SORTED_WANTED: Event<SortedWanted> = Event::new("core.sorted-wanted");
 /// The values shown without being kept changed, or ended (see
 /// [`Command::PreviewSettings`](crate::Command::PreviewSettings)).
 pub const PREVIEW_CHANGED: Event<()> = Event::new("core.preview-changed");

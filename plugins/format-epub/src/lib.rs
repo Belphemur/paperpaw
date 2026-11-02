@@ -287,7 +287,7 @@ const ENDS: usize = 4096;
 /// hash of its first and last 4 KB, where an archive keeps its directory
 /// with the checksums of all it holds (storages tell no time a file was
 /// changed). On the heap: books are opened deep in the stack.
-pub(crate) fn fingerprint(
+pub fn fingerprint(
     storage: &dyn paperpaw_sdk::Storage,
     path: &str,
 ) -> Result<alloc::string::String, paperpaw_sdk::StorageError> {

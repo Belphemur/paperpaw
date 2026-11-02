@@ -136,7 +136,9 @@ struct PluginList {
 }
 
 impl PluginList {
-    fn new(env: &Env<'_>) -> Self {
+    /// The style, the header, the list and the bar placed for `env`'s
+    /// screen.
+    fn frame(env: &Env<'_>) -> (UiStyle, ui::Header, ListView, Rect) {
         let style = UiStyle::new(env);
         let display = env.device().display;
         let header = ui::Header::new(env, &style, true);
@@ -153,6 +155,11 @@ impl PluginList {
         let height = display.height.saturating_sub(top + bar_height);
         let area = Rect::new(0, top, display.width, height);
         let list = ListView::new(area, style.noted_row()).focus_on_keys(env);
+        (style, header, list, bar)
+    }
+
+    fn new(env: &Env<'_>) -> Self {
+        let (style, header, list, bar) = Self::frame(env);
         let mut manager = Self {
             more: Vec::new(),
             plugins: Vec::new(),
@@ -488,6 +495,17 @@ fn how_file() -> String {
 }
 
 impl Screen for PluginList {
+    /// Turned or resized: laid out anew, the focus where it was.
+    fn on_resize(&mut self, cx: &mut Cx<'_, '_>) -> Handled {
+        let (style, header, fresh, bar) = Self::frame(cx.env());
+        // The focus, whether it shows and the page stay with the list.
+        self.list.set_area(fresh.area());
+        self.list.set_row(fresh.row());
+        (self.style, self.header, self.bar) = (style, header, bar);
+        cx.request_redraw();
+        Handled::Yes
+    }
+
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let len = self.len();

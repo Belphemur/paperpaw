@@ -309,6 +309,13 @@ impl App {
         }
     }
 
+    /// The screen turned or resized to `width` by `height`.
+    pub fn resize(&mut self, width: u16, height: u16) {
+        self.now += 100;
+        let effects = self.kernel.resize(Instant(self.now), width, height);
+        self.settle(effects);
+    }
+
     /// Lets `ms` go by without input, then what is due.
     pub fn wait(&mut self, ms: u64) {
         self.now += ms;

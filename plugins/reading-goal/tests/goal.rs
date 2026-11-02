@@ -197,7 +197,7 @@ impl Reader {
 /// for those it lacks.
 #[test]
 fn own_pictures_take_the_cats_place() {
-    let logo: &[u8] = include_bytes!("../../about/logo.png");
+    let logo: &[u8] = include_bytes!("../../about/pictures/logo.png");
     let files: [(&str, &[u8]); 1] = [("my-cats/sad.png", logo)];
     let config = "[reading-goal]\npictures = /my-cats/";
     let mut reader = Reader::with_files(config, true, &files);
@@ -213,6 +213,33 @@ fn own_pictures_take_the_cats_place() {
             .kernel
             .storage()
             .exists(".paperpaw/plugins/reading-goal/own-meh-0.gray")
+    );
+}
+
+/// PaperPaw's cats come from the plugin's folder on the card (a plugin
+/// file for a reader brings them there), or from the code where the plugin
+/// is part of the app; a plugin file without either draws no cat.
+#[test]
+fn the_cats_come_from_the_folder_on_the_card_or_the_code() {
+    let sad = include_bytes!("../pictures/sad.png");
+    let logo: &[u8] = include_bytes!("../../about/pictures/logo.png");
+    let cached = |reader: &Reader, size: usize| {
+        reader.kernel.storage().exists(&format!(
+            ".paperpaw/plugins/reading-goal/cat-sad-{size}.gray"
+        ))
+    };
+    // The card's own file, whatever the code carries: a cat of its size.
+    let files: [(&str, &[u8]); 1] = [("plugins/reading-goal/pictures/sad.png", logo)];
+    let mut reader = Reader::with_files("", true, &files);
+    reader.shown();
+    assert!(cached(&reader, logo.len()));
+    assert!(!cached(&reader, sad.len()));
+    // Without it: the code's, where the plugin carries them.
+    let mut reader = Reader::new("", true);
+    assert!(reader.shown().contains("A sad cat"));
+    assert_eq!(
+        cached(&reader, sad.len()),
+        cfg!(feature = "embedded-pictures")
     );
 }
 

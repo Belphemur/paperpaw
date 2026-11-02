@@ -432,7 +432,8 @@ impl CalibreScreen {
                 self.read_on(cx);
                 self.redraw(cx);
             }
-            SocketNotice::Closed { socket, reason } | SocketNotice::Failed { socket, reason }
+            SocketNotice::Closed { socket, reason }
+            | SocketNotice::Failed { socket, reason, .. }
                 if socket == SOCKET =>
             {
                 if let Some(coming) = self.coming.take() {

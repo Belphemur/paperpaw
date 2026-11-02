@@ -196,7 +196,10 @@ g_embedded() {
     run "embedded: kernel and plugins, riscv32imc" "cargo build --release --target riscv32imc-unknown-none-elf -p paperpaw-app --no-default-features --features packs,store-plugins,diagnostics -p paperpaw-image -p paperpaw-sqlite -p paperpaw-stardict -p paperpaw-sample-hello -p paperpaw-x4 -p paperpaw-fat"
     run "embedded: kernel and plugins, wasm32" "cargo build --release --target wasm32-unknown-unknown -p paperpaw-app --no-default-features --features packs,store-plugins,diagnostics -p paperpaw-image -p paperpaw-sqlite -p paperpaw-stardict -p paperpaw-sample-hello -p paperpaw-x4 -p paperpaw-fat"
     run "embedded: lint the web emulator" "cargo clippy --target wasm32-unknown-unknown -p paperpaw-web -- -D warnings"
-    run "embedded: build the web emulator" "python3 shells/web/build.py --limit-mb 16"
+    # 16.3 MB: 16 held until the Mail plugin (about 0.25 MB of code and
+    # texts, with what its generics pull in) came; keep the limits in
+    # ci.yml and release.yml the same.
+    run "embedded: build the web emulator" "python3 shells/web/build.py --limit-mb 16.3"
 }
 
 g_native() {

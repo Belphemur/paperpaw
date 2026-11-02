@@ -60,9 +60,12 @@ fn same(shown: &str, wanted: &str) -> bool {
 fn choose(app: &mut App, label: &str) {
     if touch(app) {
         for _ in 0..10 {
+            // The last one drawn: a question's choices lie over the rows
+            // of the page below, which are described as well.
             let part = app
                 .parts()
                 .into_iter()
+                .rev()
                 .find(|p| p.role == Role::Row && same(&p.label, label));
             if let Some(part) = part {
                 app.tap(center(part.area));
@@ -825,5 +828,42 @@ fn a_choice_with_nothing_to_choose_is_not_listed() {
         search(&mut app, "clock");
         let hits = titles(&mut app);
         assert!(hits.iter().any(|h| h == "Clock"), "{hits:?}");
+    }
+}
+
+/// A choice's list (here the week's first day) on a screen much wider than
+/// a line of text: its rows stand in the middle, as those of every page do.
+#[test]
+fn the_rows_of_a_choice_stand_in_the_readable_column_on_a_wide_screen() {
+    let wide = TOUCH.with_display(DisplayInfo::new(
+        1920,
+        1200,
+        220,
+        PixelFormat::Mono1,
+        Rotation::Deg0,
+        None,
+    ));
+    let mut app = App::new(wide, Shared::memory("", &[]));
+    app.run(actions::SETTINGS);
+    search(&mut app, "week starts");
+    let hit = titles(&mut app).remove(0);
+    choose(&mut app, &hit);
+    choose(&mut app, &hit);
+    assert_eq!(app.screen(), CHOOSER, "{}", app.described());
+    let rows: Vec<_> = app
+        .parts()
+        .into_iter()
+        .filter(|p| p.role == Role::Row)
+        .map(|p| p.area)
+        .collect();
+    assert_eq!(rows.len(), 3);
+    for area in &rows {
+        // In the middle, not from edge to edge.
+        assert!(area.x > 100, "{area:?}");
+        assert!(
+            u32::from(area.x) + u32::from(area.width) < 1920 - 100,
+            "{area:?}"
+        );
+        assert_eq!(area.x, rows[0].x);
     }
 }

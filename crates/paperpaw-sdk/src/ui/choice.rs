@@ -5,6 +5,11 @@
 //! the plugin's reply event, a [`Picked`] with the context it was asked
 //! for and the option chosen. Tapping outside, or *Back*, chooses
 //! nothing.
+//!
+//! The sheet is as wide as the screen's readable column ([`ui::readable`]):
+//! on a screen wider than that it stands in the middle, and what lies
+//! beside it is outside, as what lies above it is: a tap there closes the
+//! choice (the screen below is dimmed, and not usable meanwhile).
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -69,6 +74,8 @@ impl Choice {
     pub fn new(env: &Env<'_>, params: &Params) -> Self {
         let style = UiStyle::new(env);
         let display = env.device().display;
+        // A sheet in the readable column where the screen is wider than that.
+        let column = ui::readable(env, &style, Rect::new(0, 0, display.width, display.height));
         let options: Vec<String> = params
             .get(OPTIONS)
             .unwrap_or_default()
@@ -80,7 +87,7 @@ impl Choice {
         let row = style.row as u16;
         // A long title takes up to three lines.
         let lines = style.font(env).map_or((1, 0.0), |font| {
-            let width = f32::from(display.width) - 2.0 * style.margin as f32;
+            let width = f32::from(column.width) - 2.0 * style.margin as f32;
             let count = font
                 .wrap(style.title, &title_text, width)
                 .len()
@@ -109,15 +116,25 @@ impl Choice {
         let list_height = shown * row;
         let height = (u32::from(title_height) + list_height + pager_height + style.gap * 2)
             .min(u32::from(display.height)) as u16;
-        let region = Rect::new(0, display.height - height, display.width, height);
-        let title = Rect::new(0, region.y + style.gap as u16, display.width, title_height);
-        let list_area = Rect::new(0, title.y + title_height, display.width, list_height as u16);
+        let region = Rect::new(column.x, display.height - height, column.width, height);
+        let title = Rect::new(
+            column.x,
+            region.y + style.gap as u16,
+            column.width,
+            title_height,
+        );
+        let list_area = Rect::new(
+            column.x,
+            title.y + title_height,
+            column.width,
+            list_height as u16,
+        );
         let list = ListView::new(list_area, row).focus_on_keys(env);
         let pager = (pager_height > 0).then(|| {
             let area = Rect::new(
-                0,
+                column.x,
                 list_area.y + list_area.height,
-                display.width,
+                column.width,
                 pager_height as u16,
             );
             ui::Pager::new(env, area)
@@ -187,12 +204,13 @@ impl Screen for Choice {
         if let Some(font) = ui.font() {
             let margin = style.margin as f32;
             let width = f32::from(self.title.width) - 2.0 * margin;
+            let from = f32::from(self.title.x) + margin;
             let title = ui::Label::new(&self.title_text)
                 .px(style.title)
                 .color(Color::BLACK);
             let mut lines = font.wrap(style.title, &self.title_text, width);
             if lines.len() <= 1 {
-                title.draw_from(&mut ui, margin, self.title);
+                title.draw_from(&mut ui, from, self.title);
             } else {
                 let more = lines.len() > TITLE_LINES;
                 lines.truncate(TITLE_LINES);
@@ -212,11 +230,11 @@ impl Screen for Choice {
                         alloc::borrow::Cow::Borrowed(&self.title_text[range])
                     };
                     let y = self.title.y + (n as f32 * apart) as u16;
-                    let area = Rect::new(0, y, self.title.width, line as u16);
+                    let area = Rect::new(self.title.x, y, self.title.width, line as u16);
                     ui::Label::new(&text)
                         .px(style.title)
                         .color(Color::BLACK)
-                        .draw_from(&mut ui, margin, area);
+                        .draw_from(&mut ui, from, area);
                 }
             }
         }

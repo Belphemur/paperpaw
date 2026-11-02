@@ -47,6 +47,23 @@ impl<IO: ReadWriteSeek, TP, OCC> DirRawStream<'_, IO, TP, OCC> {
     }
 }
 
+// Modified for PaperPaw: `chain_at` and `seek_from` added (see `File::seek_from`).
+impl<IO: ReadWriteSeek, TP, OCC> DirRawStream<'_, IO, TP, OCC> {
+    fn chain_at(&self) -> Option<(u32, u32)> {
+        match self {
+            DirRawStream::File(file) => file.chain_at(),
+            DirRawStream::Root(_) => None,
+        }
+    }
+
+    fn seek_from(&mut self, offset: u64, at: Option<(u32, u32)>) -> Result<u64, Error<IO::Error>> {
+        match self {
+            DirRawStream::File(file) => file.seek_from(offset, at),
+            DirRawStream::Root(raw) => raw.seek(SeekFrom::Start(offset)),
+        }
+    }
+}
+
 // Note: derive cannot be used because of invalid bounds. See: https://github.com/rust-lang/rust/issues/26925
 impl<IO: ReadWriteSeek, TP, OCC> Clone for DirRawStream<'_, IO, TP, OCC> {
     fn clone(&self) -> Self {
@@ -137,7 +154,14 @@ impl<'a, IO: ReadWriteSeek, TP, OCC> Dir<'a, IO, TP, OCC> {
     /// `Error::Io` will be returned if the underlying storage object returned an I/O error.
     pub fn iter_from(&self, offset: u64) -> Result<DirIter<'a, IO, TP, OCC>, Error<IO::Error>> {
         let mut stream = self.stream.clone();
-        stream.seek(SeekFrom::Start(offset))?;
+        // From where the last such seek in this directory ended, while it is noted: the chain of a
+        // directory of thousands of entries is long, and seeking from its first cluster reads the
+        // FAT along all of it.
+        let first = stream.first_cluster();
+        stream.seek_from(offset, first.and_then(|c| self.fs.dir_chain(c)))?;
+        if let (Some(first), Some(at)) = (first, stream.chain_at()) {
+            self.fs.set_dir_chain(first, at);
+        }
         Ok(DirIter::new(stream, self.fs, true))
     }
 
@@ -162,6 +186,51 @@ impl<'a, IO: ReadWriteSeek, TP, OCC> Dir<'a, IO, TP, OCC> {
         if let Some(cluster) = self.stream.first_cluster() {
             self.fs.set_dir_note(cluster, note);
         }
+    }
+}
+
+// Modified for PaperPaw: `begins_entry` added.
+impl<IO: ReadWriteSeek, TP: TimeProvider, OCC> Dir<'_, IO, TP, OCC> {
+    /// Whether an entry begins at byte `offset` of the directory (as `DirEntry::offset_range`
+    /// says where one does), a deleted one or the directory's end: not one of the slots inside an
+    /// entry of a long name, nor its last one (as where the entry that began there was removed and
+    /// another one, of a longer name, written over it). `iter_from` there lists whole entries.
+    ///
+    /// # Errors
+    ///
+    /// `Error::Io` will be returned if the underlying storage object returned an I/O error.
+    pub fn begins_entry(&self, offset: u64) -> Result<bool, Error<IO::Error>> {
+        const LFN: u8 = 0x0F;
+        const LFN_FIRST: u8 = 0x40;
+        let size = u64::from(DIR_ENTRY_SIZE);
+        if offset % size != 0 {
+            return Ok(false);
+        }
+        let mut stream = self.stream.clone();
+        let first = stream.first_cluster();
+        let start = offset.saturating_sub(size);
+        stream.seek_from(start, first.and_then(|c| self.fs.dir_chain(c)))?;
+        let mut slots = [[0u8; DIR_ENTRY_SIZE as usize]; 2];
+        let at = usize::from(offset > 0);
+        for slot in &mut slots[..=at] {
+            match stream.read_exact(slot) {
+                Ok(()) => {}
+                // Past the directory's clusters: its end.
+                Err(Error::UnexpectedEof) => return Ok(true),
+                Err(e) => return Err(e),
+            }
+        }
+        let live = |slot: &[u8; DIR_ENTRY_SIZE as usize]| slot[0] != 0 && slot[0] != crate::dir_entry::DIR_ENTRY_DELETED_FLAG;
+        let slot = &slots[at];
+        Ok(if !live(slot) {
+            true
+        } else if slot[11] & LFN == LFN {
+            // The first slot of a long name's entries is marked.
+            slot[0] & LFN_FIRST != 0
+        } else {
+            // A short entry after a long name's slots is their last.
+            !(at == 1 && live(&slots[0]) && slots[0][11] & LFN == LFN)
+        })
     }
 }
 

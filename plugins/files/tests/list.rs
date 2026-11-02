@@ -95,6 +95,33 @@ fn an_archived_book_goes_from_the_list_at_once() {
     assert_eq!(app.screen(), "reader.screen", "{}", app.described());
 }
 
+/// Two other views (of other archive folders) asked for their sorted
+/// books: the kernel keeps the files of two, so the list's went. The list
+/// asks for it anew and shows its books, not an empty list.
+#[test]
+fn the_list_asks_anew_for_its_sorted_books_when_their_file_went() {
+    let _turn = turn();
+    let mut app = library(LARGE, "[files]\nsort = files.sort.name\n", 3);
+    assert_eq!(rows(&mut app), ["Book 01", "Book 02", "Book 03"]);
+    for archive in ["books/One", "books/Two"] {
+        let wanted = events::SortedWanted::new(archive.into());
+        app.send(events::SORTED_WANTED.id().clone(), wanted.to_params());
+        for _ in 0..5 {
+            app.wait(1000);
+        }
+    }
+    // Read further: the list reads its books again.
+    let changed = events::BookChanged::new(
+        "books/Book 02.txt".into(),
+        paperpaw_sdk::library::what::FIELDS,
+    );
+    app.send(events::BOOK_CHANGED.id().clone(), changed.to_params());
+    for _ in 0..5 {
+        app.wait(1000);
+    }
+    assert_eq!(rows(&mut app), ["Book 01", "Book 02", "Book 03"]);
+}
+
 #[test]
 fn showing_books_as_covers_applies_while_the_library_shows() {
     let _turn = turn();
@@ -136,15 +163,48 @@ fn the_focus_stays_on_its_book_with_the_order_by_recent_reading() {
 }
 
 #[test]
-fn while_a_book_covers_it_the_library_keeps_its_index_in_a_file() {
+fn while_a_book_covers_it_the_library_keeps_nothing_and_finds_its_place_again() {
     let _turn = turn();
+    // An index an earlier version kept: removed, nothing kept instead
+    // (the books sorted on the card are read again).
     let mut app = library(X4, "", 5);
-    // Settled: the index is kept, to be read again instead of made anew.
-    assert!(app.storage.exists(".paperpaw/plugins/files/index.bin"));
+    app.kernel
+        .storage()
+        .write(".paperpaw/plugins/files/index.bin", b"PPI3")
+        .unwrap();
+    app.run(actions::BACK);
+    app.run(actions::LIBRARY);
+    assert!(!app.storage.exists(".paperpaw/plugins/files/index.bin"));
     app.run(actions::DOWN);
     app.run(actions::CONFIRM);
     assert_eq!(app.screen(), "reader.screen");
     app.run(actions::BACK);
     assert_eq!(rows(&mut app).len(), 4);
     assert_eq!(focused(&mut app), "Book 02");
+}
+
+#[test]
+fn turned_the_library_keeps_the_focus_on_its_book() {
+    let _turn = turn();
+    for device in DEVICES {
+        let mut app = library(device, "[files]\nsort = files.sort.name\n", 8);
+        // The focus shows on touch screens once a button moved it.
+        app.repeat(actions::DOWN, 4);
+        let book = focused(&mut app);
+        assert!(book.starts_with("Book 0"), "{book}");
+        app.resize(800, 480);
+        assert_eq!(app.screen(), "files.browser");
+        assert_eq!(focused(&mut app), book, "landscape");
+        for part in app.parts() {
+            let area = part.area;
+            assert!(
+                u32::from(area.x) + u32::from(area.width) <= 800
+                    && u32::from(area.y) + u32::from(area.height) <= 480,
+                "{} is off the screen: {area:?}",
+                part.label
+            );
+        }
+        app.resize(480, 800);
+        assert_eq!(focused(&mut app), book, "upright again");
+    }
 }

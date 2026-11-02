@@ -5,6 +5,7 @@ use alloc::vec::Vec;
 use crate::id::Id;
 use crate::params::Params;
 use crate::settings::SettingValue;
+use crate::sockets::Tls;
 use paperpaw_platform::RefreshMode;
 
 /// An HTTP request of a plugin. When it is answered the kernel emits
@@ -449,6 +450,10 @@ pub enum SocketRead {
     /// What has come, up to `max` bytes, as text (UTF-8; invalid bytes
     /// replaced): the notice [`SocketNotice::Received`](crate::SocketNotice::Received) with it.
     Text { max: u32 },
+    /// What has come, up to `max` bytes, as it came (e.g. a protocol's
+    /// 8-bit lines that are no UTF-8): the notice
+    /// [`SocketNotice::Bytes`](crate::SocketNotice::Bytes) with them.
+    Bytes { max: u32 },
     /// Exactly `len` bytes, written to `path` in storage as they come (a
     /// file there is replaced): the notice [`SocketNotice::Saved`](crate::SocketNotice::Saved) once
     /// they all came, so files of any size never need to fit in memory.
@@ -458,7 +463,7 @@ pub enum SocketRead {
 /// Parameters of a socket's events (see [`Command::Connect`]) and of a
 /// broadcast's (see [`Command::Broadcast`]).
 pub mod socket_params {
-    /// What happened: [`CONNECTED`], [`RECEIVED`], [`SAVED`], [`CLOSED`],
+    /// What happened: [`CONNECTED`], [`RECEIVED`], [`BYTES`], [`SAVED`], [`CLOSED`],
     /// [`FAILED`], [`SECURED`] or [`UNTRUSTED`]; for broadcasts [`ANSWER`]
     /// and [`DONE`].
     pub const KIND: &str = "kind";
@@ -473,13 +478,28 @@ pub mod socket_params {
     pub const ANSWER: &str = "answer";
     /// No more answers to a broadcast will come.
     pub const DONE: &str = "done";
-    /// The socket is encrypted from now on (reserved).
+    /// The socket is encrypted from now on; the server's certificate in
+    /// [`CERTIFICATE`].
     pub const SECURED: &str = "secured";
     /// The server's certificate is not trusted; its SHA-256 in
-    /// [`CERTIFICATE`] (reserved).
+    /// [`CERTIFICATE`], why in [`WHY`].
     pub const UNTRUSTED: &str = "untrusted";
-    /// A certificate's SHA-256, hex.
+    /// The server's certificate's SHA-256, hex.
     pub const CERTIFICATE: &str = "certificate";
+    /// The SHA-256 of the server's key (its SubjectPublicKeyInfo), hex.
+    pub const KEY: &str = "key";
+    /// `false` where the certificate's dates were not checked (the time
+    /// was not known).
+    pub const TIME_CHECKED: &str = "time-checked";
+    /// Bytes came, in [`DATA`].
+    pub const BYTES: &str = "bytes";
+    /// Bytes, each written as the character of its value (U+0000 to
+    /// U+00FF, as Latin-1 does).
+    pub const DATA: &str = "data";
+    /// Why a certificate was not trusted, as `Distrust::as_str` writes it.
+    pub const WHY: &str = "why";
+    /// Why it failed, as `SocketError`'s `Display` writes it.
+    pub const ERROR: &str = "error";
     pub const TEXT: &str = "text";
     pub const PATH: &str = "path";
     /// The address an answer came from, e.g. `192.168.1.20`.
@@ -899,13 +919,21 @@ pub enum Command {
     /// socket ([`params::ID`](crate::builtin::params::ID)) and what
     /// happened, a [`SocketNotice`](crate::SocketNotice): connected,
     /// received, saved, closed, failed. Nothing is read unasked ([`Command::SocketRead`]). A socket
-    /// also closes when the screen showing as it was opened is closed.
+    /// also closes when the screen showing as it was opened is closed;
+    /// one that background work's event or job step opens closes when
+    /// that run ends instead (see [`work`](crate::work)).
+    ///
+    /// With `tls` the connection is secure from the start (e.g. IMAP on
+    /// 993): it comes as [`SocketNotice::Secured`](crate::SocketNotice::Secured) once the handshake is
+    /// done, instead of `Connected`; what is sent before goes after it.
+    /// Made with [`Command::connect`] or [`Command::connect_tls`].
     #[non_exhaustive]
     Connect {
         socket: Id,
         host: String,
         port: u16,
         events: Id,
+        tls: Option<alloc::boxed::Box<Tls>>,
     },
     /// Sends bytes on a socket.
     #[non_exhaustive]
@@ -961,6 +989,17 @@ pub enum Command {
     /// and the library is walked anew. The frame shown should say that the
     /// device is connected to a computer. Ignored elsewhere.
     UsbDrive,
+    /// Switches an open socket to TLS (STARTTLS, e.g. SMTP on 587), once
+    /// the server agreed and everything it sent before was read:
+    /// [`SocketNotice::Secured`](crate::SocketNotice::Secured) when the
+    /// handshake is done. Bytes come that were not read, or a read under
+    /// way, fail it ([`SocketError::NotReady`](crate::SocketError::NotReady)),
+    /// as they would pass as secure. Made with [`Command::start_tls`].
+    #[non_exhaustive]
+    StartTls {
+        socket: Id,
+        tls: alloc::boxed::Box<Tls>,
+    },
 }
 
 impl Command {
@@ -991,6 +1030,33 @@ impl Command {
             host: host.into(),
             port,
             events,
+            tls: None,
+        }
+    }
+
+    /// [`Command::Connect`] secure from the start, as `tls` sets up: socket
+    /// `socket` to `host` and `port`, heard as `events`.
+    pub fn connect_tls(
+        socket: Id,
+        host: impl Into<String>,
+        port: u16,
+        events: Id,
+        tls: Tls,
+    ) -> Self {
+        Command::Connect {
+            socket,
+            host: host.into(),
+            port,
+            events,
+            tls: Some(alloc::boxed::Box::new(tls)),
+        }
+    }
+
+    /// [`Command::StartTls`]: `socket` switched to TLS, as `tls` sets up.
+    pub fn start_tls(socket: Id, tls: Tls) -> Self {
+        Command::StartTls {
+            socket,
+            tls: alloc::boxed::Box::new(tls),
         }
     }
 

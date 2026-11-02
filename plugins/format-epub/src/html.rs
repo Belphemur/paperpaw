@@ -177,7 +177,7 @@ impl HtmlDocument {
     /// Opens an HTML file made from Markdown: as [`HtmlDocument::open`],
     /// the pictures it names on the storage shown, converted into `cache`
     /// (the Markdown file's, so it goes with it).
-    pub(crate) fn open_with_pictures(
+    pub fn open_with_pictures(
         storage: &dyn Storage,
         path: &str,
         styles: bool,
