@@ -43,6 +43,42 @@ pub enum Problem {
 }
 
 impl Draft {
+    /// The draft as kept between two openings: the headers a line each,
+    /// a blank line, the text.
+    pub fn to_text(&self) -> String {
+        let line = |name: &str, value: &str| format!("{name}: {}\n", crate::store::field(value));
+        let mut out = String::new();
+        out.push_str(&line("To", &self.to));
+        out.push_str(&line("Cc", &self.cc));
+        out.push_str(&line("Subject", &self.subject));
+        out.push_str(&line("In-Reply-To", &self.in_reply_to));
+        out.push_str(&line("References", &self.references));
+        out.push('\n');
+        out.push_str(&self.body);
+        out
+    }
+
+    /// A draft kept by [`Draft::to_text`], for the account `from`.
+    pub fn from_text(text: &str) -> Self {
+        let (head, body) = text.split_once("\n\n").unwrap_or((text, ""));
+        let mut draft = Self { body: body.into(), ..Self::default() };
+        for line in head.lines() {
+            let Some((name, value)) = line.split_once(": ") else {
+                continue;
+            };
+            let value = String::from(value);
+            match name {
+                "To" => draft.to = value,
+                "Cc" => draft.cc = value,
+                "Subject" => draft.subject = value,
+                "In-Reply-To" => draft.in_reply_to = value,
+                "References" => draft.references = value,
+                _ => {}
+            }
+        }
+        draft
+    }
+
     /// The addresses to send to: to and cc, each valid, no repeats.
     pub fn recipients(&self) -> Result<Vec<String>, Problem> {
         let mut out: Vec<String> = Vec::new();
@@ -241,13 +277,13 @@ pub fn date_header(seconds: i64) -> String {
     )
 }
 
-/// The text of a reply: the original quoted, each line after `> `, with a
-/// line before it saying who wrote it.
-pub fn quote(original: &str, who: &str, max_lines: usize) -> String {
+/// The text of a reply: the original quoted, each line after `> `, with
+/// `intro` (a line saying who wrote it, in the reader's language) before.
+pub fn quote(original: &str, intro: &str, max_lines: usize) -> String {
     let mut out = String::new();
-    if !who.is_empty() {
-        out.push_str(who);
-        out.push_str(" wrote:\n");
+    if !intro.is_empty() {
+        out.push_str(intro);
+        out.push('\n');
     }
     for line in original.lines().take(max_lines) {
         out.push_str("> ");
@@ -272,6 +308,18 @@ mod tests {
             in_reply_to: "<1@x>".into(),
             references: "<0@x>".into(),
         }
+    }
+
+    #[test]
+    fn a_draft_is_kept_and_read_again() {
+        let mut d = draft();
+        d.body = "Line one\n\nLine three\n".into();
+        let again = Draft::from_text(&d.to_text());
+        assert_eq!((again.to.as_str(), again.subject.as_str()), (d.to.as_str(), d.subject.as_str()));
+        assert_eq!((again.in_reply_to.as_str(), again.references.as_str()), ("<1@x>", "<0@x>"));
+        assert_eq!(again.body, d.body);
+        // Nothing kept is an empty draft.
+        assert_eq!(Draft::from_text(""), Draft::default());
     }
 
     #[test]
@@ -329,7 +377,7 @@ mod tests {
         assert_eq!(date_header(0), "Thu, 1 Jan 1970 00:00:00 +0000");
         assert_eq!(date_header(1_793_693_700), "Tue, 3 Nov 2026 08:15:00 +0000");
         assert_eq!(crate::header::date_seconds(&date_header(1_793_693_700)), Some(1_793_693_700));
-        assert_eq!(quote("a\nb\n", "Ada", 10), "Ada wrote:\n> a\n> b\n");
+        assert_eq!(quote("a\nb\n", "Ada wrote:", 10), "Ada wrote:\n> a\n> b\n");
         assert_eq!(quote("a\nb\nc", "", 2), "> a\n> b\n");
         assert_eq!(split_list("a@b.c, \"x, y\" <z@w.v>;"), ["a@b.c", "\"x, y\" <z@w.v>"]);
     }

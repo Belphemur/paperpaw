@@ -6,6 +6,7 @@
 extern crate alloc;
 
 pub mod account;
+pub mod browser;
 pub mod codec;
 pub mod compose;
 pub mod driver;
@@ -19,6 +20,26 @@ pub mod session;
 pub mod settings;
 pub mod smtp;
 pub mod store;
+pub mod texts;
 
 #[cfg(test)]
 mod tests;
+
+use paperpaw_sdk::Id;
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::replies::{Confirmed, SocketNotice};
+
+pub const PLUGIN: Id = Id::new_static("mail");
+/// Opens the folders.
+pub const OPEN: Id = Id::new_static("mail.open");
+/// Writes a mail.
+pub const WRITE: Id = Id::new_static("mail.write");
+pub const BOXES: Id = Id::new_static("mail.boxes");
+pub const LIST: Id = Id::new_static("mail.list");
+pub const READ: Id = Id::new_static("mail.read");
+pub const COMPOSE: Id = Id::new_static("mail.compose");
+/// The socket of a screen's connection, and what it tells.
+pub const SOCKET: Id = Id::new_static("mail.socket");
+pub const EVENTS: Event<SocketNotice> = Event::new("mail.events");
+/// The answer to *Trust this server?*.
+pub const PIN_ANSWER: Event<Confirmed> = Event::new("mail.pin-answer");
