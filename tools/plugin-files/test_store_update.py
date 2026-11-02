@@ -105,13 +105,24 @@ class Workspace(unittest.TestCase):
     def test_a_package_and_a_dependency_on_it_pass_in_the_lock(self):
         now = (LOCK.replace('"paperpaw-plugin-old",\n', '"paperpaw-plugin-new",\n "paperpaw-plugin-old",\n')
                + '\n[[package]]\nname = "paperpaw-plugin-new"\nversion = "1.0.0"\n')
-        self.assertEqual(store_update.lock_problems(LOCK, now), [])
+        self.assertEqual(store_update.lock_problems("paperpaw-plugin-new", LOCK, now), [])
 
     def test_a_changed_package_or_dependency_is_refused_in_the_lock(self):
-        self.assertTrue(store_update.lock_problems(LOCK, LOCK.replace('"1.0.0"\nsource', '"1.0.1"\nsource')))
-        self.assertTrue(store_update.lock_problems(LOCK, LOCK.replace('checksum = "abc"', 'checksum = "xyz"')))
+        self.assertTrue(store_update.lock_problems("paperpaw-plugin-new", LOCK, LOCK.replace('"1.0.0"\nsource', '"1.0.1"\nsource')))
+        self.assertTrue(store_update.lock_problems("paperpaw-plugin-new", LOCK, LOCK.replace('checksum = "abc"', 'checksum = "xyz"')))
         self.assertTrue(store_update.lock_problems(
-            LOCK, LOCK.replace('"paperpaw-plugin-old",\n', '"paperpaw-plugin-old",\n "serde",\n')))
+            "paperpaw-plugin-new", LOCK, LOCK.replace('"paperpaw-plugin-old",\n', '"paperpaw-plugin-old",\n "serde",\n')))
+
+    def test_a_new_paperpaw_package_or_one_from_outside_is_refused_in_the_lock(self):
+        def package(name, source=""):
+            return f'\n[[package]]\nname = "{name}"\nversion = "1.0.0"\n' + (f'source = "{source}"\n' if source else "")
+        problems = lambda extra: store_update.lock_problems("paperpaw-plugin-new", LOCK, LOCK + extra)
+        self.assertEqual(problems(package("paperpaw-plugin-new")), [])
+        self.assertTrue(problems(package("paperpaw-sdk-copy")))
+        self.assertTrue(problems(package("paperpaw-plugin-other")))
+        self.assertTrue(problems(package("left-pad", "registry+https://github.com/rust-lang/crates.io-index")))
+        self.assertTrue(problems(package("evil", "git+https://example.org/evil#abc")))
+        self.assertEqual(problems(package("helper")), [])
 
     def test_a_copy_of_the_sdk_in_the_plugin_s_folder_is_refused(self):
         ok = '[dependencies]\npaperpaw-sdk.workspace = true\nother = { path = "../../crates/paperpaw-x" }\n'

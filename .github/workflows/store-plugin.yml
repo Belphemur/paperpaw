@@ -86,6 +86,7 @@ jobs:
         with:
           ref: ${{ github.workflow_sha }}
           path: trusted
+          persist-credentials: false
       # The source to publish: data to the scripts, never run by them.
       - uses: actions/checkout@v7
         with:
@@ -130,7 +131,7 @@ jobs:
           fi
           tag="$PLUGIN-v$version"
           if gh release view "$tag" -R "$GITHUB_REPOSITORY" > /dev/null 2>&1 \
-            || git -C "$trusted" ls-remote --exit-code --tags origin "$tag" > /dev/null; then
+            || gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" > /dev/null 2>&1; then
             echo "::error::$tag exists already"
             exit 1
           fi
@@ -245,13 +246,16 @@ jobs:
           key="$RUNNER_TEMP/plugin.key"
           trap 'rm -f "$key"' EXIT
           (umask 077 && printf '%s\n' "$PAPERPAW_PLUGIN_KEY" > "$key")
-          for dir in dist/unsigned/unsigned-*; do
-            tools/plugin-files/sign.sh "$dir" target/release/paperpaw-sign --key "$key"
+          # The three checked, not whatever else the build uploaded.
+          for device in x4 x4-pro x4-classic; do
+            tools/plugin-files/sign.sh "dist/unsigned/unsigned-$device" target/release/paperpaw-sign --key "$key"
           done
       - name: Collect them
         run: |
           mkdir -p dist/signed
-          cp dist/unsigned/unsigned-*/*.ppn dist/signed/
+          for device in x4 x4-pro x4-classic; do
+            cp "dist/unsigned/unsigned-$device/$PLUGIN-$VERSION-$device.ppn" dist/signed/
+          done
       - uses: actions/upload-artifact@v7
         with:
           name: signed

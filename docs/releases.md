@@ -174,3 +174,8 @@ only the names and the base firmware's fingerprint it expects, and signs them;
 the release job, the only one that writes, runs none of the branch's code. A
 data plugin has no signature, and its version is read by the branch's script
 (`data.py`) with no secret.
+
+Known limit: a data plugin has no such source rule. Its version is read by the
+branch's own `data.py`, and nothing checks what else the branch changed; it
+carries no code and no signature, and the one who runs the workflow reviews the
+branch. A diff rule for data plugins would be a separate change.

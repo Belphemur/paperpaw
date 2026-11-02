@@ -27,8 +27,9 @@ standard output and fails, saying why on standard error, when
   a decision of whoever runs the workflow. The root `Cargo.toml` may
   gain the plugin's member and its entry of workspace.dependencies and
   nothing else ([patch], [profile.*] or another dependency would build
-  the plugin against another SDK); `Cargo.lock` may gain packages (and a
-  dependency on one of them) and no existing package changes. Git's
+  the plugin against another SDK); `Cargo.lock` may gain the plugin's own
+  package (and a dependency on it) and no existing package changes, and no
+  new paperpaw-* package or one from git or a registry. Git's
   rename detection is off, so a moved file shows both its paths;
 - the plugin depends by path on anything but another crate of the
   workspace (a copy of the SDK in its own folder).
@@ -115,9 +116,11 @@ def manifest_problems(plugin, then, now):
     return []
 
 
-def lock_problems(then, now):
-    """What Cargo.lock gained beyond new packages: no existing one changes its version, source or checksum.
+def lock_problems(package, then, now):
+    """What Cargo.lock gained beyond the plugin's own package: no existing one changes its version, source or checksum.
 
+    `package` is the plugin's crate name. A new package may be the plugin alone: one named paperpaw-* is
+    another crate that could stand for the SDK, one with a source (git, registry) is new code from outside.
     An existing package may list a new package among its dependencies (the app, with a new plugin)."""
     try:
         before, after = tomllib.loads(then), tomllib.loads(now)
@@ -128,6 +131,11 @@ def lock_problems(then, now):
     problems = [f"{name} {version}: gone, or its version or source changed" for name, version, source in old
                 if (name, version, source) not in new]
     added = {key[0] for key in new if key not in old}
+    for name, version, source in sorted(k for k in new if k not in old):
+        if name != package and name.startswith("paperpaw-"):
+            problems.append(f"{name} {version}: a new paperpaw-* package that is not the plugin")
+        if source:
+            problems.append(f"{name} {version}: a new package from {source.split('+')[0]}")
     for key, package in old.items():
         if key not in new:
             continue
@@ -197,13 +205,19 @@ def check(source, plugin, base, accepted=()):
         if versions.semver(now) <= versions.semver(then):
             problems.append(f"{plugin} is at {now}, the base has {then}: raise it in plugins/{plugin}/Cargo.toml")
     problems += plugin_problems(plugin, manifest.read_text(encoding="utf-8"))
+    try:
+        package = tomllib.loads(manifest.read_text(encoding="utf-8")).get("package", {}).get("name", "")
+    except tomllib.TOMLDecodeError:
+        package = ""
     # Renames are paths of both sides (a moved SDK file would show only where it went).
     changed = run(source, "git", "diff", "--name-only", "--no-renames", "-z", base, "HEAD").stdout.split("\0")
     own, workspace, named, refused = classify([c for c in changed if c], plugin, accepted)
     for entry in accepted_paths(accepted):
         files = [c for c in named if c == entry or c.startswith(entry + "/")]
         notes.append(f"accepted by name: {entry} ({', '.join(files) if files else 'nothing changed there'})")
-    for path, check_file in (("Cargo.toml", lambda then, now: manifest_problems(plugin, then, now)), ("Cargo.lock", lock_problems)):
+    checks = (("Cargo.toml", lambda then, now: manifest_problems(plugin, then, now)),
+              ("Cargo.lock", lambda then, now: lock_problems(package, then, now)))
+    for path, check_file in checks:
         if path in workspace:
             then_text = run(source, "git", "show", f"{base}:{path}").stdout
             now_text = run(source, "git", "show", f"HEAD:{path}").stdout
