@@ -6,6 +6,7 @@
     reason = "a part of the plugin, which shares its imports"
 )]
 use super::*;
+use paperpaw_sdk::FontHandle;
 
 impl KeyboardScreen {
     /// The title and, opposite, the hint: how typing ends, or the letters
@@ -100,6 +101,11 @@ impl KeyboardScreen {
                 f32::from(box_area.x + box_area.width - area.x) + margin
             })
         };
+        if self.multiline {
+            self.draw_lines(ui, &font, box_area);
+            self.draw_buttons(ui);
+            return;
+        }
         let room = f32::from(box_area.width) - margin * 1.5 - buttons_width;
         // The longest end of it that fits, found by halving.
         let starts: Vec<usize> = text.char_indices().map(|(i, _)| i).collect();
@@ -140,11 +146,56 @@ impl KeyboardScreen {
             cursor,
             Color::BLACK,
         );
+        self.draw_buttons(ui);
+    }
+
+    fn draw_buttons(&self, ui: &mut ui::Ui<'_>) {
+        let env = ui.env();
         for (index, &(kind, area)) in self.buttons.iter().enumerate() {
             let focused = self.focus == Some((PASTE_ROW, index));
             let label = env.i18n().tr(kind.label());
             ui.button(area, label, false, focused);
         }
+    }
+
+    /// The text of several lines, wrapped to the box, the last lines that
+    /// fit in it (so the cursor, at the end, is always in view); right to
+    /// left where the interface does, each line from the right.
+    fn draw_lines(&self, ui: &mut ui::Ui<'_>, font: &FontHandle<'_>, box_area: Rect) {
+        let style = self.style;
+        let rtl = style.is_rtl();
+        let pad = f32::from(style.margin()) / 2.0;
+        let size = style.text();
+        let line = font.line_metrics(size).line_height.max(1.0);
+        let width = (f32::from(box_area.width) - 2.0 * pad).max(1.0);
+        let fits = ((f32::from(box_area.height) - pad) / line).max(1.0) as usize;
+        let lines = wrapped_lines(font, size, &self.text, width);
+        let first = lines.len().saturating_sub(fits);
+        let top = f32::from(box_area.y) + pad / 2.0;
+        let mut end = (0.0, top);
+        for (n, text) in lines[first..].iter().enumerate() {
+            let y = top + line * n as f32;
+            let row = Rect::new(box_area.x, y as u16, box_area.width, line as u16);
+            let w = font.measure(size, text);
+            let x = if rtl {
+                f32::from(box_area.x + box_area.width) - pad - w
+            } else {
+                f32::from(box_area.x) + pad
+            };
+            ui::Label::new(text)
+                .px(size)
+                .color(Color::BLACK)
+                .draw_from(ui, x, row);
+            end = (if rtl { x - 4.0 } else { x + w }, y);
+        }
+        let cursor = size as u32;
+        ui.canvas().fill_rect(
+            end.0 as i32 + 2,
+            end.1 as i32 + (line as i32 - cursor as i32) / 2,
+            u32::from(style.line()).max(2),
+            cursor,
+            Color::BLACK,
+        );
     }
 
     /// The style keys `height` high are drawn in, by their shape: round
@@ -305,6 +356,21 @@ impl KeyboardScreen {
 
 /// A light line just inside a filled key `r`: the focus on a key that is
 /// filled already (*OK*, *Shift* while locked).
+/// `text` broken into lines that fit `width` (and at each line break), the
+/// line breaks themselves left out; an empty last line where the text ends
+/// with a break, for the cursor to go to.
+fn wrapped_lines(font: &FontHandle<'_>, size: f32, text: &str, width: f32) -> Vec<String> {
+    let mut lines: Vec<String> = font
+        .wrap(size, text, width)
+        .into_iter()
+        .map(|r| text[r].trim_end_matches('\n').to_string())
+        .collect();
+    if lines.is_empty() {
+        lines.push(String::new());
+    }
+    lines
+}
+
 fn inner_ring(ui: &mut ui::Ui<'_>, r: Rect) {
     let style = *ui.style();
     let border = ui::button_border(&style);

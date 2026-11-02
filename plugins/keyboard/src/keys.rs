@@ -24,6 +24,8 @@ pub(crate) enum Key {
     Layer(Layer),
     /// Switches to the next chosen layout.
     NextLayout,
+    /// A line break (mode `multiline`).
+    Enter,
     Done,
 }
 
@@ -188,7 +190,20 @@ pub(crate) fn split(row: Vec<Slot>, most: u32) -> Vec<Vec<Slot>> {
 /// The rows of a layer; `letters` are the rows of the layout, `switch`
 /// adds the key for the next layout; rows wider than `most` units are
 /// split (see [`split`]; 0 for none).
+#[cfg(test)]
 pub(crate) fn rows(letters: &str, layer: Layer, switch: bool, most: u32) -> Vec<Vec<Slot>> {
+    rows_for(letters, layer, switch, most, false)
+}
+
+/// [`rows`], with a key for a line break (`enter`) before *Done* where text
+/// of several lines is typed.
+pub(crate) fn rows_for(
+    letters: &str,
+    layer: Layer,
+    switch: bool,
+    most: u32,
+    enter: bool,
+) -> Vec<Vec<Slot>> {
     let chars = |row: &str| -> Vec<Slot> { row.chars().map(|c| (Key::Char(c), 2)).collect() };
     match layer {
         Layer::Letters | Layer::Symbols => {
@@ -220,15 +235,18 @@ pub(crate) fn rows(letters: &str, layer: Layer, switch: bool, most: u32) -> Vec<
             // widest, five letters at least; "," and "." are as wide as a
             // letter.
             let widest = rows.iter().map(|row| units(row)).max().unwrap_or(20);
-            let others = units(&bottom) + 2 + 2 + 3;
+            let others = units(&bottom) + 2 + 2 + 3 + if enter { 3 } else { 0 };
             let least = if bottom.len() > 1 { 7 } else { 10 };
             let space = widest.saturating_sub(others).max(least) as u8;
             bottom.extend([
                 (Key::Char(','), 2),
                 (Key::Space, space),
                 (Key::Char('.'), 2),
-                (Key::Done, 3),
             ]);
+            if enter {
+                bottom.push((Key::Enter, 3));
+            }
+            bottom.push((Key::Done, 3));
             rows.push(bottom);
             rows
         }
@@ -277,6 +295,34 @@ mod split_tests {
         assert_eq!(
             rows("qwertyuiop asdfghjkl zxcvbnm", Layer::Letters, false, 40).len(),
             4
+        );
+    }
+}
+
+#[cfg(test)]
+mod enter_tests {
+    use super::*;
+
+    /// A key for the line break only where lines are typed, before *Done*,
+    /// and the space bar keeps its width.
+    #[test]
+    fn enter_is_a_key_of_multiline_text_only() {
+        let letters = "qwertyuiop asdfghjkl zxcvbnm";
+        for layer in [Layer::Letters, Layer::Symbols] {
+            let plain = rows_for(letters, layer, false, 0, false);
+            let lines = rows_for(letters, layer, false, 0, true);
+            let has = |rows: &[Vec<Slot>]| rows.iter().flatten().any(|(k, _)| *k == Key::Enter);
+            assert!(!has(&plain) && has(&lines));
+            let bottom = lines.last().unwrap();
+            assert_eq!(bottom[bottom.len() - 2].0, Key::Enter);
+            assert_eq!(bottom.last().unwrap().0, Key::Done);
+            // No wider than the rows above.
+            let widest = lines.iter().map(|r| units(r)).max().unwrap();
+            assert_eq!(units(bottom), widest);
+        }
+        assert_eq!(
+            rows(letters, Layer::Letters, true, 0),
+            rows_for(letters, Layer::Letters, true, 0, false)
         );
     }
 }

@@ -114,6 +114,11 @@ const REMOTE_TEXT: Event<Typed> = Event::new("keyboard.remote-text");
 /// Longest text the keyboard accepts, in characters: room for long web
 /// addresses and keys; what goes past it is cut, and the keyboard says so.
 const MAX_CHARS: usize = 2000;
+/// How much of several lines (a message) may be typed.
+const MAX_CHARS_MULTILINE: usize = 6000;
+/// How many lines more than one the field of several lines grows by, at
+/// most, where the screen leaves room.
+const MORE_LINES: u16 = 10;
 /// What moves the focus between the keys.
 const MOVES: [Id; 8] = [
     actions::UP,
@@ -335,6 +340,12 @@ struct KeyboardScreen {
     current: Rc<Cell<usize>>,
     /// Shown as dots (mode `password`).
     password: bool,
+    /// Text of several lines (mode `multiline`): a key for the line break,
+    /// the field of several lines, its buttons in a strip under it.
+    multiline: bool,
+    /// The height of the strip of the field's buttons under its box (when
+    /// the text is of several lines and there are buttons), else 0.
+    strip: u16,
     /// Capitals: the next letter, or all.
     shift: Shift,
     /// When *Shift* was pressed for one capital, for a second press that
@@ -402,18 +413,26 @@ impl KeyboardScreen {
         let seam = keys::seam(env, &style, touch);
         let side = keys::side_margin(&style, seam);
         let most = (u32::from(display.width) - 2 * u32::from(side)) / unit;
+        let multiline = params.get(params::MODE) == Some("multiline");
         let letters = &layouts[current.get()].1;
         // As high as the layer with the most rows needs, so that turning
         // to the other keeps the keys where they are.
         let other = match layer {
-            Layer::Letters => rows(letters, Layer::Symbols, false, most).len(),
+            Layer::Letters => keys::rows_for(letters, Layer::Symbols, false, most, multiline).len(),
             _ => 0,
         };
-        let rows = rows(letters, layer, layouts.len() > 1, most);
+        let rows = keys::rows_for(letters, layer, layouts.len() > 1, most, multiline);
         let count = rows.len().max(other).max(4);
         // The field's buttons grow on touch screens, and its row with them.
         let touch_row = style.touch_row(u32::from(style.row())) as u16;
-        let field_height = (style.small() * 1.5) as u16 + touch_row;
+        // Of several lines the buttons have a strip of their own under the
+        // text, which has the field's whole box.
+        let strip = if multiline && !Self::button_kinds(env).is_empty() {
+            touch_row
+        } else {
+            0
+        };
+        let mut field_height = (style.small() * 1.5) as u16 + touch_row + strip;
         // Keys that are tapped have the height of their shape and size.
         // Chosen with buttons, they are a row high.
         let widest = rows.iter().map(|row| units(row)).max().unwrap_or(20).max(1);
@@ -438,6 +457,21 @@ impl KeyboardScreen {
             .height
             .saturating_sub(field_height.saturating_add(gap * 2 + room));
         let keys_height = key_height.saturating_mul(count as u16).min(room_for_keys);
+        // Text of several lines takes what the keys leave, up to a number
+        // of lines: it shows as much of the paragraph as fits.
+        if multiline {
+            let line = style
+                .font(env)
+                .map_or(style.text() * 1.3, |f| {
+                    f.line_metrics(style.text()).line_height
+                })
+                .max(1.0);
+            let spare = display
+                .height
+                .saturating_sub(field_height + keys_height + gap * 2 + room);
+            let more = ((f32::from(spare) / line) as u16).min(MORE_LINES);
+            field_height += (f32::from(more) * line) as u16;
+        }
         let height = (field_height + keys_height + gap * 2 + room).min(display.height);
         let region = Rect::new(0, display.height - height, display.width, height);
         let field = Rect::new(0, region.y + gap, display.width, field_height);
@@ -453,12 +487,14 @@ impl KeyboardScreen {
             text: params.get(params::TEXT).unwrap_or_default().to_string(),
             params: params.clone(),
             password: mode == "password",
+            multiline,
+            strip,
             layer,
             layouts,
             current,
             shift: Shift::Off,
             shifted_at: None,
-            auto: env.settings().read(&AUTO_CAPITALS) && mode == "text",
+            auto: env.settings().read(&AUTO_CAPITALS) && (mode == "text" || multiline),
             rows,
             focus: ui::focus_shown(env).then_some((0, 0)),
             column: None,
@@ -501,8 +537,18 @@ impl KeyboardScreen {
             f.x + m,
             f.y + title_height,
             f.width.saturating_sub(2 * m),
-            f.height - title_height,
+            f.height.saturating_sub(title_height + self.strip),
         )
+    }
+
+    /// Where the field's buttons lie: at the end of the text's box, or of
+    /// several lines in the strip under it.
+    fn buttons_box(&self) -> Rect {
+        let b = self.text_box();
+        if self.strip == 0 {
+            return b;
+        }
+        Rect::new(b.x, b.y + b.height, b.width, self.strip)
     }
 
     /// Keys are drawn inset by this inside their area, so their areas
@@ -513,13 +559,9 @@ impl KeyboardScreen {
         u32::from(self.seam)
     }
 
-    /// The buttons at the right end of the text field: *Phone* where text
-    /// can come from another device, *Paste* when there is text on the
-    /// clipboard.
-    fn field_buttons(&self, env: &Env<'_>) -> Vec<(FieldButton, Rect)> {
-        let Some(font) = self.style.font(env) else {
-            return Vec::new();
-        };
+    /// Which buttons the field has: *Phone* where text can come from
+    /// another device, *Paste* when there is text on the clipboard.
+    fn button_kinds(env: &Env<'_>) -> Vec<FieldButton> {
         let mut kinds = Vec::new();
         if env.caps().network && env.has_slot(&slots::REMOTE_KEYBOARD) {
             kinds.push(FieldButton::Phone);
@@ -527,7 +569,18 @@ impl KeyboardScreen {
         if env.clipboard() {
             kinds.push(FieldButton::Paste);
         }
-        let b = self.text_box();
+        kinds
+    }
+
+    /// The buttons at the right end of the text field: *Phone* where text
+    /// can come from another device, *Paste* when there is text on the
+    /// clipboard.
+    fn field_buttons(&self, env: &Env<'_>) -> Vec<(FieldButton, Rect)> {
+        let Some(font) = self.style.font(env) else {
+            return Vec::new();
+        };
+        let kinds = Self::button_kinds(env);
+        let b = self.buttons_box();
         let height = ui::button_height(&self.style, b);
         let pad = (b.height - height) / 2;
         // From the right (the left where the interface runs right to
@@ -572,6 +625,8 @@ impl KeyboardScreen {
                 let question = ask::text(self.title.clone(), &REMOTE_TEXT).initial(text);
                 let question = if self.password {
                     question.password()
+                } else if self.multiline {
+                    question.multiline()
                 } else {
                     question
                 };
@@ -612,7 +667,7 @@ impl KeyboardScreen {
     /// goes past its edge.
     fn focus_area(&self, row: usize, index: usize) -> Rect {
         if row == PASTE_ROW {
-            self.text_box()
+            self.buttons_box()
         } else {
             self.key_area(row, index)
         }
@@ -690,6 +745,7 @@ impl KeyboardScreen {
             Key::Layer(_) => env.i18n().tr("keyboard.symbols-key").to_string(),
             Key::NextLayout => self.layouts[self.current.get()].0.clone(),
             Key::Done => env.i18n().tr("keyboard.done").to_string(),
+            Key::Enter => env.i18n().tr("keyboard.enter").to_string(),
             Key::Shift | Key::Delete | Key::Space => String::new(),
         }
     }
@@ -697,7 +753,8 @@ impl KeyboardScreen {
     /// Adds text at the end, as far as there is room; jamo (of a Korean
     /// layout) join to syllables where `join` says.
     fn insert(&mut self, text: &str, join: bool, cx: &mut Cx<'_, '_>) {
-        let room = MAX_CHARS.saturating_sub(self.text.chars().count());
+        let most = self.max_chars();
+        let room = most.saturating_sub(self.text.chars().count());
         for c in text.chars().take(room) {
             if join && hangul::is_jamo(c) {
                 hangul::push(&mut self.text, c);
@@ -709,7 +766,7 @@ impl KeyboardScreen {
             let env = *cx.env();
             let full = env.i18n().format(
                 "keyboard.full",
-                &[("count", paperpaw_sdk::Arg::Int(MAX_CHARS as i64))],
+                &[("count", paperpaw_sdk::Arg::Int(most as i64))],
             );
             cx.command(Command::Notify(full));
         }
@@ -757,6 +814,10 @@ impl KeyboardScreen {
                     .set((self.current.get() + 1) % self.layouts.len());
                 self.rebuild(&env, cx);
             }
+            Key::Enter => {
+                self.insert("\n", false, cx);
+                return;
+            }
             Key::Done => {
                 self.finish(cx);
                 return;
@@ -771,7 +832,13 @@ impl KeyboardScreen {
         self.shift = Shift::Off;
         self.shift = self.auto_shift();
         let letters = self.layouts[self.current.get()].1.clone();
-        self.rows = rows(&letters, self.layer, self.layouts.len() > 1, self.most);
+        self.rows = keys::rows_for(
+            &letters,
+            self.layer,
+            self.layouts.len() > 1,
+            self.most,
+            self.multiline,
+        );
         if let Some((row, index)) = self.focus.filter(|(row, _)| *row != PASTE_ROW) {
             let row = row.min(self.rows.len() - 1);
             self.focus = Some((row, index.min(self.rows[row].len() - 1)));
@@ -789,17 +856,29 @@ impl KeyboardScreen {
     fn typed(&mut self, text: &str, cx: &mut Cx<'_, '_>) {
         let text: String = text
             .chars()
-            .filter(|c| !c.is_control())
+            .filter(|c| !c.is_control() || (self.multiline && *c == '\n'))
             .filter(|c| self.layer != Layer::Digits || c.is_ascii_digit())
             .collect();
         self.insert(&text, true, cx);
     }
 
-    /// Inserts pasted text: one line, digits only for numbers.
+    /// How many characters may be typed.
+    fn max_chars(&self) -> usize {
+        if self.multiline {
+            MAX_CHARS_MULTILINE
+        } else {
+            MAX_CHARS
+        }
+    }
+
+    /// Inserts pasted text: one line (several where lines are typed), digits
+    /// only for numbers.
     fn pasted(&mut self, text: &str, cx: &mut Cx<'_, '_>) {
+        let text = text.replace("\r\n", "\n").replace('\r', "\n");
+        let keep = |c: char| self.multiline && c == '\n';
         let line: String = text
             .chars()
-            .map(|c| if c.is_control() { ' ' } else { c })
+            .map(|c| if c.is_control() && !keep(c) { ' ' } else { c })
             .filter(|c| self.layer != Layer::Digits || c.is_ascii_digit())
             .collect();
         self.insert(line.trim(), false, cx);
