@@ -278,6 +278,25 @@ impl TocScreen {
 }
 
 impl Screen for TocScreen {
+    /// Turned or resized: laid out anew for the size, the focus on its
+    /// entry, the entries of the page read again; the headings still
+    /// being looked for go on.
+    fn on_resize(&mut self, cx: &mut Cx<'_, '_>) -> Handled {
+        let env = *cx.env();
+        let focus = self.list.focus();
+        let style = UiStyle::new(&env);
+        let header = ui::Header::new(&env, &style, true);
+        let display = env.device().display;
+        let top = header.area().height + style.gap();
+        let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
+        self.list = ListView::new(area, u32::from(style.row())).focus_on_keys(&env);
+        self.list.set_focus(focus);
+        (self.style, self.header) = (style, header);
+        self.load_page(&env);
+        cx.request_redraw();
+        Handled::Yes
+    }
+
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         if self.scan.is_some() {
             let now = cx.env().now();

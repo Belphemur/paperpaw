@@ -11,8 +11,10 @@
 mod common;
 
 use common::*;
+use paperpaw_plugin_reader::actions as reader;
 use paperpaw_sdk::builtin::actions;
 
+const ALICE: &[u8] = include_bytes!("../../../samples/library/books/alice-in-wonderland.epub");
 const BOOK: &str = "books/numbered.txt";
 
 fn open_book() -> Reading {
@@ -45,4 +47,35 @@ fn turned_the_book_stays_open_at_its_place() {
     reading.resize(480, 800);
     reading.press(actions::PREV_PAGE);
     assert_eq!(reading.screen(), "reader.screen");
+}
+
+#[test]
+fn turned_the_contents_and_the_marks_keep_their_entry() {
+    let mut reading = Reading::new(BUTTONS, Shared::default(), "books/alice.epub", ALICE, "");
+    reading.open();
+    reading.press(reader::TOC);
+    assert_eq!(reading.screen(), "reader.toc");
+    reading.press(actions::DOWN);
+    reading.press(actions::DOWN);
+    let entry = focused(&mut reading);
+    assert!(!entry.is_empty());
+    reading.resize(800, 480);
+    assert_eq!(reading.screen(), "reader.toc");
+    assert_eq!(focused(&mut reading), entry, "the contents, landscape");
+    reading.resize(480, 800);
+    assert_eq!(focused(&mut reading), entry, "the contents, upright");
+    reading.press(actions::BACK);
+    reading.press(reader::ANNOTATIONS);
+    assert_eq!(reading.screen(), "reader.annotations");
+    reading.resize(800, 480);
+    assert_eq!(reading.screen(), "reader.annotations");
+}
+
+/// The label of the part with the focus.
+fn focused(reading: &mut Reading) -> String {
+    reading.render();
+    let parts = reading.kernel.describe();
+    paperpaw_sdk::semantics::focused(&parts)
+        .map(|p| p.label.clone())
+        .unwrap_or_default()
 }

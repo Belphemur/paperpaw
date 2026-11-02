@@ -340,6 +340,8 @@ impl Reading {
     pub fn resize(&mut self, width: u16, height: u16) {
         self.now += 10;
         let effects = self.kernel.resize(Instant(self.now), width, height);
+        // The picture of the screen is made again at its new size.
+        self.image.clear();
         self.settle(effects);
     }
 

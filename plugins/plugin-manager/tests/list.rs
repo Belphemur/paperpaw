@@ -180,3 +180,31 @@ fn holding_a_plugin_that_says_nothing_more_keeps_the_list() {
     let shown = shown(&mut kernel);
     assert!(shown.starts_with("Plugins"), "{shown}");
 }
+
+#[test]
+fn turned_the_list_stays_open_with_its_focus() {
+    let mut kernel = Kernel::builder(DEVICE)
+        .storage(MemoryStorage::new())
+        .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+        .plugin(PluginManager)
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    kernel.run_action(Instant(100), OPEN);
+    for at in 0..3 {
+        kernel.run_action(Instant(200 + at), paperpaw_sdk::builtin::actions::DOWN);
+    }
+    let focused = |kernel: &mut Kernel| {
+        kernel.render(&mut |_, _| {});
+        let parts = kernel.describe();
+        paperpaw_sdk::semantics::focused(&parts).map(|p| p.label.clone())
+    };
+    let row = focused(&mut kernel);
+    assert!(row.is_some(), "a row has the focus");
+    let screen = kernel.active_screen().cloned();
+    kernel.resize(Instant(1000), 800, 480);
+    assert_eq!(kernel.active_screen().cloned(), screen);
+    assert_eq!(focused(&mut kernel), row, "landscape");
+    kernel.resize(Instant(2000), 480, 800);
+    assert_eq!(focused(&mut kernel), row, "upright again");
+}

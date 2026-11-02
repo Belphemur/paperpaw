@@ -263,6 +263,23 @@ impl Screens {
 }
 
 impl Screen for Screens {
+    /// Turned or resized: laid out anew, the focus where it was.
+    fn on_resize(&mut self, cx: &mut Cx<'_, '_>) -> Handled {
+        let env = *cx.env();
+        let focus = self.list.focus();
+        let style = UiStyle::new(&env);
+        let header = ui::Header::new(&env, &style, true);
+        let top = header.area().height + style.gap();
+        let display = env.device().display;
+        let area =
+            paperpaw_sdk::Rect::new(0, top, display.width, display.height.saturating_sub(top));
+        self.list = ListView::new(area, style.noted_row()).focus_on_keys(&env);
+        self.list.set_focus(focus);
+        (self.style, self.header) = (style, header);
+        cx.request_redraw();
+        Handled::Yes
+    }
+
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let len = self.rows.len();
