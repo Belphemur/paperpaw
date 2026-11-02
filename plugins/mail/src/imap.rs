@@ -6,7 +6,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 /// The longest response line taken; a server's longer line is an error.
-pub const MAX_LINE: usize = 16 * 1024;
+pub const MAX_LINE: usize = 8 * 1024;
 /// Tokens nested in lists, at most.
 const MAX_DEPTH: usize = 6;
 
@@ -93,45 +93,50 @@ impl Token {
 }
 
 /// The tokens of `line` (what is no token is skipped, an open list is
-/// closed).
+/// closed). Read as bytes: every character that parts tokens is ASCII, so
+/// only the tokens themselves are made text.
 pub fn tokens(line: &[u8]) -> Vec<Token> {
-    let text = String::from_utf8_lossy(line);
-    let chars: Vec<char> = text.chars().collect();
     let mut at = 0;
-    tokens_in(&chars, &mut at, 0, false)
+    tokens_in(line, &mut at, 0, false)
 }
 
-fn tokens_in(chars: &[char], at: &mut usize, depth: usize, in_list: bool) -> Vec<Token> {
+/// The most digits (and a `+`) a literal's size has between its braces.
+const MAX_LITERAL_DIGITS: usize = 12;
+
+fn text_of(bytes: &[u8]) -> String {
+    String::from_utf8_lossy(bytes).into_owned()
+}
+
+fn tokens_in(line: &[u8], at: &mut usize, depth: usize, in_list: bool) -> Vec<Token> {
     let mut out = Vec::new();
-    while *at < chars.len() {
-        let c = chars[*at];
-        match c {
-            ' ' | '\t' => *at += 1,
-            ')' => {
+    while *at < line.len() {
+        match line[*at] {
+            b' ' | b'\t' => *at += 1,
+            b')' => {
                 *at += 1;
                 if in_list {
                     return out;
                 }
             }
-            '(' => {
+            b'(' => {
                 *at += 1;
                 if depth >= MAX_DEPTH {
                     continue;
                 }
-                let inner = tokens_in(chars, at, depth + 1, true);
+                let inner = tokens_in(line, at, depth + 1, true);
                 out.push(Token::List(inner));
             }
-            '"' => {
+            b'"' => {
                 *at += 1;
-                let mut s = String::new();
-                while *at < chars.len() {
-                    match chars[*at] {
-                        '"' => {
+                let mut s = Vec::new();
+                while *at < line.len() {
+                    match line[*at] {
+                        b'"' => {
                             *at += 1;
                             break;
                         }
-                        '\\' if *at + 1 < chars.len() => {
-                            s.push(chars[*at + 1]);
+                        b'\\' if *at + 1 < line.len() => {
+                            s.push(line[*at + 1]);
                             *at += 2;
                         }
                         c => {
@@ -140,33 +145,43 @@ fn tokens_in(chars: &[char], at: &mut usize, depth: usize, in_list: bool) -> Vec
                         }
                     }
                 }
-                out.push(Token::Quoted(s));
+                out.push(Token::Quoted(text_of(&s)));
             }
-            '{' => {
-                let end = chars[*at..].iter().position(|&c| c == '}');
-                let literal = end.and_then(|e| {
-                    let inner: String = chars[*at + 1..*at + e].iter().collect();
-                    inner.trim_end_matches('+').parse::<usize>().ok()
+            b'{' => {
+                // Digits (and a `+`) and `}`, close by: no search to the end
+                // of the line for a brace that is not there.
+                let rest = &line[*at + 1..];
+                let close = rest
+                    .iter()
+                    .take(MAX_LITERAL_DIGITS + 2)
+                    .position(|&c| !(c.is_ascii_digit() || c == b'+'))
+                    .filter(|&e| rest[e] == b'}');
+                let size = close.and_then(|e| {
+                    core::str::from_utf8(&rest[..e])
+                        .ok()?
+                        .trim_end_matches('+')
+                        .parse::<usize>()
+                        .ok()
                 });
-                match (end, literal) {
+                match (close, size) {
                     (Some(e), Some(n)) => {
-                        *at += e + 1;
+                        *at += e + 2;
                         out.push(Token::Literal(n));
                     }
-                    _ => {
-                        *at += 1;
-                    }
+                    _ => *at += 1,
                 }
             }
             _ => {
                 let start = *at;
                 let mut depth_square = 0u32;
-                while *at < chars.len() {
-                    match chars[*at] {
-                        '[' => depth_square += 1,
-                        ']' => depth_square = depth_square.saturating_sub(1),
-                        ' ' | '(' | ')' | '"' | '{' if depth_square == 0 && *at > start => break,
-                        ' ' | ')' | '(' | '"' if depth_square == 0 => break,
+                while *at < line.len() {
+                    match line[*at] {
+                        b'[' => depth_square += 1,
+                        b']' => depth_square = depth_square.saturating_sub(1),
+                        b' ' | b'(' | b')' | b'"' | b'{' if depth_square == 0 && *at > start => {
+                            break;
+                        }
+                        b' ' | b')' | b'(' | b'"' if depth_square == 0 => break,
                         _ => {}
                     }
                     // `BODY[HEADER.FIELDS (FROM TO)]` is one atom.
@@ -176,7 +191,7 @@ fn tokens_in(chars: &[char], at: &mut usize, depth: usize, in_list: bool) -> Vec
                     *at += 1;
                     continue;
                 }
-                let atom: String = chars[start..*at].iter().collect();
+                let atom = text_of(&line[start..*at]);
                 if atom.eq_ignore_ascii_case("NIL") {
                     out.push(Token::Nil);
                 } else {

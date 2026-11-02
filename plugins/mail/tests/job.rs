@@ -144,7 +144,10 @@ fn every_kind_of_screen_has_a_socket_and_events_of_its_own() {
     // A list syncing and a reader opening: the reader's bytes never reach
     // the list's session, and ending the list's job closes its socket only.
     let storage = MemoryStorage::new();
-    let mut list = Job::new(LIST_CHANNEL.socket.clone(), LIST_CHANNEL.events.clone().into());
+    let mut list = Job::new(
+        LIST_CHANNEL.socket.clone(),
+        LIST_CHANNEL.events.clone().into(),
+    );
     let mut reader = Job::new(
         READER_CHANNEL.socket.clone(),
         READER_CHANNEL.events.clone().into(),

@@ -29,7 +29,12 @@ pub const MAX_MESSAGES: u32 = 50;
 /// The most folders listed.
 pub const MAX_FOLDERS: usize = 64;
 /// The most text of a message kept.
+/// The longest name of a folder taken (as the server names it).
+pub const MAX_FOLDER_NAME: usize = 255;
 pub const MAX_TEXT: usize = 24 * 1024;
+/// The most the header of a letter takes: four lists of addresses, the
+/// ids, the subject, the names of attachments.
+const LETTER_HEAD: usize = 24 * 1024;
 /// The most of a message fetched from the server (the rest is cut).
 pub const MAX_FETCH: usize = 256 * 1024;
 
@@ -171,8 +176,14 @@ impl Row {
                 .map(|a| String::from(a.shown()))
                 .unwrap_or_default(),
             from_address: from.map(|a| a.address).unwrap_or_default(),
-            subject: String::from(headers.get("subject").unwrap_or("").trim()),
-            message_id: String::from(headers.get("message-id").unwrap_or("").trim()),
+            subject: header::capped(
+                headers.get("subject").unwrap_or("").trim(),
+                header::MAX_SUBJECT,
+            ),
+            message_id: header::capped(
+                headers.get("message-id").unwrap_or("").trim(),
+                header::MAX_ID,
+            ),
         }
     }
 }
@@ -430,6 +441,7 @@ pub fn make_letter(storage: &dyn Storage, raw: &str, out: &str) -> Result<Letter
             .collect::<Vec<_>>()
             .join(", ")
     };
+    let list = |l: &[header::Address]| header::capped(&list(l), header::MAX_LIST);
     let mut letter = Letter {
         from: list(&info.from),
         to: list(&info.to),
@@ -455,6 +467,6 @@ pub fn make_letter(storage: &dyn Storage, raw: &str, out: &str) -> Result<Letter
 }
 
 pub fn read_letter(storage: &dyn Storage, file: &str) -> Option<Letter> {
-    let text = paperpaw_sdk::files::read_text(storage, file, MAX_TEXT + 4096).ok()?;
+    let text = paperpaw_sdk::files::read_text(storage, file, MAX_TEXT + LETTER_HEAD).ok()?;
     Some(Letter::parse(&text))
 }

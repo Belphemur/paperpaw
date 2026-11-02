@@ -15,6 +15,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::{CertificateHash, Distrust, KeyHash, SocketError, Storage, Tls};
 
 use crate::codec;
+use crate::header;
 use crate::imap::{self, LineBuffer, Response, Status, Token, Untagged};
 use crate::smtp::{self, Extensions, Reply, ReplyParser};
 use crate::store::{self, Counts, Folder, Row};
@@ -527,11 +528,19 @@ impl Imap {
             },
             Untagged::Exists(n) => self.exists = n,
             Untagged::List { flags, name, .. } => {
-                if self.folders.len() < store::MAX_FOLDERS && !name.is_empty() {
+                // A name no server has is skipped.
+                if self.folders.len() < store::MAX_FOLDERS
+                    && !name.is_empty()
+                    && name.len() <= store::MAX_FOLDER_NAME
+                {
                     self.folders.push(Folder {
                         name: imap::mailbox_display(&name),
                         raw: name,
-                        flags: flags.iter().map(|f| f.to_ascii_lowercase()).collect(),
+                        flags: flags
+                            .iter()
+                            .take(16)
+                            .map(|f| header::capped(&f.to_ascii_lowercase(), 32))
+                            .collect(),
                     });
                 }
             }

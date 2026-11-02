@@ -36,13 +36,29 @@ impl Reply {
 pub struct ReplyParser {
     code: u16,
     lines: Vec<String>,
+    /// Bytes of the reply so far.
+    total: usize,
 }
+
+/// The longest line of a reply, and the longest reply, in bytes (RFC 5321
+/// has lines of 512): a longer one is no server's.
+const MAX_REPLY_LINE: usize = 1000;
+const MAX_REPLY: usize = 4096;
 
 impl ReplyParser {
     /// One line of the server (without its line break): the reply, once
     /// its last line came. A line that is no reply line ends the reply
     /// with code 0 (a server that does not speak SMTP).
     pub fn line(&mut self, line: &[u8]) -> Option<Reply> {
+        self.total += line.len();
+        if line.len() > MAX_REPLY_LINE || self.total > MAX_REPLY {
+            self.lines.clear();
+            self.total = 0;
+            return Some(Reply {
+                code: 0,
+                lines: alloc::vec![String::from("reply too long")],
+            });
+        }
         let text = String::from_utf8_lossy(line);
         let bytes = text.as_bytes();
         let code = bytes
@@ -52,6 +68,7 @@ impl ReplyParser {
             .and_then(|d| d.parse::<u16>().ok());
         let (Some(code), Some(sep)) = (code, bytes.get(3).copied().or(Some(b' '))) else {
             self.lines.clear();
+            self.total = 0;
             return Some(Reply {
                 code: 0,
                 lines: alloc::vec![String::from(text.trim())],
@@ -69,6 +86,7 @@ impl ReplyParser {
         if sep == b'-' {
             return None;
         }
+        self.total = 0;
         Some(Reply {
             code,
             lines: core::mem::take(&mut self.lines),

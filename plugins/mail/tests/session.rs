@@ -552,3 +552,121 @@ fn smtp_untrusted_and_clock() {
     assert_eq!(events.last(), Some(&Event::Failed(Failure::ClockNotSet)));
     assert!(fake.sent.is_empty());
 }
+
+// ------------------------------------------------ hostile mail and servers
+
+#[test]
+fn a_hostile_mail_header_keeps_the_index_and_the_folders_small() {
+    let big = "ä".repeat(20_000);
+    let many_to = "a@b.c,".repeat(5000);
+    let raw = format!(
+        "From: \"{big}\" <{big}@x.org>\r\nTo: {many_to}\r\nSubject: {big}\r\nMessage-ID: <{big}>\r\nDate: Tue, 3 Nov 2026 09:15:00 +0100\r\n\r\nhi\r\n"
+    );
+    let mut script = Script::default();
+    script.messages = vec![(10, String::new(), raw)];
+    // A folder with a name no server has is left out.
+    script.folders.push(("n".repeat(300), String::new()));
+    let (events, fake) = imap(script, Security::Implicit, everything(1, 1));
+    assert!(
+        done(&events) || matches!(events.last(), Some(Event::Failed(_))),
+        "{events:?}"
+    );
+    let st = fake.storage.clone();
+    let folders = store::read_folders(&*st, &store::folders_file(1));
+    assert!(
+        folders.iter().all(|f| f.raw.len() <= 255),
+        "{}",
+        folders.len()
+    );
+    assert_eq!(folders.len(), 2);
+    let size = st.size(&store::index_file(1, "INBOX")).unwrap_or(0);
+    assert!(size < 2048, "an index row of {size} bytes");
+}
+
+#[test]
+fn a_letter_with_hostile_headers_stays_small_and_opens() {
+    let big = "ö".repeat(20_000);
+    let to = "a@b.c,".repeat(5000);
+    let refs = vec!["<x@y>"; 2000].join(" ");
+    let raw = format!(
+        "From: Ada <ada@x.org>\r\nReferences: {refs}\r\nSubject: {big}\r\nMessage-ID: <{big}>\r\nTo: {to}\r\nCc: {to}\r\nReply-To: {to}\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nhi there\r\n"
+    );
+    let storage = MemoryStorage::new();
+    storage.write("raw", raw.as_bytes()).unwrap();
+    let letter = store::make_letter(&storage, "raw", "letter").unwrap();
+    assert!(letter.subject.len() <= 256 && letter.message_id.len() <= 256);
+    assert!(
+        letter.references.len() <= 2048,
+        "{}",
+        letter.references.len()
+    );
+    assert!(letter.to.len() <= 2048 && letter.cc.len() <= 2048);
+    let size = storage.size("letter").unwrap();
+    assert!(size < 20_000, "a letter file of {size} bytes");
+    // It opens again from the card.
+    let again = store::read_letter(&storage, "letter").expect("opens");
+    assert_eq!(again.text.trim(), "hi there");
+}
+
+#[test]
+fn addresses_stop_at_the_most_and_references_keep_the_last_ids() {
+    use paperpaw_plugin_mail::header;
+    assert_eq!(
+        header::addresses(&"a@b.c,".repeat(5000)).len(),
+        header::MAX_ADDRESSES
+    );
+    let refs: String = (0..300)
+        .map(|n| format!("<{n}@host.example>"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let kept = header::last_ids(&refs, 2048);
+    assert!(kept.len() <= 2048);
+    assert!(kept.starts_with('<') && kept.ends_with("<299@host.example>"));
+    // Cut at a character boundary.
+    assert_eq!(header::cut("aä", 2), "a");
+}
+
+#[test]
+fn a_server_cannot_send_long_replies_or_lines_to_smtp() {
+    use paperpaw_plugin_mail::smtp::ReplyParser;
+    let mut parser = ReplyParser::default();
+    let long = format!("250-{}", "x".repeat(1100));
+    assert_eq!(parser.line(long.as_bytes()).map(|r| r.code), Some(0));
+    // Many short lines add up past the most.
+    let mut parser = ReplyParser::default();
+    let mut ended = None;
+    for _ in 0..200 {
+        ended = parser.line(format!("250-{}", "y".repeat(200)).as_bytes());
+        if ended.is_some() {
+            break;
+        }
+    }
+    assert_eq!(ended.map(|r| r.code), Some(0));
+}
+
+#[test]
+fn imap_tokens_of_hostile_lines_are_quick_and_bounded() {
+    use paperpaw_plugin_mail::imap;
+    // A line of braces that never close, and one with bytes that are no text.
+    let braces = vec![b'{'; 8 * 1024];
+    let started = std::time::Instant::now();
+    let tokens = imap::tokens(&braces);
+    assert!(tokens.is_empty());
+    assert!(
+        started.elapsed().as_millis() < 500,
+        "{:?}",
+        started.elapsed()
+    );
+    let junk: Vec<u8> = (0..4000u32).map(|n| (n % 251) as u8).collect();
+    let _ = imap::tokens(&junk);
+    assert_eq!(imap::tokens(b"{12+}"), [imap::Token::Literal(12)]);
+    assert!(
+        !imap::tokens(b"{123456789012345678}")
+            .iter()
+            .any(|t| matches!(t, imap::Token::Literal(_)))
+    );
+    // A line past the most is an error, not memory.
+    let mut buffer = imap::LineBuffer::default();
+    buffer.push(&vec![b'a'; imap::MAX_LINE + 1]);
+    assert!(buffer.line().is_err());
+}

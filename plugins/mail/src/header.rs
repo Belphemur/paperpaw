@@ -253,6 +253,56 @@ impl Address {
     }
 }
 
+/// The most addresses taken from one header.
+pub const MAX_ADDRESSES: usize = 32;
+/// The most bytes kept of a name, an address, a subject, an id, the ids a
+/// message refers to: a mail from anyone must not make the lists, the
+/// index and the letter grow without end.
+pub const MAX_NAME: usize = 128;
+pub const MAX_ADDRESS: usize = 128;
+pub const MAX_SUBJECT: usize = 256;
+pub const MAX_ID: usize = 256;
+pub const MAX_REFERENCES: usize = 2048;
+/// An attachment's name, and a list of addresses written out.
+pub const MAX_LABEL: usize = 128;
+pub const MAX_LIST: usize = 2048;
+
+/// `text` up to `max` bytes, cut at a character boundary.
+pub fn cut(text: &str, max: usize) -> &str {
+    if text.len() <= max {
+        return text;
+    }
+    let mut end = max;
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    &text[..end]
+}
+
+/// `text` as an owned string of up to `max` bytes.
+pub fn capped(text: &str, max: usize) -> String {
+    String::from(cut(text, max))
+}
+
+/// The ids of a References header, the last ones that fit `max` bytes (the
+/// ones a reply adds are at its end).
+pub fn last_ids(text: &str, max: usize) -> String {
+    let text = text.trim();
+    if text.len() <= max {
+        return String::from(text);
+    }
+    let mut start = text.len() - max;
+    while !text.is_char_boundary(start) {
+        start += 1;
+    }
+    // From the next whole id.
+    let tail = &text[start..];
+    let tail = tail
+        .find(char::is_whitespace)
+        .map_or("", |i| tail[i..].trim_start());
+    String::from(tail)
+}
+
 /// The addresses of a header's value, comma apart (a comma in a quoted
 /// name or a group does not part them). Comments in parentheses go.
 pub fn addresses(value: &str) -> Vec<Address> {
@@ -269,13 +319,22 @@ pub fn addresses(value: &str) -> Vec<Address> {
             ',' | ';' if !quoted && !angle && comment == 0 => {
                 pieces.push(&value[start..i]);
                 start = i + 1;
+                if pieces.len() >= MAX_ADDRESSES {
+                    break;
+                }
             }
             _ => {}
         }
     }
-    pieces.push(&value[start..]);
+    if pieces.len() < MAX_ADDRESSES {
+        pieces.push(&value[start..]);
+    }
     for piece in pieces {
-        if let Some(address) = one_address(piece) {
+        if let Some(mut address) = one_address(piece) {
+            address.name.truncate(cut(&address.name, MAX_NAME).len());
+            address
+                .address
+                .truncate(cut(&address.address, MAX_ADDRESS).len());
             out.push(address);
         }
     }

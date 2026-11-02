@@ -320,7 +320,7 @@ pub fn reply_to(letter: &crate::store::Letter, own: &str, all: bool, intro: &str
         },
         body: format!("\n\n{}", quote(&letter.text, intro, 40)),
         in_reply_to: String::from(letter.message_id.trim()),
-        references: String::from(references.trim()),
+        references: header::last_ids(&references, header::MAX_REFERENCES),
         ..Draft::default()
     }
 }

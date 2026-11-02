@@ -265,10 +265,19 @@ impl Walker {
         info.to = list("to");
         info.cc = list("cc");
         info.reply_to = list("reply-to");
-        info.subject = String::from(headers.get("subject").unwrap_or("").trim());
+        info.subject = header::capped(
+            headers.get("subject").unwrap_or("").trim(),
+            header::MAX_SUBJECT,
+        );
         info.date = headers.get("date").and_then(header::date_seconds);
-        info.message_id = String::from(headers.get("message-id").unwrap_or("").trim());
-        info.references = String::from(headers.get("references").unwrap_or("").trim());
+        info.message_id = header::capped(
+            headers.get("message-id").unwrap_or("").trim(),
+            header::MAX_ID,
+        );
+        info.references = header::last_ids(
+            headers.get("references").unwrap_or(""),
+            header::MAX_REFERENCES,
+        );
     }
 
     fn attachment(&mut self, headers: &Headers, kind: &ContentType, disposition: Option<&str>) {
@@ -294,7 +303,9 @@ impl Walker {
         label.push_str(&kind.kind);
         label.push(')');
         if self.info.attachments.len() < 32 {
-            self.info.attachments.push(label);
+            self.info
+                .attachments
+                .push(header::capped(&label, header::MAX_LABEL));
         }
     }
 
