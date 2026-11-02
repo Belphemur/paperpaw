@@ -36,6 +36,12 @@ use paperpaw_sdk::widgets::grid::{self, Geometry, Item, What};
 /// Pages at most.
 pub(crate) const MAX_PAGES: usize = 8;
 
+/// Pages of the layout for a screen on its side at most while it is derived
+/// (not stored): more than the settings keep, as a grid of fewer cells than
+/// the upright one may need more pages for the same items, so that none is
+/// out of reach.
+const MAX_DERIVED: usize = 3 * MAX_PAGES;
+
 /// Columns of the grid.
 pub(crate) const COLUMNS: Setting<i64> = Setting::new("home.columns");
 /// Rows of the grid; 0: as many as make cells about as high as wide.
@@ -302,8 +308,11 @@ pub(crate) fn columns_upright(env: &Env<'_>) -> u8 {
 /// the pages kept for it where there are any ([`wide_kept`]), else the
 /// items of the upright layout laid out anew in it ([`grid::refit`]), page
 /// after page in reading order, each page filled before the next is begun
-/// (so the room a page has is used, not the split upright; eight pages at
-/// most). A widget is no wider than about 110 mm. Nothing is stored.
+/// (so the room a page has is used, not the split upright). A widget is no
+/// wider than about 110 mm. Nothing is stored: where the pages are more
+/// than [`MAX_PAGES`] (full upright pages with fewer cells on their side)
+/// they all show, and the layout cannot be kept (see [`store_all`]) until
+/// there is less.
 pub(crate) fn pages_wide(env: &Env<'_>, geometry: &Geometry) -> Vec<Page> {
     if wide_kept(env) {
         return read(env, true);
@@ -318,10 +327,10 @@ pub(crate) fn pages_wide(env: &Env<'_>, geometry: &Geometry) -> Vec<Page> {
         carried.append(&mut items);
     }
     let mut out: Vec<Page> = Vec::new();
-    while out.len() < MAX_PAGES && (out.is_empty() || !carried.is_empty()) {
+    while out.len() < MAX_DERIVED && (out.is_empty() || !carried.is_empty()) {
         let (placed, left) = grid::refit(env, geometry, from, widest, &carried);
-        // Nothing fits even an empty page (a widget the grid cannot hold):
-        // what remains is not shown here.
+        // Nothing fits even an empty page (a widget the grid cannot hold,
+        // which only a grid of one cell can mean): what remains is not shown.
         let stuck = placed.is_empty() && !out.is_empty();
         if stuck {
             break;
@@ -437,24 +446,42 @@ fn write(slot: usize, wide: bool, items: &[Item]) -> Command {
 }
 
 /// The commands that keep `pages` of a layout (as [`pages`] reads them,
-/// what they do not show included; for the screen on its side what the
-/// upright pages keep without showing is added) in the first settings, in
-/// their order, and empty the others: once a page was added or removed.
+/// what they do not show included) in the first settings, in their order,
+/// and empty the others: once a page was added or removed. For the screen
+/// on its side what the upright pages keep without showing is added on its
+/// last page (a page's own is kept on it). Where the layout for the screen
+/// on its side has more than [`MAX_PAGES`] pages (derived from full upright
+/// ones), it is not kept, so that nothing is cut off: the message says to
+/// make room upright.
 pub(crate) fn store_all(env: &Env<'_>, pages: &[Page], wide: bool) -> Vec<Command> {
     if !wide {
         return write_all(pages, false);
     }
-    let with: Vec<Page> = pages
+    if pages.len() > MAX_PAGES {
+        let message = env.i18n().tr("home.grid.wide-full").to_string();
+        return alloc::vec![Command::Notify(message)];
+    }
+    let mut with: Vec<Page> = pages
         .iter()
         .map(|page| Page {
             slot: page.slot,
-            items: with_hidden(
-                env,
-                page.items.clone(),
-                &[setting_wide(page.slot), setting(page.slot)],
-            ),
+            items: with_hidden(env, page.items.clone(), &[setting_wide(page.slot)]),
         })
         .collect();
+    // What the upright pages keep without showing (their places are theirs
+    // and no use here): on the last page, where it is not on a page yet.
+    let upright: Vec<Id> = (0..MAX_PAGES).map(setting).collect();
+    let mut hidden_upright = with_hidden(env, Vec::new(), &upright);
+    hidden_upright.retain(|item| {
+        !with
+            .iter()
+            .flat_map(|p| &p.items)
+            .any(|i| i.what == item.what)
+    });
+    if let Some(last) = with.last_mut() {
+        last.items
+            .extend(hidden_upright.into_iter().map(|item| Item::new(item.what)));
+    }
     write_all(&with, true)
 }
 

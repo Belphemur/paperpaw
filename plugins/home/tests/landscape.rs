@@ -220,7 +220,11 @@ fn a_big_screen_on_its_side_keeps_cards_to_the_readable_column_and_fills_the_pag
             "{width}x{height}: card {wide} wide: {}",
             app.described()
         );
-        assert!(app.shows("Library"), "{width}x{height}: {}", app.described());
+        assert!(
+            app.shows("Library"),
+            "{width}x{height}: {}",
+            app.described()
+        );
         // Nothing is stored for it.
         assert_eq!(setting(&app, "home.page-1.wide"), "");
     }
@@ -373,4 +377,103 @@ fn right_to_left_the_pages_are_laid_out_as_they_are_left_to_right() {
             assert!(area.x + area.width <= width && area.y + area.height <= height);
         }
     }
+}
+
+/// Eight pages of two columns of tools, as many rows as a very tall and narrow
+/// screen holds (500 × 3000); on its side (3000 × 500) the grid has more
+/// columns but fewer cells.
+fn full_pages() -> String {
+    let mut config = String::from("[home]\ncolumns = 2\n");
+    for page in 1..=8 {
+        let cells: Vec<String> = (0..24)
+            .map(|i| format!("tool:core.library {}/{} 1x1", i % 2, i / 2))
+            .collect();
+        config.push_str(&format!("page-{page} = {}\n", cells.join(", ")));
+    }
+    config
+}
+
+/// The tools shown on the pages from the first until `expected` are seen
+/// (the pages turn round), and the pages that took.
+fn count_all(app: &mut App, expected: usize) -> (usize, usize) {
+    let (mut shown, mut pages) = (0, 0);
+    while shown < expected && pages < 30 {
+        shown += tools(app).len();
+        pages += 1;
+        app.run(actions::NEXT_PAGE);
+    }
+    (shown, pages)
+}
+
+#[test]
+fn full_pages_turned_on_the_side_are_all_reachable_and_the_layout_is_not_cut() {
+    let mut app = App::new(
+        screen(TOUCH, 500, 3000),
+        Shared::memory(&format!("{BASE_CONFIG}{}", full_pages()), &[]),
+    );
+    // What a full page upright holds: eight of them are the items.
+    let per_page = tools(&mut app).len();
+    assert_eq!(per_page, 24, "{}", app.described());
+    let total = 8 * per_page;
+    let (upright, pages) = count_all(&mut app, total);
+    assert_eq!((upright, pages), (total, 8), "{}", app.described());
+    // On its side the grid has fewer cells: more pages than the settings
+    // keep, and every tool still on one.
+    let mut side = App::new(
+        screen(TOUCH, 3000, 500),
+        Shared::memory(&format!("{BASE_CONFIG}{}", full_pages()), &[]),
+    );
+    let (shown, pages) = count_all(&mut side, total);
+    assert_eq!(shown, total, "{}", side.described());
+    assert!(pages > 8, "{pages} pages");
+    // Nothing is stored for it, and a change made there is not kept (that
+    // would cut the layout off at eight pages): it says to make room.
+    let before: Vec<String> = (1..=8)
+        .map(|n| setting(&side, &format!("home.page-{n}.wide")))
+        .collect();
+    assert!(before.iter().all(|s| s.is_empty()));
+    let mut side = App::new(
+        screen(TOUCH, 3000, 500),
+        Shared::memory(&format!("{BASE_CONFIG}{}", full_pages()), &[]),
+    );
+    edit(&mut side);
+    let first = tools(&mut side)[0].1;
+    // A tap on a tool in edit mode offers what to do with it.
+    side.tap(center(first));
+    side.tap_on("Remove");
+    for n in 1..=8 {
+        assert_eq!(setting(&side, &format!("home.page-{n}.wide")), "");
+    }
+    assert!(side.shows("landscape layout"), "{}", side.described());
+}
+
+#[test]
+fn what_a_page_keeps_without_showing_is_kept_on_the_last_page_on_the_side() {
+    // The third page keeps a widget no plugin offers now (switched off, say)
+    // and a tool; on its side there are fewer pages than that.
+    let config = format!(
+        "{BASE_CONFIG}[home]\ncolumns = 4\npage-1 = tool:core.library 0/0 1x1\n\
+         page-2 = tool:core.settings 0/0 1x1\n\
+         page-3 = gone.widget 0/0 4x1, tool:battery 0/1 1x1\n"
+    );
+    let mut app = App::new(screen(TOUCH, 800, 480), Shared::memory(&config, &[]));
+    edit(&mut app);
+    let settings = app.find("Settings").expect("the settings tool");
+    app.drag(settings, Point::new(settings.x + 266, settings.y + 120));
+    let kept: Vec<String> = (1..=8)
+        .map(|n| setting(&app, &format!("home.page-{n}.wide")))
+        .filter(|s| !s.is_empty())
+        .collect();
+    assert!(!kept.is_empty(), "something was kept");
+    assert_eq!(
+        kept.iter().filter(|s| s.contains("gone.widget")).count(),
+        1,
+        "{kept:?}"
+    );
+    assert!(
+        kept.last().is_some_and(|s| s.contains("gone.widget")),
+        "{kept:?}"
+    );
+    // The upright layout is as it was.
+    assert!(setting(&app, "home.page-3").contains("gone.widget"));
 }

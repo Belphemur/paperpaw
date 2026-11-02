@@ -299,7 +299,10 @@ fn a_choice_on_a_wide_screen_is_a_sheet_in_the_column_and_a_tap_beside_it_closes
 
 fn tool(name: &str, at: Option<Cells>) -> Item {
     let what = What::Tool(Id::parse(name).unwrap());
-    at.map_or_else(|| Item::new(what.clone()), |c| Item::placed(what.clone(), c))
+    at.map_or_else(
+        || Item::new(what.clone()),
+        |c| Item::placed(what.clone(), c),
+    )
 }
 
 fn widget(name: &str, at: Cells) -> Item {
@@ -355,9 +358,17 @@ fn a_widget_keeps_its_share_of_the_width_and_a_tool_its_size() {
     let wide = Geometry::of(whole(X4_SIDE), 6, 4, 8);
     let (placed, left) = grid::refit(&env, &wide, 4, u8::MAX, &items);
     assert!(left.is_empty());
-    assert_eq!(placed[0].at, Some(Cells::new(0, 0, 6, 1)), "as wide as the grid");
+    assert_eq!(
+        placed[0].at,
+        Some(Cells::new(0, 0, 6, 1)),
+        "as wide as the grid"
+    );
     assert_eq!(placed[1].at, Some(Cells::new(0, 1, 3, 1)), "half of it");
-    assert_eq!(placed[2].at, Some(Cells::new(3, 1, 1, 1)), "a tool is a cell");
+    assert_eq!(
+        placed[2].at,
+        Some(Cells::new(3, 1, 1, 1)),
+        "a tool is a cell"
+    );
     // Fewer columns: shares shrink the same way, never below a column.
     let narrow = Geometry::of(whole(X4), 2, 4, 8);
     let (placed, _) = grid::refit(&env, &narrow, 4, u8::MAX, &items);
@@ -378,7 +389,11 @@ fn no_widget_is_wider_than_the_most_it_may_take_and_tools_follow_beside_it() {
     let wide = Geometry::of(whole(X4_SIDE), 6, 3, 8);
     let (placed, left) = grid::refit(&env, &wide, 4, 3, &items);
     assert!(left.is_empty());
-    assert_eq!(placed[0].at, Some(Cells::new(0, 0, 3, 1)), "as wide as the most");
+    assert_eq!(
+        placed[0].at,
+        Some(Cells::new(0, 0, 3, 1)),
+        "as wide as the most"
+    );
     // The room beside the first widget is used by what follows: the
     // second, of half the grid, and under them the tools.
     assert_eq!(placed[1].at, Some(Cells::new(3, 0, 3, 1)), "half is 3 of 6");
@@ -387,6 +402,34 @@ fn no_widget_is_wider_than_the_most_it_may_take_and_tools_follow_beside_it() {
     // A most of nothing (a plugin's slip) is still a column.
     let (placed, _) = grid::refit(&env, &wide, 4, 0, &items[..1]);
     assert_eq!(placed[0].at, Some(Cells::new(0, 0, 1, 1)));
+}
+
+#[test]
+fn a_grid_without_columns_or_rows_is_one_of_one_and_nothing_panics() {
+    let h = harness(X4_SIDE);
+    let env = h.env();
+    let items = [
+        widget("t.w", Cells::new(0, 0, 4, 3)),
+        tool("t.a", Some(Cells::new(1, 1, 1, 1))),
+        tool("t.b", None),
+    ];
+    for geometry in [Geometry::default(), Geometry::of(whole(X4_SIDE), 0, 0, 8)] {
+        let (placed, left) = grid::refit(&env, &geometry, 4, 2, &items);
+        // Whatever finds room is inside the grid, the rest comes back as it
+        // was, in order.
+        assert_eq!(placed.len() + left.len(), items.len());
+        for item in &placed {
+            let c = item.at.expect("placed");
+            assert!(c.col + c.w <= geometry.columns.max(1) && c.row + c.h <= geometry.rows.max(1));
+        }
+        let back: Vec<_> = left.iter().map(|i| i.what.clone()).collect();
+        let sent: Vec<_> = items
+            .iter()
+            .map(|i| i.what.clone())
+            .filter(|w| back.contains(w))
+            .collect();
+        assert_eq!(back, sent);
+    }
 }
 
 #[test]
@@ -438,7 +481,10 @@ fn laying_out_anew_does_not_change_the_grid_it_came_from_and_an_empty_one_is_not
     // Not stored: the portrait layout is as it was, and laid out again
     // from the same it gives the same.
     assert_eq!(items[4].at, Some(Cells::new(0, 1, 1, 1)));
-    assert_eq!(cells(&once), cells(&grid::refit(&env, &wide, 4, u8::MAX, &items).0));
+    assert_eq!(
+        cells(&once),
+        cells(&grid::refit(&env, &wide, 4, u8::MAX, &items).0)
+    );
     let (placed, left) = grid::refit(&env, &Geometry::default(), 4, u8::MAX, &[]);
     assert!(placed.is_empty() && left.is_empty());
     // A grid made from none (0 columns) is not a division by zero.
