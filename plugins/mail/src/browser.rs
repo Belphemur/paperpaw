@@ -8,7 +8,8 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{actions, params as core_params, slots};
-use paperpaw_sdk::replies::Confirmed;
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::replies::{Confirmed, SocketNotice};
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::{
     Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode,
@@ -20,7 +21,7 @@ use crate::job::{Job, Run};
 use crate::session::Task;
 use crate::settings::FETCH;
 use crate::store::{self, Counts, Row};
-use crate::{COMPOSE, EVENTS, LIST, READ, SOCKET, texts};
+use crate::{BOXES_CHANNEL, COMPOSE, LIST, LIST_CHANNEL, READ, texts};
 
 /// Parameters of the screens.
 pub mod param {
@@ -66,6 +67,12 @@ pub(crate) struct Browser {
     mode: Mode,
     lines: Vec<Line>,
     job: Job,
+    /// The socket's events: this screen's own.
+    events: Event<SocketNotice>,
+    /// A screen opened above ended the check: do it again when this one
+    /// shows (the device holds one TLS session, which the screen above
+    /// needs).
+    interrupted: bool,
     /// Accounts still to check, after the one now.
     queue: Vec<u8>,
     /// How the last check went, in words.
@@ -97,6 +104,10 @@ impl Browser {
             }
             None => Mode::Boxes,
         };
+        let channel = match mode {
+            Mode::Boxes => BOXES_CHANNEL,
+            Mode::Folder { .. } => LIST_CHANNEL,
+        };
         let mut screen = Self {
             list: ListView::new(area, style.noted_row()).focus_on_keys(env),
             style,
@@ -104,7 +115,9 @@ impl Browser {
             note,
             mode,
             lines: Vec::new(),
-            job: Job::new(SOCKET, EVENTS.into()),
+            job: Job::new(channel.socket, channel.events.clone().into()),
+            events: channel.events,
+            interrupted: false,
             queue: Vec::new(),
             status: String::new(),
             asked: None,
@@ -317,11 +330,24 @@ impl Browser {
         cx.request_redraw();
     }
 
+    /// Lets go of the connection for a screen that opens above: its own is
+    /// the one the device can hold.
+    fn pause(&mut self, cx: &mut Cx<'_, '_>) {
+        for command in self.job.cancel() {
+            self.interrupted = true;
+            cx.command(command);
+        }
+    }
+
     fn open(&mut self, row: usize, cx: &mut Cx<'_, '_>) {
         let Some(line) = self.lines.get(row) else {
             return;
         };
-        match (&line.target, &self.mode) {
+        let target = line.target.clone();
+        if !matches!(target, Target::Check) {
+            self.pause(cx);
+        }
+        match (&target, &self.mode) {
             (Target::Check, _) => self.check(cx),
             (Target::Folder { account, raw }, _) => cx.command(Command::OpenScreen(
                 LIST,
@@ -470,11 +496,16 @@ impl Screen for Browser {
                 self.check(cx);
             }
         }
+        if self.interrupted {
+            self.interrupted = false;
+            self.job.run = Run::Idle;
+            self.check(cx);
+        }
         cx.request_redraw();
     }
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
-        if let Some(notice) = EVENTS.read(event, params) {
+        if let Some(notice) = self.events.read(event, params) {
             let env = *cx.env();
             for command in self.job.notice(notice, env.storage()) {
                 cx.command(command);

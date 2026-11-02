@@ -20,7 +20,7 @@ use crate::job::{Job, Run};
 use crate::reader::{REPLY, REPLY_ALL};
 use crate::session::Outgoing;
 use crate::settings::SIGNATURE;
-use crate::{EVENTS, SOCKET, TYPED, smtp, store, texts};
+use crate::{COMPOSE_CHANNEL, TYPED, smtp, store, texts};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Part {
@@ -105,7 +105,10 @@ impl Writer {
             accounts,
             from,
             draft: Draft::default(),
-            job: Job::new(SOCKET, EVENTS.into()),
+            job: Job::new(
+                COMPOSE_CHANNEL.socket.clone(),
+                COMPOSE_CHANNEL.events.id().clone(),
+            ),
             status: String::new(),
             sent: false,
         };
@@ -359,7 +362,7 @@ impl Screen for Writer {
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        if let Some(notice) = EVENTS.read(event, params) {
+        if let Some(notice) = COMPOSE_CHANNEL.events.read(event, params) {
             for command in self.job.notice(notice, env.storage()) {
                 cx.command(command);
             }

@@ -44,9 +44,36 @@ pub const BOXES: Id = Id::new_static("mail.boxes");
 pub const LIST: Id = Id::new_static("mail.list");
 pub const READ: Id = Id::new_static("mail.read");
 pub const COMPOSE: Id = Id::new_static("mail.compose");
-/// The socket of a screen's connection, and what it tells.
-pub const SOCKET: Id = Id::new_static("mail.socket");
-pub const EVENTS: Event<SocketNotice> = Event::new("mail.events");
+/// The socket of a screen's connection, and what it tells. Every kind of
+/// screen has its own: the kernel closes a socket that is connected again
+/// (and every screen hears every event), so screens sharing one would end
+/// each other's connections.
+#[derive(Debug)]
+pub struct Channel {
+    pub socket: Id,
+    pub events: Event<SocketNotice>,
+}
+
+/// The folders.
+pub const BOXES_CHANNEL: Channel = Channel {
+    socket: Id::new_static("mail.socket.boxes"),
+    events: Event::new("mail.events.boxes"),
+};
+/// The mails of a folder.
+pub const LIST_CHANNEL: Channel = Channel {
+    socket: Id::new_static("mail.socket.list"),
+    events: Event::new("mail.events.list"),
+};
+/// A mail being read.
+pub const READER_CHANNEL: Channel = Channel {
+    socket: Id::new_static("mail.socket.reader"),
+    events: Event::new("mail.events.reader"),
+};
+/// A mail being written.
+pub const COMPOSE_CHANNEL: Channel = Channel {
+    socket: Id::new_static("mail.socket.compose"),
+    events: Event::new("mail.events.compose"),
+};
 /// The answer to *Trust this server?*.
 pub const PIN_ANSWER: Event<Confirmed> = Event::new("mail.pin-answer");
 /// Text typed for a part of a mail being written.

@@ -494,6 +494,9 @@ impl Io for Fake {
     }
 
     fn read_bytes(&mut self, max: u32) {
+        // The real kernel answers a read while the socket is secured with
+        // `NotReady` and closes the socket.
+        assert!(!self.switching, "read while the TLS switch is under way");
         assert!(
             self.want_bytes.is_none() && self.want_file.is_none(),
             "two reads at once"
@@ -502,6 +505,7 @@ impl Io for Fake {
     }
 
     fn read_file(&mut self, path: &str, len: u64) {
+        assert!(!self.switching, "read while the TLS switch is under way");
         assert!(
             self.want_bytes.is_none() && self.want_file.is_none(),
             "two reads at once"

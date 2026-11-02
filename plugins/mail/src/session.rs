@@ -163,12 +163,17 @@ fn failure_of(error: SocketError) -> Failure {
 struct Wire {
     buf: LineBuffer,
     reading: bool,
+    /// The socket is being secured (after STARTTLS): nothing is sent or
+    /// read until the kernel says `Secured`; a read now makes it close the
+    /// socket.
+    switching: bool,
 }
 
 impl Wire {
-    /// Asks for more bytes, unless some are asked for already.
+    /// Asks for more bytes, unless some are asked for already, or the
+    /// socket is being secured.
     fn more(&mut self, io: &mut dyn Io) {
-        if !self.reading {
+        if !self.reading && !self.switching {
             self.reading = true;
             io.read_bytes(1024);
         }
@@ -350,6 +355,7 @@ impl Imap {
                     return self.fail(io, Failure::ClockNotSet);
                 }
                 self.secure = true;
+                self.wire.switching = false;
                 if self.command == Some(Command::StartTls) {
                     // Over TLS now: what the server offers is asked again.
                     self.capabilities.clear();
@@ -725,6 +731,7 @@ impl Imap {
                 }
                 // The switch: nothing is sent or read until it is done.
                 self.wire.buf = LineBuffer::default();
+                self.wire.switching = true;
                 io.start_tls(self.endpoint.tls());
             }
             Command::Capability => {
@@ -1043,6 +1050,7 @@ impl Smtp {
                     return self.fail(io, Failure::ClockNotSet);
                 }
                 self.secure = true;
+                self.wire.switching = false;
                 if self.step == Step::StartTls {
                     // The server forgets what it offered: asked again.
                     self.say(io, Step::SecureEhlo, "EHLO localhost");
@@ -1158,6 +1166,7 @@ impl Smtp {
                 // Nothing is sent or read until the switch is done.
                 self.wire.buf = LineBuffer::default();
                 self.wire.reading = false;
+                self.wire.switching = true;
                 io.start_tls(self.endpoint.tls());
             }
             Step::SecureEhlo => {

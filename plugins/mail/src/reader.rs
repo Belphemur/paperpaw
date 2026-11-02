@@ -16,7 +16,7 @@ use crate::job::{Job, Run};
 use crate::session::Task;
 use crate::settings::MARK_READ;
 use crate::store::{self, Letter, Row};
-use crate::{COMPOSE, EVENTS, SOCKET, texts};
+use crate::{COMPOSE, READER_CHANNEL, texts};
 
 /// How a reply is made (parameter of the compose screen).
 pub const REPLY: &str = "reply";
@@ -89,7 +89,10 @@ impl Reader {
             uid,
             letter: None,
             shown: String::new(),
-            job: Job::new(SOCKET, EVENTS.into()),
+            job: Job::new(
+                READER_CHANNEL.socket.clone(),
+                READER_CHANNEL.events.id().clone(),
+            ),
             status: String::new(),
             started: false,
         };
@@ -215,9 +218,13 @@ impl Reader {
         cx.request_redraw();
     }
 
-    fn reply(&self, all: bool, cx: &mut Cx<'_, '_>) {
+    fn reply(&mut self, all: bool, cx: &mut Cx<'_, '_>) {
         if self.letter.is_none() {
             return;
+        }
+        // The device holds one TLS session: the writer above gets it.
+        for command in self.job.cancel() {
+            cx.command(command);
         }
         cx.command(Command::OpenScreen(
             COMPOSE,
@@ -323,7 +330,7 @@ impl Screen for Reader {
     }
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
-        if let Some(notice) = EVENTS.read(event, params) {
+        if let Some(notice) = READER_CHANNEL.events.read(event, params) {
             let env = *cx.env();
             for command in self.job.notice(notice, env.storage()) {
                 cx.command(command);

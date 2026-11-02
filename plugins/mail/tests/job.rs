@@ -123,3 +123,46 @@ fn cancel_closes_the_socket_of_a_running_job_only() {
     assert!(matches!(job.cancel().as_slice(), [Command::Disconnect(_)]));
     assert_eq!(job.run, Run::Idle);
 }
+
+#[test]
+fn every_kind_of_screen_has_a_socket_and_events_of_its_own() {
+    use paperpaw_plugin_mail::{
+        BOXES_CHANNEL, COMPOSE_CHANNEL, Channel, LIST_CHANNEL, READER_CHANNEL,
+    };
+    let all: [&Channel; 4] = [
+        &BOXES_CHANNEL,
+        &LIST_CHANNEL,
+        &READER_CHANNEL,
+        &COMPOSE_CHANNEL,
+    ];
+    for (i, a) in all.iter().enumerate() {
+        for b in &all[i + 1..] {
+            assert_ne!(a.socket, b.socket);
+            assert_ne!(a.events.as_ref(), b.events.as_ref());
+        }
+    }
+    // A list syncing and a reader opening: the reader's bytes never reach
+    // the list's session, and ending the list's job closes its socket only.
+    let storage = MemoryStorage::new();
+    let mut list = Job::new(LIST_CHANNEL.socket.clone(), LIST_CHANNEL.events.clone().into());
+    let mut reader = Job::new(
+        READER_CHANNEL.socket.clone(),
+        READER_CHANNEL.events.clone().into(),
+    );
+    list.start_imap(&account(), vec![Task::Folders { out: "f".into() }]);
+    let Command::Disconnect(closed) = list.cancel().remove(0) else {
+        panic!("a disconnect")
+    };
+    assert_eq!(closed, LIST_CHANNEL.socket);
+    let started = reader.start_imap(&account(), vec![Task::Folders { out: "f".into() }]);
+    assert!(!started.is_empty());
+    let from_reader = SocketNotice::Failed {
+        socket: READER_CHANNEL.socket.clone(),
+        reason: String::new(),
+        error: SocketError::Lost,
+    };
+    list.start_imap(&account(), vec![Task::Folders { out: "f".into() }]);
+    assert!(list.notice(from_reader, &storage).is_empty());
+    assert_eq!(list.run, Run::Working(Stage::Connecting));
+    assert!(reader.working());
+}
