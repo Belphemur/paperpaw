@@ -52,6 +52,8 @@ impl Choice {
     /// them is `On`: a typo of the guard must not leave the other firmware
     /// unguarded, and the update page names the file when it refuses. An
     /// empty value is not set.
+    #[cold]
+    #[inline(never)]
     pub fn of(value: &str) -> Self {
         let value = value.trim();
         if value.is_empty() || value.eq_ignore_ascii_case("auto") {
@@ -108,6 +110,8 @@ impl IniScan {
         self.choice.unwrap_or_default()
     }
 
+    #[cold]
+    #[inline(never)]
     fn end_line(&mut self) {
         let line = core::mem::take(&mut self.line);
         if core::mem::take(&mut self.skipping) {
@@ -173,6 +177,8 @@ impl MarkerScan {
 
 /// Whether the bootloader's window of `flash` carries [`MARKER`], read in
 /// pieces of 1 KB (about 32 KB in all, so only where it is needed).
+#[cold]
+#[inline(never)]
 pub fn scan_marker(flash: &mut impl Flash) -> Result<bool, FlashError> {
     let mut piece = [0u8; 1024];
     let mut scan = MarkerScan::default();

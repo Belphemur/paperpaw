@@ -210,6 +210,7 @@ impl<F: Flash> Updates<F> {
     /// (`dual_boot`), nothing is written and nothing put on trial, the start
     /// is [`Start::Kept`], and installs are refused. Where nothing would be
     /// written `dual` is not asked: a normal start costs nothing.
+    #[inline(never)]
     pub fn start_guarded(
         mut flash: F,
         slots: &Slots,

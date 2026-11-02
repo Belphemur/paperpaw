@@ -13,6 +13,7 @@ pub const NOTE: &str = ".paperpaw/boot.txt";
 
 /// Whether the note says a dual-boot setup is declared: its first word is
 /// `dual-boot`. Anything else, a missing or cut or odd file, says it is not.
+#[inline(never)]
 pub fn declared(storage: &dyn Storage) -> bool {
     let mut head = [0u8; 64];
     let Ok(n) = storage.read_at(NOTE, 0, &mut head) else {

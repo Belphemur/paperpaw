@@ -18,6 +18,8 @@ const CONFIG_MAX: u64 = 64 * 1024;
 const PIECE: usize = 1024;
 
 /// What `paperpaw.ini` says, `Auto` where it says nothing or cannot be read.
+#[cold]
+#[inline(never)]
 fn choice(storage: &dyn Storage) -> Choice {
     let mut scan = IniScan::default();
     let mut piece = [0u8; PIECE];
@@ -39,6 +41,8 @@ fn choice(storage: &dyn Storage) -> Choice {
 /// Settles whether this is a declared dual-boot setup, tells updates and
 /// writes or removes the note for plugins. Whether it is declared, for what
 /// else must not touch the other partition.
+#[cold]
+#[inline(never)]
 pub fn settle(ota: &mut Option<Ota>, flash: &ota::Flash, storage: &dyn Storage) -> bool {
     let Some(ota) = ota else {
         return false;
@@ -71,6 +75,8 @@ pub fn settle(ota: &mut Option<Ota>, flash: &ota::Flash, storage: &dyn Storage) 
 }
 
 /// The note on the card, only where it changes.
+#[cold]
+#[inline(never)]
 fn note(storage: &dyn Storage, text: Option<alloc::string::String>) {
     let mut head = [0u8; 64];
     let now = storage

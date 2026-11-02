@@ -357,6 +357,7 @@ impl OtaData {
 
     /// What [`OtaData::start`] would find and do at a start of `running`,
     /// without doing it: anything but [`Start::Kept`] writes the OTA data.
+    #[inline(never)]
     pub fn plan(&self, running: u32) -> Start {
         match (self.chosen(), self.state_of(running)) {
             (Some(chosen), _) if chosen != running => Start::Undone,
