@@ -6,6 +6,7 @@ mod draw;
 mod hands_free;
 mod linking;
 mod marks;
+mod notelinks;
 mod sample;
 mod script_hint;
 mod selecting;
@@ -672,6 +673,8 @@ impl Screen for ReaderScreen {
         } else if *action == actions::BACK && !book.returns.is_empty() {
             book.go_back(cx);
             Handled::Yes
+        } else if *action == actions::BACK && book.back_to_note(cx) {
+            Handled::Yes
         } else if *action == actions::MENU || *action == actions::CONFIRM {
             // As a bar at the top, with the book and where one is in it.
             let env = *cx.env();
@@ -812,8 +815,11 @@ impl Screen for ReaderScreen {
             {
                 if let Ok(book) = &mut self.book {
                     if book.returns.is_empty() {
-                        // Out of the web page, to the one before.
-                        cx.command(Command::Back);
+                        // To the note before, else out of the web page, to
+                        // the one before.
+                        if !book.back_to_note(cx) {
+                            cx.command(Command::Back);
+                        }
                     } else {
                         book.go_back(cx);
                     }

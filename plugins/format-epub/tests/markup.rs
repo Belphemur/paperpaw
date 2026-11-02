@@ -126,11 +126,13 @@ fn markdown_inline_markup_nests_and_closes() {
 }
 
 #[test]
-fn markdown_tables_and_html_are_kept_as_text() {
+fn markdown_tables_are_rows_and_html_is_kept_as_text() {
     let md = "| a | b |\n|---|---|\n| 1 | 2 |\n\n<div>raw <b>html</b></div>\n";
     let (storage, doc) = markdown(md);
     let got = text(&doc, &storage);
-    assert!(got.contains("| a | b |"), "{got}");
+    // A row is a line of cells, set apart; the row of dashes is no text.
+    assert!(got.contains("a · b") && got.contains("1 · 2"), "{got}");
+    assert!(!got.contains("---"), "{got}");
     assert!(got.contains("<div>raw <b>html</b></div>"), "{got}");
 }
 
@@ -225,6 +227,46 @@ fn markdown_lines_of_brackets_convert_in_linear_time() {
         text(&doc, &storage).matches('[').count()
     });
     assert_eq!(done, Some(200_000));
+}
+
+#[test]
+fn markdown_wikilinks_embeds_callouts_and_tags_in_hostile_text_convert_in_linear_time() {
+    // Lines of every opening of a note's markup, never closed, deeply
+    // nested or huge: converted in time, nothing panics, the text stays.
+    let pieces = [
+        "[[",
+        "![[",
+        "[[a|",
+        "[[a#",
+        "![[a|",
+        "> [!",
+        "> > > > [!note]",
+        "---\ntags: [",
+        "#",
+        "|",
+        "\\",
+    ];
+    for piece in pieces {
+        let md = format!("{}\n", piece.repeat(100_000));
+        let done = within(20, move || {
+            let (storage, doc) = markdown(&md);
+            text(&doc, &storage).len()
+        });
+        assert!(done.is_some(), "{piece:?} took too long");
+    }
+    let nested = format!("{}x{}\n", "[[a|".repeat(50_000), "]]".repeat(50_000));
+    assert!(
+        within(20, move || {
+            let (storage, doc) = markdown(&nested);
+            text(&doc, &storage).len()
+        })
+        .is_some()
+    );
+    // Broken links lead nowhere and are shown as typed.
+    let (storage, doc) = markdown("see [[ ]] and [[|]] and [[#]] and ![[]] and [[a]b]]\n");
+    let got = text(&doc, &storage);
+    assert!(got.contains("see "), "{got}");
+    let _ = doc.links(&storage, 0, 0, u32::MAX);
 }
 
 #[test]

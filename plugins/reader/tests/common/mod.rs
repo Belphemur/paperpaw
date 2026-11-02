@@ -293,6 +293,7 @@ impl Reading {
             .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
             .plugin(paperpaw_plugin_format_txt::TxtFormat)
             .plugin(paperpaw_plugin_format_epub::EpubFormat)
+            .plugin(paperpaw_plugin_format_epub::MarkdownFormat)
             .plugin(paperpaw_plugin_reader::Reader)
             .plugin(Recorder(heard.clone()))
             .build()

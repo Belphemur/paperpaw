@@ -55,6 +55,13 @@ use paperpaw_sdk::{
 
 pub const PLUGIN: Id = Id::new_static("reader");
 pub const SCREEN: Id = Id::new_static("reader.screen");
+/// A parameter of opening a book: the anchor of the heading to open at
+/// (as its Markdown reader writes it), instead of where it was left.
+pub const ANCHOR: &str = "reader.anchor";
+/// A parameter of opening a book: the notes before this one, one path a
+/// line, the last the nearest. *Back* opens that one again, where it was
+/// left, with the others before it.
+pub const NOTES_BACK: &str = "reader.notes-back";
 /// The reader as a reading app (see `paperpaw_sdk::readers`); its name is
 /// the translation of its id.
 pub const APP: Id = Id::new_static("reader.app");

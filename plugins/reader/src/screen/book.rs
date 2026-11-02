@@ -89,6 +89,8 @@ pub(super) struct Book {
     /// [`paperpaw_sdk::readers::open_page`]): it offers the way back
     /// always.
     pub(super) page_back: bool,
+    /// The notes this one was opened from, the last the nearest.
+    pub(super) notes_back: Vec<String>,
     /// Read aloud (`volume`) or turning its pages by itself (`clock`):
     /// the icon shown in the status line.
     pub(super) hands_free: Option<&'static str>,
@@ -269,6 +271,13 @@ impl Book {
             chapter_marks: String::new(),
             landed: None,
             page_back: params.get(paperpaw_sdk::readers::PAGE).is_some(),
+            notes_back: params
+                .get(crate::NOTES_BACK)
+                .unwrap_or_default()
+                .lines()
+                .filter(|p| !p.is_empty())
+                .map(String::from)
+                .collect(),
             hands_free: None,
             finished: false,
             decorated: Vec::new(),
@@ -279,21 +288,7 @@ impl Book {
         book.reload_marks(env);
         book.chapter_marks = book.chapter_marks(env);
         book.embedded = Embedded::load(env, book.document.as_ref());
-        // Kept with another layout maybe: from the start of its line.
-        // Where the book cannot be shown there (it changed, say), from its
-        // start.
-        let saved = book.saved_position(env);
-        let start = saved.map_or(Locator::START, |(at, _)| book.line_start(env, at));
-        // Found in another conversion, or kept before: kept anew.
-        book.unsaved = saved.is_some_and(|(_, anew)| anew);
-        book.page = match book.layout(env, start) {
-            Ok(page) if !page.is_past_end() => page,
-            // Not from the start instead: the place read to would be
-            // kept as the start.
-            Err(DocumentError::OutOfMemory) => return Err(error(DocumentError::OutOfMemory)),
-            _ if start != Locator::START => book.layout(env, Locator::START).map_err(error)?,
-            page => page.map_err(error)?,
-        };
+        book.first_page(env, params).map_err(error)?;
         book.prepare_images(env);
         book.index = Some(book.open_index(env));
         book.update_chapter(env);
@@ -302,6 +297,36 @@ impl Book {
             remember_last(env.storage(), &book.path);
         }
         Ok(book)
+    }
+
+    /// Lays out the first page: where the book was left, or at the
+    /// heading the book was opened at.
+    fn first_page(&mut self, env: &Env<'_>, params: &Params) -> Result<(), DocumentError> {
+        // Kept with another layout maybe: from the start of its line.
+        // Where the book cannot be shown there (it changed, say), from its
+        // start.
+        let saved = self.saved_position(env);
+        let start = saved.map_or(Locator::START, |(at, _)| self.line_start(env, at));
+        // Opened at a heading (a link from another note): there, not where
+        // it was left.
+        let start = params
+            .get(crate::ANCHOR)
+            .and_then(|anchor| {
+                self.document
+                    .link_target(env.storage(), &format!("#{anchor}"))
+            })
+            .map_or(start, |at| self.line_start(env, at));
+        // Found in another conversion, or kept before: kept anew.
+        self.unsaved = saved.is_some_and(|(_, anew)| anew);
+        self.page = match self.layout(env, start) {
+            Ok(page) if !page.is_past_end() => page,
+            // Not from the start instead: the place read to would be
+            // kept as the start.
+            Err(DocumentError::OutOfMemory) => return Err(DocumentError::OutOfMemory),
+            _ if start != Locator::START => self.layout(env, Locator::START)?,
+            page => page?,
+        };
+        Ok(())
     }
 
     /// Where the book is read, for [`events::BOOK_OPENED`] and the other
@@ -1004,6 +1029,23 @@ impl Book {
         }
         self.returns.push(from);
         self.landed = Some(self.page.start);
+        true
+    }
+
+    /// Opens the note this one was opened from, where it was left, if
+    /// there is one; whether it did.
+    pub(super) fn back_to_note(&mut self, cx: &mut Cx<'_, '_>) -> bool {
+        let Some(before) = self.notes_back.pop() else {
+            return false;
+        };
+        self.save_due(cx, true);
+        let env = *cx.env();
+        cx.command(super::notelinks::open(
+            &env,
+            &before,
+            None,
+            &self.notes_back,
+        ));
         true
     }
 
