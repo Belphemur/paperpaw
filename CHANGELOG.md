@@ -764,6 +764,10 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
 
 ### Fixed
 
+- The store no longer counts code plugins that are switched off as taking room (#70): the next start skips their
+  code and their room is free, so an install that fits then is offered (its page says it fits while the code
+  plugins you switched off stay off), instead of asking to remove a plugin that could have been switched off.
+  The update does the same when it fetches code plugins for a new version.
 - The reader no longer keeps pages counted while a font pack on the card could not be read (a card pulled, a
   hiccup): the letters it could not measure were 0 wide, and a page index of them sent later pages to the
   wrong place. Such a step is made again (`Fonts::failed_reads` is taken before and after it); after three in a

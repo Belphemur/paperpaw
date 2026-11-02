@@ -309,6 +309,11 @@ mod installed;
 #[cfg(feature = "kernel")]
 pub use installed::InstalledCodes;
 
+#[cfg(any(test, feature = "kernel"))]
+mod need;
+#[cfg(any(test, feature = "kernel"))]
+pub use need::{InstalledNeed, installed_code_need};
+
 /// The code of `plugin` as installed (`remember_code`): the SHA-256 of
 /// its file's header. The kernel loads a code plugin's file only when its
 /// header says the same, so that a file put into a plugin's folder
@@ -582,33 +587,6 @@ pub fn keep_code_room(storage: &dyn Storage, room: Option<&CodeRoom>) -> bool {
     );
     let _ = storage.create_dir(crate::data::DIR);
     storage.write(ROOM, text.as_bytes()).is_ok()
-}
-
-/// The bytes the code plugins installed take where `room` places them,
-/// and how many they are: each folder in `plugins` with a code file named
-/// `file` ([`Native::file`]), by its header. Those installed since the
-/// start (loaded only after a restart) count, those switched off too: what
-/// the next start would place at most. Folders whose names begin with a
-/// dot (a download being put together, e.g. `.clock.part`) are no plugins
-/// and do not count.
-#[cfg(any(test, feature = "kernel"))]
-#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
-pub fn installed_code_need(storage: &dyn Storage, room: &CodeRoom, file: &str) -> (u64, u32) {
-    let mut folders: Vec<String> = Vec::new();
-    let _ = storage.list(crate::builtin::PLUGIN_DIR, &mut |entry| {
-        if entry.is_dir && !entry.name.starts_with('.') {
-            folders.push(String::from(entry.name));
-        }
-    });
-    let (mut taken, mut count) = (0u64, 0u32);
-    for folder in folders {
-        let path = alloc::format!("{}/{folder}/{file}", crate::builtin::PLUGIN_DIR);
-        if let Some(header) = read_header(storage, &path) {
-            taken = taken.saturating_add(room.needs(u64::from(header.image_len), header.align));
-            count += 1;
-        }
-    }
-    (taken, count)
 }
 
 /// The header of the plugin file at `path`, if it has one this SDK reads
@@ -1211,16 +1189,35 @@ pub(crate) mod tests {
             .with("plugins/.clock.part/code.ppn", header_of(5000, 16))
             .with("plugins/weather/code.ppn", header_of(100, 16));
         // The theme has no code, the broken file no header.
+        let none = |_: &str| false;
         assert_eq!(
-            installed_code_need(&storage, &room, "code.ppn"),
-            (8192 + 4096, 2)
+            installed_code_need(&storage, &room, "code.ppn", &none),
+            InstalledNeed {
+                taken: 8192 + 4096,
+                plugins: 2,
+                ..InstalledNeed::default()
+            }
+        );
+        // The clock switched off: kept apart.
+        let clock_off = |id: &str| id == "clock";
+        assert_eq!(
+            installed_code_need(&storage, &room, "code.ppn", &clock_off),
+            InstalledNeed {
+                taken: 4096,
+                plugins: 1,
+                off: 8192,
+                off_plugins: 1,
+            }
         );
         assert_eq!(
             read_header(&storage, "plugins/clock/code.ppn").map(|h| h.image_len),
             Some(5000)
         );
         assert!(read_header(&storage, "plugins/broken/code.ppn").is_none());
-        assert_eq!(installed_code_need(&storage, &room, "code.so"), (0, 0));
+        assert_eq!(
+            installed_code_need(&storage, &room, "code.so", &none),
+            InstalledNeed::default()
+        );
     }
 
     #[test]

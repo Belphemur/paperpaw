@@ -6,7 +6,7 @@
 
 use alloc::string::String;
 
-use paperpaw_sdk::native::{self, CodeRoom};
+use paperpaw_sdk::native::{self, CodeRoom, InstalledNeed};
 use paperpaw_sdk::{Arg, Env, files};
 
 use crate::catalog::Entry;
@@ -20,9 +20,14 @@ pub(crate) struct Room {
     /// shell says.
     pub code: Option<CodeRoom>,
     /// Bytes the code plugins installed take there, and how many they
-    /// are (those waiting for a restart with them).
+    /// are (those waiting for a restart with them): what the next start
+    /// places, so those switched off, which it skips, are not in it.
     pub taken: u64,
     pub plugins: u32,
+    /// Bytes the code plugins switched off would take, and how many they
+    /// are: free for now, taken again where they are switched on.
+    pub off: u64,
+    pub off_plugins: u32,
 }
 
 /// Whether a full flash with the web flasher gives `room` much more: the
@@ -37,19 +42,29 @@ impl Room {
     /// takes the place of the version before).
     pub(crate) fn of(env: &Env<'_>, plugin: Option<&str>) -> Room {
         let code = env.native().and_then(|_| native::code_room(env.storage()));
-        let (mut taken, mut plugins) = (0, 0);
+        let mut installed = InstalledNeed::default();
         if let (Some(room), Some(native)) = (&code, env.native()) {
-            (taken, plugins) = native::installed_code_need(env.storage(), room, &native.file);
-            if let Some(own) = plugin.and_then(|id| own_need(env, room, id)) {
-                taken = taken.saturating_sub(own);
-                plugins = plugins.saturating_sub(1);
+            // Those switched off are free: the loader skips their code at
+            // the next start.
+            installed = native::installed_code_need(env.storage(), room, &native.file, &|id| {
+                switched_off(env, id)
+            });
+            // Its own code makes room for the update, where it is on.
+            if let Some(own) = plugin
+                .filter(|id| !switched_off(env, id))
+                .and_then(|id| own_need(env, room, id))
+            {
+                installed.taken = installed.taken.saturating_sub(own);
+                installed.plugins = installed.plugins.saturating_sub(1);
             }
         }
         Room {
             free: env.storage().free_space(),
             code,
-            taken,
-            plugins,
+            taken: installed.taken,
+            plugins: installed.plugins,
+            off: installed.off,
+            off_plugins: installed.off_plugins,
         }
     }
 
@@ -71,6 +86,22 @@ impl Room {
             _ => true,
         };
         files && code
+    }
+
+    /// Whether `plugin` fits only as long as the code plugins that are
+    /// switched off stay off: the next start skips them, so it fits, but
+    /// switching them on again would not.
+    pub(crate) fn fits_while_off(&self, plugin: &Entry, image_len: Option<u64>) -> bool {
+        let (true, Some(room), Some(len)) = (plugin.code, self.code, image_len) else {
+            return false;
+        };
+        self.off_plugins > 0
+            && self.fits(plugin, image_len)
+            && !room.fits(
+                self.taken.saturating_add(self.off),
+                self.plugins.saturating_add(self.off_plugins),
+                room.needs(len, 0),
+            )
     }
 
     /// The note beside the store's title: the free space, where known
@@ -148,7 +179,9 @@ impl Room {
         if let (true, Some(left)) = (plugin.code, self.code_left()) {
             let need = size(env, image_len.unwrap_or(plugin.size));
             let left = size(env, left);
-            let key = if self.fits(plugin, image_len) {
+            let key = if self.fits_while_off(plugin, image_len) {
+                "store.needs.code-off"
+            } else if self.fits(plugin, image_len) {
                 "store.needs.code"
             } else if self.code.as_ref().is_some_and(stock_flash) {
                 "store.no-room.code-flash"
@@ -168,6 +201,12 @@ impl Room {
         let args = [("size", Arg::Str(&need)), ("free", Arg::Str(&free))];
         Some(env.i18n().format(key, &args))
     }
+}
+
+/// Whether the plugin in folder `id` is switched off (a plugin the kernel
+/// does not list is taken to be on: it runs once installed).
+fn switched_off(env: &Env<'_>, id: &str) -> bool {
+    env.plugins().get(id).is_some_and(|info| !info.enabled)
 }
 
 /// The room the installed code of plugin `id` takes, by its header.

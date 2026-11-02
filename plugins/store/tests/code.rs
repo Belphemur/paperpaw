@@ -1023,3 +1023,101 @@ fn families_do_not_hold_back_a_build_on_a_chip_that_does_not_read_them() {
     assert!(!shown.contains("Needs a newer"), "{shown}");
     assert!(shown.contains("Install"), "{shown}");
 }
+
+/// A storage where code plugins have `total` bytes, in pages of 4 KiB,
+/// and another code plugin, `other` (one page), is installed: switched
+/// off where `off` says (the next start skips its code).
+fn with_other(total: u64, off: bool) -> Shared {
+    let storage = with_room(total);
+    storage
+        .write(
+            "plugins/other/plugin.ini",
+            b"[plugin]\nid = other\nname = Other\nversion = 1.0.0\n",
+        )
+        .unwrap();
+    if off {
+        storage
+            .write("paperpaw.ini", b"[plugins]\nother = off\n")
+            .unwrap();
+    }
+    storage
+}
+
+/// The clock's page on a device whose library says its code takes two
+/// pages.
+fn clock_page_needing_two_pages(storage: Shared) -> Shopping {
+    let mut shopping = Shopping::with(Some("x4"), Some(native()), &list("1.0.0"), storage);
+    shopping.choose("Reading");
+    shopping.choose("Clock");
+    let body = page("1.0.0", &ppn(BUILD, Some(&AUTHOR))).replace(
+        r#""device": "x4", "abi""#,
+        r#""device": "x4", "image_len": 8192, "abi""#,
+    );
+    shopping.serve(PAGE, body.as_bytes());
+    shopping
+}
+
+/// Room enough: the other code plugin is on and takes a page, three
+/// are left for the clock's two.
+#[test]
+fn room_enough_with_the_others_on_is_said_plainly() {
+    let mut shopping = clock_page_needing_two_pages(with_other(16384, false));
+    let shown = shopping.shown();
+    assert!(
+        shown.contains("Needs 8.0 KB for its code, 12 KB left for code plugins"),
+        "{shown}"
+    );
+    assert!(!shown.contains("switched off"), "{shown}");
+    assert!(shown.contains("Install"), "{shown}");
+}
+
+/// The next start skips code that is switched off and its room is free:
+/// the clock fits, and the page says for how long.
+#[test]
+fn room_only_while_a_code_plugin_stays_off_is_offered_and_said() {
+    let storage = with_other(8192, true);
+    let mut shopping = clock_page_needing_two_pages(storage);
+    let shown = shopping.shown();
+    assert!(
+        shown.contains(
+            "Needs 8.0 KB for its code, 8.0 KB left while the code plugins you switched off stay off"
+        ),
+        "{shown}"
+    );
+    assert!(!shown.contains("Not enough room"), "{shown}");
+    assert!(shown.contains("Install"), "{shown}");
+    // It is installed, not refused for the room of the plugin that is off.
+    shopping.run(actions::CONFIRM);
+    let shown = shopping.shown();
+    assert!(shown.contains("Code plugins are programs"), "{shown}");
+    shopping.run(actions::CONFIRM);
+    download(&mut shopping, "1.0.0", &ppn(BUILD, Some(&AUTHOR)));
+    assert_eq!(installed(&shopping), Some(Version::new(1, 0, 0)));
+}
+
+/// The same room with the other code plugin on: not enough, as before.
+#[test]
+fn room_not_enough_with_the_other_on_is_refused() {
+    let mut shopping = clock_page_needing_two_pages(with_other(8192, false));
+    let shown = shopping.shown();
+    assert!(
+        shown.contains("Needs 8.0 KB for its code, only 4.0 KB left."),
+        "{shown}"
+    );
+    assert!(shown.contains("Not enough room"), "{shown}");
+    assert!(!shown.contains("Install"), "{shown}");
+}
+
+/// Not enough even with the code plugin that is off left out: it is not
+/// what is missing.
+#[test]
+fn room_not_enough_even_without_the_one_that_is_off_is_refused() {
+    let mut shopping = clock_page_needing_two_pages(with_other(4096, true));
+    let shown = shopping.shown();
+    assert!(
+        shown.contains("Needs 8.0 KB for its code, only 4.0 KB left."),
+        "{shown}"
+    );
+    assert!(shown.contains("Not enough room"), "{shown}");
+    assert!(!shown.contains("Install"), "{shown}");
+}
