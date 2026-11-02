@@ -35,7 +35,14 @@ fn rules() -> &'static paperpaw_publish::Rules {
 }
 
 /// The keys of `[plugin]` the kernel reads.
-const PLUGIN_KEYS: [&str; 5] = ["id", "name", "description", "version", "formats"];
+const PLUGIN_KEYS: [&str; 6] = [
+    "id",
+    "name",
+    "description",
+    "version",
+    "formats",
+    "requires",
+];
 /// The faces of a family, as `[family]` names them.
 const FACES: [&str; 4] = ["regular", "bold", "italic", "bold-italic"];
 /// Files at the top of the folder that the kernel reads.
@@ -104,6 +111,8 @@ pub struct Manifest {
     pub version: Option<String>,
     /// `formats`, where given and a number.
     pub formats: Option<u32>,
+    /// `requires` (data formats 4): the plugins it needs, as written.
+    pub requires: Option<String>,
     /// `[extends]`: a pack in `fonts/` and the font it extends.
     pub extends: Vec<Line>,
     /// `[family]`: its name and faces.
@@ -499,6 +508,29 @@ fn menus(folder: &Folder, add: &mut dyn FnMut(Finding)) {
     }
 }
 
+/// `requires`: formats 4, and plugin ids as the kernel reads them (the
+/// kernel refuses a plugin whose `requires` it cannot read).
+fn requires(manifest: &Manifest, place: &str, add: &mut dyn FnMut(Finding)) {
+    let Some(text) = &manifest.requires else {
+        return;
+    };
+    if manifest.formats.is_none_or(|formats| formats < 4) {
+        add(Finding::error(
+            "package.requires",
+            place,
+            "`requires` needs `formats = 4` (or later): PaperPaw refuses the plugin otherwise.",
+        ));
+    }
+    let own = manifest.id.as_deref().unwrap_or_default();
+    if let Err(why) = paperpaw_sdk::requires::parse(text, own) {
+        add(Finding::error(
+            "package.requires",
+            place,
+            format!("`requires = {text}` is refused: {why}."),
+        ));
+    }
+}
+
 /// `plugin.ini`: present, readable, its `[plugin]` section as the kernel
 /// and the plugin library want it.
 #[expect(
@@ -530,6 +562,7 @@ fn manifest(plugin: &DataPlugin, folder: &mut Folder, add: &mut dyn FnMut(Findin
                     "name" => manifest.name = value,
                     "description" => manifest.description = value,
                     "version" => manifest.version = value,
+                    "requires" => manifest.requires = value,
                     "formats" => match line.value.trim().parse::<u32>() {
                         Ok(n) => manifest.formats = Some(n),
                         Err(_) => add(Finding::error(
@@ -617,6 +650,7 @@ fn manifest(plugin: &DataPlugin, folder: &mut Folder, add: &mut dyn FnMut(Findin
             }
         }
     }
+    requires(manifest, place, add);
     match &manifest.version {
         None => add(Finding::error(
             "package.version",
