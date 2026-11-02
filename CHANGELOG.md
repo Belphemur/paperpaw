@@ -6,7 +6,7 @@ change the plugin SDK.
 
 ## [Unreleased]
 
-**Plugins of this release must be built from `BLESS6` or later** (plugin interface 6, #363). 0.6.0-beta.1 takes
+**Plugins of this release must be built from `6c4a19dc` or later** (plugin interface 6, #363). 0.6.0-beta.1 takes
 the interface-6 round too (TLS sockets, screens that fit another size, libraries of any size), so plugins change
 once: from interface 4 of 0.5.0-beta.12 to interface 6. Interface 5 was never released; plugins built for it (the
 earlier release candidate's store files, test cards and Workshop builds) are refused as built for an older
