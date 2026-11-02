@@ -279,10 +279,11 @@ fn a_broken_ncx_reads_without_contents() {
 }
 
 /// A card where another book's cache folder cannot be removed (damaged,
-/// #388): counted writes, nothing else changed.
+/// #388), nor listed if `unlisted`: counted writes, nothing else changed.
 struct Stuck {
     inner: MemoryStorage,
     writes: std::cell::Cell<usize>,
+    unlisted: bool,
 }
 
 impl Storage for Stuck {
@@ -301,7 +302,10 @@ impl Storage for Stuck {
         self.inner.append(path, data)
     }
     fn list(&self, dir: &str, visit: &mut dyn FnMut(DirEntry<'_>)) -> Result<(), StorageError> {
-        self.inner.list(dir, visit)
+        match self.unlisted {
+            true => Err(StorageError::Io),
+            false => self.inner.list(dir, visit),
+        }
     }
     fn remove(&self, path: &str) -> Result<(), StorageError> {
         self.inner.remove(path)
@@ -315,29 +319,33 @@ impl Storage for Stuck {
     }
 }
 
-/// Another book's cache that cannot be removed: the book replacing it
-/// shows its details, and nothing of the folder (chapters, contents,
-/// printed pages, cover) is read as its own, nor written there.
+/// Another book's cache that cannot be removed, listed or not (#397 N4):
+/// the book replacing it shows its details, and nothing of the folder
+/// (chapters, contents, printed pages, cover) is read as its own, nor
+/// written there.
 #[test]
 fn a_cache_that_cannot_be_cleared_is_never_read_from() {
-    let storage = MemoryStorage::new().with("books/book.epub", ALICE);
-    let alice = EpubDocument::open(&storage, "books/book.epub").unwrap();
-    let _ = alice.cover(&storage).unwrap();
-    assert!(!blocks(&alice, &storage).is_empty());
-    drop(alice);
-    storage.write("books/book.epub", KAFKA).unwrap();
-    let stuck = Stuck {
-        inner: storage,
-        writes: std::cell::Cell::new(0),
-    };
-    let kafka = EpubDocument::open(&stuck, "books/book.epub").unwrap();
-    assert_eq!(kafka.metadata().title.as_deref(), Some("Die Verwandlung"));
-    let start = Locator::new(0, 0);
-    assert!(kafka.block_at(&stuck, start).is_err());
-    assert!(kafka.cover(&stuck).is_err());
-    assert_eq!(kafka.toc_len(&stuck), 0);
-    assert!(kafka.toc_entry(&stuck, 0).is_none());
-    assert!(kafka.page_label(&stuck, start).is_none());
-    assert!(kafka.fonts(&stuck).is_empty());
-    assert_eq!(stuck.writes.get(), 0);
+    for unlisted in [false, true] {
+        let storage = MemoryStorage::new().with("books/book.epub", ALICE);
+        let alice = EpubDocument::open(&storage, "books/book.epub").unwrap();
+        let _ = alice.cover(&storage).unwrap();
+        assert!(!blocks(&alice, &storage).is_empty());
+        drop(alice);
+        storage.write("books/book.epub", KAFKA).unwrap();
+        let stuck = Stuck {
+            inner: storage,
+            writes: std::cell::Cell::new(0),
+            unlisted,
+        };
+        let kafka = EpubDocument::open(&stuck, "books/book.epub").unwrap();
+        assert_eq!(kafka.metadata().title.as_deref(), Some("Die Verwandlung"));
+        let start = Locator::new(0, 0);
+        assert!(kafka.block_at(&stuck, start).is_err(), "{unlisted}");
+        assert!(kafka.cover(&stuck).is_err());
+        assert_eq!(kafka.toc_len(&stuck), 0);
+        assert!(kafka.toc_entry(&stuck, 0).is_none());
+        assert!(kafka.page_label(&stuck, start).is_none());
+        assert!(kafka.fonts(&stuck).is_empty());
+        assert_eq!(stuck.writes.get(), 0);
+    }
 }

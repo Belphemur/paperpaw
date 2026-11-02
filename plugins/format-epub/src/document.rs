@@ -234,11 +234,14 @@ fn position(line: &str) -> Option<(u32, &str)> {
 /// is past the chapter.
 const MAX_SPAN: u32 = 16 * 1024;
 
-/// Whether anything is in folder `dir`.
+/// Whether anything may be in folder `dir`: something listed, or it
+/// cannot be listed (but is there).
 fn left_in(storage: &dyn Storage, dir: &str) -> bool {
     let mut any = false;
-    let _ = storage.list(dir, &mut |_| any = true);
-    any
+    match storage.list(dir, &mut |_| any = true) {
+        Ok(()) | Err(StorageError::NotFound) => any,
+        Err(_) => true,
+    }
 }
 
 /// The cache of a book.
@@ -423,7 +426,8 @@ impl EpubDocument {
                 let state = match storage.remove_dir_all(&cache) {
                     Ok(()) => Held::Nothing,
                     // Not there, or empty (a storage that removes no
-                    // folders): nothing to read from.
+                    // folders): nothing to read from. One that cannot be
+                    // listed may hold anything.
                     Err(e) if left_in(storage, &cache) => Held::Uncleared(e),
                     Err(_) => Held::Nothing,
                 };
