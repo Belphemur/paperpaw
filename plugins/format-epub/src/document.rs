@@ -65,7 +65,9 @@ pub struct EpubDocument {
     book: String,
     state: Cell<Held>,
     /// The package could not be written (its contents or stylesheets are
-    /// unreadable): not tried again until the book is opened again.
+    /// unreadable, or the card refused it, e.g. full): not tried again
+    /// until the book is opened again, each try reading the package and
+    /// writing to the card anew.
     broken: Cell<bool>,
     /// The book's path, and the stylesheets to apply after its own (e.g.
     /// the plugins'): for [`EpubDocument::styled`].
