@@ -270,6 +270,7 @@ impl KeyboardScreen {
             Key::Shift => "keyboard.shift",
             Key::Delete => "keyboard.delete",
             Key::Space => "keyboard.space",
+            Key::Enter => "keyboard.enter",
             _ => {
                 let label = self.label(env, key);
                 if filled_only {
@@ -305,10 +306,14 @@ impl KeyboardScreen {
             _ => paperpaw_sdk::icons::SPACE,
         };
         let canvas = ui.canvas();
-        if ui::draw_icon_at(canvas, env, icon, style.text(), (cx, cy), ink) {
+        // The line break has no icon in the font: drawn here, at the right
+        // end of its key where it runs left, turned round where right to
+        // left.
+        if key != Key::Enter && ui::draw_icon_at(canvas, env, icon, style.text(), (cx, cy), ink) {
             return;
         }
         match key {
+            Key::Enter => enter_arrow(canvas, cx, cy, size, style.is_rtl(), ink),
             Key::Shift => arrow_up(canvas, cx, cy, size, ink),
             Key::Delete => arrow_left(canvas, cx, cy, size, ink),
             Key::Space => {
@@ -392,6 +397,43 @@ pub(crate) fn arrow_up(canvas: &mut Canvas<'_>, x: i32, y: i32, size: i32, color
     }
     let stem = (size / 4).max(2);
     canvas.fill_rect(x - stem / 2, y, stem as u32, half as u32, color);
+}
+
+/// The arrow of a line break (a stem down, then an arrow back along the
+/// line), centred at `(x, y)`; turned round where `rtl`.
+pub(crate) fn enter_arrow(
+    canvas: &mut Canvas<'_>,
+    x: i32,
+    y: i32,
+    size: i32,
+    rtl: bool,
+    color: Color,
+) {
+    let half = size / 2;
+    let t = (size / 4).max(2);
+    let turn = if rtl { -1 } else { 1 };
+    // `from..to` along the line of text, as a width at its left end.
+    let span = |from: i32, to: i32| {
+        let (a, b) = (x + turn * from, x + turn * to);
+        (a.min(b), (a - b).unsigned_abs())
+    };
+    // The way back, along the bottom: the head at its far end.
+    let base = y + size / 4;
+    for dx in 0..=half {
+        let left = span(-half + dx, -half + dx + 1).0;
+        canvas.fill_rect(left, base - dx, 1, (dx * 2 + 1) as u32, color);
+    }
+    let (left, width) = span(-half, half);
+    canvas.fill_rect(left, base - t / 2, width, t as u32, color);
+    // The stem, from the end of the line up.
+    let (left, width) = span(half - t, half);
+    canvas.fill_rect(
+        left,
+        y - half,
+        width,
+        (base + t / 2 - (y - half)) as u32,
+        color,
+    );
 }
 
 /// An arrow pointing left (*Delete*), centred at `(x, y)`.

@@ -176,3 +176,102 @@ fn a_plain_field_stays_one_line() {
     assert_eq!(lines, ["Hi Ada Jane"]);
     assert!(field.area.height < 120, "{}", field.area.height);
 }
+
+/// A kernel with the keyboard open in `mode` on text `text`.
+fn open_keyboard(mode: &str, text: &str) -> Kernel {
+    open_keyboard_on(DEVICE, mode, text)
+}
+
+fn open_keyboard_on(device: DeviceInfo, mode: &str, text: &str) -> Kernel {
+    use paperpaw_sdk::builtin::{params, slots};
+    let mut kernel = Kernel::builder(device)
+        .storage(MemoryStorage::new())
+        .user_config("[core]\nlanguage = en\n")
+        .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+        .plugin(Keyboard)
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    let open = Params::new()
+        .with(params::TITLE, "Message")
+        .with(params::REPLY, "asker.typed")
+        .with(params::MODE, mode)
+        .with(params::TEXT, text);
+    kernel.open_slot(Instant(100), slots::KEYBOARD, open);
+    kernel.render(&mut |_, _| {});
+    kernel
+}
+
+#[test]
+fn the_panel_leaves_the_status_line_free_on_every_screen() {
+    use paperpaw_platform::{DisplayInfo, PixelFormat, Rotation};
+    let long = "line\n".repeat(100);
+    let field_top = |device: DeviceInfo, mode: &str| {
+        open_keyboard_on(device, mode, &long)
+            .describe()
+            .into_iter()
+            .find(|p| p.role == paperpaw_sdk::semantics::Role::Field)
+            .unwrap()
+            .area
+            .y
+    };
+    // Turned on its side the plain field's panel fills the screen from the
+    // top; the panel of several lines starts under the status line.
+    let wide = DEVICE.with_display(DisplayInfo::new(
+        800,
+        480,
+        220,
+        PixelFormat::Gray4,
+        Rotation::Deg0,
+        None,
+    ));
+    assert!(field_top(wide.clone(), "multiline") > field_top(wide, "text"));
+    // Upright, the lines of the field stop short of the top.
+    assert!(field_top(DEVICE, "multiline") >= 60);
+}
+
+#[test]
+fn the_line_break_key_adds_a_line_break() {
+    use paperpaw_platform::{InputEvent, PointerEvent, PointerPhase, PointerTool};
+    use paperpaw_sdk::semantics::Role;
+    let got = Rc::new(RefCell::new(Vec::new()));
+    let mut kernel = Kernel::builder(DEVICE)
+        .storage(MemoryStorage::new())
+        .user_config("[core]\nlanguage = en\n")
+        .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+        .plugin(Keyboard)
+        .plugin(Asker(got.clone(), true))
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    kernel.run_action(Instant(100), ASK);
+    let text = Typed::new("Hi", Params::new());
+    kernel.send_event(
+        Instant(150),
+        Id::new_static("keyboard.remote-text"),
+        text.to_params(),
+    );
+    let mut now = 200;
+    let mut tap = |kernel: &mut Kernel, label: &str| {
+        kernel.render(&mut |_, _| {});
+        let key = kernel
+            .describe()
+            .into_iter()
+            .find(|p| p.role == Role::Button && p.label == label)
+            .unwrap_or_else(|| panic!("no key {label:?}"));
+        let at = paperpaw_sdk::Point::new(
+            i32::from(key.area.x) + i32::from(key.area.width) / 2,
+            i32::from(key.area.y) + i32::from(key.area.height) / 2,
+        );
+        for phase in [PointerPhase::Down, PointerPhase::Up] {
+            now += 50;
+            let event =
+                InputEvent::Pointer(PointerEvent::new(0, phase, at, PointerTool::Finger, 1000));
+            kernel.handle(Instant(now), event);
+        }
+    };
+    tap(&mut kernel, "New line");
+    tap(&mut kernel, "z");
+    tap(&mut kernel, "OK");
+    assert_eq!(got.borrow().as_slice(), ["Hi\nz"]);
+}
