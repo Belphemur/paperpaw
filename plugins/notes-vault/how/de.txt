@@ -6,4 +6,4 @@ Beim ersten Mal wird der Tresor im Hintergrund erfasst, solange seine Seite offe
 
 Eine Notiz öffnet sich im Leser. Verweise auf andere Notizen ([[Notiz]], [[Notiz|Wörter]], [[Notiz#Überschrift]]) werden über den Namen der Notiz irgendwo im Tresor gefunden; ein Verweis öffnet diese Notiz, und „Zurück“ führt zur vorherigen Notiz.
 
-Nichts im Tresor wird je verändert. Die Widgets für den Startbildschirm (letzte Notizen, eine angeheftete Notiz, Notiz des Tages, zufällige Notiz, Tags, Suche) fügst du im Editor des Startbildschirms hinzu.
+Nichts im Tresor wird je verändert. Die Widgets für den Startbildschirm (letzte Notizen, eine angeheftete Notiz, Notiz des Tages, zufällige Notiz, Tags, Suche) fügst du im Editor des Startbildschirms hinzu. Ein Widget kann seine Notizen aus einem einzigen Ordner nehmen: Schreibe den Pfad des Ordners von der Wurzel der Karte (zum Beispiel Notizen/Arbeit) in die Einstellungen des Widgets; bleibt das Feld leer, nimmt es alle Notizen des Tresors.

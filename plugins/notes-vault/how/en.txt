@@ -6,4 +6,4 @@ The first time, the vault is indexed in the background while its page is open; a
 
 A note opens in the reader. Links to other notes ([[Note]], [[Note|words]], [[Note#Heading]]) are found by the note's name anywhere in the vault; following one opens that note, and Back returns to the note before.
 
-Nothing in the vault is ever changed. The widgets for the home screen (recent notes, a pinned note, a note of the day, a random note, tags, search) are added in the home screen's editor.
+Nothing in the vault is ever changed. The widgets for the home screen (recent notes, a pinned note, a note of the day, a random note, tags, search) are added in the home screen's editor. A widget can take its notes from one folder only: write the folder's path from the card's root (for example Notes/Work) in the widget's settings; left empty, it takes all notes of the vault.
