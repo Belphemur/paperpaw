@@ -125,7 +125,7 @@ pub fn check(
     };
     for variant in variants(context) {
         let mut session = Session::start(&own, &variant, &start)?;
-        let findings = install(&mut session, plugin, folder, &id)?;
+        let findings = install(&mut session, context, plugin, folder, &id)?;
         for finding in findings {
             report.add(finding.plugin(plugin.id.clone()).variant(variant.name()));
         }
@@ -136,6 +136,7 @@ pub fn check(
 /// Installs the plugin on the session's device; what was found.
 fn install(
     session: &mut Session,
+    context: &Context,
     plugin: &DataPlugin,
     folder: &Folder,
     id: &str,
@@ -225,7 +226,7 @@ fn install(
     settings(kernel, &folder.settings, &mut out);
     presets(kernel, id, folder, &mut out);
     keymap(kernel, &folder.keymap, &mut out);
-    extends(kernel, &folder.manifest.extends, &mut out);
+    extends(kernel, context, &folder.manifest.extends, &mut out);
     Ok(out)
 }
 
@@ -426,17 +427,60 @@ fn keymap(kernel: &Kernel, lines: &[Line], out: &mut Vec<Finding>) {
 }
 
 /// `[extends]`: fonts that exist.
-fn extends(kernel: &Kernel, lines: &[Line], out: &mut Vec<Finding>) {
+///
+/// A font of a plugin that is no part of the app (`literata-styles.bold`
+/// of the store's data plugin) is there once that plugin is installed: it
+/// is found among the plugins checked with this one, else told as a note
+/// (a typo in the name of a font of the app's own plugins is an error).
+fn extends(kernel: &Kernel, context: &Context, lines: &[Line], out: &mut Vec<Finding>) {
     for line in lines {
         let font = line.value.trim();
-        if Id::parse(font).is_ok() && !kernel.fonts().contains(font) {
-            out.push(Finding::error(
-                "package.fonts",
-                format!("plugin.ini:{}", line.line),
-                format!("`{font}` is no font of the app, so the pack extends nothing; e.g. fonts-default.literata."),
-            ));
+        let Ok(id) = Id::parse(font) else { continue };
+        if kernel.fonts().contains(font) || family_face_of_sibling(context, &id) {
+            continue;
         }
+        let place = format!("plugin.ini:{}", line.line);
+        let namespace = id.namespace();
+        let of_the_app = kernel
+            .plugins()
+            .iter()
+            .any(|p| p.manifest.id.as_str() == namespace);
+        out.push(if of_the_app {
+            Finding::error(
+                "package.fonts",
+                place,
+                format!("`{font}` is no font of the app, so the pack extends nothing; e.g. fonts-default.literata."),
+            )
+        } else {
+            Finding::warning(
+                "package.fonts",
+                place,
+                format!("`{font}` is a font of the plugin `{namespace}`, which is not part of the app: the pack extends nothing until that plugin is installed too."),
+            )
+        });
     }
+}
+
+/// Whether `font` (`<plugin>.<face>`) is a face of the `[family]` of a data
+/// plugin checked together with this one.
+fn family_face_of_sibling(context: &Context, font: &Id) -> bool {
+    let face = font
+        .as_str()
+        .strip_prefix(font.namespace())
+        .and_then(|r| r.strip_prefix('.'));
+    let Some(face) = face else { return false };
+    context
+        .target
+        .data
+        .iter()
+        .filter(|p| p.id == font.namespace())
+        .filter_map(|p| p.files.get("plugin.ini"))
+        .filter_map(|ini| core::str::from_utf8(ini).ok())
+        .any(|ini| {
+            paperpaw_config::parse(ini).filter_map(Result::ok).any(|e| {
+                e.section == "family" && e.key == face && !e.value.as_str().trim().is_empty()
+            })
+        })
 }
 
 /// Plugins with code named with `--plugin`: the SDK each was built for,

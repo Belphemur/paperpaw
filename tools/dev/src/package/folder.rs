@@ -67,6 +67,12 @@ const LATER_FORMATS: [(&str, u32); 5] = [
 /// The version of the data formats that brought `points/*.txt`.
 const POINTS_FORMATS: u32 = 3;
 
+/// The version of the data formats that brought `i18n/*.ppcat` (ADR 0033).
+const CATALOG_FORMATS: u32 = 4;
+
+/// The version of the data formats that brought `[fonts]` in `plugin.ini`.
+const FONTS_FORMATS: u32 = 3;
+
 /// The most steps an action of `actions.ini` runs (`MAX_STEPS` in the
 /// kernel's `data_plugin.rs`).
 const MAX_STEPS: usize = 16;
@@ -102,6 +108,8 @@ pub struct Manifest {
     pub extends: Vec<Line>,
     /// `[family]`: its name and faces.
     pub family: Vec<Line>,
+    /// `[fonts]`: roles bound to fonts (data formats 3).
+    pub fonts: Vec<Line>,
 }
 
 /// A data plugin folder as read.
@@ -267,11 +275,30 @@ fn later_formats(folder: &Folder, add: &mut dyn FnMut(Finding)) {
         .iter()
         .filter(|f| f.path.starts_with("points/") && f.path.ends_with(".txt"))
         .map(|f| (f.path.as_str(), POINTS_FORMATS));
+    let compiled = folder
+        .files
+        .iter()
+        .filter(|f| f.path.starts_with("i18n/") && f.path.ends_with(".ppcat"))
+        .map(|f| (f.path.as_str(), CATALOG_FORMATS));
     let files = LATER_FORMATS
         .iter()
         .filter(|(path, _)| folder.file(path).is_some())
         .map(|&(path, formats)| (path, formats))
-        .chain(points);
+        .chain(points)
+        .chain(compiled);
+    if let Some(line) = folder.manifest.fonts.first()
+        && says < FONTS_FORMATS
+    {
+        add(Finding::error(
+            "package.formats",
+            format!("plugin.ini:{}", line.line),
+            format!(
+                "PaperPaw reads [fonts] only for a plugin made for data formats {FONTS_FORMATS} or \
+                 later, and plugin.ini says {says}: it is left out. Write `formats = \
+                 {FONTS_FORMATS}` in [plugin]."
+            ),
+        ));
+    }
     for (path, needs) in files {
         if path.ends_with(".ini") {
             let _ = lines(folder, path, add);
@@ -283,7 +310,7 @@ fn later_formats(folder: &Folder, add: &mut dyn FnMut(Finding)) {
                 format!(
                     "PaperPaw reads this file only for a plugin made for data formats {needs} or \
                      later, and plugin.ini says {says}: it is left out. Write `formats = \
-                     {DATA_FORMATS}` in [plugin]."
+                     {needs}` in [plugin]."
                 ),
             ));
         }
@@ -526,6 +553,7 @@ fn manifest(plugin: &DataPlugin, folder: &mut Folder, add: &mut dyn FnMut(Findin
             }
             "extends" => manifest.extends.push(line.clone()),
             "family" => manifest.family.push(line.clone()),
+            "fonts" => manifest.fonts.push(line.clone()),
             "" => add(Finding::warning(
                 "package.manifest",
                 at,
@@ -538,7 +566,7 @@ fn manifest(plugin: &DataPlugin, folder: &mut Folder, add: &mut dyn FnMut(Findin
                 "package.manifest",
                 at,
                 format!(
-                    "[{other}] is not read in plugin.ini (only [plugin], [extends] and [family])."
+                    "[{other}] is not read in plugin.ini (only [plugin], [extends], [family] and [fonts])."
                 ),
             )),
         }
@@ -710,14 +738,25 @@ fn family(folder: &Folder, add: &mut dyn FnMut(Finding)) {
         .iter()
         .find(|l| l.key == "name")
         .is_some_and(|l| !l.value.trim().is_empty());
-    let regular = lines
-        .iter()
-        .any(|l| l.key == "regular" && !l.value.trim().is_empty());
-    if !name || !regular {
+    let has = |face: &str| {
+        lines
+            .iter()
+            .any(|l| l.key == face && !l.value.trim().is_empty())
+    };
+    let any_face = FACES.iter().any(|face| has(face));
+    if !name || !any_face {
         add(Finding::error(
             "package.fonts",
             place,
-            "[family] needs a name and a regular face; without them PaperPaw leaves the family out.",
+            "[family] needs a name and a face; without them PaperPaw leaves the family out.",
+        ));
+    } else if !has("regular") && folder.manifest.fonts.is_empty() {
+        // A family built in may lack a face (the firmware's Literata has
+        // no bold italic): a plugin brings it and binds it with [fonts].
+        add(Finding::warning(
+            "package.fonts",
+            place,
+            "[family] has no regular face and [fonts] binds none to a role: the faces are listed, but nothing uses them.",
         ));
     }
     for line in lines {
@@ -766,6 +805,9 @@ fn read_as(folder: &Folder, path: &str, id: &str) -> Option<&'static str> {
     let parts: Vec<&str> = path.split('/').collect();
     let ext = extension(path);
     if parts.len() == 2 && parts[0] == "i18n" && path.ends_with(".ini") {
+        return Some("catalog");
+    }
+    if parts.len() == 2 && parts[0] == "i18n" && ext == "ppcat" {
         return Some("catalog");
     }
     if parts.len() == 2 && parts[0] == "points" && ext == "txt" {
@@ -856,7 +898,7 @@ fn files_and_kinds(plugin: &DataPlugin, folder: &Folder, add: &mut dyn FnMut(Fin
             let hint = match ext.as_str() {
                 "ini" => {
                     " (it reads plugin.ini, settings.ini, keymap.ini, presets.ini, marks.ini, \
-                     menus.ini, actions.ini, icons.ini, setup.ini and i18n/*.ini)"
+                     menus.ini, actions.ini, icons.ini, setup.ini and i18n/*.ini and *.ppcat)"
                 }
                 "css" => " (it reads styles.css)",
                 "ppfp" => " (packs are read where [extends] or [family] in plugin.ini names them)",

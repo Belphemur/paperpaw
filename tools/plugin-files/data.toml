@@ -50,12 +50,15 @@ de.name = "Literata Fett Kursiv"
 de.description = "Fett-kursiver Buchtext in Literata, wo sonst Fett dafür steht."
 
 # The script packs (the owner decided, 2026-11-01, to offer them with everything else
-# that is ready): tools/script-pack.py builds them for the release.
+# that is ready): tools/script-pack.py builds them for the release. The ones with a
+# keyboard (points/keyboard.layouts.txt) say formats 3: PaperPaw reads a plugin's
+# points from there on.
 
 [script-arabic]
-version = "1.1.0"
+version = "1.1.1"
 group = "look"
 licence = "OFL-1.1"
+formats = 3
 devices = ["x4", "x4-pro", "x4-classic"]
 off_by_default = true
 build = "tools/script-pack.py"
@@ -66,9 +69,10 @@ de.name = "Arabische Schrift"
 de.description = "Bücher auf Arabisch, Persisch und Urdu in Noto Naskh Arabic, mit ihren Vokalzeichen, und Tastaturen dafür."
 
 [script-hebrew]
-version = "1.1.0"
+version = "1.1.1"
 group = "look"
 licence = "OFL-1.1"
+formats = 3
 devices = ["x4", "x4-pro", "x4-classic"]
 off_by_default = true
 build = "tools/script-pack.py"
@@ -126,9 +130,10 @@ de.description = "PaperPaws Menüs und Einstellungen auf Arabisch, von rechts na
 # fall back to it. A pack holds up to 65,535 characters, so all 11,172
 # syllables (`hangul`) can come later as data, without a new interface.
 [script-korean]
-version = "1.1.0"
+version = "1.1.1"
 group = "look"
 licence = "OFL-1.1"
+formats = 3
 devices = ["x4", "x4-pro", "x4-classic"]
 off_by_default = true
 build = "tools/script-pack.py"

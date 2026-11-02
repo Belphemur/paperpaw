@@ -13,11 +13,11 @@ import data  # noqa: E402
 
 # The versions they are at now: a change of a pack bumps it here too.
 PACKS = {
-    "script-arabic": "1.1.0",
-    "script-hebrew": "1.1.0",
+    "script-arabic": "1.1.1",
+    "script-hebrew": "1.1.1",
     "script-greek": "1.0.0",
     "script-cyrillic": "1.0.0",
-    "script-korean": "1.1.0",
+    "script-korean": "1.1.1",
     "script-korean-extra": "1.0.0",
 }
 
@@ -47,12 +47,17 @@ class ScriptPacks(unittest.TestCase):
                 self.assertTrue((data.ROOT / path).exists(), (pack, path))
             # What the pack builder writes for it.
             self.assertIn(f"id = {pack}\n", data.plugin_ini(pack, fields))
+            # A pack with a keyboard (points/) is made for formats 3, else
+            # PaperPaw leaves the keyboard out.
+            if any("/keyboards/" in path for path in fields["inputs"]):
+                self.assertGreaterEqual(fields.get("formats", 1), 3, pack)
+                self.assertIn("formats = ", data.plugin_ini(pack, fields), pack)
 
 
 class Korean(unittest.TestCase):
     def test_the_korean_pack_is_ready(self):
         fields = ready()["script-korean"]
-        self.assertEqual(fields["version"], "1.1.0")
+        self.assertEqual(fields["version"], "1.1.1")
         self.assertEqual(fields["build"], "tools/script-pack.py")
         self.assertTrue(fields["off_by_default"])
         self.assertEqual(fields["licence"], "OFL-1.1")
