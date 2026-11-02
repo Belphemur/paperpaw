@@ -99,9 +99,7 @@ impl Reader {
             }
         };
         put("mail.from", &letter.from);
-        put("mail.to", &letter.to);
         put("mail.cc", &letter.cc);
-        put("mail.subject", &letter.subject);
         put("mail.date-label", &texts::when(env, letter.date));
         if !letter.attachments.is_empty() {
             put("mail.attachments", &letter.attachments.join(", "));

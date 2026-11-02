@@ -20,6 +20,14 @@ before it are thrown away.
 
 ### Added
 
+- **Mail (#81):** a plugin that reads and sends e-mail over IMAP and SMTP with a password or an app password, no
+  browser login. Up to three accounts under Settings, Mail, with presets for ten providers that fill in the
+  servers; the folders with how many mails wait, a folder's latest mails, a mail (text, or the text of a simple
+  HTML mail; attachments are named, not fetched), *Reply*, *Reply all*, *Star*, and writing a mail on the keyboard.
+  It connects, fetches and closes (the X4 holds one secure connection), keeps what it fetched on the card, and asks
+  once before trusting a server no authority vouches for. Five home widgets: unread mail, latest mail, starred
+  mail, one mailbox and a shortcut to write. Needs the TLS sockets of the next interface raise; background
+  fetching and a Sent copy are not in this first version.
 - **Plugin interface (next raise):** `Storage::list_from` lists a folder a piece at a time, each piece going on
   where the last one stopped (#79): a folder of thousands of entries is read about twice in all, not once a
   piece. Storages that cannot go on from a place count, as `paperpaw_platform::list_counted` does (the item's

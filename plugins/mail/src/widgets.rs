@@ -163,9 +163,9 @@ impl MailWidget {
 }
 
 /// The accounts a widget's `account` setting means: all, or the one.
-fn selected(env: &Env<'_>, widget: &str) -> Vec<Account> {
+fn selected(env: &Env<'_>, widget: &str) -> Vec<u8> {
     let wanted = env.settings().int(&format!("{widget}.account"));
-    Account::all(env).into_iter().filter(|a| wanted == 0 || i64::from(a.number) == wanted).collect()
+    Account::numbers(env).into_iter().filter(|n| wanted == 0 || i64::from(*n) == wanted).collect()
 }
 
 fn folder_of(env: &Env<'_>, widget: &str) -> String {
@@ -174,10 +174,10 @@ fn folder_of(env: &Env<'_>, widget: &str) -> String {
 }
 
 /// The mails of the selected accounts' folder, newest first.
-fn rows(env: &Env<'_>, accounts: &[Account], folder: &str) -> Vec<(u8, store::Row)> {
+fn rows(env: &Env<'_>, accounts: &[u8], folder: &str) -> Vec<(u8, store::Row)> {
     let mut all: Vec<(u8, store::Row)> = accounts
         .iter()
-        .flat_map(|a| store::read_index(env.storage(), &store::index_file(a.number, folder)).into_iter().map(|r| (a.number, r)))
+        .flat_map(|&a| store::read_index(env.storage(), &store::index_file(a, folder)).into_iter().map(move |r| (a, r)))
         .collect();
     all.sort_by(|a, b| b.1.date.cmp(&a.1.date).then(b.1.uid.cmp(&a.1.uid)));
     all
@@ -199,7 +199,7 @@ fn read(kind: Kind, env: &Env<'_>) -> Shown {
     if matches!(kind, Kind::Write) {
         return Shown { headline: i18n.tr("mail.widget.write.text").into(), ..Shown::default() };
     }
-    if Account::all(env).is_empty() {
+    if Account::numbers(env).is_empty() {
         return Shown { headline: i18n.tr("mail.widget.set-up").into(), ..Shown::default() };
     }
     let count = env.settings().int(&format!("{id}.count")).clamp(1, 8) as usize;
@@ -207,7 +207,7 @@ fn read(kind: Kind, env: &Env<'_>) -> Shown {
         Kind::Unread => {
             let unseen: i64 = accounts
                 .iter()
-                .filter_map(|a| Counts::read(env.storage(), &store::status_file(a.number, "INBOX")))
+                .filter_map(|&a| Counts::read(env.storage(), &store::status_file(a, "INBOX")))
                 .map(|c| i64::from(c.unseen))
                 .sum();
             let mut items = Vec::new();
@@ -219,13 +219,13 @@ fn read(kind: Kind, env: &Env<'_>) -> Shown {
             Shown {
                 headline: i18n.plural("mail.widget.unread.count", unseen, &[("count", Arg::Int(unseen))]),
                 items,
-                folder: accounts.first().map(|a| (a.number, "INBOX".into())).filter(|_| accounts.len() == 1),
+                folder: accounts.first().map(|a| (*a, "INBOX".into())).filter(|_| accounts.len() == 1),
             }
         }
         Kind::Latest => {
             let folder = folder_of(env, id);
             let items = rows(env, &accounts, &folder).iter().take(count).map(|(n, r)| item(env, *n, &folder, r)).collect();
-            Shown { items, folder: accounts.first().map(|a| (a.number, folder)).filter(|_| accounts.len() == 1), ..Shown::default() }
+            Shown { items, folder: accounts.first().map(|a| (*a, folder)).filter(|_| accounts.len() == 1), ..Shown::default() }
         }
         Kind::Flagged => {
             let items = rows(env, &accounts, "INBOX")
@@ -241,7 +241,7 @@ fn read(kind: Kind, env: &Env<'_>) -> Shown {
             let Some(account) = accounts.first() else {
                 return Shown { headline: i18n.tr("mail.widget.set-up").into(), ..Shown::default() };
             };
-            let counts = Counts::read(env.storage(), &store::status_file(account.number, &folder));
+            let counts = Counts::read(env.storage(), &store::status_file(*account, &folder));
             let headline = counts.map_or(String::new(), |c| {
                 let n = i64::from(c.unseen);
                 i18n.plural("mail.widget.unread.count", n, &[("count", Arg::Int(n))])
@@ -250,7 +250,7 @@ fn read(kind: Kind, env: &Env<'_>) -> Shown {
                 i18n.plural("mail.widget.total", i64::from(c.messages), &[("count", Arg::Int(i64::from(c.messages)))])
             });
             let items = if second.is_empty() { Vec::new() } else { alloc::vec![Item { first: second, ..Item::default() }] };
-            Shown { headline, items, folder: Some((account.number, folder)) }
+            Shown { headline, items, folder: Some((*account, folder)) }
         }
         Kind::Write => Shown::default(),
     }
@@ -290,7 +290,7 @@ impl Widget for MailWidget {
 
     fn height(&self, env: &Env<'_>, _: u16) -> u16 {
         let id = self.kind.id();
-        let caption = if widgets::shows(env, id, "caption") { widgets::caption_height(env) } else { 0 };
+        let caption = if widgets::shows(env, id, "caption") && self.kind != Kind::Write { widgets::caption_height(env) } else { 0 };
         let empty = if self.shown.headline.is_empty() && self.shown.items.is_empty() {
             widgets::line_height(env, UiStyle::new(env).text())
         } else {
@@ -301,7 +301,7 @@ impl Widget for MailWidget {
 
     fn min_height(&self, env: &Env<'_>, _: u16) -> u16 {
         let id = self.kind.id();
-        let caption = if widgets::shows(env, id, "caption") { widgets::caption_height(env) } else { 0 };
+        let caption = if widgets::shows(env, id, "caption") && self.kind != Kind::Write { widgets::caption_height(env) } else { 0 };
         widgets::frame_height(env, id) + caption + widgets::line_height(env, UiStyle::new(env).text())
     }
 
@@ -310,7 +310,7 @@ impl Widget for MailWidget {
         let style = UiStyle::new(env);
         let look = widgets::draw_frame(canvas, env, id, area);
         let mut inner = look.area;
-        if widgets::shows(env, id, "caption") {
+        if widgets::shows(env, id, "caption") && self.kind != Kind::Write {
             let caption = env.i18n().tr(id);
             inner = widgets::draw_caption(canvas, env, id, &look, caption);
         }

@@ -140,7 +140,10 @@ impl Browser {
                     } else {
                         folders.into_iter().filter(store::Folder::selectable).collect()
                     };
-                    for folder in folders {
+                    for mut folder in folders {
+                        if let Some(key) = special_name(&folder) {
+                            folder.name = i18n.tr(key).into();
+                        }
                         let counts = Counts::read(storage, &store::status_file(account.number, &folder.raw));
                         let unseen = counts.map_or(0, |c| i64::from(c.unseen));
                         let note = if accounts.len() > 1 { account.address.clone() } else { String::new() };
@@ -163,8 +166,9 @@ impl Browser {
                 lines.push(Line { title: i18n.tr("mail.write").into(), note: String::new(), value: "›".into(), target: Target::Write });
             }
         }
-        let height = self.style.noted_row();
-        self.list.set_row(height);
+        // Rows as high as their notes need; plain ones where none has a note.
+        let noted = lines.iter().any(|l| !l.note.is_empty());
+        self.list.set_row(if noted { self.style.noted_row() } else { u32::from(self.style.row()) });
         self.lines = lines;
         let len = self.lines.len();
         if self.list.focus() >= len {
@@ -299,14 +303,26 @@ fn message_line(env: &Env<'_>, row: &Row) -> Line {
     }
 }
 
-fn folder_name(env: &Env<'_>, account: u8, raw: &str) -> String {
-    if raw.eq_ignore_ascii_case("INBOX") {
-        return env.i18n().tr("mail.inbox").to_string();
+/// The translation key of a folder the server marks for a purpose (or the
+/// inbox), so that it reads in the reader's language.
+fn special_name(folder: &store::Folder) -> Option<&'static str> {
+    if folder.is_inbox() {
+        return Some("mail.inbox");
     }
-    store::read_folders(env.storage(), &store::folders_file(account))
+    let flag = |name: &str| folder.flags.iter().any(|f| f == name);
+    [("\\sent", "mail.folder.sent"), ("\\drafts", "mail.folder.drafts"), ("\\trash", "mail.folder.trash"), ("\\junk", "mail.folder.junk"), ("\\archive", "mail.folder.archive")]
         .into_iter()
-        .find(|f| f.raw == raw)
-        .map_or_else(|| raw.to_string(), |f| f.name)
+        .find(|(name, _)| flag(name))
+        .map(|(_, key)| key)
+}
+
+fn folder_name(env: &Env<'_>, account: u8, raw: &str) -> String {
+    let found = store::read_folders(env.storage(), &store::folders_file(account)).into_iter().find(|f| f.raw == raw);
+    match found {
+        Some(folder) => special_name(&folder).map_or(folder.name.clone(), |key| env.i18n().tr(key).to_string()),
+        None if raw.eq_ignore_ascii_case("INBOX") => env.i18n().tr("mail.inbox").to_string(),
+        None => raw.to_string(),
+    }
 }
 
 /// A hash in two lines of groups of eight digits, to compare.

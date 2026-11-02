@@ -83,7 +83,7 @@ impl Writer {
         let wanted: u8 = params.get(param::ACCOUNT).and_then(|n| n.parse().ok()).unwrap_or(0);
         let from = accounts.iter().position(|a| a.number == wanted).unwrap_or(0);
         let mut screen = Self {
-            list: ListView::new(area, style.noted_row()).focus_on_keys(env),
+            list: ListView::new(area, u32::from(style.row())).focus_on_keys(env),
             style,
             header,
             note,
@@ -262,8 +262,8 @@ impl Screen for Writer {
             let Some(part) = parts.get(row) else {
                 return;
             };
-            let value = if *part == Part::Send { "›" } else { "" };
-            ui::Row::value(env.i18n().tr(part.title()), value).note(&values[row]).focused(focused).draw(ui, rect);
+            let value = if *part == Part::Send { "›" } else { values[row].as_str() };
+            ui::Row::value(env.i18n().tr(part.title()), value).focused(focused).draw(ui, rect);
         });
         let note = match &self.job.run {
             Run::Working(stage) => texts::stage(env, *stage).to_string(),

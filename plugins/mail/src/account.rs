@@ -226,6 +226,13 @@ impl Account {
         Some(Self { number, address, name: text(field::NAME), user, password, imap, smtp })
     }
 
+    /// The numbers of the accounts with an address, password or not: what a
+    /// widget needs to know (it is not handed the passwords, which are the
+    /// plugin's own).
+    pub fn numbers(values: &dyn Values) -> alloc::vec::Vec<u8> {
+        (1..=MAX).filter(|n| !values.text(&key(*n, field::ADDRESS)).trim().is_empty()).collect()
+    }
+
     /// Every account that is set up, in order.
     pub fn all(values: &dyn Values) -> alloc::vec::Vec<Self> {
         (1..=MAX).filter_map(|n| Self::read(values, n)).collect()
