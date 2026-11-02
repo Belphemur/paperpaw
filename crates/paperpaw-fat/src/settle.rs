@@ -323,11 +323,21 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
         let folder_there = there.entry.as_ref().is_some_and(FatEntry::is_dir);
         match new {
             Some(new) if new.is_dir() && (same || there.entry.is_none()) => {
-                rename_in(&to_dir, temps.ready(), &to_dir, name(to))
+                rename_in(&to_dir, temps.ready(), &to_dir, name(to))?;
             }
             Some(new) if new.is_file() && !folder_there => {
-                to_dir.replace(temps.ready(), name(to)).map_err(error)
+                to_dir.replace(temps.ready(), name(to)).map_err(error)?;
             }
+            _ => {}
+        }
+        // A folder moved names its new parent `..`, the last step of a
+        // move: folders are followed only where it does (see `damaged`).
+        match lookup(&to_dir, name(to), true)? {
+            Lookup {
+                entry: Some(entry),
+                others: false,
+                ..
+            } if entry.is_dir() => entry.to_dir().point_up(&to_dir).map_err(error),
             _ => Ok(()),
         }
     }
