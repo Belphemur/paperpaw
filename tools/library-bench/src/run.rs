@@ -41,16 +41,16 @@ pub(super) fn all(env: &Env<'_>, more: Option<&str>, walks: bool) {
 /// The catalog walked to its end.
 fn walk(env: &Env<'_>, what: &str) {
     let (steps, took) = measure(|| {
-        let mut walk = catalog::Walk::start(env, Vec::new()).ok()?;
+        let mut walk = catalog::Walk::start(env, Vec::new())?;
         let mut steps = 0u64;
-        while !walk.step(env).ok()? {
+        while !walk.step(env)? {
             steps += 1;
         }
-        Some((steps, walk.found(), walk.from_old()))
+        Ok::<_, paperpaw_sdk::StorageError>((steps, walk.found(), walk.from_old()))
     });
     let note = match steps {
-        Some((steps, found, old)) => format!("{steps} steps, {found} books, {old} from the old"),
-        None => String::from("failed"),
+        Ok((steps, found, old)) => format!("{steps} steps, {found} books, {old} from the old"),
+        Err(e) => format!("failed: {e:?}"),
     };
     report(what, &took, &note);
 }
