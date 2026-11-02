@@ -66,6 +66,46 @@ const CASES: &[Case] = &[
         colour: 0,
         fixtures: false,
     },
+    // The Find screen of the library on buttons (#111): the focus starts
+    // on the search, and Up from the first row of letters returns to it.
+    Case {
+        name: "x4-library-find",
+        profile: "xteink-x4",
+        book: None,
+        sets: &[],
+        script: "run:core.library,wait:1500,run:files.list.find,wait:300,right,wait:300",
+        colour: 0,
+        fixtures: false,
+    },
+    Case {
+        name: "x4-library-find-up",
+        profile: "xteink-x4",
+        book: None,
+        sets: &[],
+        script: "run:core.library,wait:1500,run:files.list.find,wait:300,right,page-back,wait:300",
+        colour: 0,
+        fixtures: false,
+    },
+    // The keyboard on buttons with a phone to type on (#111): the focus
+    // starts on *Phone*, and Right goes to the first key.
+    Case {
+        name: "x4-keyboard-phone",
+        profile: "xteink-x4",
+        book: None,
+        sets: &[],
+        script: "run:core.library,wait:1500,run:files.search,wait:500",
+        colour: 0,
+        fixtures: true,
+    },
+    Case {
+        name: "x4-keyboard-phone-right",
+        profile: "xteink-x4",
+        book: None,
+        sets: &[],
+        script: "run:core.library,wait:1500,run:files.search,wait:500,right,wait:300",
+        colour: 0,
+        fixtures: true,
+    },
     Case {
         name: "boox-setup",
         profile: "boox-go-7",

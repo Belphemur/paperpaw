@@ -485,6 +485,35 @@ fn with_buttons_alone_the_focus_starts_on_phone() {
     assert_eq!(touched.focused(), None);
 }
 
+/// Right from the last button of the field (*Phone*) goes straight to the
+/// first key; left and the other moves keep their ways.
+#[test]
+fn right_from_phone_goes_to_the_first_key() {
+    let mut typing = Typing::with_phone(BUTTONS);
+    typing.open(&[]);
+    assert_eq!(typing.focused().as_deref(), Some("Phone"));
+    typing.run(actions::NEXT);
+    let first = typing.focused();
+    assert_ne!(first.as_deref(), Some("Phone"));
+    // Back up to Phone, then Right.
+    typing.run(actions::UP);
+    assert_eq!(typing.focused().as_deref(), Some("Phone"));
+    typing.run(actions::RIGHT);
+    assert_eq!(typing.focused(), first);
+    // Left from the first key goes round its row, not back up to Phone.
+    typing.run(actions::LEFT);
+    assert_ne!(typing.focused(), first);
+    assert_ne!(typing.focused().as_deref(), Some("Phone"));
+    // Up from the first row is Phone again; Left there stays on it.
+    typing.run(actions::UP);
+    assert_eq!(typing.focused().as_deref(), Some("Phone"));
+    typing.run(actions::LEFT);
+    assert_eq!(typing.focused().as_deref(), Some("Phone"));
+    // Down goes to the key below Phone.
+    typing.run(actions::DOWN);
+    assert_ne!(typing.focused().as_deref(), Some("Phone"));
+}
+
 #[test]
 fn every_letter_typed_by_touch_gives_the_text() {
     let mut typing = Typing::new(TOUCH);
