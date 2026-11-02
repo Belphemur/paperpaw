@@ -1,0 +1,11 @@
+Notes vault reads a folder of Markdown notes (plain .md files, as notes apps keep them). It works with Obsidian vaults.
+
+Choose the vault's folder in the settings, or on the vault's page in the tools. The page then offers the folders as they are on the card, the notes changed last, the tags, and a search in the notes' titles.
+
+The first time, the vault is indexed in the background while its page is open; a vault of thousands of notes takes a few minutes, then opens at once. The index is kept on the card and made again when the vault's page opens after some hours, or when you choose Update.
+
+A note opens in the reader. With this version of PaperPaw, tapping a link to another note in the text does not follow it. Open the reader's menu and choose Links in this note: it lists the note's links ([[Note]], [[Note|words]], [[Note#Heading]] and links to .md files); a note is found by its name anywhere in the vault, and Back from the note a link led to returns to the list of notes, not to the note before. A link to a heading opens the note at its start.
+
+A note read before in PaperPaw's own Markdown reader may open a little off its saved place the first time, and its highlights and bookmarks may be off: they were made for another conversion of the text.
+
+Nothing in the vault is ever changed. The widgets for the home screen (recent notes, a pinned note, a note of the day, a random note, tags, search) are added in the home screen's editor. A widget can take its notes from one folder only: write the folder's path from the card's root (for example Notes/Work) in the widget's settings; left empty, it takes all notes of the vault.

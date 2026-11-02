@@ -71,6 +71,7 @@ differently; a plugin must keep that mapping.
 | `.paperpaw/plugins/opds/catalogs.txt` | opds | a catalog per line: name, address, user, (password, empty), folder, `sync`, `webdav` | version 1 |
 | `.paperpaw/plugins/opds/synced/<md5 of the address>.txt` | opds | the books a catalog's sync fetched, by their ids in the catalog, so that one deleted is not fetched again | |
 | `.paperpaw/plugins/news/feeds.txt` | news | a feed per line: address, name | version 1 |
+| `.paperpaw/plugins/notes-vault/index.txt`, `tags.txt`, `state.txt` | notes-vault | the vault's notes (when each changed, a tab, its path; a line each), the tags of its notes (a note's path, a tab, its tags apart by spaces) and what was made (first line `notes-vault 1`, then the vault's folder, when it was made in unix seconds, how many notes, a stamp of them that changes when one comes, goes or changes, whether the tags are made); made again, in the background, when the vault's page opens some hours later or on *Update*; the vault itself is never changed | version 1 |
 | `.paperpaw/plugins/browser/bookmarks.txt`, `history.txt` | browser | a page per line: title, address | version 1 |
 | `.paperpaw/plugins/kosync/device.ini`, `account.ini` | kosync | ini: the device's id; the key of earlier versions (moved to the passwords and keys) | version 1 |
 | `.paperpaw/plugins/wallabag/articles.txt`, `finished.txt` | wallabag | an article per line: id and path; ids read to the end | version 1 |

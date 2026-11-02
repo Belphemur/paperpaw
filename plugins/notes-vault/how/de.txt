@@ -1,0 +1,11 @@
+Notizen-Tresor liest einen Ordner mit Markdown-Notizen (einfache .md-Dateien, wie Notiz-Apps sie ablegen). Er funktioniert mit Obsidian-Tresoren.
+
+Wähle den Ordner des Tresors in den Einstellungen oder auf der Seite des Tresors bei den Werkzeugen. Die Seite zeigt dann die Ordner, wie sie auf der Karte liegen, die zuletzt geänderten Notizen, die Tags und eine Suche in den Titeln der Notizen.
+
+Beim ersten Mal wird der Tresor im Hintergrund erfasst, solange seine Seite offen ist; bei Tausenden Notizen dauert das einige Minuten, danach öffnet er sofort. Das Verzeichnis liegt auf der Karte und wird neu erstellt, wenn die Seite nach einigen Stunden geöffnet wird oder wenn du „Aktualisieren“ wählst.
+
+Eine Notiz öffnet sich im Leser. Mit dieser Version von PaperPaw folgt ein Antippen eines Verweises auf eine andere Notiz im Text nicht. Öffne das Menü des Lesers und wähle „Links dieser Notiz“: Die Liste zeigt die Verweise der Notiz ([[Notiz]], [[Notiz|Wörter]], [[Notiz#Überschrift]] und Links auf .md-Dateien); eine Notiz wird über ihren Namen irgendwo im Tresor gefunden, und „Zurück“ führt von der Notiz, zu der ein Verweis führte, zur Liste der Notizen, nicht zur Notiz davor. Ein Verweis auf eine Überschrift öffnet die Notiz am Anfang.
+
+Eine Notiz, die zuvor im eigenen Markdown-Leser von PaperPaw gelesen wurde, kann beim ersten Mal etwas neben der gemerkten Stelle öffnen; auch Markierungen und Lesezeichen können abweichen: Sie wurden für eine andere Umwandlung des Textes gemacht.
+
+Nichts im Tresor wird je verändert. Die Widgets für den Startbildschirm (letzte Notizen, eine angeheftete Notiz, Notiz des Tages, zufällige Notiz, Tags, Suche) fügst du im Editor des Startbildschirms hinzu. Ein Widget kann seine Notizen aus einem einzigen Ordner nehmen: Schreibe den Pfad des Ordners von der Wurzel der Karte (zum Beispiel Notizen/Arbeit) in die Einstellungen des Widgets; bleibt das Feld leer, nimmt es alle Notizen des Tresors.

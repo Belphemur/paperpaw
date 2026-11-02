@@ -6,6 +6,14 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- **Notes vault (#87), a store plugin for 0.6.0-beta.1:** reads a folder of Markdown notes (works with Obsidian
+  vaults) without changing it: the vault's folders as they are on the card, its latest changes, its tags and a
+  search in the notes' titles, each list shown a hundred rows at a time from an index kept on the card and made
+  in the background. Six home widgets: recent notes, a pinned note, the note of the day, a random note, the tags
+  and a search. Notes open in the reader; its menu entry *Links in this note* lists the note's `[[wikilinks]]`
+  and links to other note files and opens the one chosen (this release's reader does not follow links to other
+  files itself, and *Back* from the note a link led to returns to the list of notes, not to the note before).
+
 ## [0.6.0-beta.1] - 2026-11-02
 
 **Plugins of this release must be built from `e5f4a41a` or later** (the interface 5 amendment, #259). The plugin

@@ -56,6 +56,7 @@ members = [
     "plugins/reading-goal",
     "plugins/end-of-book",
     "plugins/notes-overview",
+    "plugins/notes-vault",
     "plugins/wifi",
     "plugins/bluetooth",
     "plugins/power",
@@ -196,6 +197,7 @@ paperpaw-plugin-about = { path = "plugins/about", version = "1.0.2" }
 paperpaw-plugin-setup = { path = "plugins/setup", version = "1.0.2" }
 paperpaw-plugin-update = { path = "plugins/update", version = "1.0.2" }
 paperpaw-plugin-news = { path = "plugins/news", version = "1.0.5" }
+paperpaw-plugin-notes-vault = { path = "plugins/notes-vault", version = "1.0.0" }
 paperpaw-plugin-weather = { path = "plugins/weather", version = "1.0.2" }
 paperpaw-plugin-widgets = { path = "plugins/widgets", version = "1.0.3" }
 paperpaw-plugin-keyboard = { path = "plugins/keyboard", version = "1.0.1" }

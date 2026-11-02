@@ -182,6 +182,7 @@ dependencies = [
  "paperpaw-plugin-menu-editor",
  "paperpaw-plugin-news",
  "paperpaw-plugin-notes-overview",
+ "paperpaw-plugin-notes-vault",
  "paperpaw-plugin-profiles",
  "paperpaw-plugin-read-later-cloud",
  "paperpaw-plugin-reading-goal",
@@ -207,6 +208,14 @@ dependencies = [
 name = "paperpaw-plugin-format-docx"
 version = "1.0.0"
 dependencies = [
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-format-epub"
+version = "1.0.3"
+dependencies = [
+ "miniz_oxide",
  "paperpaw-sdk",
 ]
 
@@ -367,6 +376,14 @@ dependencies = [
 name = "paperpaw-plugin-notes-overview"
 version = "1.0.0"
 dependencies = [
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-notes-vault"
+version = "1.0.0"
+dependencies = [
+ "paperpaw-plugin-format-epub",
  "paperpaw-sdk",
 ]
 
