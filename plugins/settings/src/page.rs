@@ -707,7 +707,7 @@ impl Screen for GroupPage {
                 .on_action(&env, spec.as_ref(), action, cx)
                 .handled();
         }
-        if let Some(change) = navigate_rows(&mut self.rows, &mut self.keys, action) {
+        if let Some(change) = navigate_rows(cx.env(), &mut self.rows, &mut self.keys, action) {
             change.request(cx);
         } else if *action == actions::CONFIRM {
             self.activate(&env, cx);

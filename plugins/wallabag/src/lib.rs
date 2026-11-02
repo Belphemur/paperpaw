@@ -924,7 +924,9 @@ impl Screen for SetupScreen {
         } else {
             return Handled::No;
         };
-        self.list.move_focus(delta, ROWS.len()).request(cx);
+        self.list
+            .move_focus_in(cx.env(), delta, ROWS.len())
+            .request(cx);
         Handled::Yes
     }
 

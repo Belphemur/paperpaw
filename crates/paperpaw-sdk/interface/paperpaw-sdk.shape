@@ -199,6 +199,7 @@ const paperpaw_sdk::builtin::screens::PLACEHOLDER: paperpaw_sdk::id::Id = Id::ne
 const paperpaw_sdk::builtin::screens::STATUS_ITEMS: paperpaw_sdk::id::Id = Id::new_static("core.status-items")
 const paperpaw_sdk::builtin::screens::STATUS_LINES: paperpaw_sdk::id::Id = Id::new_static("core.status-lines")
 const paperpaw_sdk::builtin::screens::WIDGET_LIST: paperpaw_sdk::id::Id = Id::new_static("core.widget-list")
+const paperpaw_sdk::builtin::settings::ARROWS_STAY_ON_PAGE: paperpaw_sdk::setting::Setting<bool> = Setting::new("core.arrows-stay-on-page")
 const paperpaw_sdk::builtin::settings::AWAKE_HOLDS: paperpaw_sdk::setting::Setting<bool> = Setting::new("core.awake-holds")
 const paperpaw_sdk::builtin::settings::BATTERY_LOW: paperpaw_sdk::setting::Setting<i64> = Setting::new("core.battery-low")
 const paperpaw_sdk::builtin::settings::BOOK_ALIGN: paperpaw_sdk::setting::Setting<bool> = Setting::new("core.book-align")

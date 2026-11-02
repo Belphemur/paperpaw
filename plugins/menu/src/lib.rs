@@ -614,10 +614,10 @@ impl Screen for MenuScreen {
         self.rows.set_passed(passed(cx.env(), &self.items));
         // The focus changes nothing but its rows: only they are drawn.
         if *a == actions::UP || *a == actions::LEFT || *a == actions::PREVIOUS {
-            let change = self.rows.step(false);
+            let change = self.rows.step_in(cx.env(), false);
             change.request(cx);
         } else if *a == actions::DOWN || *a == actions::RIGHT || *a == actions::NEXT {
-            let change = self.rows.step(true);
+            let change = self.rows.step_in(cx.env(), true);
             change.request(cx);
         } else if *a == actions::NEXT_PAGE {
             let change = self.rows.turn(true);

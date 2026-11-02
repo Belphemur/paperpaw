@@ -70,6 +70,10 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
 - **Look for new books** (#109). An empty library has a button that looks for books again, and the library's menu has
   the same entry: for books copied onto the card while PaperPaw ran. **After swapping the SD card, restart the
   reader**: PaperPaw reads the card it started with.
+- **Arrow keys stay on the page** (#112), a new setting under *Controls*, off by default. On, the arrow keys go
+  round on the page shown: back on its first entry goes to its last, on from its last to its first (on a short last
+  page among the entries it has); only the page buttons turn pages. Off, as before, they go round the whole list.
+  For the lists of PaperPaw's own plugins; store plugins follow once they are built again.
 - **Secure connections for plugins** (#81). Plugins can open HTTPS, IMAP and SMTP connections: the X4 does the encryption
   itself (one connection at a time), the emulator and the Android app use rustls. A server whose certificate no authority
   vouches for is shown and trusted only after you say so, and then only that certificate or key. The X4 just after a
@@ -98,6 +102,12 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
 
 ### Added
 
+- UI: focus moves that follow *Arrow keys stay on the page* (`builtin::settings::ARROWS_STAY_ON_PAGE`,
+  `core.arrows-stay-on-page`, #112): `ListView::navigate_in` and `move_focus_in`, `Rows::step_in`,
+  `Sections::step_in` and `ui::step_focus_in` (for a focus of a screen's own over pages of `page` things) take the
+  `Env` and go round within the page where the reader chose so, else as `navigate`, `move_focus`, `step` and
+  `step_focus`, which stay as they were. New functions and a new constant, no change of what plugins built before
+  see; the SDK's lists and PaperPaw's plugins use them.
 - UI: `UiStyle::flip` and `UiStyle::flip_x` are public (#33): a screen lays a row or a grid out once from the left
   and mirrors each part where the interface runs right to left, as the SDK's own parts do. New functions, no
   change of what plugins built before see; their api.txt lines are part of this release's interface 6. The library's rows and

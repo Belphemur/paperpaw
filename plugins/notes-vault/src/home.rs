@@ -387,7 +387,7 @@ impl Screen for HomeScreen {
         } else {
             return Handled::No;
         };
-        self.list.move_focus(delta, len).request(cx);
+        self.list.move_focus_in(cx.env(), delta, len).request(cx);
         Handled::Yes
     }
 
@@ -497,7 +497,7 @@ impl Screen for TagsScreen {
             return Handled::No;
         };
         let len = self.tags.len();
-        self.list.move_focus(delta, len).request(cx);
+        self.list.move_focus_in(cx.env(), delta, len).request(cx);
         Handled::Yes
     }
 

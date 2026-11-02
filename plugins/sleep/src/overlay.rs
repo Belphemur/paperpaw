@@ -460,7 +460,7 @@ impl Screen for Picker {
             }
             return Handled::Yes;
         }
-        match self.list.navigate(action, self.rows.len()) {
+        match self.list.navigate_in(cx.env(), action, self.rows.len()) {
             Some(change) => {
                 change.request(cx);
                 Handled::Yes

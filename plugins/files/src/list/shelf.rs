@@ -521,7 +521,7 @@ impl Screen for ShelfScreen {
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let a = action;
         let len = self.entries.len();
-        if let Some(change) = self.list.navigate(a, len) {
+        if let Some(change) = self.list.navigate_in(cx.env(), a, len) {
             if change == ListChange::Page {
                 let env = *cx.env();
                 self.load_page(&env);

@@ -371,16 +371,16 @@ impl Screen for TocScreen {
         let rows = self.list.rows() as isize;
         let a = action;
         if *a == actions::UP || *a == actions::LEFT || *a == actions::PREVIOUS {
-            let change = self.list.move_focus(-1, len);
+            let change = self.list.move_focus_in(cx.env(), -1, len);
             self.moved(change, cx);
         } else if *a == actions::DOWN || *a == actions::RIGHT || *a == actions::NEXT {
-            let change = self.list.move_focus(1, len);
+            let change = self.list.move_focus_in(cx.env(), 1, len);
             self.moved(change, cx);
         } else if *a == actions::NEXT_PAGE {
-            let change = self.list.move_focus(rows, len);
+            let change = self.list.move_focus_in(cx.env(), rows, len);
             self.moved(change, cx);
         } else if *a == actions::PREV_PAGE {
-            let change = self.list.move_focus(-rows, len);
+            let change = self.list.move_focus_in(cx.env(), -rows, len);
             self.moved(change, cx);
         } else if *a == actions::CONFIRM {
             self.choose(self.list.focus(), cx);

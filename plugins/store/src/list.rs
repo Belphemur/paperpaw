@@ -486,9 +486,9 @@ impl Screen for ListScreen {
             return Handled::Yes;
         }
         let change = if back.contains(a) {
-            self.list.step(false)
+            self.list.step_in(cx.env(), false)
         } else if forward.contains(a) {
-            self.list.step(true)
+            self.list.step_in(cx.env(), true)
         } else if *a == actions::NEXT_PAGE {
             self.list.turn(true)
         } else if *a == actions::PREV_PAGE {

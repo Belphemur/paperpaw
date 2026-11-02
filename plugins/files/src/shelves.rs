@@ -218,7 +218,7 @@ impl ShelfScreen {
             None
         };
         let Some(bound) = next else {
-            let change = self.list.move_focus(delta, len);
+            let change = self.list.move_focus_in(cx.env(), delta, len);
             change.request(cx);
             return;
         };

@@ -306,7 +306,7 @@ impl Screen for GroupList {
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
-        if let Some(change) = navigate_rows(&mut self.rows, &mut self.keys, action) {
+        if let Some(change) = navigate_rows(cx.env(), &mut self.rows, &mut self.keys, action) {
             change.request(cx);
         } else if *action == actions::CONFIRM {
             self.choose(self.rows.focus(), cx);

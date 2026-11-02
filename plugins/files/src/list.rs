@@ -46,7 +46,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_sdk::builtin::{actions, events, params, slots};
+use paperpaw_sdk::builtin::{actions, events, params, settings, slots};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::library::{self, catalog::State};
 use paperpaw_sdk::semantics::Role;
@@ -876,7 +876,8 @@ impl ListScreen {
 
     /// Moves the focus by `delta` entries. Past the first (or the last)
     /// it reaches the filter's row (or the chips), as in other lists the
-    /// header's note.
+    /// header's note; of the page, where the arrow keys stay on the page
+    /// (`ARROWS_STAY_ON_PAGE`), and from there the page's other end.
     fn step(&mut self, delta: isize, cx: &mut Cx<'_, '_>) {
         let len = self.len();
         let before = self.focus;
@@ -885,15 +886,25 @@ impl ListScreen {
             // Nothing to move to: no books, no filter shown.
             return;
         }
+        let (first, end) = if cx.env().settings().read(&settings::ARROWS_STAY_ON_PAGE) {
+            let page = self.page_of(self.focus.min(len.saturating_sub(1)));
+            (self.page_start(page), self.page_start(page + 1).min(len))
+        } else {
+            (0, len)
+        };
         if self.filter_focused {
             self.filter_focused = false;
-            self.focus = if delta > 0 { 0 } else { len.saturating_sub(1) };
+            self.focus = if delta > 0 {
+                first
+            } else {
+                end.saturating_sub(1)
+            };
         } else if !self.shown {
             // The first press shows where the focus is.
             self.shown = true;
         } else {
             let next = self.focus as isize + delta;
-            if next < 0 || next >= len as isize {
+            if next < first as isize || next >= end as isize {
                 self.filter_focused = true;
             } else {
                 self.focus = next as usize;

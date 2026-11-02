@@ -297,7 +297,7 @@ impl Screen for ItemsScreen {
             }
             return Handled::Yes;
         }
-        match self.list.navigate(a, self.items.len()) {
+        match self.list.navigate_in(cx.env(), a, self.items.len()) {
             Some(change) => {
                 change.request(cx);
                 Handled::Yes

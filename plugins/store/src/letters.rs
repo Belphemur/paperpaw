@@ -102,7 +102,9 @@ impl Screen for LettersScreen {
         } else {
             return Handled::No;
         };
-        self.list.move_focus(delta, LETTERS).request(cx);
+        self.list
+            .move_focus_in(cx.env(), delta, LETTERS)
+            .request(cx);
         Handled::Yes
     }
 

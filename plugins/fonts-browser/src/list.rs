@@ -320,7 +320,7 @@ impl Screen for ListScreen {
             return Handled::Yes;
         }
         let len = self.fonts.len();
-        if let Some(change) = self.list.navigate(action, len) {
+        if let Some(change) = self.list.navigate_in(cx.env(), action, len) {
             self.move_focus(change, cx);
         } else if *action == actions::CONFIRM {
             self.activate(self.list.focus(), cx);

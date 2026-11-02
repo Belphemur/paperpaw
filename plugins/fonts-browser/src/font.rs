@@ -374,7 +374,7 @@ impl Screen for FontScreen {
             return Handled::Yes;
         }
         let len = self.rows(cx.env()).len();
-        if let Some(change) = self.list.navigate(action, len) {
+        if let Some(change) = self.list.navigate_in(cx.env(), action, len) {
             change.request(cx);
         } else if *action == actions::CONFIRM {
             self.activate(self.list.focus(), cx);

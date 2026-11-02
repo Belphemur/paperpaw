@@ -10,7 +10,7 @@ use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_sdk::builtin::actions;
+use paperpaw_sdk::builtin::{actions, settings};
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::widgets::{self, Widget, categories};
 use paperpaw_sdk::{
@@ -512,6 +512,15 @@ impl Screen for AddScreen {
                     .iter()
                     .find(|p| p.page == to)
                     .map_or(self.list.focus(), |p| p.row)
+            } else if cx.env().settings().read(&settings::ARROWS_STAY_ON_PAGE) {
+                // The arrow keys stay on the page: round among its widgets.
+                let page = self.gallery_page();
+                let on_page = self.gallery.iter().filter(|p| p.page == page);
+                let rows: Vec<usize> = on_page.map(|p| p.row).collect();
+                match rows.iter().position(|row| *row == self.list.focus()) {
+                    Some(at) => rows[ui::step_focus(at, delta, rows.len())],
+                    None => ui::step_focus(self.list.focus(), delta, len),
+                }
             } else {
                 ui::step_focus(self.list.focus(), delta, len)
             };
@@ -525,7 +534,7 @@ impl Screen for AddScreen {
         let Some(delta) = ui::list_step(action, rows) else {
             return Handled::No;
         };
-        self.list.move_focus(delta, len).request(cx);
+        self.list.move_focus_in(cx.env(), delta, len).request(cx);
         Handled::Yes
     }
 

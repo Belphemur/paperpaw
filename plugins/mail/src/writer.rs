@@ -416,7 +416,7 @@ impl Screen for Writer {
         let Some(delta) = ui::list_step(action, self.list.rows() as isize) else {
             return Handled::No;
         };
-        self.list.move_focus(delta, len).request(cx);
+        self.list.move_focus_in(cx.env(), delta, len).request(cx);
         Handled::Yes
     }
 

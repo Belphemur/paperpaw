@@ -250,7 +250,7 @@ impl ListScreen {
 
     fn move_focus(&mut self, delta: isize, cx: &mut Cx<'_, '_>) {
         let len = self.rows().len();
-        self.list.move_focus(delta, len).request(cx);
+        self.list.move_focus_in(cx.env(), delta, len).request(cx);
     }
 
     /// Keeps the profiles; not kept, the list goes back to what the card
