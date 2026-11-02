@@ -78,6 +78,21 @@ crate::event_data! {
 }
 
 crate::event_data! {
+    /// The display's new size ([`DISPLAY_CHANGED`]).
+    pub struct DisplayChanged {
+        /// All of the display, in pixels: bars and the row of hints
+        /// included.
+        pub width: u16,
+        pub height: u16,
+        /// The display's [class](crate::ui::ScreenClass) by its width, at
+        /// the reader's size of text.
+        pub class: crate::ui::ScreenClass,
+        /// Wider than high.
+        pub landscape: bool,
+    }
+}
+
+crate::event_data! {
     /// Text typed from outside the screen ([`TYPE_TEXT`]).
     pub struct TypeText {
         /// What was typed, as many characters as there are.
@@ -749,3 +764,9 @@ pub const WORK_ALLOWED: Event<()> = Event::new("core.work-allowed");
 /// once a second), sent to that plugin, e.g. for its page; the work's
 /// id comes as [`params::ID`](super::params::ID).
 pub const WORK_CHANGED: Event<()> = Event::new("core.work-changed");
+/// The display changed its size, e.g. the device turned or a window was
+/// resized ([`DisplayChanged`]): sent once, after the screens open were
+/// laid out for it ([`Screen::on_resize`](crate::Screen::on_resize)). For
+/// what a plugin keeps outside its screens at a size, e.g. pictures made
+/// for a cell. Screens need not listen: they are laid out anew.
+pub const DISPLAY_CHANGED: Event<DisplayChanged> = Event::new("core.display-changed");

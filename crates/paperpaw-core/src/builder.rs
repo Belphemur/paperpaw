@@ -672,6 +672,7 @@ impl BuilderParts {
                 last_tap: None,
                 recognizers: Vec::new(),
                 pressed_on: None,
+                pane_keys: None,
                 thresholds: core::cell::Cell::new(None),
             },
             io: network::IoState {

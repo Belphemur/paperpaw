@@ -44,6 +44,7 @@ const paperpaw_sdk::builtin::actions::NEXT: paperpaw_sdk::id::Id = Id::new_stati
 const paperpaw_sdk::builtin::actions::NEXT_PAGE: paperpaw_sdk::id::Id = Id::new_static("core.next-page")
 const paperpaw_sdk::builtin::actions::NOTHING: paperpaw_sdk::id::Id = Id::new_static("core.nothing")
 const paperpaw_sdk::builtin::actions::OPEN_WITH: paperpaw_sdk::id::Id = Id::new_static("core.open-with")
+const paperpaw_sdk::builtin::actions::PANE_OTHER: paperpaw_sdk::id::Id = Id::new_static("core.pane.other")
 const paperpaw_sdk::builtin::actions::PREVIOUS: paperpaw_sdk::id::Id = Id::new_static("core.previous")
 const paperpaw_sdk::builtin::actions::PREV_PAGE: paperpaw_sdk::id::Id = Id::new_static("core.prev-page")
 const paperpaw_sdk::builtin::actions::QUICK_PANEL: paperpaw_sdk::id::Id = Id::new_static("core.quick-panel")
@@ -70,6 +71,7 @@ const paperpaw_sdk::builtin::events::CATALOG_CHANGED: paperpaw_sdk::event::Event
 const paperpaw_sdk::builtin::events::CATALOG_FAILED: paperpaw_sdk::event::Event<()> = Event::new("core.catalog-failed")
 const paperpaw_sdk::builtin::events::CATALOG_WANTED: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::CatalogWanted> = Event::new("core.catalog-wanted")
 const paperpaw_sdk::builtin::events::DECORATION_TAPPED: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::DecorationTapped> = Event::new("core.decoration-tapped")
+const paperpaw_sdk::builtin::events::DISPLAY_CHANGED: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::DisplayChanged> = Event::new("core.display-changed")
 const paperpaw_sdk::builtin::events::DOCUMENT_READY: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::DocumentReady> = Event::new("core.document-ready")
 const paperpaw_sdk::builtin::events::FIRMWARE_CHANGED: paperpaw_sdk::event::Event<()> = Event::new("core.firmware-changed")
 const paperpaw_sdk::builtin::events::FOCUS_CHANGED: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::FocusChanged> = Event::new("core.focus-changed")
@@ -580,6 +582,8 @@ const paperpaw_sdk::ui::look_extra::PartKind::DIALOG: Self = Self(5)
 const paperpaw_sdk::ui::look_extra::PartKind::SCROLLBAR: Self = Self(1)
 const paperpaw_sdk::ui::look_extra::PartKind::TAB: Self = Self(2)
 const paperpaw_sdk::ui::look_extra::PartKind::TOAST: Self = Self(4)
+const paperpaw_sdk::ui::responsive::COMPACT_BELOW_MM: u32 = 100u32
+const paperpaw_sdk::ui::responsive::EXPANDED_FROM_MM: u32 = 140u32
 const paperpaw_sdk::ui::style::Ink::ACCENT: paperpaw_sdk::ui::style::Ink = Ink(14)
 const paperpaw_sdk::ui::style::Ink::ALL: &'static [paperpaw_sdk::ui::style::Ink] = &[ Ink::TEXT, Ink::PAPER, Ink::NOTE, Ink::DETAIL, Ink::MUTED, Ink::FAINT, Ink::DISABLED, Ink::RULE, Ink::LINE, Ink::LINE_FAINT, Ink::ON_FOCUS_MUTED, Ink::ON_DARK_MUTED, Ink::CARD, Ink::SECTION, Ink::ACCENT, Ink::ON_ACCENT, Ink::LINK, Ink::SELECTION, Ink::WARNING, ]
 const paperpaw_sdk::ui::style::Ink::CARD: paperpaw_sdk::ui::style::Ink = Ink(12)
@@ -771,6 +775,7 @@ enum paperpaw_sdk::ui::picker::DateOrder { DayMonthYear, MonthDayYear, YearMonth
 enum paperpaw_sdk::ui::picker::PickerPart { Plus(0: usize), Minus(0: usize), Value(0: usize) }
 enum paperpaw_sdk::ui::reorder::ReorderStep { Changed, Same, Dropped { from: usize, to: usize } }
 enum paperpaw_sdk::ui::response::Response<T> { Ignored, Same, Changed, Done(0: T) }
+enum paperpaw_sdk::ui::responsive::ScreenClass { Compact, Medium, Expanded }
 enum paperpaw_sdk::ui::row::RowKind<'r> { Value(0: &'r str), Switch(0: bool), Number { value: &'r str, room: &'r str, focus: core::option::Option<bool> } }
 enum paperpaw_sdk::ui::row::RowPart { Row, Switch, Minus, Plus }
 enum paperpaw_sdk::ui::sections::Item { Heading(0: usize), Entry(0: usize) }
@@ -849,6 +854,7 @@ struct paperpaw_sdk::builtin::events::BookMoved { from: alloc::string::String, p
 struct paperpaw_sdk::builtin::events::BookRemoved { path: alloc::string::String }
 struct paperpaw_sdk::builtin::events::CatalogWanted { anew: bool }
 struct paperpaw_sdk::builtin::events::DecorationTapped { decorator: paperpaw_sdk::id::Id, role: paperpaw_sdk::id::Id, text: alloc::string::String, path: alloc::string::String, section: u32, offset: u32, end_section: u32, end_offset: u32 }
+struct paperpaw_sdk::builtin::events::DisplayChanged { width: u16, height: u16, class: paperpaw_sdk::ui::responsive::ScreenClass, landscape: bool }
 struct paperpaw_sdk::builtin::events::DocumentReady { path: alloc::string::String }
 struct paperpaw_sdk::builtin::events::FocusChanged { role: alloc::string::String, label: alloc::string::String, x: u16, y: u16, width: u16, height: u16, on: core::option::Option<bool> }
 struct paperpaw_sdk::builtin::events::FollowLink { path: alloc::string::String, href: alloc::string::String }

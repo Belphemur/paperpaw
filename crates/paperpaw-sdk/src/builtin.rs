@@ -65,6 +65,11 @@ pub mod actions {
     /// light, turning the screen, …). A swipe down from the top edge
     /// opens it.
     pub const QUICK_PANEL: Id = Id::new_static("core.quick-panel");
+    /// Where a list and the item chosen in it show beside each other (a
+    /// [`Pane::DETAIL`](crate::Pane::DETAIL) screen on a wide screen):
+    /// moves the keys and buttons to the other of the two. A tap moves
+    /// them to the one it lands in.
+    pub const PANE_OTHER: Id = Id::new_static("core.pane.other");
     /// Refreshes the whole screen with a flash, clearing what e-ink left
     /// of earlier pictures (ghosting).
     pub const REFRESH_SCREEN: Id = Id::new_static("core.refresh-screen");

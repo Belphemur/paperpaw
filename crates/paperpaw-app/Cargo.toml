@@ -13,7 +13,11 @@ categories = ["no-std"]
 links = "paperpaw-app"
 
 [features]
-default = ["store-plugins", "diagnostics"]
+default = ["store-plugins", "diagnostics", "panes"]
+# A list and its detail beside each other on wide screens (the kernel's
+# `panes`): every shell with the app's defaults has it; the Xteink
+# firmware, never wide, leaves it out.
+panes = ["paperpaw-core/panes"]
 # The plugins the store offers as files too (ADR 0024): built in where a
 # shell takes them (Android, the emulator, tests), left out of the X4's
 # and the X4 Pro's firmware (see `StorePlugins`).

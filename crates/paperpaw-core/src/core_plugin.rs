@@ -47,6 +47,7 @@ impl Plugin for CorePlugin {
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         register_screen_actions(r)?;
         register_moving(r)?;
+        crate::panes::register(r)?;
         register_device_actions(r)?;
         register_library(r)?;
         register_reading_apps(r)?;
@@ -1535,8 +1536,6 @@ fn register_colors(r: &mut Registrar) -> Result<(), RegisterError> {
     Ok(())
 }
 
-/// The roles of the marks every reader draws: highlights, links, a
-/// search hit, the sentence read aloud (see `paperpaw_sdk::decorations`).
 mod marks;
 /// Smooth text and its contrast, beside the font's weight.
 pub(crate) mod text_look;

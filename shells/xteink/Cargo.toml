@@ -99,7 +99,8 @@ paperpaw-app = { path = "../../crates/paperpaw-app", default-features = false, f
 # The sample that runs in real time (ADR 0030), built in for measuring:
 # feature `frame-test`, never in released firmware.
 paperpaw-sample-frame-test = { path = "../../samples/frame-test", optional = true }
-paperpaw-core = { path = "../../crates/paperpaw-core" }
+# Without `panes`: no Xteink screen is ever wide enough for two.
+paperpaw-core = { path = "../../crates/paperpaw-core", default-features = false }
 paperpaw-sdk = { path = "../../crates/paperpaw-sdk", features = ["kernel"] }
 paperpaw-platform = { path = "../../crates/paperpaw-platform" }
 paperpaw-graphics = { path = "../../crates/paperpaw-graphics" }
