@@ -679,7 +679,10 @@ pub struct Walk {
 impl Walk {
     /// Starts anew with the books under the library folder, the books
     /// `fresh` taken from their details; an error where what it needs
-    /// cannot be read (nothing is changed then).
+    /// cannot be read. Nothing is changed then, but for a catalog without
+    /// books: it is removed first (walked as where there is none), and
+    /// stays gone; the library is empty either way, and the next walk
+    /// makes one as where there was none.
     pub fn start(env: &Env<'_>, fresh: Vec<String>) -> Result<Walk, StorageError> {
         if library::emptiness::is_empty(env.storage()) {
             // A catalog without books (the card was empty): walked as

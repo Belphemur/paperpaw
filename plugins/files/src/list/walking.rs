@@ -6,7 +6,9 @@
 
 use alloc::string::String;
 
-use paperpaw_sdk::{Command, Commands, Cx, Env, FixedAction, Handled, Id, Params, Rect, library};
+use paperpaw_sdk::{
+    Command, Commands, Cx, Env, FixedAction, Handled, Id, Instant, Params, Rect, library,
+};
 
 /// Looks for new books: the kernel walks the library folder anew.
 pub(crate) const LOOK_AGAIN: Id = Id::new_static("files.look-again");
@@ -14,6 +16,11 @@ pub(crate) const LOOK_AGAIN: Id = Id::new_static("files.look-again");
 /// The key of [`library::Library::extended`] the kernel's library answers
 /// with whether it is making the catalog anew (`walking`).
 const WALKING: Id = Id::new_static("core.library-walking");
+
+/// How long after looking for new books the library makes sure the
+/// kernel began (in milliseconds): it does at once, and tells the view
+/// when it ends or fails.
+const BEGUN_MS: u64 = 5_000;
 
 /// The action of [`LOOK_AGAIN`].
 pub(crate) const ACTION: FixedAction =
@@ -41,8 +48,22 @@ impl super::ListScreen {
             self.collecting = true;
             self.refilter(cx.env());
             cx.request_redraw();
+            cx.wake_at(Instant(cx.env().now().millis() + BEGUN_MS));
         }
         Handled::No
+    }
+
+    /// A while after looking for new books: where no catalog is being
+    /// made (the kernel never began, as where another handler took the
+    /// action), the library says again that it has none, not that it
+    /// collects them.
+    pub(super) fn looked(&mut self, cx: &mut Cx<'_, '_>) {
+        let env = *cx.env();
+        if self.collecting && !super::collecting(&env) && !walking(&env) {
+            self.collecting = false;
+            self.refilter(&env);
+            cx.request_redraw();
+        }
     }
 }
 

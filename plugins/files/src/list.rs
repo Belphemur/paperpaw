@@ -1371,6 +1371,10 @@ impl Screen for ListScreen {
         }
     }
 
+    fn on_timer(&mut self, cx: &mut Cx<'_, '_>) {
+        self.looked(cx);
+    }
+
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
         if let Some(picked) = SHOWN.read(event, params) {
             match SHOW_OPTIONS.iter().position(|o| *o == picked.option) {

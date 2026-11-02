@@ -247,3 +247,50 @@ fn an_empty_library_collects_new_books_as_a_first_walk() {
         assert!(app.shows("Book 0"), "{}", app.described());
     }
 }
+
+/// Takes "Look for new books" in place of the library's own handler:
+/// the kernel is never asked to walk.
+struct Swallows;
+
+impl paperpaw_sdk::Plugin for Swallows {
+    fn manifest(&self) -> paperpaw_sdk::Manifest {
+        let version = paperpaw_sdk::Version::new(1, 0, 0);
+        paperpaw_sdk::Manifest::new(Id::new_static("swallows"), "Swallows", version)
+    }
+
+    fn register(&self, r: &mut paperpaw_sdk::Registrar) -> Result<(), paperpaw_sdk::RegisterError> {
+        let none = |_: &paperpaw_sdk::Env<'_>, _: &Params, _: &mut paperpaw_sdk::Commands| {};
+        r.override_action(
+            Id::new_static("files.look-again"),
+            none,
+            paperpaw_sdk::Priority(10),
+        )
+    }
+}
+
+/// Where no walk begins after looking for new books (another handler
+/// took the action), the empty library does not stay collecting: a while
+/// later it says again that there are none, and offers to look (#109).
+#[test]
+fn an_empty_library_where_no_walk_begins_says_so_again() {
+    let _turn = turn();
+    for device in [X4, TOUCH] {
+        let mut app = App::with(device, Shared::memory("", &[]), Swallows);
+        app.storage.create_dir("books").unwrap();
+        app.run(actions::LIBRARY);
+        app.wait(1_000);
+        assert!(app.shows("No books here yet"), "{}", app.described());
+        app.now += 100;
+        let press = if device.input.touch {
+            Id::new_static("files.look-again")
+        } else {
+            actions::CONFIRM
+        };
+        let effects = app.kernel.run_action(Instant(app.now), press);
+        assert!(app.shows("Collecting the books"), "{}", app.described());
+        app.settle(effects);
+        app.wait(6_000);
+        assert!(app.shows("No books here yet"), "{}", app.described());
+        assert!(app.shows("Look for new books"), "{}", app.described());
+    }
+}
