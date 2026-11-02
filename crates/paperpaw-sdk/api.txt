@@ -4632,6 +4632,7 @@ pub fn paperpaw_sdk::ui::ListView::column_count(&self) -> usize
 pub fn paperpaw_sdk::ui::ListView::columns(self, u32) -> Self
 pub fn paperpaw_sdk::ui::ListView::confirm(&mut self) -> core::option::Option<usize>
 pub fn paperpaw_sdk::ui::ListView::draw(&self, &mut paperpaw_sdk::ui::Ui<'_>, usize, impl core::ops::function::FnMut(&mut paperpaw_sdk::ui::Ui<'_>, usize, paperpaw_platform::geometry::Rect, bool))
+pub fn paperpaw_sdk::ui::ListView::fit_columns(&paperpaw_sdk::Env<'_>, paperpaw_platform::geometry::Rect, u32) -> u32
 pub fn paperpaw_sdk::ui::ListView::focus(&self) -> usize
 pub fn paperpaw_sdk::ui::ListView::focus_change(&self) -> paperpaw_sdk::ui::ListChange
 pub fn paperpaw_sdk::ui::ListView::focus_on_keys(self, &paperpaw_sdk::Env<'_>) -> Self
@@ -4642,11 +4643,13 @@ pub fn paperpaw_sdk::ui::ListView::new(paperpaw_platform::geometry::Rect, u32) -
 pub fn paperpaw_sdk::ui::ListView::page(&self) -> usize
 pub fn paperpaw_sdk::ui::ListView::pages(&self, usize) -> usize
 pub fn paperpaw_sdk::ui::ListView::paging(&self, usize) -> core::option::Option<paperpaw_sdk::ui::Paging>
+pub fn paperpaw_sdk::ui::ListView::readable(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, u32) -> Self
 pub fn paperpaw_sdk::ui::ListView::row(&self) -> u32
 pub fn paperpaw_sdk::ui::ListView::row_rect(&self, usize) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_sdk::ui::ListView::rows(&self) -> usize
 pub fn paperpaw_sdk::ui::ListView::set_active(&mut self, bool)
 pub fn paperpaw_sdk::ui::ListView::set_area(&mut self, paperpaw_platform::geometry::Rect)
+pub fn paperpaw_sdk::ui::ListView::set_columns(&mut self, u32)
 pub fn paperpaw_sdk::ui::ListView::set_focus(&mut self, usize) -> paperpaw_sdk::ui::ListChange
 pub fn paperpaw_sdk::ui::ListView::set_len(&mut self, usize)
 pub fn paperpaw_sdk::ui::ListView::set_row(&mut self, u32)
@@ -4938,6 +4941,7 @@ pub fn paperpaw_sdk::ui::number_room<'a>(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::
 pub fn paperpaw_sdk::ui::number_title_area(&paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_sdk::ui::opens_screen(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::SettingSpec) -> bool
 pub fn paperpaw_sdk::ui::option_name(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::SettingSpec, &str) -> alloc::string::String
+pub fn paperpaw_sdk::ui::readable(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_sdk::ui::row_lines(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, &paperpaw_sdk::SettingSpec, u16, &str, u32, bool) -> paperpaw_sdk::ui::RowLines
 pub fn paperpaw_sdk::ui::setting_height(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, &paperpaw_sdk::SettingSpec, u16, &str, u32, bool) -> u32
 pub fn paperpaw_sdk::ui::setting_opens(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::SettingSpec) -> core::option::Option<paperpaw_sdk::Command>
@@ -5115,6 +5119,7 @@ pub fn paperpaw_sdk::widgets::grid::Item::placed(paperpaw_sdk::widgets::grid::Wh
 pub const paperpaw_sdk::widgets::grid::MAX_COLUMNS: u8
 pub const paperpaw_sdk::widgets::grid::MAX_ROWS: u8
 pub fn paperpaw_sdk::widgets::grid::add(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::widgets::grid::Geometry, &[paperpaw_sdk::widgets::grid::Item], paperpaw_sdk::widgets::grid::What) -> core::option::Option<alloc::vec::Vec<paperpaw_sdk::widgets::grid::Item>>
+pub fn paperpaw_sdk::widgets::grid::columns_for(paperpaw_platform::geometry::Rect, u8) -> u8
 pub fn paperpaw_sdk::widgets::grid::dragged(&paperpaw_sdk::widgets::grid::Geometry, paperpaw_sdk::widgets::grid::Cells, paperpaw_platform::geometry::Point, paperpaw_platform::geometry::Point, bool) -> core::option::Option<paperpaw_sdk::widgets::grid::Cells>
 pub fn paperpaw_sdk::widgets::grid::draw_tool(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, paperpaw_platform::geometry::Rect, &paperpaw_sdk::Id, bool)
 pub fn paperpaw_sdk::widgets::grid::draw_tool_focus(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect)
@@ -5123,6 +5128,7 @@ pub fn paperpaw_sdk::widgets::grid::fit(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::w
 pub fn paperpaw_sdk::widgets::grid::free_place(&paperpaw_sdk::widgets::grid::Geometry, &[paperpaw_sdk::widgets::grid::Cells], u8, u8) -> core::option::Option<paperpaw_sdk::widgets::grid::Cells>
 pub fn paperpaw_sdk::widgets::grid::parse(&str) -> alloc::vec::Vec<paperpaw_sdk::widgets::grid::Item>
 pub fn paperpaw_sdk::widgets::grid::place(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::widgets::grid::Geometry, &[paperpaw_sdk::widgets::grid::Item]) -> alloc::vec::Vec<(paperpaw_sdk::widgets::grid::Item, paperpaw_sdk::widgets::grid::Cells)>
+pub fn paperpaw_sdk::widgets::grid::refit(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::widgets::grid::Geometry, &[paperpaw_sdk::widgets::grid::Item]) -> (alloc::vec::Vec<paperpaw_sdk::widgets::grid::Item>, alloc::vec::Vec<paperpaw_sdk::widgets::grid::Item>)
 pub fn paperpaw_sdk::widgets::grid::tool_name_lines(&paperpaw_sdk::Env<'_>, paperpaw_platform::geometry::Rect, &paperpaw_sdk::Id, bool) -> usize
 pub fn paperpaw_sdk::widgets::grid::write(&[paperpaw_sdk::widgets::grid::Item]) -> alloc::string::String
 pub type paperpaw_sdk::widgets::grid::DropCheck = fn(&paperpaw_sdk::Env<'_>, &[paperpaw_sdk::widgets::grid::Item], &paperpaw_sdk::widgets::grid::Item, paperpaw_sdk::widgets::grid::Cells) -> bool

@@ -195,6 +195,29 @@ impl ListView {
         self
     }
 
+    /// Makes the grid `columns` wide from now on (e.g. after the screen's
+    /// size changed: [`ListView::fit_columns`]), the focus kept on its
+    /// item, which may be on another page.
+    pub fn set_columns(&mut self, columns: u32) {
+        self.columns = columns.clamp(1, u32::from(u16::MAX));
+    }
+
+    /// How many columns of at least `cell_min_mm` millimetres fit `area`
+    /// side by side, at least 1: a cover grid's columns for the screen it
+    /// is on ([`columns`](Self::columns), [`set_columns`](Self::set_columns)).
+    pub fn fit_columns(env: &Env<'_>, area: Rect, cell_min_mm: u32) -> u32 {
+        let cell = env.metrics().mm(cell_min_mm).max(1);
+        (u32::from(area.width) / cell).clamp(1, u32::from(u16::MAX))
+    }
+
+    /// A list of rows `row` high in the readable column of `area`
+    /// ([`readable`](super::readable)): all of `area` where it is
+    /// narrow. Rows, touch and paging are those of any list; they only
+    /// see the narrower area.
+    pub fn readable(env: &Env<'_>, style: &UiStyle, area: Rect, row: u32) -> Self {
+        Self::new(super::readable(env, style, area), row)
+    }
+
     /// The height of a row, at least 1 (`row` is a field anyone can set).
     fn row_height(&self) -> u32 {
         self.row.max(1)
