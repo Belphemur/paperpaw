@@ -706,29 +706,39 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
     }
 
     /// The clusters the files and folders below `path` take, as bytes in
-    /// whole clusters, where the free space is followed.
+    /// whole clusters, where the free space is followed: what removing
+    /// them frees (see `remove_tree`), none of a damaged folder.
     fn tree_len(&self, path: &str) -> u64 {
         if self.read.is_none() {
             return 0;
         }
+        let cluster = self.cluster();
         let mut taken = 0;
         let mut dirs = alloc::vec![String::from(path)];
-        while let Some(dir) = dirs.pop() {
-            taken += self.free.borrow().clusters(1) * self.cluster();
-            #[expect(
-                clippy::let_underscore_must_use,
-                reason = "a folder that cannot be listed counts as empty"
-            )]
-            let _ = Storage::list(self, &dir, &mut |entry| {
-                let path = format!("{dir}/{}", entry.name);
-                if damaged::is_damaged_name(entry.name) {
-                    // Its clusters stay taken (see `damaged`).
-                } else if entry.is_dir {
-                    dirs.push(path);
+        while let Some(path) = dirs.pop() {
+            // One that cannot be read counts as empty.
+            let Ok(dir) = self.dir(&path) else {
+                continue;
+            };
+            let (mut here, mut below, mut damaged) = (cluster, alloc::vec::Vec::new(), false);
+            for (at, entry) in entries(&dir).enumerate() {
+                let Ok(entry) = entry else {
+                    break;
+                };
+                let name = entry.file_name();
+                damaged |= damaged::is_damaged(self.fs, &entry, &name, at);
+                if name == "." || name == ".." || is_temp_name(&name) && entry.is_dir() {
+                    // Its clusters stay taken.
+                } else if entry.is_dir() {
+                    below.push(format!("{path}/{name}"));
                 } else {
-                    taken += self.free.borrow().clusters(entry.size) * self.cluster();
+                    here += self.free.borrow().clusters(entry.len()) * cluster;
                 }
-            });
+            }
+            if !damaged {
+                taken += here;
+                dirs.append(&mut below);
+            }
         }
         taken
     }
@@ -1097,37 +1107,41 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
             Err(StorageError::NotFound) => return Ok(()),
             Err(e) => return Err(e),
         };
-        // Each with whether it is a folder, and whether it is damaged.
-        let mut names: alloc::vec::Vec<(String, bool, bool)> = alloc::vec::Vec::new();
+        // Each with whether it is a folder.
+        let mut names: alloc::vec::Vec<(String, bool)> = alloc::vec::Vec::new();
         // Names of new content left by cuts (see `settled`).
         let mut ready = alloc::vec::Vec::new();
-        for entry in entries(&dir) {
+        let mut damaged = false;
+        for (at, entry) in entries(&dir).enumerate() {
             let entry = entry?;
             let name = entry.file_name();
+            damaged |= damaged::is_damaged(self.fs, &entry, &name, at);
             if name != "." && name != ".." {
                 if entry.is_file() && name.len() == 12 && name.starts_with('~') {
                     ready.push(name.to_ascii_uppercase());
                 }
-                let damaged = damaged::is_damaged(self.fs, &entry, &name);
-                names.push((name, entry.is_dir(), damaged));
+                names.push((name, entry.is_dir()));
             }
+        }
+        if damaged {
+            // Its cluster holds another's data, the entries that look
+            // sane too: none is followed (see `damaged`).
+            return self.unlink_damaged(path);
         }
         // A file and its new content may be the same file: settled first,
         // its clusters are not freed twice.
         for (name, ..) in names
             .iter()
-            .filter(|(_, is_dir, damaged)| !is_dir && !damaged && !ready.is_empty())
+            .filter(|(_, is_dir)| !is_dir && !ready.is_empty())
         {
             let temps = Temps::of(name);
             if ready.iter().any(|n| n == temps.ready()) {
                 dir.replace(temps.ready(), name).map_err(error)?;
             }
         }
-        for (name, is_dir, damaged) in names {
+        for (name, is_dir) in names {
             let child = format!("{path}/{name}");
-            if damaged {
-                // Not to be named: swept below.
-            } else if is_temp_name(&name) {
+            if is_temp_name(&name) {
                 // Not taken by name (see `check`). A folder's new name in a
                 // move cut off holds that folder's clusters: left to it.
                 match is_dir {
@@ -1142,22 +1156,10 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
                 self.remove_entry(&child, false)?;
             }
         }
-        let damaged = self.sweep(&dir)?;
+        self.sweep(&dir, 0)?;
         self.forget(path);
         let parent = self.dir(parent(path))?;
-        if !damaged {
-            return remove_in(&parent, name(path));
-        }
-        // Its clusters held another's data: left to it (see `damaged`).
-        match lookup(&parent, name(path), true)? {
-            Lookup {
-                entry: Some(entry),
-                others: false,
-                ..
-            } => parent.unlink_found(&entry).map_err(error),
-            Lookup { entry: None, .. } => Ok(()),
-            Lookup { .. } => Err(StorageError::InvalidPath),
-        }
+        remove_in(&parent, name(path))
     }
 }
 

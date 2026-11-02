@@ -1,6 +1,6 @@
 //! A damaged folder (#388): entries of names no file system gives and
-//! sizes past the card, as an X4 card showed after resets. Removed with
-//! its folder, each where it is found; what they point at stays.
+//! sizes past the card, as an X4 card showed after resets. Cut off where
+//! its parent names it; nothing it points at is freed or written.
 
 use super::*;
 
@@ -18,19 +18,41 @@ fn short_entry(card: &Cut, short: &[u8; 11]) -> usize {
     at
 }
 
-/// The first cluster of the entry at `at` (FAT12 or FAT16).
-fn first_cluster(card: &Cut, at: usize) -> u16 {
+/// The first cluster of the entry at `at` (its high half 0 on FAT12
+/// and FAT16).
+fn first_cluster(card: &Cut, at: usize) -> u32 {
     let image = card.image();
-    u16::from_le_bytes([image[at + 26], image[at + 27]])
+    u32::from(u16::from_le_bytes([image[at + 26], image[at + 27]]))
+        | u32::from(u16::from_le_bytes([image[at + 20], image[at + 21]])) << 16
 }
 
 /// Overwrites the entry at `at`: name, attributes, first cluster, size.
-fn garble(card: &Cut, at: usize, name: &[u8; 11], attributes: u8, first: u16, size: u32) {
+fn garble(card: &Cut, at: usize, name: &[u8; 11], attributes: u8, first: u32, size: u32) {
     let mut data = card.data.borrow_mut();
     data[at..at + 11].copy_from_slice(name);
     data[at + 11] = attributes;
-    data[at + 26..at + 28].copy_from_slice(&first.to_le_bytes());
+    data[at + 20..at + 22].copy_from_slice(&((first >> 16) as u16).to_le_bytes());
+    data[at + 26..at + 28].copy_from_slice(&(first as u16).to_le_bytes());
     data[at + 28..at + 32].copy_from_slice(&size.to_le_bytes());
+}
+
+/// Fills `card` with files until it is full: none may be given clusters
+/// still taken.
+fn fill(s: &FatStorage<SharedDisk<Cut>>) {
+    let fill = vec![0x55; 64 << 10];
+    let mut n = 0;
+    while s.write(&format!("fill/{n}.bin"), &fill).is_ok() {
+        n += 1;
+    }
+    assert!(n > 10, "{n}");
+}
+
+/// The free space followed: as counted on the card afresh.
+fn followed_as_counted(card: &Cut, s: &FatStorage<SharedDisk<Cut>>) {
+    count_out(card, s);
+    let fresh = card.storage();
+    count_out(card, &fresh);
+    assert_eq!(s.free_space(), fresh.free_space());
 }
 
 fn kept() -> Vec<u8> {
@@ -92,12 +114,7 @@ fn a_damaged_folder_is_removed_and_what_it_points_at_stays() {
     assert_eq!(s.list("cache/1e", &mut |_| {}), Err(StorageError::NotFound));
     assert_eq!(whole(&s, "keep/other.bin").unwrap(), kept());
     // The card filled: no file is given the clusters kept.
-    let fill = vec![0x55; 64 << 10];
-    let mut n = 0;
-    while s.write(&format!("fill/{n}.bin"), &fill).is_ok() {
-        n += 1;
-    }
-    assert!(n > 10, "{n}");
+    fill(&s);
     let s = card.storage();
     assert_eq!(whole(&s, "keep/other.bin").unwrap(), kept());
 }
@@ -115,6 +132,136 @@ fn names_not_taken_go_with_their_folder() {
     let mut file = dir.create_file("nul.txt").unwrap();
     file.write_all(&kept()).unwrap();
     drop(file);
+    s.fs.flush().unwrap();
+    assert!(counted(&s) < free);
+    assert_eq!(s.remove_dir_all("odd"), Ok(()));
+    assert_eq!(s.list("odd", &mut |_| {}), Err(StorageError::NotFound));
+    let s = card.storage();
+    assert!(counted(&s) > free, "{} {free}", counted(&s));
+}
+
+/// A damaged folder whose other entries look sane: a file and a folder
+/// of names PaperPaw takes, pointing at the clusters of files kept
+/// elsewhere, and a size past the card. None is followed: the kept files
+/// stay whole, also once the card is filled, and the free space followed
+/// is the card's. On FAT12/16 and FAT32 (where the first cluster has a
+/// high half).
+#[test]
+fn a_damaged_folder_frees_nothing_its_sane_looking_entries_point_at() {
+    for card in [Cut::formatted(FormatVolumeOptions::new()), fat32()] {
+        let s = card.storage();
+        s.write("keep/other.bin", &kept()).unwrap();
+        s.write("keep/folder.bin", &kept()[..5_000]).unwrap();
+        for name in ["aaaa.bin", "bbbb.bin", "cccc.bin", "dddd.bin"] {
+            s.write(&format!("cache/1e/book/{name}"), b"cached")
+                .unwrap();
+        }
+        s.write("cache/1e/book/sub/eeee.bin", b"cached").unwrap();
+        s.sync().unwrap();
+        let other = first_cluster(&card, short_entry(&card, b"OTHER   BIN"));
+        let folder = first_cluster(&card, short_entry(&card, b"FOLDER  BIN"));
+        // One entry damaged: a NUL in its name.
+        garble(
+            &card,
+            short_entry(&card, b"AAAA    BIN"),
+            b"A\0AA    BIN",
+            0,
+            other,
+            10,
+        );
+        garble(
+            &card,
+            short_entry(&card, b"BBBB    BIN"),
+            b"JUNK    BIN",
+            0,
+            other,
+            20_000,
+        );
+        garble(
+            &card,
+            short_entry(&card, b"CCCC    BIN"),
+            b"JUNKDIR    ",
+            0x10,
+            folder,
+            0,
+        );
+        garble(
+            &card,
+            short_entry(&card, b"DDDD    BIN"),
+            b"HUGE    BIN",
+            0,
+            first_cluster(&card, short_entry(&card, b"EEEE    BIN")),
+            u32::MAX,
+        );
+
+        let s = card.storage();
+        let total = s.total_space().unwrap();
+        assert_eq!(s.remove_dir_all("cache/1e"), Ok(()));
+        assert_eq!(s.list("cache/1e", &mut |_| {}), Err(StorageError::NotFound));
+        assert_eq!(whole(&s, "keep/other.bin").unwrap(), kept());
+        assert_eq!(whole(&s, "keep/folder.bin").unwrap(), kept()[..5_000]);
+        assert!(s.free_space().unwrap() <= total);
+        followed_as_counted(&card, &s);
+        fill(&s);
+        let s = card.storage();
+        assert_eq!(whole(&s, "keep/other.bin").unwrap(), kept());
+        assert_eq!(whole(&s, "keep/folder.bin").unwrap(), kept()[..5_000]);
+    }
+}
+
+/// A folder whose entry points at a kept file's data (text), read as
+/// entries: cut off, the data neither freed nor written (no entry in it
+/// marked removed).
+#[test]
+fn a_folder_in_another_files_data_is_not_written() {
+    for card in [Cut::formatted(FormatVolumeOptions::new()), fat32()] {
+        let text = b"Chapter one. It was a dark night, and the road was long. ".repeat(300);
+        let s = card.storage();
+        s.write("keep/other.bin", &text).unwrap();
+        s.write("cache/1e/book/aaaa.bin", b"cached").unwrap();
+        s.sync().unwrap();
+        let other = first_cluster(&card, short_entry(&card, b"OTHER   BIN"));
+        garble(
+            &card,
+            short_entry(&card, b"BOOK       "),
+            b"BOOK       ",
+            0x10,
+            other,
+            0,
+        );
+
+        let s = card.storage();
+        let mut listed = 0;
+        s.list("cache/1e/book", &mut |_| listed += 1).unwrap();
+        assert!(listed > 0);
+        assert_eq!(s.remove_dir_all("cache/1e"), Ok(()));
+        assert_eq!(s.list("cache", &mut |_| {}), Ok(()));
+        assert_eq!(s.list("cache/1e", &mut |_| {}), Err(StorageError::NotFound));
+        assert_eq!(whole(&s, "keep/other.bin").unwrap(), text);
+        followed_as_counted(&card, &s);
+        fill(&s);
+        let s = card.storage();
+        assert_eq!(whole(&s, "keep/other.bin").unwrap(), text);
+    }
+}
+
+/// A folder of a name PaperPaw does not take (made elsewhere: `con`),
+/// with a folder and files in it: removed with its folder, all their
+/// clusters freed.
+#[test]
+fn folders_not_taken_go_with_what_they_hold() {
+    let card = Cut::formatted(FormatVolumeOptions::new());
+    let s = card.storage();
+    s.write("odd/good.txt", b"good").unwrap();
+    s.sync().unwrap();
+    let free = counted(&s);
+    let odd = s.fs.root_dir().open_dir("odd").unwrap();
+    let con = odd.create_dir("con").unwrap();
+    for dir in [con.clone(), con.create_dir("deeper").unwrap()] {
+        let mut file = dir.create_file("nul.txt").unwrap();
+        file.write_all(&kept()).unwrap();
+    }
+    drop((odd, con));
     s.fs.flush().unwrap();
     assert!(counted(&s) < free);
     assert_eq!(s.remove_dir_all("odd"), Ok(()));

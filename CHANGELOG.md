@@ -9,9 +9,10 @@ change the plugin SDK.
 ### Fixed
 
 - A damaged folder on the memory card (entries with names no file system gives, as a reset can leave) can be removed
-  again, and the folders above it (#388): such entries are taken out where they are found, the data they point at is
-  left alone (it may be another file's; the space comes back when the card is checked on a computer). Before, removing
-  the folder, or a book's cache in it, failed with "invalid path".
+  again, and the folders above it (#388, #99): the folder is cut off where its parent names it, and nothing in it is
+  written, followed or freed, the entries that look sane included (its space may hold another file's data; the space
+  comes back when the card is checked on a computer). Before, removing the folder, or a book's cache in it, failed
+  with "invalid path". Folders of names PaperPaw does not take (made elsewhere: `con`) are removed with all they hold.
 
 ## [0.6.0-beta.1] - 2026-11-02
 
