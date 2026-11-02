@@ -8,7 +8,7 @@ change the plugin SDK.
 
 ## [0.6.0-beta.1] - 2026-11-02
 
-**Plugins of this release must be built from `6c4a19dc` or later** (plugin interface 6, #363). 0.6.0-beta.1 takes
+**Plugins of this release must be built from `965d866b` or later** (plugin interface 6, #363; `965d866b` raises the shared interface family `ui` to revision 2, #119: the firmware refuses plugins of revision 1, built before). 0.6.0-beta.1 takes
 the interface-6 round too (TLS sockets, screens that fit another size, libraries of any size), so plugins change
 once: from interface 4 of 0.5.0-beta.12 to interface 6. Interface 6 was never released; plugins built for it (the
 earlier release candidate's store files, test cards and Workshop builds) are refused as built for an older
