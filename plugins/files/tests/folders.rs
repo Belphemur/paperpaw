@@ -364,3 +364,26 @@ fn the_kernels_folder_editor_opens_the_chooser() {
         "books/Novels"
     );
 }
+
+#[test]
+fn turned_the_chooser_keeps_its_folder_and_its_row() {
+    let _turn = turn();
+    let card = Card::new("turned");
+    let storage = card.storage();
+    for n in 0..40 {
+        storage
+            .write(&format!("books/Many/Folder {n:02}/x.txt"), b"x")
+            .unwrap();
+    }
+    let mut app = chooser(X4, storage, "core.library-folder");
+    choose(&mut app, "Many/");
+    app.repeat(actions::DOWN, 5);
+    let row = app.focused();
+    assert!(row.is_some(), "a row has the focus");
+    app.resize(800, 480);
+    assert_eq!(app.screen(), CHOOSER);
+    assert!(app.shows("Many"), "{}", app.described());
+    assert_eq!(app.focused(), row, "landscape");
+    app.resize(480, 800);
+    assert_eq!(app.focused(), row, "upright again");
+}

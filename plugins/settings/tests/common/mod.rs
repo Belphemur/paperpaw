@@ -310,6 +310,13 @@ impl App {
         self.settle(effects);
     }
 
+    /// The screen turned or resized to `width` by `height`.
+    pub fn resize(&mut self, width: u16, height: u16) {
+        self.now += 100;
+        let effects = self.kernel.resize(Instant(self.now), width, height);
+        self.settle(effects);
+    }
+
     /// Runs `action` `times` times.
     pub fn repeat(&mut self, action: Id, times: usize) {
         for _ in 0..times {

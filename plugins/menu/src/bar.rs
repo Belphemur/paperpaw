@@ -354,7 +354,29 @@ impl BarScreen {
     }
 }
 
+impl BarScreen {
+    /// Laid out anew, the focus on the entry it was on (where it stays).
+    fn remake(&mut self, env: &Env<'_>) {
+        let focused = self.entries.get(self.focus).map(|e| e.id.clone());
+        let keys = self.keys;
+        let opened = self.params.clone();
+        *self = BarScreen::new(env, &opened);
+        if let Some(at) = focused.and_then(|id| self.entries.iter().position(|e| e.id == id)) {
+            self.focus = at;
+        }
+        self.keys = keys;
+    }
+}
+
 impl Screen for BarScreen {
+    /// Turned or resized: laid out anew for the size, the focus kept.
+    fn on_resize(&mut self, cx: &mut Cx<'_, '_>) -> Handled {
+        let env = *cx.env();
+        self.remake(&env);
+        cx.request_redraw();
+        Handled::Yes
+    }
+
     fn region(&self, _: &Env<'_>) -> Option<Rect> {
         Some(self.region)
     }
@@ -493,17 +515,7 @@ impl Screen for BarScreen {
             let env = *cx.env();
             let before = self.region;
             if env.settings().governs(changed.id.as_str()) {
-                // Anew, the focus on the entry it was on (where it stays).
-                let focused = self.entries.get(self.focus).map(|e| e.id.clone());
-                let keys = self.keys;
-                let opened = self.params.clone();
-                *self = BarScreen::new(&env, &opened);
-                if let Some(at) =
-                    focused.and_then(|id| self.entries.iter().position(|e| e.id == id))
-                {
-                    self.focus = at;
-                }
-                self.keys = keys;
+                self.remake(&env);
             }
             // What it covered before too, should it have shrunk.
             cx.request_redraw_area(before.union(&self.region));

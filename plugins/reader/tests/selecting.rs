@@ -138,6 +138,22 @@ fn a_long_press_looks_up_the_word_without_punctuation_and_with_its_sentence() {
 }
 
 #[test]
+fn turned_with_text_selected_the_selection_ends_and_its_menu_does_nothing() {
+    let mut reading = numbered(TOUCH);
+    let words = reading.words();
+    reading.long_press(words[4]);
+    reading.tap(words[8]);
+    reading.resize(800, 480);
+    assert_eq!(reading.screen(), "reader.screen");
+    // The words moved with the new size: nothing is selected, and a menu
+    // item chosen from the selection before writes nothing.
+    reading.press(reader::HIGHLIGHT);
+    assert!(highlights(&reading).is_empty());
+    assert!(!reading.storage.exists(&annotations::file(BOOK)));
+    assert!(reading.part("Look up").is_none());
+}
+
+#[test]
 fn taps_extend_a_selection_and_highlight_writes_it() {
     let mut reading = numbered(TOUCH);
     let words = reading.words();

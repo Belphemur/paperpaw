@@ -1139,6 +1139,19 @@ impl Screen for ListScreen {
         cx.wake_at(env.now());
     }
 
+    /// Turned or resized: laid out anew for the size, the focus on its
+    /// book, the filter and the order as they are.
+    fn on_resize(&mut self, cx: &mut Cx<'_, '_>) -> Handled {
+        let env = *cx.env();
+        self.layout = Layout::new(&env);
+        if !self.covered {
+            self.refilter_in_place(&env);
+            cx.wake_at(env.now());
+        }
+        cx.request_redraw();
+        Handled::Yes
+    }
+
     fn on_hide(&mut self) {
         // Covered by a book (or another full screen): the covers and the
         // index go, memory for the book; the index is kept in a file.

@@ -278,3 +278,27 @@ fn reading_aloud_from_the_selected_word() {
         Some("Sentence 2 has a few words in it.")
     );
 }
+
+#[test]
+fn turned_while_reading_aloud_the_speech_pauses_and_the_book_stays() {
+    let text = sentences(200);
+    let mut reading = Reading::speaking(BUTTONS, Shared::default(), BOOK, text.as_bytes());
+    reading.open();
+    reading.speech();
+    reading.press(reader::READ_ALOUD);
+    let (said, _) = reading.speech();
+    assert!(!said.is_empty(), "it speaks");
+    reading.resize(800, 480);
+    assert_eq!(reading.screen(), "reader.screen");
+    let (_, stopped) = reading.speech();
+    assert!(stopped, "the speech was stopped");
+    assert!(
+        !reading.events().contains(&"closed"),
+        "{:?}",
+        reading.events()
+    );
+    // Going on reads aloud again, from the page shown.
+    reading.press(reader::READ_ALOUD);
+    let (said, _) = reading.speech();
+    assert!(!said.is_empty(), "it speaks on");
+}

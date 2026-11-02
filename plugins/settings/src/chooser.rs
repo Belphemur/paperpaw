@@ -98,6 +98,17 @@ impl Chooser {
 }
 
 impl Screen for Chooser {
+    /// Turned or resized: laid out anew, the focus on its option.
+    fn on_resize(&mut self, cx: &mut Cx<'_, '_>) -> Handled {
+        let (style, header, fresh) = frame(cx.env(), false);
+        // The focus, whether it shows and the page stay with the list.
+        self.list.set_area(fresh.area());
+        self.list.set_row(fresh.row());
+        (self.style, self.header) = (style, header);
+        cx.request_redraw();
+        Handled::Yes
+    }
+
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let mut ui = ui::Ui::new(canvas, env, &style);

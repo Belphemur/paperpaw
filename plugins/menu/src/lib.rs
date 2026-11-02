@@ -507,7 +507,33 @@ pub(crate) fn is_menu(env: &Env<'_>, id: &Id) -> bool {
     !env.menus().items(id.as_str()).is_empty()
 }
 
+impl MenuScreen {
+    /// Laid out anew, the focus on the entry it was on (where it stays).
+    fn remake(&mut self, env: &Env<'_>) {
+        let focused = self.items.get(self.rows.focus()).map(|i| i.id.clone());
+        let (focus, keys) = (self.rows.focus(), self.keys);
+        // A number being edited goes on.
+        let edit = core::mem::take(&mut self.edit);
+        let opened = self.params.clone();
+        *self = MenuScreen::new(env, &opened);
+        self.edit = edit;
+        let at = focused
+            .and_then(|id| self.items.iter().position(|i| i.id == id))
+            .unwrap_or(focus.min(self.items.len().saturating_sub(1)));
+        self.rows.set_focus(at);
+        self.keys = keys;
+    }
+}
+
 impl Screen for MenuScreen {
+    /// Turned or resized: laid out anew for the size, the focus kept.
+    fn on_resize(&mut self, cx: &mut Cx<'_, '_>) -> Handled {
+        let env = *cx.env();
+        self.remake(&env);
+        cx.request_redraw();
+        Handled::Yes
+    }
+
     fn hint(&self, action: &Id, env: &Env<'_>) -> paperpaw_sdk::Hint {
         // While the buttons change a number: what each does to it.
         self.edit.hint(action, env)
@@ -687,16 +713,7 @@ impl Screen for MenuScreen {
             let env = *cx.env();
             let before = self.region;
             if env.settings().governs(changed.id.as_str()) {
-                // Anew, the focus on the entry it was on (where it stays).
-                let focused = self.items.get(self.rows.focus()).map(|i| i.id.clone());
-                let (focus, keys) = (self.rows.focus(), self.keys);
-                let opened = self.params.clone();
-                *self = MenuScreen::new(&env, &opened);
-                let at = focused
-                    .and_then(|id| self.items.iter().position(|i| i.id == id))
-                    .unwrap_or(focus.min(self.items.len().saturating_sub(1)));
-                self.rows.set_focus(at);
-                self.keys = keys;
+                self.remake(&env);
             }
             // What it covered before too, should it have shrunk.
             cx.request_redraw_area(before.union(&self.region));

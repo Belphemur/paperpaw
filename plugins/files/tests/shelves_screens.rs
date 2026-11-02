@@ -198,3 +198,20 @@ fn the_shelves_menu_offers_every_shelf() {
         assert_eq!(app.screen(), SHELF);
     }
 }
+
+#[test]
+fn turned_the_shelves_keep_their_focus() {
+    let _turn = turn();
+    let mut app = app_on(X4, library());
+    app.run(actions::LIBRARY);
+    app.run(Id::new_static("files.by-author"));
+    wait(&mut app);
+    app.run(actions::DOWN);
+    let name = app.focused();
+    assert!(name.is_some(), "a name has the focus");
+    app.resize(800, 480);
+    assert_eq!(app.screen(), SHELF);
+    assert_eq!(app.focused(), name, "landscape");
+    app.resize(480, 800);
+    assert_eq!(app.focused(), name, "upright again");
+}

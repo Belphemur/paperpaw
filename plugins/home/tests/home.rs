@@ -40,8 +40,15 @@ const fn sized(touch: bool, width: u16, height: u16) -> DeviceInfo {
     )
 }
 
-/// How often the probe widget was made.
-static MADE: AtomicUsize = AtomicUsize::new(0);
+thread_local! {
+    /// How often the probe widget was made by this test's own kernel
+    /// (tests run in parallel, each on a thread of its own).
+    static MADE: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+fn made() -> usize {
+    MADE.with(std::cell::Cell::get)
+}
 
 /// A plugin with a widget that counts how often it is made, and a
 /// setting of its own that its widget does not have.
@@ -75,7 +82,7 @@ impl Plugin for Probe {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_widget(WidgetSpec::new(PROBE, "probe.widget", |_| {
-            MADE.fetch_add(1, Ordering::SeqCst);
+            MADE.with(|n| n.set(n.get() + 1));
             Box::new(ProbeWidget)
         }))?;
         r.add_setting(SettingSpec::switch(
@@ -325,19 +332,19 @@ fn an_added_page_shows_until_it_is_removed() {
 fn widgets_are_made_anew_only_when_what_makes_them_changes() {
     let mut home = Home::new(true, "columns = 4\npage-1 = probe.widget 0/0 4x1\n");
     home.shown();
-    let made = MADE.load(Ordering::SeqCst);
-    assert_eq!(made, 1, "made once as the home screen showed");
+    let before = made();
+    assert_eq!(before, 1, "made once as the home screen showed");
     // Another plugin's setting: read anew, not made anew.
     home.set(OTHER.as_str(), "true");
     home.shown();
-    assert_eq!(MADE.load(Ordering::SeqCst), made);
+    assert_eq!(made(), before);
     // The widget's own setting, the look of all: made anew.
     home.set(OWN.as_str(), "true");
     home.shown();
-    assert_eq!(MADE.load(Ordering::SeqCst), made + 1);
+    assert_eq!(made(), before + 1);
     home.set("core.ui-lines", "5");
     home.shown();
-    assert_eq!(MADE.load(Ordering::SeqCst), made + 2);
+    assert_eq!(made(), before + 2);
 }
 
 impl Home {
@@ -664,4 +671,46 @@ fn the_start_card_takes_the_one_row_left_beside_a_tall_clock() {
     let (_, at) = card.unwrap_or_else(|| panic!("no card in {texts:?}"));
     // In the last row, the screen's lower part.
     assert!(at.y >= 240 && at.y + at.height <= 480, "{at:?}");
+}
+
+#[test]
+fn turned_to_landscape_the_page_and_the_edit_mode_stay() {
+    let mut home = Home::new(
+        true,
+        "page-1 = tool:core.library 0/0 1x1\n\
+         page-2 = tool:core.settings 0/0 1x1\n",
+    );
+    home.run(actions::NEXT_PAGE);
+    assert!(home.says("Settings"), "the second page");
+    home.now += 100;
+    let effects = home.kernel.resize(Instant(home.now), 800, 480);
+    home.settle(effects);
+    assert!(home.says("Settings"), "still the second page, turned");
+    assert!(!home.says("Library"));
+    let shown = home.shown();
+    on_screen(&home, &shown);
+    // And back: the same page again.
+    home.now += 100;
+    let effects = home.kernel.resize(Instant(home.now), 480, 800);
+    home.settle(effects);
+    assert!(home.says("Settings"), "the second page, upright again");
+}
+
+/// Under another screen the home screen let its widgets go: a resize then
+/// makes none, and the page is laid out for the new size when it shows.
+#[test]
+fn resized_while_hidden_the_widgets_are_made_when_it_shows() {
+    let mut home = Home::new(true, "columns = 4\npage-1 = probe.widget 0/0 4x1\n");
+    home.shown();
+    home.open("home.add-widget", Params::new().with("page", "0"));
+    let before = made();
+    home.now += 100;
+    let effects = home.kernel.resize(Instant(home.now), 800, 480);
+    home.settle(effects);
+    assert_eq!(made(), before, "none while hidden");
+    // Back on the home screen: laid out for the new size.
+    home.run(actions::BACK);
+    let shown = home.shown();
+    on_screen(&home, &shown);
+    assert!(made() > before, "made as it shows");
 }

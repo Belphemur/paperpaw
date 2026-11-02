@@ -422,6 +422,31 @@ impl Screen for ReaderScreen {
         Handled::Yes
     }
 
+    /// Turned or resized: the book stays open and its pages are laid out
+    /// anew for the new size from the page shown, as when its type changes.
+    /// Reading aloud pauses (as at any button), where it was kept to
+    /// go on from. A book being prepared, waited for or let go of has no
+    /// pages to lay out; it is opened at the new size when it is.
+    fn on_resize(&mut self, cx: &mut Cx<'_, '_>) -> Handled {
+        self.selection = None;
+        self.linking = None;
+        if self.aloud.is_some() {
+            self.pause_aloud(cx);
+        }
+        let env = *cx.env();
+        if let Ok(book) = &mut self.book {
+            book.relayout(&env);
+            // Kept to go on from only where the page is the one it was.
+            if self.resume.is_some_and(|(page, _)| page != book.page.start) {
+                self.resume = None;
+            }
+            self.status_shown = None;
+            cx.wake_at(env.now());
+        }
+        cx.request_redraw();
+        Handled::Yes
+    }
+
     fn on_close(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         self.unsqueeze(&env);

@@ -124,6 +124,17 @@ pub(crate) struct TocScreen {
 }
 
 impl TocScreen {
+    /// The style, the header and the list placed for `env`'s screen.
+    fn frame(env: &Env<'_>) -> (UiStyle, ui::Header, ListView) {
+        let style = UiStyle::new(env);
+        let header = ui::Header::new(env, &style, true);
+        let display = env.device().display;
+        let top = header.area().height + style.gap();
+        let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
+        let list = ListView::new(area, u32::from(style.row())).focus_on_keys(env);
+        (style, header, list)
+    }
+
     pub(crate) fn open(env: &Env<'_>, params: &Params) -> Self {
         let path = params.get(params::PATH).unwrap_or_default().to_string();
         let options = crate::screen::open_options(env);
@@ -131,11 +142,7 @@ impl TocScreen {
         let len = document
             .as_ref()
             .map_or(0, |d| d.toc_len(env.storage()) as usize);
-        let style = UiStyle::new(env);
-        let display = env.device().display;
-        let header = ui::Header::new(env, &style, true);
-        let top = header.area().height + style.gap();
-        let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
+        let (style, header, list) = Self::frame(env);
         // Few entries: the headings may do better.
         let (headings, scan) = if len <= 1 && document.is_some() {
             match load_headings(env, &path) {
@@ -157,7 +164,7 @@ impl TocScreen {
             visible: Vec::new(),
             style,
             header,
-            list: ListView::new(area, u32::from(style.row())).focus_on_keys(env),
+            list,
         };
         if let Some(current) = locator_of(params) {
             screen.list.set_focus(screen.current(env, current));
@@ -278,6 +285,21 @@ impl TocScreen {
 }
 
 impl Screen for TocScreen {
+    /// Turned or resized: laid out anew for the size, the focus on its
+    /// entry, the entries of the page read again; the headings still
+    /// being looked for go on.
+    fn on_resize(&mut self, cx: &mut Cx<'_, '_>) -> Handled {
+        let env = *cx.env();
+        let (style, header, fresh) = Self::frame(&env);
+        // The focus, whether it shows and the page stay with the list.
+        self.list.set_area(fresh.area());
+        self.list.set_row(fresh.row());
+        (self.style, self.header) = (style, header);
+        self.load_page(&env);
+        cx.request_redraw();
+        Handled::Yes
+    }
+
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         if self.scan.is_some() {
             let now = cx.env().now();

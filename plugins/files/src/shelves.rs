@@ -106,15 +106,22 @@ pub(crate) struct ShelfScreen {
 }
 
 impl ShelfScreen {
-    pub(crate) fn new(env: &Env<'_>, params: &Params) -> Self {
+    /// The style, the header and the list placed for `env`'s screen.
+    fn frame(env: &Env<'_>) -> (UiStyle, ui::Header, ListView) {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device().display;
         let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
+        let list = ListView::new(area, style.noted_row()).focus_on_keys(env);
+        (style, header, list)
+    }
+
+    pub(crate) fn new(env: &Env<'_>, params: &Params) -> Self {
+        let (style, header, list) = Self::frame(env);
         let shelf = Shelf::of(params.get(params::MODE));
         Self {
-            list: ListView::new(area, style.noted_row()).focus_on_keys(env),
+            list,
             names: names(&mut |f| library::service(env).each(env, f), shelf),
             collecting: false,
             failed: false,
@@ -146,6 +153,18 @@ impl ShelfScreen {
 }
 
 impl Screen for ShelfScreen {
+    /// Turned or resized: laid out anew, the focus on its name.
+    fn on_resize(&mut self, cx: &mut Cx<'_, '_>) -> Handled {
+        let env = *cx.env();
+        let (style, header, fresh) = Self::frame(&env);
+        // The focus, whether it shows and the page stay with the list.
+        self.list.set_area(fresh.area());
+        self.list.set_row(fresh.row());
+        (self.style, self.header) = (style, header);
+        cx.request_redraw();
+        Handled::Yes
+    }
+
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let len = self.names.len();

@@ -148,3 +148,29 @@ fn while_a_book_covers_it_the_library_keeps_its_index_in_a_file() {
     assert_eq!(rows(&mut app).len(), 4);
     assert_eq!(focused(&mut app), "Book 02");
 }
+
+#[test]
+fn turned_the_library_keeps_the_focus_on_its_book() {
+    let _turn = turn();
+    for device in DEVICES {
+        let mut app = library(device, "[files]\nsort = files.sort.name\n", 8);
+        // The focus shows on touch screens once a button moved it.
+        app.repeat(actions::DOWN, 4);
+        let book = focused(&mut app);
+        assert!(book.starts_with("Book 0"), "{book}");
+        app.resize(800, 480);
+        assert_eq!(app.screen(), "files.browser");
+        assert_eq!(focused(&mut app), book, "landscape");
+        for part in app.parts() {
+            let area = part.area;
+            assert!(
+                u32::from(area.x) + u32::from(area.width) <= 800
+                    && u32::from(area.y) + u32::from(area.height) <= 480,
+                "{} is off the screen: {area:?}",
+                part.label
+            );
+        }
+        app.resize(480, 800);
+        assert_eq!(focused(&mut app), book, "upright again");
+    }
+}
