@@ -1286,9 +1286,16 @@ impl Screen for ListScreen {
             // or, while covered, when it shows (the one kept is of the old
             // catalog).
             self.failed = false;
+            let service = library::service(&env);
             if self.covered {
                 self.gone.clear();
                 self.collecting = false;
+            } else if !self.collecting
+                && self.index.version.is_some()
+                && service.is_current(&env, &self.index)
+            {
+                // The catalog as it was (a walk found nothing changed):
+                // the index holds, nothing is made or kept anew.
             } else {
                 self.rebuild(&env, true);
                 cx.request_redraw();

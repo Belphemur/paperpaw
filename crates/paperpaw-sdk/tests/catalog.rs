@@ -738,10 +738,11 @@ fn a_walk_that_finds_books_gone_or_come_at_the_end_writes_the_catalog() {
 }
 
 #[test]
-fn a_walk_that_finds_nothing_changed_cuts_the_log_only_where_the_catalog_has_not_what_it_noted() {
+fn a_walk_keeps_the_log_where_the_catalog_has_what_it_noted() {
     let h = library_of(30);
     let book = "books/Beta/book number 0010.txt";
     let before = h.storage.get(CATALOG).unwrap();
+    let generation = catalog::generation(&h.storage).unwrap();
     // What the catalog has noted again: the log stays as it is.
     catalog::note(&h.storage, book, Status::new(None, false, false)).unwrap();
     let log = h.storage.get(LOG).unwrap();
@@ -749,13 +750,21 @@ fn a_walk_that_finds_nothing_changed_cuts_the_log_only_where_the_catalog_has_not
     walk(&h.env_on(&watched));
     assert_eq!(watched.taken(), Vec::<String>::new());
     assert_eq!(h.storage.get(LOG).unwrap(), log);
-    // A book noted removed that is there: the catalog as it was, the log
-    // cut (it would hide the book).
+    // A book noted removed that is there: its lines as they were, but a
+    // catalog anew (views make theirs again) and the log cut (it would
+    // hide the book).
     catalog::forget(&h.storage, book).unwrap();
     assert!(!books(&h.storage).iter().any(|(p, _)| p == book));
     walk(&h.env_on(&watched));
-    assert_eq!(watched.taken(), [LOG]);
-    assert_eq!(h.storage.get(CATALOG).unwrap(), before);
+    assert_eq!(
+        watched.taken(),
+        [".paperpaw/library/catalog.tmp", CATALOG, LOG]
+    );
+    assert_eq!(catalog::generation(&h.storage), Some(generation + 1));
+    assert_eq!(lines(&h.storage), {
+        let text = String::from_utf8(before).unwrap();
+        text.lines().skip(1).map(str::to_string).collect::<Vec<_>>()
+    });
     assert!(catalog::changes(&h.storage).is_empty());
     assert!(books(&h.storage).iter().any(|(p, _)| p == book));
 }

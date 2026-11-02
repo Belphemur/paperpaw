@@ -182,6 +182,12 @@ fn on_the_x4_a_walk_waits_while_the_list_shows() {
     app.wait(61_000);
     let generation = |app: &App| library::catalog::generation(app.storage.0.as_ref()).unwrap();
     let before = generation(&app);
+    // A favourite chosen without a word: a walk makes the catalog anew
+    // (one that finds nothing changed keeps it, and its generation).
+    app.storage
+        .0
+        .write(".paperpaw/library/favourites.txt", b"books/Book 04.txt\n")
+        .unwrap();
     let anew = events::CatalogWanted::new(true);
     app.send(events::CATALOG_WANTED.id().clone(), anew.to_params());
     app.wait(61_000);

@@ -71,8 +71,8 @@ fn path_of(line: &str) -> &str {
 /// A walk compares what it makes with the old catalog first and writes
 /// nothing while they are the same: where they part, the building file is
 /// begun with the old catalog's lines so far (copied a piece a step), and
-/// where they never do the old catalog stays, its log too unless what it
-/// noted is not in the catalog.
+/// where they never do the old catalog stays, its log too (all it noted is
+/// in the catalog: views keep what they made of them).
 #[derive(Debug, Default)]
 struct Making {
     /// How long the log was when it began.
@@ -98,8 +98,8 @@ struct Making {
     /// the building file, then the text that was not the same.
     parting: Option<Parting>,
     /// Something noted in the log is not as the catalog has it (a status
-    /// other than the one written, a book removed found again): the log
-    /// is cut to what was noted since even where the catalog stays.
+    /// other than the one written, a book removed found again): the
+    /// catalog is written anew even where its lines stay, the log cut.
     noted_differs: bool,
 }
 
@@ -285,31 +285,22 @@ impl Making {
 
     /// Puts the new catalog in place and keeps the log noted since it
     /// began; the log goes where it cannot be read (the details have what
-    /// it said). Where it is the old one, that stays, its log cut only
-    /// where something noted is not in it; where the old one has more
-    /// lines, it parts from it: `false`, more steps to take.
+    /// it said). Where it is the old one, that stays, and its log; where
+    /// the old one has more lines, or the log notes what is not in it (a
+    /// book removed that is there), it parts from it: `false`, more steps
+    /// to take.
     fn finish(&mut self, storage: &dyn Storage) -> Result<bool, StorageError> {
         if self.copy(storage)? {
             return Ok(false);
         }
         if let Some((_, at)) = self.same {
-            if storage.size(&catalog_path())? != at {
-                // Books gone from its end.
+            if self.noted_differs || storage.size(&catalog_path())? != at {
                 self.part(storage, String::new())?;
                 return Ok(false);
-            }
-            if self.noted_differs && self.log_from > 0 {
-                self.keep_log_since(storage);
             }
             return Ok(true);
         }
         files::move_to(storage, &building_path(), &catalog_path())?;
-        self.keep_log_since(storage);
-        Ok(true)
-    }
-
-    /// The log cut to what was noted since it began.
-    fn keep_log_since(&self, storage: &dyn Storage) {
         let mut since = String::new();
         let read = lines_from(storage, &log_path(), self.log_from, &mut |_, line| {
             since.push_str(line);
@@ -326,6 +317,7 @@ impl Making {
             )]
             let _ = storage.remove(&log_path());
         }
+        Ok(true)
     }
 
     #[expect(
@@ -577,6 +569,7 @@ impl Walk {
     pub fn start(env: &Env<'_>, fresh: Vec<String>) -> Result<Walk, StorageError> {
         let old = OldCatalog::open(env.storage())?;
         let making = Making::start(env, true)?;
+
         Ok(Walk {
             making,
             old,
