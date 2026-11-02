@@ -66,6 +66,13 @@ of a release) raw, nothing else; keep both slots at least 6,553,600 bytes
   applies).
   Where the card cannot be read at all, `paperpaw.ini` cannot be, and the
   start goes on as for a setup not declared by the reader.
+  The first update from 0.6.0-beta.1 (made by a PaperPaw that does not put
+  its word in the entry) carries no word of PaperPaw's either: that one start
+  waits for the card and has no early rollback; the updates after it are
+  marked at once.
+- Once an install is asked for and the setup is found declared, it stays
+  declared until the next start, even if `dual-boot` is switched off meanwhile:
+  the safe direction.
 - Never reads the other partition for the web flasher's bundle of plugins.
 - Says so where an update would have been offered: the *Updates* page tells
   in two plain sentences that PaperPaw shares the device and installs no

@@ -87,8 +87,13 @@ pub fn guard(ota: &mut Ota, storage: &dyn Storage) -> bool {
 fn decide(ota: &Ota, storage: &dyn Storage) -> Option<Source> {
     let began = millis();
     let choice = choice(storage);
+    let read = millis();
     let marker = dual_boot::needs_marker(choice).then(|| ota::marker(ota.flash()));
-    info!("dual boot: looked in {} ms", millis() - began);
+    info!(
+        "dual boot: the ini took {} ms, the bootloader {} ms",
+        read - began,
+        millis() - read
+    );
     let source = dual_boot::decide(Evidence { choice, marker });
     match source {
         Some(source) => info!(
