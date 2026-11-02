@@ -323,7 +323,7 @@ fn the_files_of_later_formats_need_the_formats_that_read_them() {
     assert!(read.is_empty(), "{read:?}");
     // [fonts] binds a role to a font, from formats 3 on too.
     let fonts = "\n[fonts]\ncore.font-reading-bold = cosy.bold\n";
-    let old = found("fonts-1", "package.formats", &ini(&fonts[..]), &[]);
+    let old = found("fonts-1", "package.formats", &ini(fonts), &[]);
     assert!(
         old.contains(&("plugin.ini:6".to_string(), Level::Error)),
         "{old:?}"
