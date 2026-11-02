@@ -16,7 +16,6 @@ mod quote;
 mod text;
 mod todo;
 
-use alloc::borrow::Cow;
 use alloc::format;
 use alloc::rc::Rc;
 use alloc::string::String;
@@ -28,8 +27,6 @@ use paperpaw_sdk::{Canvas, Commands, Env, Id, RegisterError, Registrar, Storage}
 use crate::{frame_height, today};
 
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    r.add_translations(Cow::Borrowed(include_str!("../i18n/words.en.ini")))?;
-    r.add_translations(Cow::Borrowed(include_str!("../i18n/words.de.ini")))?;
     let changes = Changes::default();
     quote::register(r, &changes)?;
     picture::register(r, &changes)?;

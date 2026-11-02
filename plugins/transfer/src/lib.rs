@@ -64,7 +64,7 @@ pub(crate) const PORT: u16 = 8080;
 const OWN_IDLE_MS: u64 = 10 * 60 * 1000;
 
 /// The web page; its texts come from the translations.
-const PAGE: &str = include_str!("page.html");
+const PAGE: &str = include_str!("../data/page.html");
 
 /// The transfer plugin.
 #[derive(Debug, Default)]

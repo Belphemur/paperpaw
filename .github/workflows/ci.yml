@@ -103,6 +103,12 @@ jobs:
       # data the fixtures do not give fails the run.
       - name: Every screen reached with the buttons alone
         run: target/release/paperpaw-dev reach --quick --network fixtures
+      # PaperPaw's own plugins keep docs/plugin-conventions.md: its
+      # warnings fail the run here (a plugin of others keeps them as
+      # warnings). A plugin built into the firmware says why it embeds
+      # large files in its Cargo.toml (`embedded-assets`).
+      - name: Every first-party plugin keeps the plugin conventions
+        run: target/release/paperpaw-dev package --strict plugins/*/
 
   msrv:
     name: Oldest Rust

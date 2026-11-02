@@ -34,7 +34,7 @@ const X4: DeviceInfo = DeviceInfo::new(
 
 const SCREEN: &str = "sleep.screen";
 /// A real picture: the logo of the about page.
-const PNG: &[u8] = include_bytes!("../../about/logo.png");
+const PNG: &[u8] = include_bytes!("../../about/pictures/logo.png");
 
 fn next_file() -> String {
     format!("{}/next.txt", Env::plugin_dir("sleep"))
