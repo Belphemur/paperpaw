@@ -57,10 +57,7 @@ use paperpaw_sdk::{
 
 use index::{Filter, NEVER, hash};
 use paperpaw_sdk::library::sorted::{self, Entry, Sorted};
-use rows::{Loaded, Sizes};
-
-/// Between two covers read from their books: input comes between.
-pub(crate) const COVER_GAP_MS: u64 = 20;
+use rows::{CoverPace, Loaded, Sizes};
 
 use crate::names::{self, Bound, Distinct, Firsts};
 
@@ -381,6 +378,8 @@ struct ListScreen {
     /// index is kept in a file.
     kept_focus: Option<u32>,
     covered: bool,
+    /// When the covers not read yet are read.
+    pace: CoverPace,
     /// Just opened: the first `on_show` need not load again.
     fresh: bool,
 }
@@ -416,6 +415,7 @@ impl ListScreen {
             gone: Vec::new(),
             kept_focus: None,
             covered: false,
+            pace: CoverPace::default(),
             fresh: true,
         };
         // A catalog without books may be out of date (books copied onto
@@ -1188,6 +1188,7 @@ impl Screen for ListScreen {
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
+        self.pace.heard(cx.env().now());
         self.shown(cx);
         self.wake_for_covers(cx);
     }
@@ -1224,12 +1225,14 @@ impl Screen for ListScreen {
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
+        self.pace.heard(cx.env().now());
         let handled = self.act(action, cx);
         self.wake_for_covers(cx);
         handled
     }
 
     fn on_gesture(&mut self, gesture: Gesture, cx: &mut Cx<'_, '_>) -> Handled {
+        self.pace.heard(cx.env().now());
         let handled = self.gesture(gesture, cx);
         self.wake_for_covers(cx);
         handled
@@ -1241,14 +1244,11 @@ impl Screen for ListScreen {
     }
 
     /// The covers of the page shown not read yet, one a tick (each opens
-    /// its book), the first shown first; drawn as each comes.
+    /// its book), the first shown first, none while input comes; drawn as
+    /// each comes.
     fn on_timer(&mut self, cx: &mut Cx<'_, '_>) {
-        let env = *cx.env();
-        if !self.covered && rows::read_next_cover(&env, &mut self.loaded) {
+        if !self.covered && self.pace.tick(cx, &mut self.loaded) {
             cx.request_redraw();
-        }
-        if !self.covered && rows::covers_unread(&self.loaded) {
-            cx.wake_at(env.now().add_millis(COVER_GAP_MS));
         }
     }
 }
@@ -1482,16 +1482,13 @@ impl ListScreen {
                 self.layout = Layout::new(&env);
             }
             cx.request_redraw();
-            if !self.covered {
-                cx.wake_at(env.now());
-            }
         }
     }
 
     /// Wakes for the covers of the page shown not read yet.
     fn wake_for_covers(&self, cx: &mut Cx<'_, '_>) {
-        if !self.covered && rows::covers_unread(&self.loaded) {
-            cx.wake_at(cx.env().now());
+        if !self.covered {
+            self.pace.wake(cx, &self.loaded);
         }
     }
 }

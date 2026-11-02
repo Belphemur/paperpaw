@@ -105,6 +105,55 @@ fn the_list_reads_one_cover_a_tick() {
     assert_eq!(covers(&app.storage).len(), 2);
 }
 
+/// While keys come (the reader going through the library), no cover is
+/// begun: a key pressed would wait for it, seconds for a large one on the
+/// X4. Once they stop for a while, the covers shown are read.
+#[test]
+fn no_cover_is_begun_while_keys_come() {
+    let _turn = turn();
+    let mut app = walked(
+        X4,
+        &[("books/alice.epub", ALICE), ("books/kafka.epub", KAFKA)],
+    );
+    app.now += 100;
+    let mut wake = app
+        .kernel
+        .run_action(Instant(app.now), actions::LIBRARY)
+        .wake_at();
+    for n in 0..20 {
+        let key = app.now + 300;
+        while let Some(at) = wake.filter(|at| at.0 < key) {
+            app.now = app.now.max(at.0);
+            wake = app.kernel.tick(Instant(app.now)).wake_at();
+        }
+        app.now = key;
+        let action = if n % 2 == 0 {
+            actions::DOWN
+        } else {
+            actions::UP
+        };
+        wake = app.kernel.run_action(Instant(app.now), action).wake_at();
+        assert!(covers(&app.storage).is_empty(), "{n}");
+    }
+    let last_key = app.now;
+    let mut first = None;
+    for _ in 0..1000 {
+        let Some(at) = wake else {
+            break;
+        };
+        app.now = app.now.max(at.0);
+        wake = app.kernel.tick(Instant(app.now)).wake_at();
+        if first.is_none() && !covers(&app.storage).is_empty() {
+            first = Some(app.now);
+        }
+    }
+    assert_eq!(covers(&app.storage).len(), 2);
+    assert!(
+        first.is_some_and(|at| at >= last_key + 600),
+        "{first:?} {last_key}"
+    );
+}
+
 #[test]
 fn a_replaced_book_shows_its_own_cover() {
     let _turn = turn();

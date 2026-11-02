@@ -13,7 +13,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::library::{self, Badge, catalog::Record};
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::ui::{self, Thumbnail, UiStyle};
-use paperpaw_sdk::{Arg, Color, Env, Rect};
+use paperpaw_sdk::{Arg, Color, Cx, Env, Instant, Rect};
 
 /// Badges shown on a book's row at most ([`library::service::badges`]).
 const BADGES: usize = 2;
@@ -185,10 +185,48 @@ pub(crate) struct Loaded {
     pub(crate) unread_cover: Option<((u16, u16), String)>,
 }
 
-/// Reads the cover of the first book of `loaded` (in the order shown)
-/// whose cover was not read yet: whether there was one.
-pub(crate) fn read_next_cover(env: &Env<'_>, loaded: &mut [Loaded]) -> bool {
-    loaded.iter_mut().any(|book| book.read_cover(env))
+/// Between two covers read from their books: input comes between.
+const COVER_GAP_MS: u64 = 20;
+
+/// How long after the last input (and the view showing) no cover is
+/// begun: a large one takes seconds on the X4, and a key pressed while
+/// the reader goes through pages would wait for it.
+pub(crate) const COVER_QUIET_MS: u64 = 600;
+
+/// When the covers of a view's books not read yet are read: one a tick,
+/// none while input comes.
+#[derive(Debug, Default)]
+pub(crate) struct CoverPace {
+    /// No cover begun before.
+    quiet_until: Instant,
+}
+
+impl CoverPace {
+    /// Input came (or the view showed) at `now`: no cover begun for a
+    /// while.
+    pub(crate) fn heard(&mut self, now: Instant) {
+        self.quiet_until = now.add_millis(COVER_QUIET_MS);
+    }
+
+    /// Wakes `cx` for the next cover of `loaded` to read, if any.
+    pub(crate) fn wake(&self, cx: &mut Cx<'_, '_>, loaded: &[Loaded]) {
+        if covers_unread(loaded) {
+            cx.wake_at(cx.env().now().max(self.quiet_until));
+        }
+    }
+
+    /// A tick: reads the cover of the first book of `loaded` (in the
+    /// order shown) not read yet, unless input came lately, and wakes
+    /// for the next; whether one was read.
+    pub(crate) fn tick(&self, cx: &mut Cx<'_, '_>, loaded: &mut [Loaded]) -> bool {
+        let env = *cx.env();
+        let read =
+            env.now() >= self.quiet_until && loaded.iter_mut().any(|book| book.read_cover(&env));
+        if covers_unread(loaded) {
+            cx.wake_at(env.now().add_millis(COVER_GAP_MS).max(self.quiet_until));
+        }
+        read
+    }
 }
 
 /// Whether a cover of `loaded` is still to be read.
