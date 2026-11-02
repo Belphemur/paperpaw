@@ -75,6 +75,21 @@ fn title_row(font: &crate::FontHandle<'_>, size: f32, count: usize) -> u16 {
     }
 }
 
+/// The height of a line of a button's label where a label is wider than
+/// `full` (so buttons get two lines of it), else 0.
+fn long_label_line(env: &Env<'_>, style: &UiStyle, buttons: &[&str], full: f32) -> u16 {
+    style.font(env).map_or(0, |font| {
+        let long = buttons
+            .iter()
+            .any(|label| label.chars().count() > 1 && font.measure(style.small, label) > full);
+        if long {
+            font.line_metrics(style.small).line_height as u16
+        } else {
+            0
+        }
+    })
+}
+
 impl Dialog {
     /// A dialog as wide as the screen less its margins, as tall as
     /// `title`, `text` (each a paragraph, wrapped) and `buttons` need, at
@@ -135,16 +150,7 @@ impl Dialog {
         // A word too long for a button as wide as the box: buttons of two
         // lines, one below the other.
         let full = inner - 2.0 * super::label_pad(style, inner);
-        let label_line = style.font(env).map_or(0, |font| {
-            let long = buttons
-                .iter()
-                .any(|label| label.chars().count() > 1 && font.measure(style.small, label) > full);
-            if long {
-                font.line_metrics(style.small).line_height as u16
-            } else {
-                0
-            }
-        });
+        let label_line = long_label_line(env, style, buttons, full);
         let stacked = stacked || label_line > 0;
         let (title_line, text_line, lines) = match style.font(env) {
             Some(font) => (

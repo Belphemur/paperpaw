@@ -46,15 +46,15 @@ impl DrawerScreen {
         // About as high as a column is wide; a line higher where a tool's
         // name takes two (its icon as large as the others').
         let columns = u32::from(grid::columns_for(area, COLUMNS));
-        // Room too for the focus: a half gap of air between a tool's icon
-        // and name and its ring, above and below.
-        let row = (u32::from(area.width) / columns * 4 / 5).max(u32::from(style.row()))
-            + u32::from(style.gap());
+        let row = (u32::from(area.width) / columns * 4 / 5).max(u32::from(style.row()));
         let tools: Vec<Id> = pages::tools(env).into_iter().map(|(id, _)| id).collect();
         // The names' lines as they fall in a row grown by that line.
         let line = u32::from(paperpaw_sdk::widgets::line_height(env, style.small()));
         let width = (u32::from(area.width) / columns) as u16;
         let cell = Rect::new(0, 0, width, (row + line) as u16);
+        // Rows are higher by the room the focus ring takes above and below
+        // an icon and name (see `clear_of`).
+        let row = row + 2 * u32::from(inset(&style));
         let lines = tools
             .iter()
             .map(|id| blocks::tool_name_lines(env, cell, id))
@@ -88,11 +88,30 @@ impl DrawerScreen {
     }
 }
 
+/// How far the focus ring stands from the ink of a tool's icon and name
+/// above and below (see [`clear_of`]).
+fn reach(style: &UiStyle) -> u16 {
+    style.gap() / 2 * 2 + style.line() * 3
+}
+
+/// How far the ring may go past a tool's cell above and below: the room
+/// a redraw takes there.
+fn past(style: &UiStyle) -> u16 {
+    style.gap() / 2 + 2
+}
+
+/// The room a tool's icon and name keep from the top and the bottom of
+/// its cell, so that the focus ring is no more than [`past`] outside it.
+fn inset(style: &UiStyle) -> u16 {
+    reach(style).saturating_sub(past(style))
+}
+
 /// Where the focus of the tool at `cell` whose icon and name have ink in
 /// `ink` goes round: a half gap further from the ink than the focus
-/// usually stands, so that the name is not close to the ring, but never
-/// past the cell sideways (the next tool's name is there) and never
-/// through the ink: a name as wide as the cell keeps the usual distance.
+/// usually stands, so that the name is not close to the ring. Sideways it
+/// never goes past the cell (the next tool is there) nor through the ink:
+/// a name as wide as the cell keeps the usual distance. Above and below it
+/// may go a little past the cell, into the room the rows have for it.
 fn clear_of(style: &UiStyle, cell: Rect, ink: Rect) -> Rect {
     let more = i64::from(style.gap() / 2);
     // What the ring takes round the ink it is given (see `draw_tool_focus`).
@@ -136,7 +155,8 @@ impl Screen for DrawerScreen {
             ui.canvas()
                 .describe(paperpaw_sdk::semantics::Role::Button, &name, rect)
                 .focused(focused);
-            let ink = blocks::draw_tool_lines(ui.canvas(), env, rect, &tools[index], lines);
+            let inner = rect.inset(0, inset(&style));
+            let ink = blocks::draw_tool_lines(ui.canvas(), env, inner, &tools[index], lines);
             if focused {
                 // Round its icon and name, never through them.
                 paperpaw_sdk::widgets::grid::draw_tool_focus(
@@ -179,11 +199,22 @@ impl Screen for DrawerScreen {
         };
         match self.list.move_focus(delta, len) {
             ListChange::Focus { left, reached, .. } => {
-                // The focus goes round a tool's icon and name, a little
-                // past its place.
-                let past = self.style.gap() + self.style.line() * 3 + 1;
-                ListChange::focus(self.flip(left).grow(past), self.flip(reached).grow(past))
-                    .request(cx);
+                // The focus goes round a tool's icon and name: past its cell
+                // above and below by the room the rows keep for it (a half
+                // gap and a bit), sideways by a name as wide as the cell.
+                let (side, high) = (
+                    self.style.gap() / 2 + self.style.line() * 3 + 1,
+                    past(&self.style),
+                );
+                let round = |cell: Rect| {
+                    Rect::new(
+                        cell.x.saturating_sub(side),
+                        cell.y.saturating_sub(high),
+                        cell.width.saturating_add(2 * side),
+                        cell.height.saturating_add(2 * high),
+                    )
+                };
+                ListChange::focus(round(self.flip(left)), round(self.flip(reached))).request(cx);
             }
             change => change.request(cx),
         }
