@@ -5,14 +5,13 @@ const SHA1: &str = "0123456789abcdef0123456789abcdef01234567";
 const SHA256: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
 const KEY: &str = "1111111111111111111111111111111111111111111111111111111111111111";
 const FILES: [&str; 4] = ["i.txt", "i.bin", "i.head", "i.sections"];
+/// The fingerprint of the X4's PaperPaw in these tests: of the plugin
+/// interface of this SDK, as builds of this device are listed by it.
+const FINGERPRINT: Fingerprint = Fingerprint::of(paperpaw_sdk::native::INTERFACE, 0x4567_89ab_cdef);
 /// The X4 running a PaperPaw that loads code plugins of this build.
-/// Builds of this device are listed by their fingerprint's interface, the
-/// plugin interface of this SDK.
-const _: () =
-    assert!(Fingerprint(0x0005_4567_89ab_cdef).interface() == paperpaw_sdk::native::INTERFACE);
 const X4: Device<'static> = Device {
     name: "x4",
-    fingerprint: Some(Fingerprint(0x0005_4567_89ab_cdef)),
+    fingerprint: Some(FINGERPRINT),
     code_file: "code.ppn",
     plugins: None,
     sdk: paperpaw_sdk::SDK_VERSION,
@@ -29,6 +28,11 @@ fn plugin(id: &str, group: &str, extra: &str) -> String {
 }
 
 /// A build for `device` and `abi`.
+/// The fingerprint of [`FINGERPRINT`], as a store's build names it.
+fn abi() -> String {
+    format!("{:016x}", FINGERPRINT.0)
+}
+
 fn build_of(device: &str, abi: &str) -> String {
     format!(
         r#"{{"device": "{device}", "abi": "{abi}", "url": "/b/{device}.ppn", "size": 70000, "sha256": "{SHA256}"}}"#
@@ -98,7 +102,7 @@ fn only_what_fits_is_listed_in_its_order() {
 /// plugin's key is PaperPaw's own: never from the list's word alone.
 #[test]
 fn only_paperpaws_own_key_makes_a_plugin_official() {
-    let fits = build_of("x4", "0005456789abcdef");
+    let fits = build_of("x4", &abi());
     let ours = "148ccf3ebc30506b355c6b5cb2baf87d9265606cc6a81f085bb3b9740a95aebd";
     let official =
         |plugin: String| plugin.replace(r#""author": "A","#, r#""author": "A", "official": true,"#);
@@ -148,14 +152,11 @@ fn only_paperpaws_own_key_makes_a_plugin_official() {
 
 #[test]
 fn code_plugins_are_listed_where_a_build_fits() {
-    let fits = build_of("x4", "0005456789abcdef");
+    let fits = build_of("x4", &abi());
     let storage = list(&[
-        code(
-            "clock",
-            &[build_of("x4-pro", "0005456789abcdef"), fits.clone()],
-        ),
+        code("clock", &[build_of("x4-pro", &abi()), fits.clone()]),
         code("other-build", &[build_of("x4", "fedcba9876543210")]),
-        code("pro-only", &[build_of("x4-pro", "0005456789abcdef")]),
+        code("pro-only", &[build_of("x4-pro", &abi())]),
         code("no-builds", &[]),
     ]);
     let (entries, _) = entries(&storage);
@@ -201,7 +202,7 @@ fn page(files: &str) -> MemoryStorage {
 }
 
 fn page_of(files: &str, kind: &str, more: &str) -> MemoryStorage {
-    page_with(files, kind, more, &build_of("x4", "0005456789abcdef"))
+    page_with(files, kind, more, &build_of("x4", &abi()))
 }
 
 /// A page whose code plugin has the build `build`.
@@ -621,7 +622,7 @@ fn with_table() -> Device<'static> {
 
 #[test]
 fn a_build_that_needs_a_newer_paperpaw_is_listed_as_such_and_not_installed() {
-    let abi = "0005456789abcdef";
+    let abi = &abi();
     let storage = list(&[
         code(
             "plain",
@@ -692,7 +693,7 @@ fn a_build_that_needs_a_newer_paperpaw_is_listed_as_such_and_not_installed() {
 #[test]
 fn a_page_of_a_plugin_made_for_a_newer_paperpaw_has_no_code_to_install() {
     let author = format!(r#""author_key": "{KEY}","#);
-    let build = needing("0005456789abcdef", r#""needs_api": 500"#);
+    let build = needing(&abi(), r#""needs_api": 500"#);
     let storage = page_with(&file("plugin.ini"), "code", &author, &build);
     let plugin = read_plugin(&storage, "a.json", &with_table(), BASE).unwrap();
     assert!(plugin.entry.needs_newer && plugin.entry.code);
