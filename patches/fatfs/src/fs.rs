@@ -336,12 +336,21 @@ pub struct FileSystem<IO: ReadWriteSeek, TP = DefaultTimeProvider, OCC = LossyOe
     // Modified for PaperPaw: notes about directories (see `Dir::note`).
     dir_notes: RefCell<[Option<DirNote>; DIR_NOTES]>,
     entries_written: Cell<u64>,
+    // Modified for PaperPaw: see `check_kept_places`.
+    #[cfg(debug_assertions)]
+    check_places: Cell<bool>,
 }
 
 // Modified for PaperPaw: added.
 /// A note about a directory (see `Dir::note`): its first cluster, the note, and a place in its
 /// cluster chain (see `File::chain_at`) where `Dir::iter_from` seeks from. A directory's chain
 /// only grows at its end while it is there, so a place stays right as long as the note does.
+///
+/// That holds only while whatever frees a directory's clusters or changes its chain otherwise than
+/// by adding a cluster at its end drops its note first (`drop_dir_note`), as `Dir::remove_found`
+/// does for a directory removed: a directory cut shorter, repaired, or freed by a settling that
+/// frees clusters instead of unlinking an entry must too, or a directory made later on its first
+/// cluster would be read at the old one's places.
 #[derive(Clone, Copy)]
 struct DirNote {
     cluster: u32,
@@ -452,6 +461,8 @@ impl<IO: Read + Write + Seek, TP, OCC> FileSystem<IO, TP, OCC> {
             current_status_flags: Cell::new(status_flags),
             dir_notes: RefCell::new([None; DIR_NOTES]),
             entries_written: Cell::new(0),
+            #[cfg(debug_assertions)]
+            check_places: Cell::new(false),
         })
     }
 
@@ -539,6 +550,21 @@ impl<IO: Read + Write + Seek, TP, OCC> FileSystem<IO, TP, OCC> {
         }
     }
 
+    /// In debug builds, for tests: whether every place kept in a directory's chain (see
+    /// `DirNote`) is checked against the chain where it is used, reading the FAT along it (as
+    /// many blocks as the place saves).
+    #[cfg(debug_assertions)]
+    pub fn check_kept_places(&self, on: bool) {
+        self.check_places.set(on);
+    }
+
+    #[cfg(debug_assertions)]
+    pub(crate) fn checks_kept_places(&self) -> bool {
+        self.check_places.get()
+    }
+
+    /// Drops the note about the directory beginning at `cluster` (see `DirNote`): before its
+    /// clusters are freed or its chain changes otherwise than at its end.
     pub(crate) fn drop_dir_note(&self, cluster: u32) {
         let mut notes = self.dir_notes.borrow_mut();
         for note in notes.iter_mut() {

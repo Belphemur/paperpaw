@@ -235,6 +235,7 @@ fn names_of_a_folder_of_a_long_chain_are_found_from_any_place_in_it() {
     let count = 700;
     let card = long_chain(count);
     let s = card.storage();
+    s.fs.check_kept_places(true);
     assert_eq!(listed(&s, "big").len(), count);
     let found = |n: usize| {
         assert_eq!(
@@ -281,4 +282,94 @@ fn names_of_a_folder_of_a_long_chain_are_found_from_any_place_in_it() {
         whole(&s, &format!("big/{}", long(count + 1))),
         Ok(b"new".to_vec())
     );
+}
+
+/// The first cluster of folder `name` in the root.
+fn first_cluster(s: &FatStorage<SharedDisk<Cut>>, name: &str) -> Option<u32> {
+    s.dir("")
+        .unwrap()
+        .iter()
+        .map(Result::unwrap)
+        .find(|e| e.file_name() == name)
+        .and_then(|e| e.first_cluster())
+}
+
+/// A noted folder with a place kept in its chain, removed, and a folder
+/// made anew on its first cluster (the card full but for the clusters it
+/// freed): the new one is not noted, its names are found where they are,
+/// none of the old one's (the kept place, which is checked against the
+/// chain in debug builds, would read the old folder's clusters).
+#[test]
+fn a_folder_made_anew_on_a_noted_ones_first_cluster_finds_its_own_names() {
+    let card = long_chain(300);
+    let s = card.storage();
+    s.fs.check_kept_places(true);
+    assert_eq!(listed(&s, "big").len(), 300);
+    assert!(s.dir("big").unwrap().note().is_some());
+    assert_eq!(
+        whole(&s, &format!("big/{}", long(290))),
+        Ok(long(290).into_bytes())
+    );
+    let old = first_cluster(&s, "big").unwrap();
+    // The card filled, so that what the folder frees is all there is.
+    s.write("filler.bin", b"").unwrap();
+    let block = [7u8; 512];
+    while s.append("filler.bin", &block).is_ok() {}
+    s.sync().unwrap();
+    assert_eq!(counted(&s), 0);
+    s.remove_dir_all("big").unwrap();
+    let new = |n: usize| format!("{n:012x}.new.ini");
+    for n in 0..BIG + 20 {
+        s.write(&format!("big/{}", new(n)), new(n).as_bytes())
+            .unwrap();
+    }
+    assert_eq!(
+        first_cluster(&s, "big"),
+        Some(old),
+        "made on the old one's first cluster"
+    );
+    // Not noted until read whole; then its names are found, late ones by
+    // the place kept in its own chain.
+    assert_eq!(s.dir("big").unwrap().note(), None);
+    assert_eq!(listed(&s, "big").len(), BIG + 20);
+    assert!(s.dir("big").unwrap().note().is_some());
+    for n in [BIG + 19, BIG + 10, 3, BIG + 18, 0] {
+        assert_eq!(
+            whole(&s, &format!("big/{}", new(n))),
+            Ok(new(n).into_bytes()),
+            "{n}"
+        );
+    }
+    assert_eq!(
+        s.size(&format!("big/{}", long(290))),
+        Err(StorageError::NotFound)
+    );
+}
+
+/// Entries removed before and after the place kept in a noted folder's
+/// chain: the others are found after them, in the folder's order and
+/// backwards; the removed ones not.
+#[test]
+fn names_after_entries_removed_around_the_kept_place_are_found() {
+    let card = long_chain(600);
+    let s = card.storage();
+    s.fs.check_kept_places(true);
+    listed(&s, "big");
+    assert_eq!(
+        whole(&s, &format!("big/{}", long(400))),
+        Ok(long(400).into_bytes())
+    );
+    let gone = |n: usize| (150..170).contains(&n) || (395..420).contains(&n);
+    for n in (0..600).filter(|n| gone(*n)) {
+        s.remove(&format!("big/{}", long(n))).unwrap();
+    }
+    assert!(s.dir("big").unwrap().note().is_some());
+    for n in (140..600).chain((0..600).rev()) {
+        let read = whole(&s, &format!("big/{}", long(n)));
+        if gone(n) {
+            assert_eq!(read, Err(StorageError::NotFound), "{n}");
+        } else {
+            assert_eq!(read, Ok(long(n).into_bytes()), "{n}");
+        }
+    }
 }

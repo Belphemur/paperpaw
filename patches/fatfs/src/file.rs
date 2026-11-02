@@ -203,12 +203,34 @@ impl<'a, IO: ReadWriteSeek, TP, OCC> File<'a, IO, TP, OCC> {
             let inside = !matches!(self.size(), Some(size) if bytes > u64::from(size));
             if ahead && inside && n <= self.fs.clusters_from_bytes(offset) {
                 if let Ok(bytes) = u32::try_from(bytes) {
+                    #[cfg(debug_assertions)]
+                    self.debug_check_chain_at(n, cluster);
                     self.offset = bytes;
                     self.current_cluster = Some(cluster);
                 }
             }
         }
         self.seek(SeekFrom::Start(offset))
+    }
+
+    /// In debug builds, where the file system is told to (`FileSystem::check_kept_places`): that
+    /// the `n`th cluster of the chain (1 for the first) is `cluster`, as a place kept for it says
+    /// (see `DirNote`).
+    #[cfg(debug_assertions)]
+    fn debug_check_chain_at(&self, n: u32, cluster: u32) {
+        let Some(first) = self.first_cluster.filter(|_| self.fs.checks_kept_places()) else {
+            return;
+        };
+        let mut walked = first;
+        let mut iter = self.fs.cluster_iter(first);
+        for _ in 1..n {
+            match iter.next() {
+                Some(Ok(next)) => walked = next,
+                // What the disk does not give cannot be told here.
+                _ => return,
+            }
+        }
+        debug_assert_eq!(walked, cluster, "the place kept for cluster {} of the chain from {}", n, first);
     }
 
     /// Returns the attributes of this file.
