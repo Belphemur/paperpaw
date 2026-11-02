@@ -838,6 +838,18 @@ pub fn fit(font: &FontHandle<'_>, size: f32, text: &str, width: f32) -> String {
         before = Some(c);
     }
     result.push('…');
+    // Text of right-to-left letters is measured as drawn (in its order on
+    // the line, Arabic letters joined), which the letters' advances above
+    // only estimate: shortened on until that fits.
+    if paperpaw_text::bidi::needs_bidi(text) {
+        while font.measure(size, &result) > width {
+            let cut = result.len() - '…'.len_utf8();
+            let Some(last) = result[..cut].chars().next_back() else {
+                break;
+            };
+            result.remove(cut - last.len_utf8());
+        }
+    }
     result
 } @ ui::TEXT_FIT
 }

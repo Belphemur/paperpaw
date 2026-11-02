@@ -20,6 +20,8 @@ before it are thrown away.
 
 ### Added
 
+- Text: `TextInk::RIGHT_TO_LEFT`, a flag of the reserved ones: the lines a handle draws run right to left
+  (`TextInk::is_right_to_left`). The kernel sets it for the interface's font where its language runs right to left.
 - Screens mirror in a user-interface language that runs right to left (#33): the switch, value rows and their
   chevrons, ticked rows, the number buttons, text fields, dialog buttons, list rows' icons, chips, the date
   and time pickers, headings and the reader's menu bar start at the right, and left/right follow them. The
@@ -288,6 +290,12 @@ before it are thrown away.
   4 pixels), so on small screens the keys get nearly the whole width. Every layout, tapped or chosen with buttons;
   the text field keeps its margin, the key order and the focus are as before. Round keys are as high as wide, so
   the keyboard gets a little higher; it still stops at half the screen where the size allows more.
+- Arabic in the interface (#33): labels, rows, buttons, dialogs and whatever else draws with `FontHandle::draw`,
+  `draw_toned` or `measure` set Arabic letters joined, in the order they are shown, as the reader does (`draw_in`), and
+  `FontHandle::wrap` breaks them as wide as drawn. A line of both directions starts at the right with the interface's
+  font in a language right to left (`Wi-Fi متصل`: `Wi-Fi` read first), as its first strong letter goes with other
+  fonts. Text left to right alone is drawn as before. Plugins built before take it up from the firmware (shared text
+  functions); plugins with their own copies need a rebuild.
 - *Store: a plugin rebuilt for a newer PaperPaw* is not offered to a device whose firmware lacks what the build
   needs (a newer table or revision of a family of shared functions, as the library lists it in `interface`,
   `needs_api` and `families` of the build). The page says *Needs a newer PaperPaw* in place of *Install* or *Update*,

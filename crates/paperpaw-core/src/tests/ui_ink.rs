@@ -49,3 +49,39 @@ fn the_ui_font_carries_the_ink_of_the_setting_and_the_language() {
     set(&mut kernel, &curve, "");
     assert_eq!(ui_ink(&kernel), TextInk::DEFAULT);
 }
+
+/// Where the interface's language runs right to left (its catalog says
+/// so), the UI font's handles say its lines do, so a label of both
+/// directions starts at the right; the tone stays as set, and the flag
+/// goes with the language.
+#[test]
+fn the_ui_font_says_its_lines_run_right_to_left_in_arabic() {
+    let arabic = "[meta]\nlanguage = ar\nname = العربية\ndirection = rtl\n\n[messages]\nx.y = س\n";
+    let storage = paperpaw_sdk::MemoryStorage::new()
+        .with("plugins/arabic/plugin.ini", "[plugin]\nname = Arabic\n")
+        .with("plugins/arabic/i18n/ar.ini", arabic);
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(FontPlugin)
+        .storage(storage)
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    assert!(!ui_ink(&kernel).is_right_to_left());
+    let language = settings::LANGUAGE.id().clone();
+    set(&mut kernel, &language, "ar");
+    assert!(ui_ink(&kernel).is_right_to_left());
+    let curve = settings::UI_TEXT_CURVE.id().clone();
+    set(&mut kernel, &curve, "contrast:2");
+    assert!(ui_ink(&kernel).is_right_to_left());
+    assert_eq!(ui_ink(&kernel).tone(), ToneCurve::contrast(2));
+    // Another font role is not the interface's: its first letters say.
+    let reading = kernel
+        .shared
+        .fonts
+        .role(paperpaw_sdk::builtin::fonts::READING.as_str())
+        .unwrap();
+    assert!(!reading.text_ink().is_right_to_left());
+    set(&mut kernel, &language, "en");
+    assert!(!ui_ink(&kernel).is_right_to_left());
+    assert_eq!(ui_ink(&kernel).tone(), ToneCurve::contrast(2));
+}

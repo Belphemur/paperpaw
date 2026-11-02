@@ -1071,7 +1071,8 @@ impl<'a> FontHandle<'a> {
 
     paperpaw_table::shared! {
     /// Width of a single line of text in pixels, its pairs kerned (see
-    /// [`FontHandle::kern`]).
+    /// [`FontHandle::kern`]); with letters of right-to-left scripts, as
+    /// [`FontHandle::draw`] sets them (Arabic joined).
     pub fn measure(&self, size: f32, text: &str) -> f32 {
         if let Some(larger) = self.larger_for(size) {
             return larger.measure(size, text);
@@ -1079,6 +1080,10 @@ impl<'a> FontHandle<'a> {
         // Hangul in jamo: set as its syllables.
         if paperpaw_text::has_jamo(text) {
             return self.measure_in(size, text, &paperpaw_text::Around::NONE);
+        }
+        // Right to left, or both ways: as drawn (see `FontHandle::line`).
+        if paperpaw_text::bidi::needs_bidi(text) {
+            return self.measure_in(size, text, &self.line());
         }
         let size = self.size_for(size, text);
         let single = self.others[0].is_none();
@@ -1191,11 +1196,22 @@ impl<'a> FontHandle<'a> {
 
     paperpaw_table::shared! {
     /// Breaks `text` into lines that fit `max_width`, its pairs kerned
-    /// within each line as drawn.
+    /// within each line as drawn; Arabic letters as wide as drawn joined.
     pub fn wrap(&self, size: f32, text: &str, max_width: f32) -> Vec<Range<usize>> {
-        let advance = |_: usize, ch: char| {
+        let joined = paperpaw_text::bidi::needs_bidi(text);
+        let line = self.line();
+        let shown = |c: &char| !paperpaw_text::is_mark(*c);
+        let advance = |at: usize, ch: char| {
             let mut buffer = [0u8; 4];
-            self.measure(size, ch.encode_utf8(&mut buffer))
+            let one = ch.encode_utf8(&mut buffer);
+            if !joined {
+                return self.measure(size, one);
+            }
+            // In the form its neighbours give it, as drawn (a line breaks
+            // at a space mostly, which no letter joins).
+            let before = text.get(..at).and_then(|t| t.chars().rev().find(shown));
+            let after = text.get(at + ch.len_utf8()..).and_then(|t| t.chars().find(shown));
+            self.measure_in(size, one, &line.with_context(before, after))
         };
         let kern = |_: usize, left: char, right: char| self.kern(size, left, right);
         paperpaw_text::wrap_lines_kerned(text, |_| max_width, advance, kern, None)
@@ -1207,6 +1223,10 @@ impl<'a> FontHandle<'a> {
 
     paperpaw_table::shared! {
     /// Draws one line with its baseline at `baseline`; returns its width.
+    /// Letters of right-to-left scripts are shown in their order, Arabic
+    /// joined: on a line running right to left where the handle's ink says
+    /// so (the interface's font in Arabic), else as its first strong letter
+    /// goes (see [`FontHandle::draw_in`]).
     #[allow(
         clippy::too_many_arguments,
         reason = "its inputs are separate things; a struct of them would serve this call alone"
@@ -1276,6 +1296,11 @@ impl<'a> FontHandle<'a> {
         if paperpaw_text::has_jamo(text) {
             let none = &paperpaw_text::Around::NONE;
             return self.draw_in(canvas, size, x, baseline, text, color, (extra, tone), none);
+        }
+        // Right to left, or both ways (see `FontHandle::line`).
+        if paperpaw_text::bidi::needs_bidi(text) {
+            let line = &self.line();
+            return self.draw_in(canvas, size, x, baseline, text, color, (extra, tone), line);
         }
         self.count_missing(text);
         let size = self.size_for(size, text);
@@ -1400,95 +1425,11 @@ impl<'a> FontHandle<'a> {
         )
     } @ text::HANDLE_DRAW_IN
     }
-
-    /// Draws `run`, all in `style`'s font, from `x`; its width. At once
-    /// where the font kerns it as this handle does; else character by
-    /// character, each where measuring puts it, ligatures in place of
-    /// their characters.
-    fn draw_run(
-        &self,
-        canvas: &mut Canvas<'_>,
-        cache: &mut GlyphCache,
-        style: &paperpaw_text::TextStyle<'_>,
-        x: f32,
-        baseline: i32,
-        run: &str,
-    ) -> f32 {
-        if self.kerning && !(self.ligatures && run.contains('f')) {
-            return paperpaw_text::draw_text(canvas, cache, style, x, baseline, run);
-        }
-        let (font, size) = (style.font, style.size);
-        let mut style = *style;
-        let mut pen = x;
-        let mut before: Option<char> = None;
-        let mut at = 0;
-        let mut buffer = [0u8; 4];
-        while let Some(ch) = run[at..].chars().next() {
-            if let Some(left) = before {
-                pen += self.pair_in(font, size, left, ch);
-            }
-            let joined = match self.ligatures && ch == 'f' {
-                true => self.ligature_at(font, size, &run[at..]),
-                false => None,
-            };
-            let (drawn, len, width) = joined.unwrap_or((ch, ch.len_utf8(), font.advance(ch, size)));
-            paperpaw_text::draw_text(
-                canvas,
-                cache,
-                &style,
-                pen,
-                baseline,
-                drawn.encode_utf8(&mut buffer),
-            );
-            if !paperpaw_text::is_mark(ch) {
-                style = style.based(true);
-            }
-            pen += width;
-            before = run[..at + len].chars().next_back();
-            at += len;
-        }
-        pen - x
-    }
-
-    /// The ligature drawn for the start of `text` (an `f`): its
-    /// character, the bytes of `text` it stands for and the width those
-    /// take as measured, with the pairs between them. `None` where the
-    /// `f` is drawn alone: the font lacks the ligature, or one of three
-    /// characters or `ff` would not take their room, or the next `f`
-    /// makes a ligature with the character after it.
-    fn ligature_at(&self, font: &Font, size: f32, text: &str) -> Option<(char, usize, f32)> {
-        let mut chars = text.chars();
-        let (Some('f'), Some(second)) = (chars.next(), chars.next()) else {
-            return None;
-        };
-        let advance = |ch: char| font.advance(ch, size);
-        if let Some(joined) = ligature('f', second) {
-            let width = advance('f') + self.pair_in(font, size, 'f', second) + advance(second);
-            return font.has_char(joined).then_some((joined, 2, width));
-        }
-        if second != 'f' {
-            return None;
-        }
-        let two = advance('f') + self.pair_in(font, size, 'f', 'f') + advance('f');
-        let fits = |joined: char, width: f32| {
-            font.has_char(joined) && (advance(joined) - width).abs() <= LIGATURE_FIT
-        };
-        if let Some(third @ ('i' | 'l')) = chars.next() {
-            let three = two + self.pair_in(font, size, 'f', third) + advance(third);
-            let joined = if third == 'i' { '\u{fb03}' } else { '\u{fb04}' };
-            if fits(joined, three) {
-                return Some((joined, 3, three));
-            }
-            if ligature('f', third).is_some_and(|l| font.has_char(l)) {
-                return None;
-            }
-        }
-        fits('\u{fb00}', two).then_some(('\u{fb00}', 2, two))
-    }
 }
 
 mod missing;
 use missing::Drawing;
+mod runs;
 mod split;
 mod storage;
 mod wanted;

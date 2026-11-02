@@ -173,8 +173,10 @@ pub fn paperpaw_text::StoredPack::fmt(&self, &mut core::fmt::Formatter<'_>) -> c
 pub struct paperpaw_text::TextInk
 impl paperpaw_text::TextInk
 pub const paperpaw_text::TextInk::DEFAULT: paperpaw_text::TextInk
+pub const paperpaw_text::TextInk::RIGHT_TO_LEFT: u32
 pub const fn paperpaw_text::TextInk::dither(&self) -> paperpaw_graphics::blit::Dither
 pub const fn paperpaw_text::TextInk::flags(&self) -> u32
+pub const fn paperpaw_text::TextInk::is_right_to_left(&self) -> bool
 pub const fn paperpaw_text::TextInk::new(paperpaw_text::ToneCurve) -> paperpaw_text::TextInk
 pub const fn paperpaw_text::TextInk::tone(&self) -> paperpaw_text::ToneCurve
 pub const fn paperpaw_text::TextInk::with_dither(self, paperpaw_graphics::blit::Dither) -> paperpaw_text::TextInk
