@@ -3445,6 +3445,9 @@ pub paperpaw_sdk::replies::SocketNotice::Answer
 pub paperpaw_sdk::replies::SocketNotice::Answer::from: alloc::string::String
 pub paperpaw_sdk::replies::SocketNotice::Answer::socket: paperpaw_sdk::Id
 pub paperpaw_sdk::replies::SocketNotice::Answer::text: alloc::string::String
+pub paperpaw_sdk::replies::SocketNotice::Bytes
+pub paperpaw_sdk::replies::SocketNotice::Bytes::data: alloc::vec::Vec<u8>
+pub paperpaw_sdk::replies::SocketNotice::Bytes::socket: paperpaw_sdk::Id
 pub paperpaw_sdk::replies::SocketNotice::Closed
 pub paperpaw_sdk::replies::SocketNotice::Closed::reason: alloc::string::String
 pub paperpaw_sdk::replies::SocketNotice::Closed::socket: paperpaw_sdk::Id
@@ -3465,9 +3468,12 @@ pub paperpaw_sdk::replies::SocketNotice::Saved::path: alloc::string::String
 pub paperpaw_sdk::replies::SocketNotice::Saved::socket: paperpaw_sdk::Id
 pub paperpaw_sdk::replies::SocketNotice::Secured
 pub paperpaw_sdk::replies::SocketNotice::Secured::certificate: paperpaw_sdk::CertificateHash
+pub paperpaw_sdk::replies::SocketNotice::Secured::key: paperpaw_sdk::KeyHash
 pub paperpaw_sdk::replies::SocketNotice::Secured::socket: paperpaw_sdk::Id
+pub paperpaw_sdk::replies::SocketNotice::Secured::time_checked: bool
 pub paperpaw_sdk::replies::SocketNotice::Untrusted
 pub paperpaw_sdk::replies::SocketNotice::Untrusted::certificate: paperpaw_sdk::CertificateHash
+pub paperpaw_sdk::replies::SocketNotice::Untrusted::key: paperpaw_sdk::KeyHash
 pub paperpaw_sdk::replies::SocketNotice::Untrusted::socket: paperpaw_sdk::Id
 pub paperpaw_sdk::replies::SocketNotice::Untrusted::why: paperpaw_sdk::Distrust
 impl paperpaw_sdk::replies::SocketNotice
@@ -5950,6 +5956,9 @@ pub paperpaw_sdk::SocketNotice::Answer
 pub paperpaw_sdk::SocketNotice::Answer::from: alloc::string::String
 pub paperpaw_sdk::SocketNotice::Answer::socket: paperpaw_sdk::Id
 pub paperpaw_sdk::SocketNotice::Answer::text: alloc::string::String
+pub paperpaw_sdk::SocketNotice::Bytes
+pub paperpaw_sdk::SocketNotice::Bytes::data: alloc::vec::Vec<u8>
+pub paperpaw_sdk::SocketNotice::Bytes::socket: paperpaw_sdk::Id
 pub paperpaw_sdk::SocketNotice::Closed
 pub paperpaw_sdk::SocketNotice::Closed::reason: alloc::string::String
 pub paperpaw_sdk::SocketNotice::Closed::socket: paperpaw_sdk::Id
@@ -5970,9 +5979,12 @@ pub paperpaw_sdk::SocketNotice::Saved::path: alloc::string::String
 pub paperpaw_sdk::SocketNotice::Saved::socket: paperpaw_sdk::Id
 pub paperpaw_sdk::SocketNotice::Secured
 pub paperpaw_sdk::SocketNotice::Secured::certificate: paperpaw_sdk::CertificateHash
+pub paperpaw_sdk::SocketNotice::Secured::key: paperpaw_sdk::KeyHash
 pub paperpaw_sdk::SocketNotice::Secured::socket: paperpaw_sdk::Id
+pub paperpaw_sdk::SocketNotice::Secured::time_checked: bool
 pub paperpaw_sdk::SocketNotice::Untrusted
 pub paperpaw_sdk::SocketNotice::Untrusted::certificate: paperpaw_sdk::CertificateHash
+pub paperpaw_sdk::SocketNotice::Untrusted::key: paperpaw_sdk::KeyHash
 pub paperpaw_sdk::SocketNotice::Untrusted::socket: paperpaw_sdk::Id
 pub paperpaw_sdk::SocketNotice::Untrusted::why: paperpaw_sdk::Distrust
 impl paperpaw_sdk::replies::SocketNotice
@@ -5982,6 +5994,8 @@ pub fn paperpaw_sdk::replies::SocketNotice::from_params(&paperpaw_sdk::Params) -
 pub fn paperpaw_sdk::replies::SocketNotice::into_params(self) -> paperpaw_sdk::Params
 pub fn paperpaw_sdk::replies::SocketNotice::to_params(&self) -> paperpaw_sdk::Params
 #[non_exhaustive] pub enum paperpaw_sdk::SocketRead
+pub paperpaw_sdk::SocketRead::Bytes
+pub paperpaw_sdk::SocketRead::Bytes::max: u32
 pub paperpaw_sdk::SocketRead::File
 pub paperpaw_sdk::SocketRead::File::len: u64
 pub paperpaw_sdk::SocketRead::File::path: alloc::string::String
@@ -6010,6 +6024,7 @@ pub fn paperpaw_sdk::setting::Text::write(alloc::borrow::Cow<'static, str>) -> p
 #[non_exhaustive] pub enum paperpaw_sdk::Trust
 pub paperpaw_sdk::Trust::Authorities
 pub paperpaw_sdk::Trust::Pinned(alloc::vec::Vec<paperpaw_sdk::CertificateHash>)
+pub paperpaw_sdk::Trust::PinnedKeys(alloc::vec::Vec<paperpaw_sdk::KeyHash>)
 #[non_exhaustive] pub struct paperpaw_sdk::ActionOverride
 pub paperpaw_sdk::ActionOverride::action: paperpaw_sdk::Id
 pub paperpaw_sdk::ActionOverride::handler: paperpaw_sdk::ActionHandler
@@ -6536,6 +6551,13 @@ pub fn paperpaw_sdk::ItemState::shown(self, bool) -> Self
 pub fn paperpaw_sdk::ItemState::text(&self, &str) -> alloc::string::String
 impl core::default::Default for paperpaw_sdk::ItemState
 pub fn paperpaw_sdk::ItemState::default() -> Self
+pub struct paperpaw_sdk::KeyHash(_)
+impl paperpaw_sdk::KeyHash
+pub const fn paperpaw_sdk::KeyHash::new([u8; 32]) -> Self
+pub fn paperpaw_sdk::KeyHash::parse(&str) -> core::option::Option<Self>
+pub const fn paperpaw_sdk::KeyHash::sha256(&self) -> &[u8; 32]
+impl core::fmt::Display for paperpaw_sdk::KeyHash
+pub fn paperpaw_sdk::KeyHash::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[non_exhaustive] pub struct paperpaw_sdk::Manifest
 pub paperpaw_sdk::Manifest::description: paperpaw_sdk::Str
 pub paperpaw_sdk::Manifest::how: &'static [(&'static str, &'static str)]
@@ -7105,6 +7127,7 @@ pub fn paperpaw_sdk::Tls::check(&self) -> core::result::Result<(), paperpaw_sdk:
 pub fn paperpaw_sdk::Tls::idle_ms(self, u32) -> Self
 pub fn paperpaw_sdk::Tls::new() -> Self
 pub fn paperpaw_sdk::Tls::pinned(alloc::vec::Vec<paperpaw_sdk::CertificateHash>) -> Self
+pub fn paperpaw_sdk::Tls::pinned_keys(alloc::vec::Vec<paperpaw_sdk::KeyHash>) -> Self
 pub fn paperpaw_sdk::Tls::server_name(self, impl core::convert::Into<alloc::string::String>) -> Self
 pub fn paperpaw_sdk::Tls::timeout_ms(self, u32) -> Self
 impl core::default::Default for paperpaw_sdk::Tls

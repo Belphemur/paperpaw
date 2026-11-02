@@ -1742,16 +1742,23 @@ that was open as it opened closes.
 
 A socket may be secure (TLS): `Command::connect_tls(socket, host, 993,
 events, Tls::new())` connects and says `SocketNotice::Secured` once the
-handshake is done (no `Connected` before), and what is sent before goes
-after it. For STARTTLS, connect plainly, send the server's command, read
+handshake is done (no `Connected` before). Send and read nothing before:
+until `Secured` that fails the socket (`SocketError::NotReady`) and
+closes it. For STARTTLS, connect plainly, send the server's command, read
 its go-ahead, then `Command::start_tls(socket, Tls::new())`: with a read
 under way or bytes come unread it fails and closes, as they would pass as
 secure. `Tls::new()` trusts the authorities PaperPaw ships; a server of
 one's own with a certificate no authority signed is trusted by
-`Tls::pinned(vec![hash])`. The first connection to it says
-`SocketNotice::Untrusted` with the certificate's `CertificateHash`: show
-it to the reader to compare, and keep it in the plugin's settings once
-they agree. `Capabilities::tls_sessions` says how many TLS connections fit
+`Tls::pinned_keys(vec![key])` (its key, which a renewed certificate
+usually keeps) or `Tls::pinned(vec![hash])` (that certificate alone).
+The first connection to it says `SocketNotice::Untrusted` with the
+certificate's `CertificateHash` and `KeyHash`: show one to the reader to
+compare, and keep it in the plugin's settings once they agree.
+`Secured`'s `time_checked` is false where the device did not know the
+time yet (an X4 just after a cold start): the certificate's dates were
+not checked, so a plugin that must be sure closes and tries again later.
+`SocketRead::Bytes` reads what came as bytes (`SocketNotice::Bytes`), for
+lines that are no UTF-8. `Capabilities::tls_sessions` says how many TLS connections fit
 at once (one on the X4, HTTPS counted): a socket waits for one up to its
 `Tls::timeout_ms`, then fails `SocketError::Busy`. A TLS connection holds
 about 40 KiB on the X4 and keeps the radio awake, so connect, fetch and

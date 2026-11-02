@@ -28,6 +28,20 @@ fn kinds(out: &[Command]) -> Vec<String> {
         .collect()
 }
 
+fn key() -> KeyHash {
+    KeyHash::new([0x6b; 32])
+}
+
+/// What a shell reports once socket 1 is secure, its dates checked or not.
+fn secured(time_checked: bool) -> SocketEvent {
+    SocketEvent::Secured {
+        socket: 1,
+        certificate: certificate(),
+        key: key(),
+        time_checked,
+    }
+}
+
 fn certificate() -> CertificateHash {
     CertificateHash::new([0x5a; 32])
 }
@@ -65,27 +79,117 @@ fn a_socket_secure_from_the_start_says_so_once_it_is() {
             tls: Some(tls),
         }]
     );
-    // What is sent before goes to the shell, which sends it once secure.
-    let login = Command::socket_send(SOCKET, b"a1 LOGIN".to_vec());
-    sockets.command(login, true, 1, &storage, &mut out);
-    assert!(matches!(
-        sockets.take()[..],
-        [SocketCall::Send { socket: 1, .. }]
-    ));
     // A shell that says it connected first is not heard: nothing is to be
     // done before the handshake.
     sockets.event(SocketEvent::Connected { socket: 1 }, &storage, &mut out);
     assert!(out.is_empty());
-    let secured = SocketEvent::Secured {
-        socket: 1,
-        certificate: certificate(),
-    };
-    sockets.event(secured.clone(), &storage, &mut out);
+    sockets.event(secured(true), &storage, &mut out);
     assert_eq!(kinds(&out), [p::SECURED]);
     assert_eq!(last(&out, p::CERTIFICATE), Some("5a".repeat(32)));
     // Told once.
-    sockets.event(secured, &storage, &mut out);
+    sockets.event(secured(true), &storage, &mut out);
     assert_eq!(out.len(), 1);
+    // Secure, it sends and reads.
+    let login = Command::socket_send(SOCKET, b"a1 LOGIN".to_vec());
+    sockets.command(login, true, 1, &storage, &mut out);
+    let read = Command::socket_read(SOCKET, SocketRead::Text { max: 64 });
+    sockets.command(read, true, 1, &storage, &mut out);
+    assert!(matches!(
+        sockets.take()[..],
+        [
+            SocketCall::Send { socket: 1, .. },
+            SocketCall::Read { socket: 1, .. }
+        ]
+    ));
+}
+
+#[test]
+fn nothing_goes_out_or_is_read_before_a_tls_connection_is_secure() {
+    let storage = MemoryStorage::new();
+    let login = || Command::socket_send(SOCKET, b"a1 LOGIN user secret".to_vec());
+    let read = || Command::socket_read(SOCKET, SocketRead::Bytes { max: 64 });
+    for early in [login(), read()] {
+        let mut sockets = Sockets::new(1);
+        let mut out = Vec::new();
+        let connect = Command::connect_tls(SOCKET, HOST, 993, EVENTS, Tls::new());
+        sockets.command(connect, true, 1, &storage, &mut out);
+        sockets.calls.clear();
+        sockets.command(early, true, 1, &storage, &mut out);
+        assert_eq!(last(&out, p::ERROR).as_deref(), Some("not-ready"));
+        assert_eq!(sockets.take(), [SocketCall::Close { socket: 1 }]);
+        assert!(!sockets.any());
+    }
+    // Nor after a switch was asked for, until it is secure.
+    for early in [login(), read()] {
+        let (mut sockets, mut out) = plain(&storage);
+        let switch = Command::start_tls(SOCKET, Tls::new());
+        sockets.command(switch, true, 1, &storage, &mut out);
+        assert!(matches!(
+            sockets.take()[..],
+            [SocketCall::StartTls { socket: 1, .. }]
+        ));
+        sockets.command(early, true, 1, &storage, &mut out);
+        assert_eq!(last(&out, p::ERROR).as_deref(), Some("not-ready"));
+        assert_eq!(sockets.take(), [SocketCall::Close { socket: 1 }]);
+        assert!(!sockets.any());
+    }
+}
+
+#[test]
+fn a_certificate_whose_dates_could_not_be_checked_says_so() {
+    let storage = MemoryStorage::new();
+    let mut sockets = Sockets::new(1);
+    let mut out = Vec::new();
+    let connect = Command::connect_tls(SOCKET, HOST, 993, EVENTS, Tls::new());
+    sockets.command(connect, true, 1, &storage, &mut out);
+    // A shell that does not know the time yet.
+    sockets.event(secured(false), &storage, &mut out);
+    assert_eq!(last(&out, p::TIME_CHECKED).as_deref(), Some("false"));
+    let Some(Command::Emit(_, params)) = out.last() else {
+        panic!("no event");
+    };
+    assert_eq!(
+        SocketNotice::from_params(params),
+        Some(SocketNotice::Secured {
+            socket: SOCKET,
+            certificate: certificate(),
+            key: key(),
+            time_checked: false,
+        })
+    );
+}
+
+#[test]
+fn bytes_are_read_as_they_came() {
+    let storage = MemoryStorage::new();
+    let (mut sockets, mut out) = plain(&storage);
+    let read = Command::socket_read(SOCKET, SocketRead::Bytes { max: 1 << 20 });
+    sockets.command(read, true, 1, &storage, &mut out);
+    // As large as a text read may be.
+    assert_eq!(
+        sockets.take(),
+        [SocketCall::Read {
+            socket: 1,
+            max: SOCKET_PART
+        }]
+    );
+    // A header in Latin-1, no UTF-8.
+    let header = b"Subject: Gr\xfc\xdfe\r\n".to_vec();
+    let data = SocketEvent::Data {
+        socket: 1,
+        data: header.clone(),
+    };
+    sockets.event(data, &storage, &mut out);
+    let Some(Command::Emit(_, params)) = out.last() else {
+        panic!("no event");
+    };
+    assert_eq!(
+        SocketNotice::from_params(params),
+        Some(SocketNotice::Bytes {
+            socket: SOCKET,
+            data: header,
+        })
+    );
 }
 
 #[test]
@@ -153,11 +257,7 @@ fn a_plain_socket_switches_to_tls_once_everything_come_is_read() {
     };
     // The name checked is the host connected to.
     assert_eq!(tls.server_name, HOST);
-    let secured = SocketEvent::Secured {
-        socket: 1,
-        certificate: certificate(),
-    };
-    sockets.event(secured, &storage, &mut out);
+    sockets.event(secured(true), &storage, &mut out);
     assert_eq!(kinds(&out), [p::CONNECTED, p::RECEIVED, p::SECURED]);
     // Secure once: a second switch fails and closes.
     sockets.command(
@@ -255,6 +355,7 @@ fn an_untrusted_certificate_is_told_and_the_socket_is_gone() {
     let untrusted = SocketEvent::Untrusted {
         socket: 1,
         certificate: certificate(),
+        key: key(),
         why: Distrust::UnknownIssuer,
     };
     sockets.event(untrusted, &storage, &mut out);
@@ -269,6 +370,7 @@ fn an_untrusted_certificate_is_told_and_the_socket_is_gone() {
         SocketNotice::Untrusted {
             socket: SOCKET,
             certificate: certificate(),
+            key: key(),
             why: Distrust::UnknownIssuer,
         }
     );

@@ -450,6 +450,10 @@ pub enum SocketRead {
     /// What has come, up to `max` bytes, as text (UTF-8; invalid bytes
     /// replaced): the notice [`SocketNotice::Received`](crate::SocketNotice::Received) with it.
     Text { max: u32 },
+    /// What has come, up to `max` bytes, as it came (e.g. a protocol's
+    /// 8-bit lines that are no UTF-8): the notice
+    /// [`SocketNotice::Bytes`](crate::SocketNotice::Bytes) with them.
+    Bytes { max: u32 },
     /// Exactly `len` bytes, written to `path` in storage as they come (a
     /// file there is replaced): the notice [`SocketNotice::Saved`](crate::SocketNotice::Saved) once
     /// they all came, so files of any size never need to fit in memory.
@@ -459,7 +463,7 @@ pub enum SocketRead {
 /// Parameters of a socket's events (see [`Command::Connect`]) and of a
 /// broadcast's (see [`Command::Broadcast`]).
 pub mod socket_params {
-    /// What happened: [`CONNECTED`], [`RECEIVED`], [`SAVED`], [`CLOSED`],
+    /// What happened: [`CONNECTED`], [`RECEIVED`], [`BYTES`], [`SAVED`], [`CLOSED`],
     /// [`FAILED`], [`SECURED`] or [`UNTRUSTED`]; for broadcasts [`ANSWER`]
     /// and [`DONE`].
     pub const KIND: &str = "kind";
@@ -482,6 +486,16 @@ pub mod socket_params {
     pub const UNTRUSTED: &str = "untrusted";
     /// The server's certificate's SHA-256, hex.
     pub const CERTIFICATE: &str = "certificate";
+    /// The SHA-256 of the server's key (its SubjectPublicKeyInfo), hex.
+    pub const KEY: &str = "key";
+    /// `false` where the certificate's dates were not checked (the time
+    /// was not known).
+    pub const TIME_CHECKED: &str = "time-checked";
+    /// Bytes came, in [`DATA`].
+    pub const BYTES: &str = "bytes";
+    /// Bytes, each written as the character of its value (U+0000 to
+    /// U+00FF, as Latin-1 does).
+    pub const DATA: &str = "data";
     /// Why a certificate was not trusted, as `Distrust::as_str` writes it.
     pub const WHY: &str = "why";
     /// Why it failed, as `SocketError`'s `Display` writes it.

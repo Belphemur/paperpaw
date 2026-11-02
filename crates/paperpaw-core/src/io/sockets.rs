@@ -13,7 +13,8 @@ use alloc::vec::Vec;
 use paperpaw_platform::Storage;
 use paperpaw_sdk::event::EventData;
 use paperpaw_sdk::{
-    CertificateHash, Command, Distrust, Id, SocketError, SocketNotice, SocketRead, Tls, Trust,
+    CertificateHash, Command, Distrust, Id, KeyHash, SocketError, SocketNotice, SocketRead, Tls,
+    Trust,
 };
 
 /// The most a shell is asked to read at once; a file read goes in such
@@ -30,7 +31,7 @@ pub struct TlsSetup {
     pub server_name: String,
     /// Which certificates are trusted: the authorities the shell ships
     /// (chain, name and dates checked), or those pinned (the leaf's
-    /// SHA-256 one of them, its dates checked).
+    /// SHA-256 one of them, or its key's, its dates checked).
     pub trust: Trust,
     /// How long the connection and handshake may take, waiting for a free
     /// TLS session counted (then `Failed`, `Timeout` or `Busy`).
@@ -56,8 +57,18 @@ impl TlsSetup {
 pub enum SocketCall {
     /// Open a TCP connection; report `Connected` or `Failed`. With `tls`,
     /// make it secure first and report `Secured`, `Untrusted` or `Failed`
-    /// instead of `Connected`: `Send`s and `Read`s that come before wait
-    /// for it. A shell with no TLS ([`tls_sessions`] 0) is never asked.
+    /// instead of `Connected`. A shell with no TLS ([`tls_sessions`] 0) is
+    /// never asked.
+    ///
+    /// TLS, here and in `StartTls`: **nothing goes out or is read until
+    /// `Secured`**. The kernel sends no `Send` or `Read` for the socket
+    /// before it (a plugin's fail it, `NotReady`, and close it), and the
+    /// shell passes no byte of the plugin's out, nor one it received to
+    /// the kernel, before the handshake is done. The certificate is
+    /// checked as `TlsSetup::trust` says, its dates where the shell knows
+    /// the time: where it does not (no clock, no network time yet), it
+    /// checks the rest and reports `Secured` with `time_checked` false;
+    /// `Failed` with `Expired` only for a time known and outside the dates.
     ///
     /// [`tls_sessions`]: crate::KernelBuilder::tls_sessions
     Connect {
@@ -105,16 +116,22 @@ pub enum SocketEvent {
     Connected {
         socket: u32,
     },
-    /// The handshake is done, `certificate` (the server's) trusted.
+    /// The handshake is done, `certificate` (the server's, by the SHA-256
+    /// of its DER) and its `key` (of its SubjectPublicKeyInfo) trusted;
+    /// `time_checked` false where its dates could not be checked (the
+    /// time unknown).
     Secured {
         socket: u32,
         certificate: CertificateHash,
+        key: KeyHash,
+        time_checked: bool,
     },
-    /// The server's certificate was not trusted, for `why`; the shell
-    /// closed the socket.
+    /// The server's certificate was not trusted, for `why`. The shell has
+    /// closed the socket already: no `Close` comes for it.
     Untrusted {
         socket: u32,
         certificate: CertificateHash,
+        key: KeyHash,
         why: Distrust,
     },
     /// What a `Read` brought; empty when the other side closed.
@@ -123,7 +140,8 @@ pub enum SocketEvent {
         data: Vec<u8>,
     },
     /// The connection ended or could not be made: `error` says why,
-    /// `reason` more, for a log.
+    /// `reason` more, for a log. The shell has closed the socket already:
+    /// no `Close` comes for it.
     Failed {
         socket: u32,
         error: SocketError,
@@ -144,6 +162,8 @@ pub enum SocketEvent {
 enum Reading {
     /// Text, up to `max` bytes a read.
     Text { max: u32 },
+    /// Bytes as they come.
+    Bytes,
     /// Into `path`, `left` bytes still to come.
     File { path: String, left: u64 },
 }
@@ -284,6 +304,9 @@ impl Sockets {
             }
             Command::SocketSend { socket, data, .. } => {
                 if let Some(at) = self.at(&socket) {
+                    if self.securing(at, out) {
+                        return;
+                    }
                     let number = self.sockets[at].number;
                     self.calls.push(SocketCall::Send {
                         socket: number,
@@ -293,6 +316,9 @@ impl Sockets {
             }
             Command::SocketRead { socket, read, .. } => {
                 if let Some(at) = self.at(&socket) {
+                    if self.securing(at, out) {
+                        return;
+                    }
                     self.read(at, read, storage, out);
                 }
             }
@@ -382,6 +408,27 @@ impl Sockets {
         });
     }
 
+    /// Whether socket `at` waits for its handshake: then what a plugin
+    /// sends or reads fails it, `NotReady`, and closes it. Nothing goes
+    /// out or is read until `Secured`: sent, it could go in the clear, and
+    /// read, bytes from before the handshake would pass as secure.
+    fn securing(&mut self, at: usize, out: &mut Vec<Command>) -> bool {
+        if self.sockets[at].phase != Phase::Securing {
+            return false;
+        }
+        let socket = self.sockets.remove(at);
+        self.calls.push(SocketCall::Close {
+            socket: socket.number,
+        });
+        let reason = String::from("nothing is sent or read before the connection is secure");
+        out.push(socket.notice(|socket| SocketNotice::Failed {
+            socket,
+            reason,
+            error: SocketError::NotReady,
+        }));
+        true
+    }
+
     /// Why TLS as `tls` sets it up is refused here, if it is.
     fn tls_refused(&self, tls: &Tls) -> Option<(SocketError, &'static str)> {
         if self.tls_sessions == 0 {
@@ -415,6 +462,11 @@ impl Sockets {
             SocketRead::Text { max } => {
                 let max = max.clamp(1, SOCKET_PART);
                 s.reading = Some(Reading::Text { max });
+                max
+            }
+            SocketRead::Bytes { max } => {
+                let max = max.clamp(1, SOCKET_PART);
+                s.reading = Some(Reading::Bytes);
                 max
             }
             SocketRead::File { path, len } => {
@@ -515,18 +567,24 @@ impl Sockets {
             SocketEvent::Secured {
                 socket,
                 certificate,
+                key,
+                time_checked,
             } => {
                 if let Some(s) = self.socket_in(socket, Phase::Securing) {
                     s.phase = Phase::Secure;
                     out.push(s.notice(|socket| SocketNotice::Secured {
                         socket,
                         certificate,
+                        key,
+                        time_checked,
                     }));
                 }
             }
+            // The shell closed it (as for `Failed`).
             SocketEvent::Untrusted {
                 socket,
                 certificate,
+                key,
                 why,
             } => {
                 if let Some(at) = self.sockets.iter().position(|s| s.number == socket) {
@@ -534,6 +592,7 @@ impl Sockets {
                     out.push(s.notice(|socket| SocketNotice::Untrusted {
                         socket,
                         certificate,
+                        key,
                         why,
                     }));
                 }
@@ -603,6 +662,14 @@ impl Sockets {
                 s.partial.clear();
                 let text = String::new();
                 out.push(s.notice(|socket| SocketNotice::Received { socket, text }));
+            }
+            // As they came, with the start of a character a text read
+            // before left.
+            Some(Reading::Bytes) => {
+                let mut bytes = core::mem::take(&mut s.partial);
+                bytes.extend_from_slice(&data);
+                let data = bytes;
+                out.push(s.notice(|socket| SocketNotice::Bytes { socket, data }));
             }
             Some(Reading::Text { max }) => {
                 let mut bytes = core::mem::take(&mut s.partial);

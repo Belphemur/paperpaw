@@ -195,8 +195,8 @@ pub use settings::{
 };
 pub use shared_str::Str;
 pub use sockets::{
-    CertificateHash, Distrust, MAX_PINS, MAX_TLS_IDLE_MS, MAX_TLS_TIMEOUT_MS, SocketError, Tls,
-    Trust,
+    CertificateHash, Distrust, KeyHash, MAX_PINS, MAX_TLS_IDLE_MS, MAX_TLS_TIMEOUT_MS, SocketError,
+    Tls, Trust,
 };
 pub use version::{DATA_FORMATS, SDK_VERSION, Version};
 

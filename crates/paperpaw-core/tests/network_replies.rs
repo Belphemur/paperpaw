@@ -16,8 +16,8 @@ mod common;
 use common::{DEVICE, Harness, REPLY};
 use paperpaw_core::sdk::wifi::{NETWORK_WAIT_MS, WifiState};
 use paperpaw_core::sdk::{
-    CertificateHash, Command, HttpError, HttpRequest, Id, MemoryStorage, Params, ServerResponse,
-    SocketError, SocketRead, Speech, Tls,
+    CertificateHash, Command, HttpError, HttpRequest, Id, KeyHash, MemoryStorage, Params,
+    ServerResponse, SocketError, SocketRead, Speech, Tls,
 };
 use paperpaw_core::{
     HttpResponse, Io, Kernel, KernelBuilder, ServerCall, ServerEvent, SocketCall, SocketEvent,
@@ -548,14 +548,18 @@ fn a_tls_socket_is_heard_of_once_secure() {
     let certificate = CertificateHash::new([1; 32]);
     kernel.socket_event(
         Instant(20),
+        // From a shell that does not know the time yet.
         SocketEvent::Secured {
             socket: number,
             certificate,
+            key: KeyHash::new([2; 32]),
+            time_checked: false,
         },
     );
     let told = replies(&harness);
     assert_eq!(told.len(), 1, "{told:?}");
     assert!(told[0].contains("kind=secured"), "{told:?}");
+    assert!(told[0].contains("time-checked=false"), "{told:?}");
     assert!(
         told[0].contains(&format!("certificate={certificate}")),
         "{told:?}"

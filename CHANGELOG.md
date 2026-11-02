@@ -29,11 +29,16 @@ before it are thrown away.
   4,367 instead of 68,291).
 - **Plugin interface (next raise):** TLS for plugins' sockets (#81), as a mail plugin needs it (IMAP, SMTP):
   `Command::connect_tls` is secure from the start, `Command::start_tls` switches an open socket (STARTTLS) once
-  everything the server sent was read, else it fails and closes. `Tls` sets it up: the authorities PaperPaw ships
-  (`Tls::new`) or up to `MAX_PINS` pinned certificates (`Tls::pinned`, `CertificateHash` as browsers and `openssl`
-  write it), the name checked, the time to connect, the time idle before it closes. `SocketNotice::Secured` and
-  `Untrusted` (reserved before) carry the server's certificate, `Untrusted` why (`Distrust`); `SocketNotice::Failed`
-  says why it failed (`SocketError`; `Other(0)` from older kernels). `Capabilities::tls_sessions` says how many TLS
+  everything the server sent was read, else it fails and closes. Nothing is sent or read until it is secure: a send or
+  read before fails `NotReady` and closes the socket. `Tls` sets it up: the authorities PaperPaw ships (`Tls::new`),
+  or up to `MAX_PINS` pinned certificates (`Tls::pinned`, `CertificateHash` as browsers and `openssl` write it) or
+  keys (`Tls::pinned_keys`, `KeyHash` of the SubjectPublicKeyInfo: renewals of the same key stay trusted), the name
+  checked, the time to connect, the time idle before it closes. `SocketNotice::Secured` and `Untrusted` (reserved
+  before) carry the server's certificate and key, `Untrusted` why (`Distrust`); `Secured::time_checked` is false
+  where the device did not know the time yet, so the certificate's dates were not checked (an X4 just after a cold
+  start). `SocketNotice::Failed` says why it failed (`SocketError`; `Other(0)` from older kernels).
+  `SocketRead::Bytes` reads bytes as they come (`SocketNotice::Bytes`), for 8-bit protocol lines that are no
+  UTF-8. `Capabilities::tls_sessions` says how many TLS
   connections fit at once, HTTPS among them; with none (every shell for now) TLS sockets fail at once,
   `SocketError::Unsupported`. The shells' TLS comes with the firmware's part of #81.
 - Screens mirror in a user-interface language that runs right to left (#33): the switch, value rows and their

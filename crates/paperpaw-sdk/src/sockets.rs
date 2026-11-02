@@ -6,7 +6,15 @@
 //! A plugin gets TLS as it is, bytes in and out after the handshake: what
 //! it speaks over it is its own. The server's certificate is checked
 //! against the authorities PaperPaw ships unless the plugin pins the
-//! certificates it trusts instead ([`Trust`]).
+//! certificates or keys it trusts instead ([`Trust`]).
+//!
+//! *Valid now* is checked where the device knows the time. Where it does
+//! not yet (no clock that kept it, no network time since a cold start),
+//! everything else is checked and the socket says so
+//! ([`SocketNotice::Secured`](crate::SocketNotice::Secured)'s
+//! `time_checked`): a plugin that must not trust an expired certificate
+//! closes and tries again once the clock is set. Failing instead would
+//! keep an X4 from every server just after it starts.
 
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -70,10 +78,22 @@ impl Tls {
 
     /// Trusting `certificates` alone (a server of one's own, with a
     /// certificate no authority signed): the server's must be one of them
-    /// and valid now; its name and chain are not checked.
+    /// and valid now; its name and chain are not checked. A renewed
+    /// certificate is another: [`Tls::pinned_keys`] outlasts renewals that
+    /// keep the key.
     pub fn pinned(certificates: Vec<CertificateHash>) -> Self {
         Self {
             trust: Trust::Pinned(certificates),
+            ..Self::new()
+        }
+    }
+
+    /// Trusting certificates of `keys` alone, whoever signed them: the
+    /// server's must be for one of them and valid now; its name and chain
+    /// are not checked.
+    pub fn pinned_keys(keys: Vec<KeyHash>) -> Self {
+        Self {
+            trust: Trust::PinnedKeys(keys),
             ..Self::new()
         }
     }
@@ -104,7 +124,8 @@ impl Tls {
     pub fn check(&self) -> Result<(), SocketError> {
         let pins_fit = match &self.trust {
             Trust::Authorities => true,
-            Trust::Pinned(pins) => !pins.is_empty() && pins.len() <= MAX_PINS,
+            Trust::Pinned(pins) => (1..=MAX_PINS).contains(&pins.len()),
+            Trust::PinnedKeys(keys) => (1..=MAX_PINS).contains(&keys.len()),
         };
         let name_fits = self.server_name.as_deref().is_none_or(is_host_name);
         let fits = pins_fit
@@ -140,13 +161,18 @@ fn is_host_name(name: &str) -> bool {
 #[non_exhaustive]
 pub enum Trust {
     /// Those whose chain ends in an authority PaperPaw ships (Mozilla's
-    /// list, updated with the firmware), for the server's name, valid now.
+    /// list, updated with the firmware), for the server's name, valid now
+    /// (where the time is known: see the module).
     Authorities,
     /// These alone (1 to [`MAX_PINS`]), valid now; name and chain not
     /// checked. The reader compares a certificate's hash
     /// ([`SocketNotice::Untrusted`](crate::SocketNotice::Untrusted)) before
     /// a plugin pins it.
     Pinned(Vec<CertificateHash>),
+    /// Those for one of these keys (1 to [`MAX_PINS`]), valid now; name
+    /// and chain not checked: renewed certificates of the same key stay
+    /// trusted.
+    PinnedKeys(Vec<KeyHash>),
 }
 
 /// A certificate, by the SHA-256 of its DER: what a plugin pins
@@ -173,31 +199,72 @@ impl CertificateHash {
     /// The hash written in `text`: 64 hex digits, either case, with `:`
     /// or spaces between them or not (as browsers and `openssl` show it).
     pub fn parse(text: &str) -> Option<Self> {
-        let mut hash = [0u8; 32];
-        let mut digits = 0usize;
-        for b in text.bytes() {
-            if b == b':' || b == b' ' {
-                continue;
-            }
-            let digit = match b {
-                b'0'..=b'9' => b - b'0',
-                b'a'..=b'f' => b - b'a' + 10,
-                b'A'..=b'F' => b - b'A' + 10,
-                _ => return None,
-            };
-            let byte = hash.get_mut(digits / 2)?;
-            *byte = *byte << 4 | digit;
-            digits += 1;
-        }
-        (digits == 64).then_some(Self(hash))
+        sha256_of(text).map(Self)
     }
 }
 
 impl core::fmt::Display for CertificateHash {
     /// 64 lower-case hex digits.
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        self.0.iter().try_for_each(|b| write!(f, "{b:02x}"))
+        write_hex(&self.0, f)
     }
+}
+
+/// A server's key, by the SHA-256 of its certificate's
+/// SubjectPublicKeyInfo (DER), as browsers pinned keys: what a plugin pins
+/// ([`Trust::PinnedKeys`]) and the kernel tells of the server's. Written
+/// as 64 hex digits.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct KeyHash([u8; 32]);
+
+impl KeyHash {
+    /// The key whose SubjectPublicKeyInfo's SHA-256 is `sha256`.
+    pub const fn new(sha256: [u8; 32]) -> Self {
+        Self(sha256)
+    }
+
+    /// Its SHA-256.
+    pub const fn sha256(&self) -> &[u8; 32] {
+        &self.0
+    }
+
+    /// The hash written in `text`, as [`CertificateHash::parse`] reads it.
+    pub fn parse(text: &str) -> Option<Self> {
+        sha256_of(text).map(Self)
+    }
+}
+
+impl core::fmt::Display for KeyHash {
+    /// 64 lower-case hex digits.
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write_hex(&self.0, f)
+    }
+}
+
+/// A SHA-256 written as 64 hex digits, either case, `:` or spaces between
+/// them or not.
+fn sha256_of(text: &str) -> Option<[u8; 32]> {
+    let mut hash = [0u8; 32];
+    let mut digits = 0usize;
+    for b in text.bytes() {
+        if b == b':' || b == b' ' {
+            continue;
+        }
+        let digit = match b {
+            b'0'..=b'9' => b - b'0',
+            b'a'..=b'f' => b - b'a' + 10,
+            b'A'..=b'F' => b - b'A' + 10,
+            _ => return None,
+        };
+        let byte = hash.get_mut(digits / 2)?;
+        *byte = *byte << 4 | digit;
+        digits += 1;
+    }
+    (digits == 64).then_some(hash)
+}
+
+fn write_hex(bytes: &[u8], f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    bytes.iter().try_for_each(|b| write!(f, "{b:02x}"))
 }
 
 /// Why a server's certificate was not trusted
@@ -208,8 +275,8 @@ pub enum Distrust {
     /// Its chain ends in no authority PaperPaw ships (e.g. one it signed
     /// itself, or a company's own).
     UnknownIssuer,
-    /// It is none of those pinned ([`Trust::Pinned`]): renewed, or
-    /// someone else's.
+    /// It is none of those pinned, nor for a key pinned ([`Trust::Pinned`],
+    /// [`Trust::PinnedKeys`]): renewed, or someone else's.
     NotPinned,
 }
 
@@ -380,9 +447,13 @@ mod tests {
         let pin = CertificateHash::new([7; 32]);
         assert_eq!(Tls::new().check(), Ok(()));
         assert_eq!(Tls::pinned(alloc::vec![pin]).check(), Ok(()));
+        let key = KeyHash::new([8; 32]);
+        assert_eq!(Tls::pinned_keys(alloc::vec![key]).check(), Ok(()));
+        assert_eq!(KeyHash::parse(&format!("{key}")), Some(key));
         let wrong = [
             Tls::pinned(Vec::new()),
             Tls::pinned(alloc::vec![pin; MAX_PINS + 1]),
+            Tls::pinned_keys(Vec::new()),
             Tls::new().server_name(""),
             Tls::new().server_name("mail.example.org/inbox"),
             Tls::new().timeout_ms(MAX_TLS_TIMEOUT_MS + 1),

@@ -21,7 +21,7 @@ use crate::command::{http_params, server_params, socket_params, speech_params};
 use crate::event::EventData;
 use crate::id::Id;
 use crate::params::Params;
-use crate::sockets::{CertificateHash, Distrust, SocketError};
+use crate::sockets::{CertificateHash, Distrust, KeyHash, SocketError};
 
 /// The parameters of `params` but `known`, as a plugin gave them.
 fn context(params: &Params, known: &[&str]) -> Params {
@@ -565,6 +565,12 @@ pub enum SocketNotice {
         socket: Id,
         text: String,
     },
+    /// Bytes came ([`SocketRead::Bytes`](crate::SocketRead::Bytes)) as
+    /// they are; none when the other side closed.
+    Bytes {
+        socket: Id,
+        data: Vec<u8>,
+    },
     /// A file read is complete.
     Saved {
         socket: Id,
@@ -596,10 +602,14 @@ pub enum SocketNotice {
     /// The socket is encrypted (TLS) from now on: what is sent and
     /// received goes so ([`Command::connect_tls`](crate::Command::connect_tls),
     /// [`Command::start_tls`](crate::Command::start_tls)). `certificate`
-    /// is the server's, trusted.
+    /// and `key` are the server's, trusted; `time_checked` is false where
+    /// the device did not know the time, and so not whether the
+    /// certificate is valid now (see [`Tls`](crate::Tls)).
     Secured {
         socket: Id,
         certificate: CertificateHash,
+        key: KeyHash,
+        time_checked: bool,
     },
     /// The server's certificate is not trusted, for `why`, and the socket
     /// closed; `certificate` is its hash, for the reader to compare (e.g.
@@ -608,6 +618,7 @@ pub enum SocketNotice {
     Untrusted {
         socket: Id,
         certificate: CertificateHash,
+        key: KeyHash,
         why: Distrust,
     },
 }
@@ -618,6 +629,7 @@ impl SocketNotice {
         match self {
             SocketNotice::Connected { socket }
             | SocketNotice::Received { socket, .. }
+            | SocketNotice::Bytes { socket, .. }
             | SocketNotice::Saved { socket, .. }
             | SocketNotice::Closed { socket, .. }
             | SocketNotice::Failed { socket, .. }
@@ -637,6 +649,10 @@ impl EventData for SocketNotice {
             SocketNotice::Connected { .. } => kind(p, socket_params::CONNECTED),
             SocketNotice::Received { text, .. } => {
                 kind(p, socket_params::RECEIVED).with(socket_params::TEXT, text.clone())
+            }
+            SocketNotice::Bytes { data, .. } => {
+                let data: String = data.iter().map(|&b| char::from(b)).collect();
+                kind(p, socket_params::BYTES).with(socket_params::DATA, data)
             }
             SocketNotice::Saved { path, .. } => {
                 kind(p, socket_params::SAVED).with(socket_params::PATH, path.clone())
@@ -658,12 +674,26 @@ impl EventData for SocketNotice {
                     p.with(socket_params::REASON, reason.clone())
                 }
             }
-            SocketNotice::Secured { certificate, .. } => kind(p, socket_params::SECURED)
-                .with(socket_params::CERTIFICATE, alloc::format!("{certificate}")),
+            SocketNotice::Secured {
+                certificate,
+                key,
+                time_checked,
+                ..
+            } => kind(p, socket_params::SECURED)
+                .with(socket_params::CERTIFICATE, alloc::format!("{certificate}"))
+                .with(socket_params::KEY, alloc::format!("{key}"))
+                .with(
+                    socket_params::TIME_CHECKED,
+                    if *time_checked { "true" } else { "false" },
+                ),
             SocketNotice::Untrusted {
-                certificate, why, ..
+                certificate,
+                key,
+                why,
+                ..
             } => kind(p, socket_params::UNTRUSTED)
                 .with(socket_params::CERTIFICATE, alloc::format!("{certificate}"))
+                .with(socket_params::KEY, alloc::format!("{key}"))
                 .with(socket_params::WHY, why.as_str()),
         }
     }
@@ -676,6 +706,16 @@ impl EventData for SocketNotice {
             socket_params::RECEIVED => SocketNotice::Received {
                 socket,
                 text: get(socket_params::TEXT),
+            },
+            socket_params::BYTES => SocketNotice::Bytes {
+                socket,
+                // One character a byte; one above U+00FF is no such text.
+                data: p
+                    .get(socket_params::DATA)
+                    .unwrap_or_default()
+                    .chars()
+                    .map(|c| u8::try_from(c).ok())
+                    .collect::<Option<Vec<u8>>>()?,
             },
             socket_params::SAVED => SocketNotice::Saved {
                 socket,
@@ -706,10 +746,14 @@ impl EventData for SocketNotice {
             socket_params::SECURED => SocketNotice::Secured {
                 socket,
                 certificate: CertificateHash::parse(p.get(socket_params::CERTIFICATE)?)?,
+                key: KeyHash::parse(p.get(socket_params::KEY)?)?,
+                // Unsaid: not checked.
+                time_checked: p.get(socket_params::TIME_CHECKED) == Some("true"),
             },
             socket_params::UNTRUSTED => SocketNotice::Untrusted {
                 socket,
                 certificate: CertificateHash::parse(p.get(socket_params::CERTIFICATE)?)?,
+                key: KeyHash::parse(p.get(socket_params::KEY)?)?,
                 why: p
                     .get(socket_params::WHY)
                     .and_then(Distrust::parse)
@@ -967,15 +1011,34 @@ mod tests {
     fn tls_socket_notices_through_params_and_back() {
         let socket = Id::new_static("a.mail");
         let certificate = CertificateHash::new([0xab; 32]);
+        let key = KeyHash::new([0xcd; 32]);
         for notice in [
             SocketNotice::Secured {
                 socket: socket.clone(),
                 certificate,
+                key,
+                time_checked: true,
+            },
+            SocketNotice::Secured {
+                socket: socket.clone(),
+                certificate,
+                key,
+                time_checked: false,
             },
             SocketNotice::Untrusted {
                 socket: socket.clone(),
                 certificate,
+                key,
                 why: Distrust::NotPinned,
+            },
+            // Bytes that are no UTF-8 come as they are.
+            SocketNotice::Bytes {
+                socket: socket.clone(),
+                data: alloc::vec![b'*', 0xe4, 0x00, 0xff, b'\r', b'\n'],
+            },
+            SocketNotice::Bytes {
+                socket: socket.clone(),
+                data: Vec::new(),
             },
             SocketNotice::Failed {
                 socket: socket.clone(),
@@ -1000,15 +1063,23 @@ mod tests {
         let untrusted = Params::new()
             .with(params::ID, "a.mail")
             .with(socket_params::KIND, socket_params::UNTRUSTED)
-            .with(socket_params::CERTIFICATE, "AB".repeat(32));
+            .with(socket_params::CERTIFICATE, "AB".repeat(32))
+            .with(socket_params::KEY, "cd".repeat(32));
         assert_eq!(
             SocketNotice::from_params(&untrusted),
             Some(SocketNotice::Untrusted {
                 socket: socket.clone(),
                 certificate,
+                key,
                 why: Distrust::UnknownIssuer,
             })
         );
+        // Bytes written above U+00FF are no bytes.
+        let bytes = Params::new()
+            .with(params::ID, "a.mail")
+            .with(socket_params::KIND, socket_params::BYTES)
+            .with(socket_params::DATA, "a\u{100}");
+        assert_eq!(SocketNotice::from_params(&bytes), None);
         // A certificate that is no hash is no notice.
         let broken = untrusted.with(socket_params::CERTIFICATE, "ab");
         assert_eq!(SocketNotice::from_params(&broken), None);
