@@ -60,9 +60,12 @@ fn same(shown: &str, wanted: &str) -> bool {
 fn choose(app: &mut App, label: &str) {
     if touch(app) {
         for _ in 0..10 {
+            // The last one drawn: a question's choices lie over the rows
+            // of the page below, which are described as well.
             let part = app
                 .parts()
                 .into_iter()
+                .rev()
                 .find(|p| p.role == Role::Row && same(&p.label, label));
             if let Some(part) = part {
                 app.tap(center(part.area));

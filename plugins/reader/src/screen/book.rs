@@ -89,6 +89,8 @@ pub(super) struct Book {
     /// [`paperpaw_sdk::readers::open_page`]): it offers the way back
     /// always.
     pub(super) page_back: bool,
+    /// The notes this one was opened from, the last the nearest.
+    pub(super) notes_back: Vec<String>,
     /// Read aloud (`volume`) or turning its pages by itself (`clock`):
     /// the icon shown in the status line.
     pub(super) hands_free: Option<&'static str>,
@@ -247,7 +249,7 @@ impl Book {
             save_failed: false,
             held: false,
             from_progress: false,
-            conversion: paperpaw_sdk::reading::conversion(env),
+            conversion: conversion_of(env, path),
             pointed: true,
             xpointer: None,
             fingerprint: paperpaw_sdk::library::Fingerprint::of(env.storage(), path),
@@ -269,6 +271,13 @@ impl Book {
             chapter_marks: String::new(),
             landed: None,
             page_back: params.get(paperpaw_sdk::readers::PAGE).is_some(),
+            notes_back: params
+                .get(crate::NOTES_BACK)
+                .unwrap_or_default()
+                .lines()
+                .filter(|p| !p.is_empty())
+                .map(String::from)
+                .collect(),
             hands_free: None,
             finished: false,
             decorated: Vec::new(),
@@ -279,21 +288,7 @@ impl Book {
         book.reload_marks(env);
         book.chapter_marks = book.chapter_marks(env);
         book.embedded = Embedded::load(env, book.document.as_ref());
-        // Kept with another layout maybe: from the start of its line.
-        // Where the book cannot be shown there (it changed, say), from its
-        // start.
-        let saved = book.saved_position(env);
-        let start = saved.map_or(Locator::START, |(at, _)| book.line_start(env, at));
-        // Found in another conversion, or kept before: kept anew.
-        book.unsaved = saved.is_some_and(|(_, anew)| anew);
-        book.page = match book.layout(env, start) {
-            Ok(page) if !page.is_past_end() => page,
-            // Not from the start instead: the place read to would be
-            // kept as the start.
-            Err(DocumentError::OutOfMemory) => return Err(error(DocumentError::OutOfMemory)),
-            _ if start != Locator::START => book.layout(env, Locator::START).map_err(error)?,
-            page => page.map_err(error)?,
-        };
+        book.first_page(env, params).map_err(error)?;
         book.prepare_images(env);
         book.index = Some(book.open_index(env));
         book.update_chapter(env);
@@ -302,6 +297,36 @@ impl Book {
             remember_last(env.storage(), &book.path);
         }
         Ok(book)
+    }
+
+    /// Lays out the first page: where the book was left, or at the
+    /// heading the book was opened at.
+    fn first_page(&mut self, env: &Env<'_>, params: &Params) -> Result<(), DocumentError> {
+        // Kept with another layout maybe: from the start of its line.
+        // Where the book cannot be shown there (it changed, say), from its
+        // start.
+        let saved = self.saved_position(env);
+        let start = saved.map_or(Locator::START, |(at, _)| self.line_start(env, at));
+        // Opened at a heading (a link from another note): there, not where
+        // it was left.
+        let start = params
+            .get(crate::ANCHOR)
+            .and_then(|anchor| {
+                self.document
+                    .link_target(env.storage(), &format!("#{anchor}"))
+            })
+            .map_or(start, |at| self.line_start(env, at));
+        // Found in another conversion, or kept before: kept anew.
+        self.unsaved = saved.is_some_and(|(_, anew)| anew);
+        self.page = match self.layout(env, start) {
+            Ok(page) if !page.is_past_end() => page,
+            // Not from the start instead: the place read to would be
+            // kept as the start.
+            Err(DocumentError::OutOfMemory) => return Err(DocumentError::OutOfMemory),
+            _ if start != Locator::START => self.layout(env, Locator::START)?,
+            page => page?,
+        };
+        Ok(())
     }
 
     /// Where the book is read, for [`events::BOOK_OPENED`] and the other
@@ -568,6 +593,17 @@ impl Book {
             }
             _ => None,
         };
+        // Kept with another format's conversion of the file (a plugin that
+        // replaces a format was switched on or off) and with no XPointer
+        // to find it by: its offset is in other text, so the same part of
+        // the book is taken, by how far into it the place was.
+        let by_format = kept
+            .conversion
+            .is_some_and(|c| c ^ self.conversion == REPLACING_FORMAT);
+        let found = found.or_else(|| {
+            (by_format && kept.percent > 0.0)
+                .then(|| self.locator_at(f64::from(kept.percent) / 100.0))
+        });
         Some(found.map_or((kept.at, before), |at| (at, true)))
     }
 
@@ -1007,6 +1043,23 @@ impl Book {
         true
     }
 
+    /// Opens the note this one was opened from, where it was left, if
+    /// there is one; whether it did.
+    pub(super) fn back_to_note(&mut self, cx: &mut Cx<'_, '_>) -> bool {
+        let Some(before) = self.notes_back.pop() else {
+            return false;
+        };
+        self.save_due(cx, true);
+        let env = *cx.env();
+        cx.command(super::notelinks::open(
+            &env,
+            &before,
+            None,
+            &self.notes_back,
+        ));
+        true
+    }
+
     /// Back to where the last jump was made from.
     pub(super) fn go_back(&mut self, cx: &mut Cx<'_, '_>) {
         if let Some(from) = self.returns.pop() {
@@ -1279,3 +1332,21 @@ pub(super) fn env_filters_changed(env: &Env<'_>, book: &Book) -> bool {
 
 #[cfg(test)]
 mod chapter_tests;
+
+/// What a format adds to the conversion where it is not one of the format
+/// plugins' own but a plugin's that replaces one for its ending (the Notes
+/// vault's Markdown for the built-in): a bit no style touches.
+const REPLACING_FORMAT: u64 = 1 << 63;
+
+/// The conversion a book's positions are in: what `reading::conversion`
+/// says of the styles, and [`REPLACING_FORMAT`] where such a format opens
+/// the file, so that a place kept with the one is another conversion for
+/// the other, and nothing for the format plugins' own: positions kept
+/// before stay in their conversion.
+fn conversion_of(env: &Env<'_>, path: &str) -> u64 {
+    let replacing = env
+        .formats()
+        .for_path(path)
+        .is_some_and(|spec| !spec.id.as_str().starts_with("format-"));
+    paperpaw_sdk::reading::conversion(env) ^ if replacing { REPLACING_FORMAT } else { 0 }
+}

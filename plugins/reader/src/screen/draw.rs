@@ -164,7 +164,7 @@ impl Book {
     /// page before.
     pub(super) fn back_area(&self, env: &Env<'_>) -> Option<Rect> {
         let landed = !self.returns.is_empty() && self.landed == Some(self.page.start);
-        if !landed && !self.page_back {
+        if !landed && !self.page_back && self.notes_back.is_empty() {
             return None;
         }
         let style = UiStyle::new(env);

@@ -79,6 +79,16 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   once before trusting a server no authority vouches for. Five home widgets: unread mail, latest mail, starred
   mail, one mailbox and a shortcut to write. Needs the TLS sockets of the next interface raise; background
   fetching and a Sent copy are not in this first version.
+- **Notes vault (#87):** a plugin that reads a folder of Markdown notes (works with Obsidian vaults) without
+  changing it: the vault's folders as they are on the card, its latest changes, its tags and a search in the
+  notes' titles, each list shown a hundred rows at a time so that a vault of thousands of notes costs a window of
+  memory (5,000 notes tested), from an index kept on the card and made in the background. Six home widgets: recent
+  notes, a pinned note, the note of the day, a random note, the tags and a search, each with its own settings
+  (how many, which folder). Notes open in the reader: `[[wikilinks]]` (`[[note|words]]`, `[[note#heading]]`) and
+  links to other note files open that note by its name, anywhere in the vault, at its heading, and *Back* returns
+  to the note before; embedded pictures (`![[picture.png]]`) show, front matter is hidden (its tags are shown),
+  callouts (`> [!note] Title`) are quotes with their title, `#tags` stay as written and tables are rows of cells.
+  The Markdown reader's HTML anchors the headings for those links.
 - **Plugin interface (next raise):** `Storage::list_from` lists a folder a piece at a time, each piece going on
   where the last one stopped (#79): a folder of thousands of entries is read about twice in all, not once a
   piece. Storages that cannot go on from a place count, as `paperpaw_platform::list_counted` does (the item's

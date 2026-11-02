@@ -119,6 +119,12 @@ test = false
 bench = false
 
 [[bin]]
+name = "notes-vault"
+path = "src/bin/notes-vault.rs"
+test = false
+bench = false
+
+[[bin]]
 name = "format-mobi"
 path = "src/bin/format-mobi.rs"
 test = false
@@ -263,6 +269,7 @@ paperpaw-plugin-battery = { path = "../../plugins/battery" }
 paperpaw-plugin-reading-goal = { path = "../../plugins/reading-goal", default-features = false }
 paperpaw-plugin-end-of-book = { path = "../../plugins/end-of-book" }
 paperpaw-plugin-notes-overview = { path = "../../plugins/notes-overview" }
+paperpaw-plugin-notes-vault = { path = "../../plugins/notes-vault" }
 paperpaw-plugin-format-mobi = { path = "../../plugins/format-mobi" }
 paperpaw-plugin-format-docx = { path = "../../plugins/format-docx" }
 paperpaw-plugin-format-images = { path = "../../plugins/format-images" }
