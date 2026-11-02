@@ -29,8 +29,10 @@ not leave the other firmware open to an update. `dual-boot = off` undoes it.
 Carry the string `paperpaw-dualboot:1` anywhere in the bootloader's window of
 the flash, from 0x0 up to the partition table at 0x8000 (a constant in the
 bootloader's image is enough). It says: *I manage the two slots; PaperPaw,
-never write the other one, nor the OTA data.* PaperPaw looks for it only
-where it matters, and reads the 32 KB of the window once for that.
+never write the other one, nor the OTA data.* PaperPaw reads the 32 KB of the
+window once at each start, unless `dual-boot` in `paperpaw.ini` is set (`on` or
+`off`), and never writes before it has looked: where the window cannot be read, it
+counts as marked.
 
 PaperPaw cannot sit well beside a firmware whose tool does not tell it, and
 phase 2 of this work will look for another firmware's image in the other
@@ -48,7 +50,15 @@ of a release) raw, nothing else; keep both slots at least 6,553,600 bytes
 - Never writes the other app partition: no update from the card, from the
   update server, nor the way back to another firmware.
 - Never writes the OTA data at a start: no trial of a new firmware, no
-  "undo" of an update that did not start.
+  "undo" of an update that did not start, no marking of a failed one and no
+  going back. A start looks at the OTA data first and writes nothing; the
+  card, `paperpaw.ini` and the bootloader are read next (before the screen,
+  the kernel and the plugins), and only then, if the setup is not declared,
+  does the start do what it needs. (A start that hangs before the card is
+  read is therefore not undone, as it would be if the OTA data were marked
+  earlier; the bootloader's own rollback, where it has one, still is.)
+  Where the card cannot be read at all, `paperpaw.ini` cannot be, and the
+  start goes on as for a setup not declared by the reader.
 - Never reads the other partition for the web flasher's bundle of plugins.
 - Says so where an update would have been offered: the *Updates* page tells
   in two plain sentences that PaperPaw shares the device and installs no

@@ -448,8 +448,9 @@ fn prepare() -> Ready {
     // Taken only now: an update that failed its trial goes back after its
     // note (`install_note`), which has the update's panic message.
     // A start that goes back (a failed trial) leaves the message where it
-    // is: the firmware it goes back to reads it as its own.
-    let going_back = ota.as_ref().is_some_and(|ota| ota.failed_trial().is_some());
+    // is: the firmware it goes back to reads it as its own. Whether it does
+    // is known once the card has said this is no dual-boot setup (`dual`).
+    let going_back = ota.as_ref().is_some_and(ota::Ota::plans_to_go_back);
     let panicked = if going_back {
         crash::last()
     } else {
@@ -471,6 +472,19 @@ fn prepare() -> Ready {
         Ok(storage) => (storage, None),
         Err(trouble) => (Box::new(NoStorage) as Box<dyn Storage>, Some(trouble)),
     };
+    // The reader's choice and the bootloader say whether this is a dual-boot
+    // setup, nothing in the other firmware's partition or the OTA data
+    // changed: only then the start does what it needs (an update marked as
+    // on trial, one undone, one that failed marked bad). Before anything
+    // that goes back to the firmware before, and before anything else is
+    // written to the card.
+    let mut ota = ota;
+    let dual = dual::settle(&mut ota, &flash, storage.as_ref());
+    // A failed trial that the setup left alone: the message is no longer
+    // the other firmware's to read.
+    if going_back && ota.as_ref().is_some_and(|ota| ota.failed_trial().is_none()) {
+        crash::take_last();
+    }
     // After the card, which the note below goes to; before anything else
     // is written to it.
     #[cfg(feature = "x3")]
@@ -480,10 +494,6 @@ fn prepare() -> Ready {
     // What the card keeps under PaperPaw's old name, moved before anything
     // is written to its folder (the kernel does it again, finding nothing).
     paperpaw_sdk::data::take_over_old_name(storage.as_ref());
-    // A dual-boot setup, declared by the reader or the bootloader: nothing
-    // is installed into the other firmware's partition, nor read for plugins.
-    let mut ota = ota;
-    let dual = dual::settle(&mut ota, &flash, storage.as_ref());
     // Wi-Fi the web flasher wrote with the firmware: to the card, for the
     // kernel to keep at its start.
     provision::take(&flash, storage.as_ref());

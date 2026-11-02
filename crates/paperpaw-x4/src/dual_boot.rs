@@ -34,6 +34,13 @@ pub const KEY: &str = "dual-boot";
 /// Longest line of the file looked at; a longer one is not one of ours.
 const MAX_LINE: usize = 256;
 
+/// The code of [`InstallFailure::Other`] for an install refused because the
+/// device is shared with another firmware (listed with the others in
+/// `paperpaw_sdk::firmware`).
+///
+/// [`InstallFailure::Other`]: paperpaw_sdk::firmware::InstallFailure::Other
+pub const REFUSED: u16 = 1;
+
 /// What the reader chose in `paperpaw.ini`.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum Choice {
@@ -96,7 +103,7 @@ impl IniScan {
                 b'\r' => {}
                 _ if self.skipping => {}
                 _ if self.line.len() >= MAX_LINE => {
-                    self.line.clear();
+                    self.too_long();
                     self.skipping = true;
                 }
                 _ => self.line.push(byte),
@@ -110,14 +117,29 @@ impl IniScan {
         self.choice.unwrap_or_default()
     }
 
+    /// The line being read is too long to be one of ours (a comment, say):
+    /// the rest of it is skipped. What it started as still counts: a header
+    /// leaves the section; a `dual-boot` entry in the section is too long
+    /// to be read, and guards (the safe way to take it); any other line
+    /// changes nothing.
+    #[cold]
+    #[inline(never)]
+    fn too_long(&mut self) {
+        let start = self.line.iter().position(|b| !b.is_ascii_whitespace());
+        let head = start.map_or(&[][..], |at| &self.line[at..]);
+        if head.first() == Some(&b'[') {
+            self.inside = false;
+        } else if self.inside && head.starts_with(KEY.as_bytes()) {
+            self.choice = Some(Choice::On);
+        }
+        self.line.clear();
+    }
+
     #[cold]
     #[inline(never)]
     fn end_line(&mut self) {
         let line = core::mem::take(&mut self.line);
         if core::mem::take(&mut self.skipping) {
-            // A section header or an entry too long to be one of ours: what
-            // follows cannot be told from here, so the section is left.
-            self.inside = false;
             return;
         }
         let Ok(line) = core::str::from_utf8(&line) else {
@@ -334,10 +356,48 @@ mod tests {
         scan.feed(&bytes);
         assert_eq!(scan.finish(), Choice::Auto);
         let long = alloc::format!("[firmware]\n{}\ndual-boot = on\n", "x".repeat(10_000));
-        assert_eq!(choice(&long), Choice::Auto);
+        assert_eq!(choice(&long), Choice::On);
         // A bare key without a value, an equals sign alone.
         assert_eq!(choice("[firmware]\ndual-boot\n="), Choice::Auto);
         assert_eq!(choice("[firmware\ndual-boot = on\n"), Choice::Auto);
+    }
+
+    #[test]
+    fn a_long_line_changes_what_it_is_and_no_more() {
+        let long = alloc::format!("# {}", "x".repeat(2000));
+        // A long comment in the section does not turn the guard off.
+        assert_eq!(
+            choice(&alloc::format!("[firmware]\n{long}\ndual-boot = on\n")),
+            Choice::On
+        );
+        assert_eq!(
+            choice(&alloc::format!("[firmware]\ndual-boot = on\n{long}\n")),
+            Choice::On
+        );
+        // A long line of another key: no change either.
+        let key = alloc::format!("[firmware]\nnote = {}\ndual-boot = off\n", "y".repeat(500));
+        assert_eq!(choice(&key), Choice::Off);
+        // A header too long to be read leaves the section.
+        let header = alloc::format!("[{}]\ndual-boot = on\n", "z".repeat(500));
+        assert_eq!(
+            choice(&alloc::format!("[firmware]\n{header}")),
+            Choice::Auto
+        );
+        // A `dual-boot` entry too long to be read guards: the safe way.
+        let entry = alloc::format!("[firmware]\ndual-boot = off {}\n", "w".repeat(500));
+        assert_eq!(choice(&entry), Choice::On);
+        // Outside the section it is not ours.
+        let outside = alloc::format!("[core]\ndual-boot = off {}\n", "w".repeat(500));
+        assert_eq!(choice(&outside), Choice::Auto);
+        // Indented, and in any pieces.
+        let mut scan = IniScan::default();
+        for piece in alloc::format!("[firmware]\n  {long}\ndual-boot=on")
+            .as_bytes()
+            .chunks(7)
+        {
+            scan.feed(piece);
+        }
+        assert_eq!(scan.finish(), Choice::On);
     }
 
     #[test]

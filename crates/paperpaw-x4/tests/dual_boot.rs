@@ -17,7 +17,7 @@ mod common;
 use common::{FLASH, layouts, table};
 use paperpaw_sdk::MemoryStorage;
 use paperpaw_sdk::firmware::{CHIP_ESP32_C3, Firmware, InstallFailure};
-use paperpaw_x4::dual_boot::{MARKER, Source, WINDOW, scan_marker};
+use paperpaw_x4::dual_boot::{MARKER, REFUSED, Source, WINDOW, scan_marker};
 use paperpaw_x4::ota::{Flash, FlashError, OtaData, SLOTS, Start, State};
 use paperpaw_x4::partitions::{Slots, TABLE_AT, TABLE_LEN};
 use paperpaw_x4::updates::{TRIAL_MS, Updates};
@@ -90,36 +90,40 @@ impl Flash for Part<'_> {
     }
 }
 
+/// The start as the firmware does it: looked at (`open`, nothing written),
+/// then settled once the card has said what is declared. What it planned,
+/// what it did, and the flash as `open` left it.
 fn start(
     chip: Chip,
     slots: &Slots,
     running: u32,
     declared: Option<Source>,
-) -> (Updates<Chip>, Option<Start>, u32) {
-    let mut asked = 0;
-    let (updates, start) = Updates::start_guarded(chip, slots, running, this(), "x4", &mut |_| {
-        asked += 1;
-        declared
-    })
-    .unwrap();
-    (updates, start, asked)
+) -> (Updates<Chip>, Start, Option<Start>) {
+    let before = chip.0.clone();
+    let (mut updates, plan) = Updates::open(chip, slots, running, this(), "x4").unwrap();
+    // Until the setup is known, not one byte is written.
+    assert!(updates.flash().0 == before, "open wrote");
+    let started = updates.settle(declared);
+    (updates, plan, started)
 }
 
 #[test]
 fn a_declared_setup_leaves_the_ota_data_as_it_finds_it() {
     for (name, csv) in layouts() {
         for running in 0..SLOTS {
-            let (mut chip, slots) = flash(csv);
-            // The other firmware's choice, which this start would undo.
-            disagreeing(&mut chip, &slots, (running + 1) % SLOTS, State::Valid);
-            let before = chip.0.clone();
-            let (updates, started, asked) = start(chip, &slots, running, Some(Source::Marker));
-            assert_eq!(started, Some(Start::Kept), "{name} {running}");
-            assert_eq!(asked, 1, "{name}");
-            assert_eq!(updates.dual(), Some(Source::Marker), "{name}");
-            assert!(!updates.on_trial(), "{name}");
-            // Not one byte of the flash written.
-            assert!(updates.into_flash().0 == before, "{name} {running}");
+            for declared in [Source::Marker, Source::Ini] {
+                let (mut chip, slots) = flash(csv);
+                // The other firmware's choice, which this start would undo.
+                disagreeing(&mut chip, &slots, (running + 1) % SLOTS, State::Valid);
+                let before = chip.0.clone();
+                let (updates, plan, started) = start(chip, &slots, running, Some(declared));
+                assert_eq!(plan, Start::Undone, "{name} {running}");
+                assert_eq!(started, Some(Start::Kept), "{name} {running}");
+                assert_eq!(updates.dual(), Some(declared), "{name}");
+                assert!(!updates.on_trial(), "{name}");
+                // Not one byte of the flash written.
+                assert!(updates.into_flash().0 == before, "{name} {running}");
+            }
         }
     }
 }
@@ -130,39 +134,64 @@ fn without_a_declaration_the_start_is_as_before() {
         let (mut chip, slots) = flash(csv);
         disagreeing(&mut chip, &slots, 1, State::Valid);
         let before = data(&chip, &slots);
-        let (updates, started, asked) = start(chip, &slots, 0, None);
+        let (updates, plan, started) = start(chip, &slots, 0, None);
+        assert_eq!(plan, Start::Undone, "{name}");
         assert_eq!(started, Some(Start::Undone), "{name}");
-        assert_eq!(asked, 1, "{name}: asked, since it would write");
         assert_eq!(updates.dual(), None, "{name}");
         assert_ne!(data(&updates.into_flash(), &slots), before, "{name}");
     }
 }
 
 #[test]
-fn a_normal_start_costs_nothing_and_never_asks() {
-    let (chip, slots) = flash(layouts()[0].1);
-    let (updates, started, asked) = start(chip, &slots, 0, Some(Source::Marker));
-    assert_eq!(started, Some(Start::Kept));
-    // Nothing would be written, so nothing was looked for: no 32 KB read.
-    assert_eq!(asked, 0);
-    assert_eq!(updates.dual(), None);
+fn a_normal_start_writes_nothing_either_way() {
+    for declared in [None, Some(Source::Marker)] {
+        let (chip, slots) = flash(layouts()[0].1);
+        let before = chip.0.clone();
+        let (updates, plan, started) = start(chip, &slots, 0, declared);
+        assert_eq!(plan, Start::Kept);
+        assert_eq!(started, Some(Start::Kept));
+        assert!(updates.into_flash().0 == before);
+    }
 }
 
 #[test]
 fn no_trial_begins_in_a_declared_setup() {
     // A tool chose this slot as `New`, as CrossPoint's installer does: the
-    // firmware would mark it pending.
+    // firmware would mark it pending. The reader's ini says it is theirs
+    // (no marker), after the start looked and before it did anything.
+    for (name, csv) in layouts() {
+        for declared in [Source::Ini, Source::Marker] {
+            let (mut chip, slots) = flash(csv);
+            disagreeing(&mut chip, &slots, 0, State::New);
+            let before = chip.0.clone();
+            let (mut updates, plan, started) = start(chip, &slots, 0, Some(declared));
+            assert_eq!(plan, Start::Trial { ran: 0 }, "{name}");
+            assert_eq!(started, Some(Start::Kept), "{name}");
+            assert!(!updates.on_trial(), "{name}");
+            // And nothing is marked later either.
+            assert!(!updates.check_trial(TRIAL_MS * 2).unwrap(), "{name}");
+            updates.pause_trial(1000).unwrap();
+            updates.resume_trial(2000).unwrap();
+            assert!(updates.into_flash().0 == before, "{name}");
+        }
+    }
+}
+
+#[test]
+fn an_update_that_failed_its_trial_is_left_alone_in_a_declared_setup() {
+    // Marked pending by this firmware at an earlier start: where it is not
+    // declared the next start finds the trial failed, marks it bad and goes
+    // back; where it is declared nothing is written, nobody goes back.
     for (name, csv) in layouts() {
         let (mut chip, slots) = flash(csv);
         disagreeing(&mut chip, &slots, 0, State::New);
+        let (updates, _, started) = start(chip, &slots, 0, None);
+        assert_eq!(started, Some(Start::Trial { ran: 0 }), "{name}");
+        let chip = updates.into_flash();
         let before = chip.0.clone();
-        let (mut updates, started, _) = start(chip, &slots, 0, Some(Source::Ini));
+        let (updates, plan, started) = start(chip, &slots, 0, Some(Source::Ini));
+        assert!(matches!(plan, Start::Failed { .. }), "{name}: {plan:?}");
         assert_eq!(started, Some(Start::Kept), "{name}");
-        assert!(!updates.on_trial(), "{name}");
-        // And nothing is marked later either.
-        assert!(!updates.check_trial(TRIAL_MS * 2).unwrap(), "{name}");
-        updates.pause_trial(1000).unwrap();
-        updates.resume_trial(2000).unwrap();
         assert!(updates.into_flash().0 == before, "{name}");
     }
 }
@@ -175,22 +204,21 @@ fn nothing_installs_in_a_declared_setup() {
             slots.apps[1].0 as usize,
             chip.0[slots.apps[1].0 as usize..][..4096].to_vec(),
         );
-        // A normal start asks nothing; the firmware says what it found after
-        // the card (`declare_dual`).
-        let (mut updates, _, _) = start(chip, &slots, 0, None);
-        updates.declare_dual(Some(Source::Marker));
+        let (mut updates, _, _) = start(chip, &slots, 0, Some(Source::Marker));
         let card = MemoryStorage::new();
-        // Refused before the file is even read, whatever it is.
+        // Refused before the file is even read, whatever it is, and said as
+        // no size or file problem.
+        let refused = Some(InstallFailure::Other(REFUSED));
         assert_eq!(
             updates
                 .begin(&card, "updates/paperpaw.bin", None, true)
                 .err(),
-            Some(InstallFailure::TooLarge),
+            refused,
             "{name}"
         );
         assert_eq!(
             updates.begin_foreign(&card, "updates/other.bin").err(),
-            Some(InstallFailure::TooLarge),
+            refused,
             "{name}"
         );
         assert!(!updates.installing(), "{name}");
@@ -220,40 +248,21 @@ fn without_a_declaration_installs_are_as_before() {
 }
 
 #[test]
-fn a_declaration_from_the_ini_comes_after_the_start_and_guards_from_then_on() {
+fn what_is_declared_guards_from_the_settling_on() {
     let (chip, slots) = flash(layouts()[0].1);
-    let (mut updates, _, _) = start(chip, &slots, 0, None);
+    let (mut updates, _, _) = start(chip, &slots, 0, Some(Source::Ini));
     let card = MemoryStorage::new();
-    updates.declare_dual(Some(Source::Ini));
     assert_eq!(updates.dual(), Some(Source::Ini));
     assert_eq!(
         updates
             .begin(&card, "updates/paperpaw.bin", None, true)
             .err(),
-        Some(InstallFailure::TooLarge)
+        Some(InstallFailure::Other(REFUSED))
     );
     assert_eq!(updates.firmware().room, 0);
     // Declared off again (`dual-boot = off` beats the marker): as before.
-    updates.declare_dual(None);
+    updates.settle(None);
     assert!(updates.firmware().room > 0);
-}
-
-#[test]
-fn a_trial_begun_before_the_ini_was_read_still_ends_cleanly() {
-    // The OTA data is marked before the card is there; an ini that declares
-    // the setup afterwards must not leave the trial half done (the next
-    // start would see it failed and go to the other firmware).
-    let (mut chip, slots) = flash(layouts()[0].1);
-    disagreeing(&mut chip, &slots, 0, State::New);
-    let (mut updates, started, _) = start(chip, &slots, 0, None);
-    assert_eq!(started, Some(Start::Trial { ran: 0 }));
-    updates.declare_dual(Some(Source::Ini));
-    assert!(updates.on_trial());
-    assert!(updates.check_trial(TRIAL_MS).unwrap());
-    let mut chip = updates.into_flash();
-    let mut part = Part(&mut chip, slots.data);
-    let ota = OtaData::read(&mut part).unwrap();
-    assert_eq!(ota.state_of(0), Some((State::Valid, 0)));
 }
 
 #[test]

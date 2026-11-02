@@ -85,20 +85,25 @@ impl ota::Flash for Chip {
 }
 
 /// Updates on this device.
-pub struct Ota(Updates<Chip>, Option<u32>, bool);
+pub struct Ota(Updates<Chip>, Option<u32>, bool, bool);
 
 /// Whether the bootloader carries the marker of a dual-boot setup
-/// (`paperpaw_x4::dual_boot`), looked for on the flash `shared`; no marker
-/// where the flash cannot be read.
+/// (`paperpaw_x4::dual_boot`), looked for on the flash `shared`. Where the
+/// flash cannot be read it counts as there: nothing is written to the OTA
+/// data where it cannot be told.
 pub fn marker(shared: &Flash) -> bool {
-    paperpaw_x4::dual_boot::scan_marker(&mut Chip(shared.clone())).unwrap_or(false)
+    paperpaw_x4::dual_boot::scan_marker(&mut Chip(shared.clone())).unwrap_or_else(|_| {
+        warn!("dual boot: the bootloader could not be read, so it counts as marked");
+        true
+    })
 }
 
 impl Ota {
-    /// Looks at what started and why (see `paperpaw_x4::updates`): an
-    /// update that failed its trial restarts into the firmware before it
-    /// at once. `None` without two app partitions (flashed before they
-    /// came: the web flasher sets them up once).
+    /// Looks at what started and why (see `paperpaw_x4::updates`), and
+    /// writes nothing: [`Ota::settle`] does what the start needs once the
+    /// card has said whether this is a dual-boot setup. `None` without two
+    /// app partitions (flashed before they came: the web flasher sets them
+    /// up once).
     // A frame of its own, off the stack before the kernel is built.
     #[inline(never)]
     pub fn start(shared: Flash) -> Option<Self> {
@@ -113,29 +118,29 @@ impl Ota {
         let this = Firmware::new(env!("PAPERPAW_VERSION"), PROJECT, CHIP)
             .keys(paperpaw_x4::updates::KEYS.to_vec())
             .plugins(Plugins::read_static(&PLUGINS).unwrap_or_default());
-        // The OTA data is written at a start only where an update ran or
-        // did not start: only then the bootloader is looked at, for the
-        // marker of a dual-boot setup, which writes nothing.
-        let (updates, start) = Updates::start_guarded(
-            Chip(shared),
-            &slots,
-            running,
-            this,
-            BOARD_TAG,
-            &mut |chip| {
-                paperpaw_x4::dual_boot::scan_marker(chip)
-                    .unwrap_or(false)
-                    .then_some(paperpaw_x4::dual_boot::Source::Marker)
-            },
-        )
-        .ok()?;
-        if updates.dual().is_some() {
-            warn!(
-                "OTA: a dual-boot setup (the bootloader's marker): the OTA data is left as it is"
-            );
+        let (updates, plan) =
+            Updates::open(Chip(shared), &slots, running, this, BOARD_TAG).ok()?;
+        let failing = matches!(plan, Start::Failed { .. });
+        Some(Self(updates, None, false, failing))
+    }
+
+    /// Whether the start found an update that failed its trial: unless the
+    /// setup turns out a dual-boot one, it goes back to the firmware before
+    /// it ([`Ota::settle`], [`Ota::failed_trial`]).
+    pub fn plans_to_go_back(&self) -> bool {
+        self.3
+    }
+
+    /// Says whether this is a declared dual-boot setup (`dual_boot::decide`,
+    /// once the card gave `paperpaw.ini`) and does what the start needs:
+    /// the OTA data is written, an update put on trial, one undone or marked
+    /// bad, only where it is not (see `Updates::settle`).
+    pub fn settle(&mut self, source: Option<paperpaw_x4::dual_boot::Source>) {
+        let running = self.0.running();
+        let start = self.0.settle(source);
+        if source.is_some() {
+            warn!("OTA: a declared dual-boot setup: the OTA data is left as it is");
         }
-        let mut failed = None;
-        let mut marked = false;
         match start {
             Some(Start::Kept) => info!("OTA: started {running}"),
             Some(Start::Undone) => warn!("OTA: the update did not start, {running} is back"),
@@ -148,18 +153,17 @@ impl Ota {
                 info!(
                     "OTA: an update on trial in {running}, marked pending by the bootloader, {ran} ms run before"
                 );
-                marked = true;
+                self.2 = true;
             }
             Some(Start::Failed { ran }) => {
                 // Marked bad already: whatever happens now, the bootloader
                 // passes over this firmware at its next start. It goes back
                 // once the card has the note (`main`, `failed_trial`).
                 warn!("OTA: the update failed on trial ({ran} ms run before): going back");
-                failed = Some(ran);
+                self.1 = Some(ran);
             }
             None => warn!("OTA: could not mark the start of {running}"),
         }
-        Some(Self(updates, failed, marked))
     }
 
     /// An update on trial that cannot work on this device (an X3 whose
@@ -265,12 +269,6 @@ impl Ota {
     /// Whether, and by what, the setup is a declared dual-boot one.
     pub fn dual(&self) -> Option<paperpaw_x4::dual_boot::Source> {
         self.0.dual()
-    }
-
-    /// The setup is declared a dual-boot one, or not (`dual_boot::decide`,
-    /// once the card gave `paperpaw.ini`): nothing installs from then on.
-    pub fn declare_dual(&mut self, source: Option<paperpaw_x4::dual_boot::Source>) {
-        self.0.declare_dual(source);
     }
 
     /// The partition running, 0 or 1.

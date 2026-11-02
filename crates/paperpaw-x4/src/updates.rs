@@ -172,6 +172,9 @@ pub struct Updates<F> {
     /// This is a declared dual-boot setup (`dual_boot`): the other app
     /// partition is another firmware's, nothing is installed there.
     dual: Option<Source>,
+    /// The OTA data as the start found it, where the start would write it:
+    /// held until [`Updates::settle`] knows whether it may.
+    pending: Option<OtaData>,
 }
 
 impl<F> core::fmt::Debug for Updates<F> {
@@ -193,7 +196,9 @@ impl<F: Flash> Updates<F> {
     /// [`Start::Failed`] means an update failed its trial and is marked bad,
     /// and the device restarts now into the firmware before it; `None`
     /// where the start could not be marked. `Err` where the OTA data cannot
-    /// be read.
+    /// be read. Writes the OTA data at once where the start needs it; a
+    /// firmware that may share the flash with another (`dual_boot`) uses
+    /// [`Updates::open`] and [`Updates::settle`] instead.
     pub fn start(
         flash: F,
         slots: &Slots,
@@ -201,54 +206,29 @@ impl<F: Flash> Updates<F> {
         this: Firmware,
         board: &'static str,
     ) -> Result<(Self, Option<Start>), FlashError> {
-        Self::start_guarded(flash, slots, running, this, board, &mut |_| None)
+        let (mut updates, _) = Self::open(flash, slots, running, this, board)?;
+        let start = updates.settle(None);
+        Ok((updates, start))
     }
 
-    /// As [`Updates::start`], but where a start would write the OTA data
-    /// (an update's first start, one undone), `dual` is asked first, given
-    /// the flash: if it says the setup is a declared dual-boot one
-    /// (`dual_boot`), nothing is written and nothing put on trial, the start
-    /// is [`Start::Kept`], and installs are refused. Where nothing would be
-    /// written `dual` is not asked: a normal start costs nothing.
+    /// The first half of [`Updates::start`]: looks at the OTA data and what
+    /// it says this start is ([`OtaData::plan`], returned), and writes
+    /// nothing. Whether the setup is a dual-boot one is not known yet (the
+    /// reader's choice is on the card): [`Updates::settle`] says, and does
+    /// what the start needs only where it is not.
     #[inline(never)]
-    pub fn start_guarded(
+    pub fn open(
         mut flash: F,
         slots: &Slots,
         running: u32,
         this: Firmware,
         board: &'static str,
-        dual: &mut dyn FnMut(&mut F) -> Option<Source>,
-    ) -> Result<(Self, Option<Start>), FlashError> {
-        let mut ota_data = OtaData::read(&mut Partition {
+    ) -> Result<(Self, Start), FlashError> {
+        let ota_data = OtaData::read(&mut Partition {
             flash: &mut flash,
             offset: slots.data,
         })?;
-        let declared = if ota_data.plan(running) == Start::Kept {
-            None
-        } else {
-            dual(&mut flash)
-        };
-        let partition = &mut Partition {
-            flash: &mut flash,
-            offset: slots.data,
-        };
-        let start = if declared.is_some() {
-            Some(Start::Kept)
-        } else {
-            ota_data.start(partition, running)
-        };
-        let mut trial = None;
-        let mut undone = false;
-        match start {
-            Some(Start::Undone) => undone = true,
-            Some(Start::Trial { ran } | Start::Marked { ran }) => {
-                trial = Some(Trial {
-                    before: u64::from(ran),
-                    since: 0,
-                });
-            }
-            Some(Start::Kept | Start::Failed { .. }) | None => {}
-        }
+        let plan = ota_data.plan(running);
         let updates = Self {
             flash,
             data: slots.data,
@@ -256,12 +236,47 @@ impl<F: Flash> Updates<F> {
             running,
             this,
             board,
-            trial,
-            undone,
+            trial: None,
+            undone: false,
             install: None,
-            dual: declared,
+            dual: None,
+            pending: (plan != Start::Kept).then_some(ota_data),
         };
-        Ok((updates, start))
+        Ok((updates, plan))
+    }
+
+    /// The second half of [`Updates::start`]: whether the setup is a
+    /// declared dual-boot one (`dual_boot::decide`, from the reader's choice
+    /// and the bootloader). If it is, nothing is written to the OTA data,
+    /// no trial begins, and installs are refused from now on: the start is
+    /// [`Start::Kept`]. If not, what the start needs is done now, and its
+    /// result returned (`None` where it could not be marked). Once only;
+    /// again it says [`Start::Kept`] and changes what is declared.
+    #[inline(never)]
+    pub fn settle(&mut self, declared: Option<Source>) -> Option<Start> {
+        self.dual = declared;
+        let Some(mut ota_data) = self.pending.take() else {
+            return Some(Start::Kept);
+        };
+        if declared.is_some() {
+            return Some(Start::Kept);
+        }
+        let partition = &mut Partition {
+            flash: &mut self.flash,
+            offset: self.data,
+        };
+        let start = ota_data.start(partition, self.running);
+        match start {
+            Some(Start::Undone) => self.undone = true,
+            Some(Start::Trial { ran } | Start::Marked { ran }) => {
+                self.trial = Some(Trial {
+                    before: u64::from(ran),
+                    since: 0,
+                });
+            }
+            Some(Start::Kept | Start::Failed { .. }) | None => {}
+        }
+        start
     }
 
     /// The app partition running.
@@ -378,14 +393,6 @@ impl<F: Flash> Updates<F> {
         self.install.is_some()
     }
 
-    /// The setup is declared a dual-boot one (`dual_boot`), after the start
-    /// (by `paperpaw.ini`, which the card gives only later): from now on
-    /// nothing is installed. A trial under way ends as it began, so that
-    /// the OTA data is not left half done.
-    pub fn declare_dual(&mut self, source: Option<Source>) {
-        self.dual = source;
-    }
-
     /// Whether, and by what, the setup is declared a dual-boot one.
     pub fn dual(&self) -> Option<Source> {
         self.dual
@@ -408,7 +415,7 @@ impl<F: Flash> Updates<F> {
         older: bool,
     ) -> Result<Installing, InstallFailure> {
         if self.dual.is_some() {
-            return Err(InstallFailure::TooLarge);
+            return Err(InstallFailure::Other(crate::dual_boot::REFUSED));
         }
         let update = Update::read(storage, path)?;
         update.may_install(&self.firmware(), key, older)?;
@@ -426,7 +433,7 @@ impl<F: Flash> Updates<F> {
         path: &str,
     ) -> Result<(Installing, String), InstallFailure> {
         if self.dual.is_some() {
-            return Err(InstallFailure::TooLarge);
+            return Err(InstallFailure::Other(crate::dual_boot::REFUSED));
         }
         let image = ForeignImage::read(storage, path)?;
         image.fits(&self.firmware())?;

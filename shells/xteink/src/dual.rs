@@ -17,6 +17,13 @@ const CONFIG_MAX: u64 = 64 * 1024;
 /// Read a piece at a time.
 const PIECE: usize = 1024;
 
+/// Milliseconds since the start.
+fn millis() -> u64 {
+    esp_hal::time::Instant::now()
+        .duration_since_epoch()
+        .as_millis()
+}
+
 /// What `paperpaw.ini` says, `Auto` where it says nothing or cannot be read.
 #[cold]
 #[inline(never)]
@@ -38,27 +45,25 @@ fn choice(storage: &dyn Storage) -> Choice {
     scan.finish()
 }
 
-/// Settles whether this is a declared dual-boot setup, tells updates and
-/// writes or removes the note for plugins. Whether it is declared, for what
-/// else must not touch the other partition.
+/// Settles whether this is a declared dual-boot setup, and lets the start
+/// do what it needs only where it is not (`Ota::settle`: until now the OTA
+/// data was not written), tells updates and writes or removes the note for
+/// plugins. Whether it is declared, for what else must not touch the other
+/// partition.
 #[cold]
 #[inline(never)]
 pub fn settle(ota: &mut Option<Ota>, flash: &ota::Flash, storage: &dyn Storage) -> bool {
     let Some(ota) = ota else {
         return false;
     };
+    let began = millis();
     let choice = choice(storage);
-    // Looked for at the start where it mattered (and found); else only now,
-    // and only where the reader did not decide.
-    let marker = if ota.dual() == Some(Source::Marker) {
-        Some(true)
-    } else if dual_boot::needs_marker(choice) {
-        Some(ota::marker(flash))
-    } else {
-        None
-    };
+    // The bootloader is looked at (32 KB of flash) only where the reader
+    // did not decide.
+    let marker = dual_boot::needs_marker(choice).then(|| ota::marker(flash));
+    info!("dual boot: looked in {} ms", millis() - began);
     let source = dual_boot::decide(Evidence { choice, marker });
-    ota.declare_dual(source);
+    ota.settle(source);
     match source {
         Some(source) => info!(
             "dual boot: declared by the {}: nothing is installed in the other slot",
