@@ -287,6 +287,47 @@ type Made = Rc<RefCell<Vec<(String, String, Vec<Line>)>>>;
 /// Placements kept in [`Made`] at most.
 const MAX_MADE: usize = 16;
 
+/// Bytes [`Made`] holds at most: it stays on the heap under an open book.
+fn made_room(env: &Env<'_>) -> usize {
+    if env.device().memory == paperpaw_sdk::MemoryClass::Small {
+        8 * 1024
+    } else {
+        32 * 1024
+    }
+}
+
+/// Keeps `entry` in `all`, the oldest going until the entries fit `room`
+/// bytes and [`MAX_MADE`]; an entry too big alone is not kept (it is made
+/// anew each time).
+fn keep(
+    all: &mut Vec<(String, String, Vec<Line>)>,
+    entry: (String, String, Vec<Line>),
+    room: usize,
+) {
+    let size = made_size(&entry.1, &entry.2);
+    all.retain(|(placed, ..)| *placed != entry.0);
+    if size > room {
+        return;
+    }
+    let held = |all: &[(String, String, Vec<Line>)]| {
+        all.iter().map(|(_, s, l)| made_size(s, l)).sum::<usize>()
+    };
+    while all.len() >= MAX_MADE || (!all.is_empty() && held(all) + size > room) {
+        all.remove(0);
+    }
+    all.push(entry);
+}
+
+/// About what an entry of [`Made`] takes: its texts and, for each line,
+/// the command (a path or a few words).
+fn made_size(signature: &str, lines: &[Line]) -> usize {
+    signature.len()
+        + lines
+            .iter()
+            .map(|l| l.title.len() + l.note.len() + 96)
+            .sum::<usize>()
+}
+
 struct NoteWidget {
     made: Made,
     kind: Kind,
@@ -565,12 +606,11 @@ impl Widget for NoteWidget {
         let made = kept.is_none();
         let lines = kept.unwrap_or_else(|| self.lines(env));
         if let (true, Some(signature)) = (made, made_from) {
-            let mut all = self.made.borrow_mut();
-            all.retain(|(placed, ..)| *placed != id);
-            if all.len() >= MAX_MADE {
-                all.remove(0);
-            }
-            all.push((id, signature, lines.clone()));
+            keep(
+                &mut self.made.borrow_mut(),
+                (id, signature, lines.clone()),
+                made_room(env),
+            );
         }
         let changed = !self.read || lines != self.lines;
         self.read = true;
@@ -692,6 +732,35 @@ impl Widget for NoteWidget {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn what_the_widgets_made_is_kept_within_its_room() {
+        let line = |n: usize| Line {
+            title: "t".repeat(n),
+            note: String::new(),
+            command: Command::Notify(String::new()),
+        };
+        let entry = |id: &str, n: usize| (id.to_string(), "sig".to_string(), alloc::vec![line(n)]);
+        let mut all = Vec::new();
+        // Each about 1 KiB: eight fit 8 KiB, the oldest go.
+        for k in 0..20 {
+            keep(&mut all, entry(&alloc::format!("w{k}"), 900), 8 * 1024);
+            assert!(
+                all.iter().map(|(_, s, l)| made_size(s, l)).sum::<usize>() <= 8 * 1024,
+                "{k}"
+            );
+        }
+        assert!(all.len() < 9 && all.last().is_some_and(|e| e.0 == "w19"));
+        // The same placement again replaces its entry.
+        let before = all.len();
+        keep(&mut all, entry("w19", 10), 8 * 1024);
+        assert_eq!(all.len(), before);
+        // One too big alone is not kept, and does not push the others out.
+        let others = all.len();
+        keep(&mut all, entry("big", 9000), 8 * 1024);
+        assert!(all.iter().all(|e| e.0 != "big"));
+        assert!(all.len() <= others);
+    }
 
     /// Each widget's settings are named after it, as it reads them.
     #[test]
