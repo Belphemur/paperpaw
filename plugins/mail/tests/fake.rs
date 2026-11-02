@@ -2,7 +2,13 @@
 //! IMAP and SMTP as the sessions use, in whatever sized pieces the test
 //! wants, and plays the socket's part (reads, file reads, TLS switches).
 
-#![allow(dead_code, missing_debug_implementations, clippy::unwrap_used, clippy::expect_used, reason = "tests unwrap what they just made")]
+#![allow(
+    dead_code,
+    missing_debug_implementations,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests unwrap what they just made"
+)]
 
 use std::collections::VecDeque;
 
@@ -41,8 +47,15 @@ impl Default for Script {
             password: "secret".into(),
             user: "ada".into(),
             messages: Vec::new(),
-            folders: vec![("INBOX".into(), "\\HasNoChildren".into()), ("Sent".into(), "\\Sent".into())],
-            smtp_extensions: vec!["STARTTLS".into(), "AUTH PLAIN LOGIN".into(), "SIZE 1000000".into()],
+            folders: vec![
+                ("INBOX".into(), "\\HasNoChildren".into()),
+                ("Sent".into(), "\\Sent".into()),
+            ],
+            smtp_extensions: vec![
+                "STARTTLS".into(),
+                "AUTH PLAIN LOGIN".into(),
+                "SIZE 1000000".into(),
+            ],
             refuse_rcpt: None,
         }
     }
@@ -184,7 +197,10 @@ impl Fake {
         if !self.secure && self.proto == Proto::Imap {
             // Anything with the password before TLS is a leak.
             let text = String::from_utf8_lossy(data);
-            if text.contains(&self.script.password) || text.contains("AUTHENTICATE") || text.contains("LOGIN") {
+            if text.contains(&self.script.password)
+                || text.contains("AUTHENTICATE")
+                || text.contains("LOGIN")
+            {
                 self.sent_plain_password = true;
             }
         }
@@ -208,7 +224,11 @@ impl Fake {
         while let Some(end) = self.inbox.windows(2).position(|w| w == b"\r\n") {
             let line: Vec<u8> = self.inbox.drain(..end + 2).collect();
             let line = String::from_utf8_lossy(&line[..line.len() - 2]).into_owned();
-            self.sent.push(if line.len() > 200 { line[..200].into() } else { line.clone() });
+            self.sent.push(if line.len() > 200 {
+                line[..200].into()
+            } else {
+                line.clone()
+            });
             match self.proto {
                 Proto::Imap => self.imap_line(&line),
                 Proto::Smtp => self.smtp_line(&line),
@@ -220,16 +240,23 @@ impl Fake {
         }
     }
 
-    #[expect(clippy::too_many_lines, reason = "the fake server's whole IMAP dialogue in one match")]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "the fake server's whole IMAP dialogue in one match"
+    )]
     fn imap_line(&mut self, line: &str) {
         if self.auth == Auth::PlainWait {
             self.auth = Auth::None;
             let tag = self.pending_tag.clone();
-            let expect = paperpaw_plugin_mail::codec::base64_line(format!("\0{}\0{}", self.script.user, self.script.password).as_bytes());
+            let expect = paperpaw_plugin_mail::codec::base64_line(
+                format!("\0{}\0{}", self.script.user, self.script.password).as_bytes(),
+            );
             if line == expect {
                 self.say(&format!("{tag} OK authenticated\r\n"));
             } else {
-                self.say(&format!("{tag} NO [AUTHENTICATIONFAILED] bad credentials\r\n"));
+                self.say(&format!(
+                    "{tag} NO [AUTHENTICATIONFAILED] bad credentials\r\n"
+                ));
             }
             return;
         }
@@ -249,16 +276,24 @@ impl Fake {
                 self.pending_tag = tag;
                 self.say("+ \r\n");
             } else {
-                let expect = paperpaw_plugin_mail::codec::base64_line(format!("\0{}\0{}", self.script.user, self.script.password).as_bytes());
+                let expect = paperpaw_plugin_mail::codec::base64_line(
+                    format!("\0{}\0{}", self.script.user, self.script.password).as_bytes(),
+                );
                 if arg == expect {
                     self.say(&format!("{tag} OK authenticated\r\n"));
                 } else {
-                    self.say(&format!("{tag} NO [AUTHENTICATIONFAILED] bad credentials\r\n"));
+                    self.say(&format!(
+                        "{tag} NO [AUTHENTICATIONFAILED] bad credentials\r\n"
+                    ));
                 }
             }
         } else if upper.starts_with("LOGIN ") {
             let ok = rest.contains(&format!("\"{}\"", self.script.password));
-            self.say(&if ok { format!("{tag} OK logged in\r\n") } else { format!("{tag} NO login failed\r\n") });
+            self.say(&if ok {
+                format!("{tag} OK logged in\r\n")
+            } else {
+                format!("{tag} NO login failed\r\n")
+            });
         } else if upper.starts_with("LIST") {
             let mut text = String::new();
             for (name, flags) in &self.script.folders {
@@ -271,14 +306,23 @@ impl Fake {
             if self.script.folders.iter().any(|(n, _)| *n == name) {
                 self.selected = Some(name);
                 let n = self.script.messages.len();
-                self.say(&format!("* {n} EXISTS\r\n* OK [UIDVALIDITY 77] ok\r\n{tag} OK [READ-WRITE] done\r\n"));
+                self.say(&format!(
+                    "* {n} EXISTS\r\n* OK [UIDVALIDITY 77] ok\r\n{tag} OK [READ-WRITE] done\r\n"
+                ));
             } else {
                 self.say(&format!("{tag} NO no such folder\r\n"));
             }
         } else if upper.starts_with("STATUS") {
-            let unseen = self.script.messages.iter().filter(|(_, f, _)| !f.contains("\\Seen")).count();
+            let unseen = self
+                .script
+                .messages
+                .iter()
+                .filter(|(_, f, _)| !f.contains("\\Seen"))
+                .count();
             let n = self.script.messages.len();
-            self.say(&format!("* STATUS \"INBOX\" (MESSAGES {n} UNSEEN {unseen})\r\n{tag} OK done\r\n"));
+            self.say(&format!(
+                "* STATUS \"INBOX\" (MESSAGES {n} UNSEEN {unseen})\r\n{tag} OK done\r\n"
+            ));
         } else if upper.starts_with("FETCH ") {
             let range = rest[6..].split(' ').next().unwrap().to_string();
             let (a, b) = range.split_once(':').unwrap();
@@ -301,12 +345,24 @@ impl Fake {
             self.say(&text);
         } else if upper.starts_with("UID FETCH") {
             let uid: u32 = rest.split(' ').nth(2).unwrap().parse().unwrap();
-            let found = self.script.messages.iter().find(|(u, _, _)| *u == uid).cloned();
+            let found = self
+                .script
+                .messages
+                .iter()
+                .find(|(u, _, _)| *u == uid)
+                .cloned();
             match found {
                 Some((_, _, raw)) => {
-                    let limit: usize = rest.split("0.").nth(1).and_then(|s| s.trim_end_matches('>').parse().ok()).unwrap_or(usize::MAX);
+                    let limit: usize = rest
+                        .split("0.")
+                        .nth(1)
+                        .and_then(|s| s.trim_end_matches('>').parse().ok())
+                        .unwrap_or(usize::MAX);
                     let bytes = &raw.as_bytes()[..raw.len().min(limit)];
-                    self.say(&format!("* 1 FETCH (UID {uid} BODY[]<0> {{{}}}\r\n", bytes.len()));
+                    self.say(&format!(
+                        "* 1 FETCH (UID {uid} BODY[]<0> {{{}}}\r\n",
+                        bytes.len()
+                    ));
                     self.out.extend(bytes.iter().copied());
                     self.say(&format!(")\r\n{tag} OK done\r\n"));
                 }
@@ -336,7 +392,11 @@ impl Fake {
             Auth::LoginPass => {
                 self.auth = Auth::None;
                 let pw = paperpaw_plugin_mail::codec::base64_line(self.script.password.as_bytes());
-                self.say(if line == pw { "235 ok\r\n" } else { "535 bad\r\n" });
+                self.say(if line == pw {
+                    "235 ok\r\n"
+                } else {
+                    "535 bad\r\n"
+                });
                 return;
             }
             _ => {}
@@ -363,8 +423,14 @@ impl Fake {
             self.say("220 go ahead\r\n");
             self.starttls_pending = true;
         } else if upper.starts_with("AUTH PLAIN ") {
-            let expect = paperpaw_plugin_mail::codec::base64_line(format!("\0{}\0{}", self.script.user, self.script.password).as_bytes());
-            self.say(if line[11..] == expect { "235 ok\r\n" } else { "535 5.7.8 bad credentials\r\n" });
+            let expect = paperpaw_plugin_mail::codec::base64_line(
+                format!("\0{}\0{}", self.script.user, self.script.password).as_bytes(),
+            );
+            self.say(if line[11..] == expect {
+                "235 ok\r\n"
+            } else {
+                "535 5.7.8 bad credentials\r\n"
+            });
         } else if upper == "AUTH LOGIN" {
             self.auth = Auth::LoginUser;
             self.say("334 VXNlcm5hbWU6\r\n");
@@ -407,7 +473,10 @@ impl Io for Fake {
     }
 
     fn start_tls(&mut self, tls: Tls) {
-        assert!(self.starttls_pending, "start_tls without the server's go-ahead");
+        assert!(
+            self.starttls_pending,
+            "start_tls without the server's go-ahead"
+        );
         self.starttls_pending = false;
         self.tls_used.push(tls);
         self.tls_switches += 1;
@@ -425,12 +494,18 @@ impl Io for Fake {
     }
 
     fn read_bytes(&mut self, max: u32) {
-        assert!(self.want_bytes.is_none() && self.want_file.is_none(), "two reads at once");
+        assert!(
+            self.want_bytes.is_none() && self.want_file.is_none(),
+            "two reads at once"
+        );
         self.want_bytes = Some(max);
     }
 
     fn read_file(&mut self, path: &str, len: u64) {
-        assert!(self.want_bytes.is_none() && self.want_file.is_none(), "two reads at once");
+        assert!(
+            self.want_bytes.is_none() && self.want_file.is_none(),
+            "two reads at once"
+        );
         self.want_file = Some((path.to_string(), len));
     }
 

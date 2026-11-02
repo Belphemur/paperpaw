@@ -11,7 +11,8 @@ use paperpaw_sdk::builtin::{actions, params as core_params, slots};
 use paperpaw_sdk::replies::Confirmed;
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::{
-    Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode, Screen,
+    Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode,
+    Screen,
 };
 
 use crate::account::{self, Account};
@@ -49,7 +50,11 @@ struct Line {
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Mode {
     Boxes,
-    Folder { account: u8, raw: String, name: String },
+    Folder {
+        account: u8,
+        raw: String,
+        name: String,
+    },
 }
 
 /// The list screens.
@@ -77,7 +82,12 @@ impl Browser {
         let display = env.device().display;
         let top = header.area().height + style.gap();
         let note_h = style.row();
-        let note = Rect::new(0, display.height.saturating_sub(note_h), display.width, note_h);
+        let note = Rect::new(
+            0,
+            display.height.saturating_sub(note_h),
+            display.width,
+            note_h,
+        );
         let area = Rect::new(0, top, display.width, note.y.saturating_sub(top));
         let mode = match params.get(param::ACCOUNT).and_then(|n| n.parse().ok()) {
             Some(account) => {
@@ -134,41 +144,78 @@ impl Browser {
         match &self.mode {
             Mode::Boxes => {
                 for account in &accounts {
-                    let folders = store::read_folders(storage, &store::folders_file(account.number));
+                    let folders =
+                        store::read_folders(storage, &store::folders_file(account.number));
                     let folders: Vec<_> = if folders.is_empty() {
-                        alloc::vec![store::Folder { raw: "INBOX".into(), name: i18n.tr("mail.inbox").into(), flags: Vec::new() }]
+                        alloc::vec![store::Folder {
+                            raw: "INBOX".into(),
+                            name: i18n.tr("mail.inbox").into(),
+                            flags: Vec::new()
+                        }]
                     } else {
-                        folders.into_iter().filter(store::Folder::selectable).collect()
+                        folders
+                            .into_iter()
+                            .filter(store::Folder::selectable)
+                            .collect()
                     };
                     for mut folder in folders {
                         if let Some(key) = special_name(&folder) {
                             folder.name = i18n.tr(key).into();
                         }
-                        let counts = Counts::read(storage, &store::status_file(account.number, &folder.raw));
+                        let counts =
+                            Counts::read(storage, &store::status_file(account.number, &folder.raw));
                         let unseen = counts.map_or(0, |c| i64::from(c.unseen));
-                        let note = if accounts.len() > 1 { account.address.clone() } else { String::new() };
+                        let note = if accounts.len() > 1 {
+                            account.address.clone()
+                        } else {
+                            String::new()
+                        };
                         lines.push(Line {
                             title: folder.name.clone(),
                             note,
-                            value: if unseen > 0 { format!("{unseen}") } else { String::new() },
-                            target: Target::Folder { account: account.number, raw: folder.raw },
+                            value: if unseen > 0 {
+                                format!("{unseen}")
+                            } else {
+                                String::new()
+                            },
+                            target: Target::Folder {
+                                account: account.number,
+                                raw: folder.raw,
+                            },
                         });
                     }
                 }
-                for (key, target) in [("mail.write", Target::Write), ("mail.settings", Target::Settings)] {
-                    lines.push(Line { title: i18n.tr(key).into(), note: String::new(), value: "›".into(), target });
+                for (key, target) in [
+                    ("mail.write", Target::Write),
+                    ("mail.settings", Target::Settings),
+                ] {
+                    lines.push(Line {
+                        title: i18n.tr(key).into(),
+                        note: String::new(),
+                        value: "›".into(),
+                        target,
+                    });
                 }
             }
             Mode::Folder { account, raw, .. } => {
                 let mut rows = store::read_index(storage, &store::index_file(*account, raw));
                 rows.sort_by_key(|r| core::cmp::Reverse(r.uid));
                 lines.extend(rows.iter().map(|row| message_line(env, row)));
-                lines.push(Line { title: i18n.tr("mail.write").into(), note: String::new(), value: "›".into(), target: Target::Write });
+                lines.push(Line {
+                    title: i18n.tr("mail.write").into(),
+                    note: String::new(),
+                    value: "›".into(),
+                    target: Target::Write,
+                });
             }
         }
         // Rows as high as their notes need; plain ones where none has a note.
         let noted = lines.iter().any(|l| !l.note.is_empty());
-        self.list.set_row(if noted { self.style.noted_row() } else { u32::from(self.style.row()) });
+        self.list.set_row(if noted {
+            self.style.noted_row()
+        } else {
+            u32::from(self.style.row())
+        });
         self.lines = lines;
         let len = self.lines.len();
         if self.list.focus() >= len {
@@ -187,7 +234,10 @@ impl Browser {
             return self.next(cx);
         };
         let now = paperpaw_sdk::time::unix_seconds(&env).unwrap_or(0);
-        let count = env.settings().read(&FETCH).clamp(1, i64::from(store::MAX_MESSAGES)) as u32;
+        let count = env
+            .settings()
+            .read(&FETCH)
+            .clamp(1, i64::from(store::MAX_MESSAGES)) as u32;
         let sync = |raw: &str| Task::Sync {
             folder: raw.to_string(),
             count,
@@ -196,7 +246,12 @@ impl Browser {
             now,
         };
         let tasks = match &self.mode {
-            Mode::Boxes => alloc::vec![Task::Folders { out: store::folders_file(number) }, sync("INBOX")],
+            Mode::Boxes => alloc::vec![
+                Task::Folders {
+                    out: store::folders_file(number)
+                },
+                sync("INBOX")
+            ],
             Mode::Folder { raw, account, .. } if *account == number => alloc::vec![sync(raw)],
             Mode::Folder { .. } => Vec::new(),
         };
@@ -236,7 +291,12 @@ impl Browser {
                 self.queue.clear();
                 self.status = texts::failure(&env, &failure);
             }
-            Run::Untrusted { smtp, certificate, key, .. } => {
+            Run::Untrusted {
+                smtp,
+                certificate,
+                key,
+                ..
+            } => {
                 self.queue.clear();
                 self.asked = Some(self.job.account);
                 let i18n = env.i18n();
@@ -265,21 +325,28 @@ impl Browser {
             (Target::Check, _) => self.check(cx),
             (Target::Folder { account, raw }, _) => cx.command(Command::OpenScreen(
                 LIST,
-                Params::new().with(param::ACCOUNT, format!("{account}")).with(param::FOLDER, raw.clone()),
-            )),
-            (Target::Message { uid }, Mode::Folder { account, raw, .. }) => cx.command(Command::OpenScreen(
-                READ,
                 Params::new()
                     .with(param::ACCOUNT, format!("{account}"))
-                    .with(param::FOLDER, raw.clone())
-                    .with(param::UID, format!("{uid}")),
+                    .with(param::FOLDER, raw.clone()),
             )),
+            (Target::Message { uid }, Mode::Folder { account, raw, .. }) => {
+                cx.command(Command::OpenScreen(
+                    READ,
+                    Params::new()
+                        .with(param::ACCOUNT, format!("{account}"))
+                        .with(param::FOLDER, raw.clone())
+                        .with(param::UID, format!("{uid}")),
+                ))
+            }
             (Target::Write, mode) => {
                 let account = match mode {
                     Mode::Folder { account, .. } => *account,
                     Mode::Boxes => 0,
                 };
-                cx.command(Command::OpenScreen(COMPOSE, Params::new().with(param::ACCOUNT, format!("{account}"))));
+                cx.command(Command::OpenScreen(
+                    COMPOSE,
+                    Params::new().with(param::ACCOUNT, format!("{account}")),
+                ));
             }
             (Target::Settings, _) => cx.command(Command::OpenSlot(
                 slots::SETTINGS,
@@ -294,7 +361,11 @@ impl Browser {
 fn message_line(env: &Env<'_>, row: &Row) -> Line {
     let mark = if !row.seen() { "\u{2022} " } else { "" };
     let flag = if row.flagged() { "* " } else { "" };
-    let subject = if row.subject.is_empty() { env.i18n().tr("mail.no-subject") } else { &row.subject };
+    let subject = if row.subject.is_empty() {
+        env.i18n().tr("mail.no-subject")
+    } else {
+        &row.subject
+    };
     Line {
         title: format!("{mark}{flag}{}", row.from),
         note: subject.to_string(),
@@ -317,15 +388,25 @@ fn special_name(folder: &store::Folder) -> Option<&'static str> {
         ("\\junk", "junk", "mail.folder.junk"),
         ("\\archive", "archive", "mail.folder.archive"),
     ];
-    let marked = KINDS.iter().find(|(flag, _, _)| folder.flags.iter().any(|f| f == flag));
-    let named = || KINDS.iter().find(|(_, name, _)| folder.name.eq_ignore_ascii_case(name));
+    let marked = KINDS
+        .iter()
+        .find(|(flag, _, _)| folder.flags.iter().any(|f| f == flag));
+    let named = || {
+        KINDS
+            .iter()
+            .find(|(_, name, _)| folder.name.eq_ignore_ascii_case(name))
+    };
     marked.or_else(named).map(|(_, _, key)| *key)
 }
 
 fn folder_name(env: &Env<'_>, account: u8, raw: &str) -> String {
-    let found = store::read_folders(env.storage(), &store::folders_file(account)).into_iter().find(|f| f.raw == raw);
+    let found = store::read_folders(env.storage(), &store::folders_file(account))
+        .into_iter()
+        .find(|f| f.raw == raw);
     match found {
-        Some(folder) => special_name(&folder).map_or(folder.name.clone(), |key| env.i18n().tr(key).to_string()),
+        Some(folder) => {
+            special_name(&folder).map_or(folder.name.clone(), |key| env.i18n().tr(key).to_string())
+        }
         None if raw.eq_ignore_ascii_case("INBOX") => env.i18n().tr("mail.inbox").to_string(),
         None => raw.to_string(),
     }
@@ -351,14 +432,18 @@ impl Screen for Browser {
         let title = self.title(env);
         let len = self.lines.len();
         let mut ui = ui::Ui::new(canvas, env, &style);
-        self.header.draw(&mut ui, &title, None, self.list.paging(len));
+        self.header
+            .draw(&mut ui, &title, None, self.list.paging(len));
         let lines = &self.lines;
         let empty_folder = matches!(self.mode, Mode::Folder { .. }) && lines.len() <= 2;
         self.list.draw(&mut ui, len, |ui, row, rect, focused| {
             let Some(line) = lines.get(row) else {
                 return;
             };
-            ui::Row::value(&line.title, &line.value).note(&line.note).focused(focused).draw(ui, rect);
+            ui::Row::value(&line.title, &line.value)
+                .note(&line.note)
+                .focused(focused)
+                .draw(ui, rect);
         });
         let status = match &self.job.run {
             Run::Working(stage) => texts::stage(env, *stage).to_string(),
@@ -377,7 +462,9 @@ impl Screen for Browser {
         // Back from the question whether to trust the server: check again
         // if the reader said yes.
         if let Some(number) = self.asked.take() {
-            let pinned = Account::all(&env).iter().any(|a| a.number == number && (a.imap.pin.is_some() || a.smtp.pin.is_some()));
+            let pinned = Account::all(&env)
+                .iter()
+                .any(|a| a.number == number && (a.imap.pin.is_some() || a.smtp.pin.is_some()));
             if pinned {
                 self.job.run = Run::Idle;
                 self.check(cx);
@@ -446,7 +533,9 @@ pub fn pin_answered(answer: &Confirmed, out: &mut paperpaw_sdk::Commands) {
     }
     let ctx = &answer.context;
     let (Some(number), Some(key)) = (
-        ctx.get("account").and_then(|n| n.parse::<u8>().ok()).filter(|n| (1..=account::MAX).contains(n)),
+        ctx.get("account")
+            .and_then(|n| n.parse::<u8>().ok())
+            .filter(|n| (1..=account::MAX).contains(n)),
         ctx.get("key").and_then(paperpaw_sdk::KeyHash::parse),
     ) else {
         return;
@@ -459,17 +548,33 @@ mod tests {
     use super::*;
 
     fn folder(name: &str, flags: &[&str]) -> store::Folder {
-        store::Folder { raw: name.into(), name: name.into(), flags: flags.iter().map(|f| (*f).into()).collect() }
+        store::Folder {
+            raw: name.into(),
+            name: name.into(),
+            flags: flags.iter().map(|f| (*f).into()).collect(),
+        }
     }
 
     #[test]
     fn purposes_are_named_by_flag_or_by_the_usual_name() {
         assert_eq!(special_name(&folder("inbox", &[])), Some("mail.inbox"));
-        assert_eq!(special_name(&folder("Gesendet", &["\\sent"])), Some("mail.folder.sent"));
-        assert_eq!(special_name(&folder("Archive", &[])), Some("mail.folder.archive"));
-        assert_eq!(special_name(&folder("Drafts", &[])), Some("mail.folder.drafts"));
+        assert_eq!(
+            special_name(&folder("Gesendet", &["\\sent"])),
+            Some("mail.folder.sent")
+        );
+        assert_eq!(
+            special_name(&folder("Archive", &[])),
+            Some("mail.folder.archive")
+        );
+        assert_eq!(
+            special_name(&folder("Drafts", &[])),
+            Some("mail.folder.drafts")
+        );
         assert_eq!(special_name(&folder("Receipts", &[])), None);
         // The server's flag wins over the name.
-        assert_eq!(special_name(&folder("Archive", &["\\trash"])), Some("mail.folder.trash"));
+        assert_eq!(
+            special_name(&folder("Archive", &["\\trash"])),
+            Some("mail.folder.trash")
+        );
     }
 }

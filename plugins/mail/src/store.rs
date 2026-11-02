@@ -42,7 +42,12 @@ pub fn folder_key(raw_name: &str) -> String {
         hash = hash.wrapping_mul(0x0100_0193);
     }
     let mut key = String::from("f");
-    key.extend(raw_name.chars().filter(char::is_ascii_alphanumeric).take(12));
+    key.extend(
+        raw_name
+            .chars()
+            .filter(char::is_ascii_alphanumeric)
+            .take(12),
+    );
     key.push('-');
     key.push_str(&format!("{hash:08x}"));
     key
@@ -161,7 +166,10 @@ impl Row {
             flags: imap::flag_letters(flags),
             date,
             size,
-            from: from.as_ref().map(|a| String::from(a.shown())).unwrap_or_default(),
+            from: from
+                .as_ref()
+                .map(|a| String::from(a.shown()))
+                .unwrap_or_default(),
             from_address: from.map(|a| a.address).unwrap_or_default(),
             subject: String::from(headers.get("subject").unwrap_or("").trim()),
             message_id: String::from(headers.get("message-id").unwrap_or("").trim()),
@@ -199,7 +207,10 @@ pub struct Counts {
 
 impl Counts {
     pub fn line(&self) -> String {
-        format!("{}\t{}\t{}\t{}\n", self.messages, self.unseen, self.uid_validity, self.checked)
+        format!(
+            "{}\t{}\t{}\t{}\n",
+            self.messages, self.unseen, self.uid_validity, self.checked
+        )
     }
 
     pub fn read(storage: &dyn Storage, file: &str) -> Option<Self> {
@@ -227,7 +238,10 @@ pub struct Folder {
 
 impl Folder {
     pub fn selectable(&self) -> bool {
-        !self.flags.iter().any(|f| f == "\\noselect" || f == "\\nonexistent")
+        !self
+            .flags
+            .iter()
+            .any(|f| f == "\\noselect" || f == "\\nonexistent")
     }
 
     /// Whether this is the inbox (the name is `INBOX` in any case).
@@ -248,13 +262,21 @@ pub fn read_folders(storage: &dyn Storage, file: &str) -> Vec<Folder> {
             (!raw.is_empty()).then(|| Folder {
                 raw: String::from(raw),
                 name: imap::mailbox_display(raw),
-                flags: flags.split(' ').filter(|f| !f.is_empty()).map(String::from).collect(),
+                flags: flags
+                    .split(' ')
+                    .filter(|f| !f.is_empty())
+                    .map(String::from)
+                    .collect(),
             })
         })
         .collect()
 }
 
-pub fn write_folders(storage: &dyn Storage, file: &str, folders: &[Folder]) -> Result<(), StorageError> {
+pub fn write_folders(
+    storage: &dyn Storage,
+    file: &str,
+    folders: &[Folder],
+) -> Result<(), StorageError> {
     let mut text = String::new();
     for folder in folders.iter().take(MAX_FOLDERS) {
         text.push_str(&field(&folder.raw));
@@ -272,14 +294,21 @@ pub fn sort_folders(folders: &mut [Folder]) {
     let rank = |f: &Folder| -> u8 {
         if f.is_inbox() {
             0
-        } else if f.flags.iter().any(|x| matches!(x.as_str(), "\\sent" | "\\drafts" | "\\trash" | "\\junk" | "\\archive" | "\\flagged")) {
+        } else if f.flags.iter().any(|x| {
+            matches!(
+                x.as_str(),
+                "\\sent" | "\\drafts" | "\\trash" | "\\junk" | "\\archive" | "\\flagged"
+            )
+        }) {
             1
         } else {
             2
         }
     };
     folders.sort_by(|a, b| {
-        rank(a).cmp(&rank(b)).then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+        rank(a)
+            .cmp(&rank(b))
+            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
     });
 }
 
@@ -335,7 +364,15 @@ impl Letter {
         put("Message-ID", &self.message_id);
         put("References", &self.references);
         put("Reply-To", &self.reply_to);
-        put("Attachments", &self.attachments.iter().map(|a| field(a)).collect::<Vec<_>>().join("\t"));
+        put(
+            "Attachments",
+            &self
+                .attachments
+                .iter()
+                .map(|a| field(a))
+                .collect::<Vec<_>>()
+                .join("\t"),
+        );
         put("Truncated", if self.truncated { "1" } else { "0" });
         out.push('\n');
         out
@@ -343,7 +380,10 @@ impl Letter {
 
     pub fn parse(text: &str) -> Self {
         let (head, body) = text.split_once("\n\n").unwrap_or((text, ""));
-        let mut letter = Letter { text: String::from(body), ..Self::default() };
+        let mut letter = Letter {
+            text: String::from(body),
+            ..Self::default()
+        };
         for line in head.lines() {
             let Some((name, value)) = line.split_once(": ") else {
                 continue;
@@ -359,7 +399,11 @@ impl Letter {
                 "References" => letter.references = value,
                 "Reply-To" => letter.reply_to = value,
                 "Attachments" => {
-                    letter.attachments = value.split('\t').filter(|a| !a.is_empty()).map(String::from).collect()
+                    letter.attachments = value
+                        .split('\t')
+                        .filter(|a| !a.is_empty())
+                        .map(String::from)
+                        .collect()
                 }
                 "Truncated" => letter.truncated = value == "1",
                 _ => {}
@@ -374,7 +418,18 @@ impl Letter {
 pub fn make_letter(storage: &dyn Storage, raw: &str, out: &str) -> Result<Letter, StorageError> {
     let scratch = format!("{out}.part");
     let info = crate::render::render(storage, raw, &scratch, MAX_TEXT)?;
-    let list = |list: &[header::Address]| list.iter().map(|a| if a.name.is_empty() { a.address.clone() } else { format!("{} <{}>", a.name, a.address) }).collect::<Vec<_>>().join(", ");
+    let list = |list: &[header::Address]| {
+        list.iter()
+            .map(|a| {
+                if a.name.is_empty() {
+                    a.address.clone()
+                } else {
+                    format!("{} <{}>", a.name, a.address)
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
     let mut letter = Letter {
         from: list(&info.from),
         to: list(&info.to),

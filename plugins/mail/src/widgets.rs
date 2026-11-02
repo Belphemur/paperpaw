@@ -20,8 +20,12 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_sdk::ui::{self, UiStyle};
-use paperpaw_sdk::widgets::{self, Align, FixedWidget, Frame, Padding, TextSize, Widget, WidgetTarget};
-use paperpaw_sdk::{Arg, Canvas, Command, Env, Id, Params, Rect, RegisterError, Registrar, SettingSpec};
+use paperpaw_sdk::widgets::{
+    self, Align, FixedWidget, Frame, Padding, TextSize, Widget, WidgetTarget,
+};
+use paperpaw_sdk::{
+    Arg, Canvas, Command, Env, Id, Params, Rect, RegisterError, Registrar, SettingSpec,
+};
 
 use crate::account::Account;
 use crate::browser::param;
@@ -76,28 +80,107 @@ static WRITE_LOOK: [SettingSpec; 5] = looks!("mail.widget.write", NEW, Align::Ce
 
 /// What each shows, besides the look.
 static UNREAD_OWN: [SettingSpec; 2] = [
-    SettingSpec::number("mail.widget.unread.account", "mail.widget.account", 0, 3, 0, UNREAD).description("mail.widget.account.help"),
-    widgets::part_spec("mail.widget.unread.newest", UNREAD, "mail.part.newest", true),
+    SettingSpec::number(
+        "mail.widget.unread.account",
+        "mail.widget.account",
+        0,
+        3,
+        0,
+        UNREAD,
+    )
+    .description("mail.widget.account.help"),
+    widgets::part_spec(
+        "mail.widget.unread.newest",
+        UNREAD,
+        "mail.part.newest",
+        true,
+    ),
 ];
 static LATEST_OWN: [SettingSpec; 5] = [
-    SettingSpec::number("mail.widget.latest.account", "mail.widget.account", 0, 3, 0, LATEST).description("mail.widget.account.help"),
-    SettingSpec::text("mail.widget.latest.folder", "mail.widget.folder", "INBOX", LATEST).description("mail.widget.folder.help"),
-    SettingSpec::number("mail.widget.latest.count", "mail.widget.count", 1, 8, 3, LATEST),
-    widgets::part_spec("mail.widget.latest.subject", LATEST, "mail.part.subject", true),
+    SettingSpec::number(
+        "mail.widget.latest.account",
+        "mail.widget.account",
+        0,
+        3,
+        0,
+        LATEST,
+    )
+    .description("mail.widget.account.help"),
+    SettingSpec::text(
+        "mail.widget.latest.folder",
+        "mail.widget.folder",
+        "INBOX",
+        LATEST,
+    )
+    .description("mail.widget.folder.help"),
+    SettingSpec::number(
+        "mail.widget.latest.count",
+        "mail.widget.count",
+        1,
+        8,
+        3,
+        LATEST,
+    ),
+    widgets::part_spec(
+        "mail.widget.latest.subject",
+        LATEST,
+        "mail.part.subject",
+        true,
+    ),
     widgets::part_spec("mail.widget.latest.time", LATEST, "mail.part.time", true),
 ];
 static FLAGGED_OWN: [SettingSpec; 3] = [
-    SettingSpec::number("mail.widget.flagged.account", "mail.widget.account", 0, 3, 0, FLAGGED).description("mail.widget.account.help"),
-    SettingSpec::number("mail.widget.flagged.count", "mail.widget.count", 1, 8, 3, FLAGGED),
-    widgets::part_spec("mail.widget.flagged.subject", FLAGGED, "mail.part.subject", true),
+    SettingSpec::number(
+        "mail.widget.flagged.account",
+        "mail.widget.account",
+        0,
+        3,
+        0,
+        FLAGGED,
+    )
+    .description("mail.widget.account.help"),
+    SettingSpec::number(
+        "mail.widget.flagged.count",
+        "mail.widget.count",
+        1,
+        8,
+        3,
+        FLAGGED,
+    ),
+    widgets::part_spec(
+        "mail.widget.flagged.subject",
+        FLAGGED,
+        "mail.part.subject",
+        true,
+    ),
 ];
 static FOLDER_OWN: [SettingSpec; 3] = [
-    SettingSpec::number("mail.widget.folder.account", "mail.widget.account", 1, 3, 1, FOLDER),
-    SettingSpec::text("mail.widget.folder.folder", "mail.widget.folder", "INBOX", FOLDER).description("mail.widget.folder.help"),
+    SettingSpec::number(
+        "mail.widget.folder.account",
+        "mail.widget.account",
+        1,
+        3,
+        1,
+        FOLDER,
+    ),
+    SettingSpec::text(
+        "mail.widget.folder.folder",
+        "mail.widget.folder",
+        "INBOX",
+        FOLDER,
+    )
+    .description("mail.widget.folder.help"),
     widgets::part_spec("mail.widget.folder.total", FOLDER, "mail.part.total", true),
 ];
-static WRITE_OWN: [SettingSpec; 1] =
-    [SettingSpec::number("mail.widget.write.account", "mail.widget.account", 0, 3, 0, NEW).description("mail.widget.write.account.help")];
+static WRITE_OWN: [SettingSpec; 1] = [SettingSpec::number(
+    "mail.widget.write.account",
+    "mail.widget.account",
+    0,
+    3,
+    0,
+    NEW,
+)
+.description("mail.widget.write.account.help")];
 
 pub fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     static GROUPS: [paperpaw_sdk::SettingGroupSpec; 5] = [
@@ -111,22 +194,40 @@ pub fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_setting_group(group)?;
     }
     for settings in [
-        &UNREAD_LOOK[..], &UNREAD_OWN, &LATEST_LOOK, &LATEST_OWN, &FLAGGED_LOOK, &FLAGGED_OWN, &FOLDER_LOOK,
-        &FOLDER_OWN, &WRITE_LOOK, &WRITE_OWN,
+        &UNREAD_LOOK[..],
+        &UNREAD_OWN,
+        &LATEST_LOOK,
+        &LATEST_OWN,
+        &FLAGGED_LOOK,
+        &FLAGGED_OWN,
+        &FOLDER_LOOK,
+        &FOLDER_OWN,
+        &WRITE_LOOK,
+        &WRITE_OWN,
     ] {
         r.add_settings(settings)?;
     }
     static WIDGETS: [FixedWidget; 5] = [
-        FixedWidget::new(UNREAD, "mail.widget.unread", |_| Box::new(MailWidget::new(Kind::Unread)))
-            .category(widgets::categories::PERSONAL),
-        FixedWidget::new(LATEST, "mail.widget.latest", |_| Box::new(MailWidget::new(Kind::Latest)))
-            .category(widgets::categories::PERSONAL),
-        FixedWidget::new(FLAGGED, "mail.widget.flagged", |_| Box::new(MailWidget::new(Kind::Flagged)))
-            .category(widgets::categories::PERSONAL),
-        FixedWidget::new(FOLDER, "mail.widget.folder", |_| Box::new(MailWidget::new(Kind::Folder)))
-            .category(widgets::categories::PERSONAL),
-        FixedWidget::new(NEW, "mail.widget.write", |_| Box::new(MailWidget::new(Kind::Write)))
-            .category(widgets::categories::PERSONAL),
+        FixedWidget::new(UNREAD, "mail.widget.unread", |_| {
+            Box::new(MailWidget::new(Kind::Unread))
+        })
+        .category(widgets::categories::PERSONAL),
+        FixedWidget::new(LATEST, "mail.widget.latest", |_| {
+            Box::new(MailWidget::new(Kind::Latest))
+        })
+        .category(widgets::categories::PERSONAL),
+        FixedWidget::new(FLAGGED, "mail.widget.flagged", |_| {
+            Box::new(MailWidget::new(Kind::Flagged))
+        })
+        .category(widgets::categories::PERSONAL),
+        FixedWidget::new(FOLDER, "mail.widget.folder", |_| {
+            Box::new(MailWidget::new(Kind::Folder))
+        })
+        .category(widgets::categories::PERSONAL),
+        FixedWidget::new(NEW, "mail.widget.write", |_| {
+            Box::new(MailWidget::new(Kind::Write))
+        })
+        .category(widgets::categories::PERSONAL),
     ];
     r.add_widgets(&WIDGETS)
 }
@@ -158,18 +259,28 @@ struct MailWidget {
 
 impl MailWidget {
     fn new(kind: Kind) -> Self {
-        Self { kind, shown: Shown::default() }
+        Self {
+            kind,
+            shown: Shown::default(),
+        }
     }
 }
 
 /// The accounts a widget's `account` setting means: all, or the one.
 fn selected(env: &Env<'_>, widget: &str) -> Vec<u8> {
     let wanted = env.settings().int(&format!("{widget}.account"));
-    Account::numbers(env).into_iter().filter(|n| wanted == 0 || i64::from(*n) == wanted).collect()
+    Account::numbers(env)
+        .into_iter()
+        .filter(|n| wanted == 0 || i64::from(*n) == wanted)
+        .collect()
 }
 
 fn folder_of(env: &Env<'_>, widget: &str) -> String {
-    let raw = env.settings().text(&format!("{widget}.folder")).trim().to_string();
+    let raw = env
+        .settings()
+        .text(&format!("{widget}.folder"))
+        .trim()
+        .to_string();
     if raw.is_empty() { "INBOX".into() } else { raw }
 }
 
@@ -177,7 +288,11 @@ fn folder_of(env: &Env<'_>, widget: &str) -> String {
 fn rows(env: &Env<'_>, accounts: &[u8], folder: &str) -> Vec<(u8, store::Row)> {
     let mut all: Vec<(u8, store::Row)> = accounts
         .iter()
-        .flat_map(|&a| store::read_index(env.storage(), &store::index_file(a, folder)).into_iter().map(move |r| (a, r)))
+        .flat_map(|&a| {
+            store::read_index(env.storage(), &store::index_file(a, folder))
+                .into_iter()
+                .map(move |r| (a, r))
+        })
         .collect();
     all.sort_by(|a, b| b.1.date.cmp(&a.1.date).then(b.1.uid.cmp(&a.1.uid)));
     all
@@ -186,9 +301,52 @@ fn rows(env: &Env<'_>, accounts: &[u8], folder: &str) -> Vec<(u8, store::Row)> {
 fn item(env: &Env<'_>, account: u8, folder: &str, row: &store::Row) -> Item {
     Item {
         first: row.from.clone(),
-        second: if row.subject.is_empty() { env.i18n().tr("mail.no-subject").into() } else { row.subject.clone() },
+        second: if row.subject.is_empty() {
+            env.i18n().tr("mail.no-subject").into()
+        } else {
+            row.subject.clone()
+        },
         time: texts::when(env, row.date),
         open: Some((account, folder.to_string(), row.uid)),
+    }
+}
+
+/// *Mailbox*: one account's folder, how many are unread of how many.
+fn mailbox(env: &Env<'_>, id: &str, accounts: &[u8]) -> Shown {
+    let i18n = env.i18n();
+    let folder = folder_of(env, id);
+    let Some(account) = accounts.first() else {
+        return Shown {
+            headline: i18n.tr("mail.widget.set-up").into(),
+            ..Shown::default()
+        };
+    };
+    let counts = Counts::read(env.storage(), &store::status_file(*account, &folder));
+    let headline = counts.map_or(String::new(), |c| {
+        let n = i64::from(c.unseen);
+        i18n.plural("mail.widget.unread.count", n, &[("count", Arg::Int(n))])
+    });
+    let second = counts
+        .filter(|_| widgets::shows(env, id, "total"))
+        .map_or(String::new(), |c| {
+            i18n.plural(
+                "mail.widget.total",
+                i64::from(c.messages),
+                &[("count", Arg::Int(i64::from(c.messages)))],
+            )
+        });
+    let items = if second.is_empty() {
+        Vec::new()
+    } else {
+        alloc::vec![Item {
+            first: second,
+            ..Item::default()
+        }]
+    };
+    Shown {
+        headline,
+        items,
+        folder: Some((*account, folder)),
     }
 }
 
@@ -197,10 +355,16 @@ fn read(kind: Kind, env: &Env<'_>) -> Shown {
     let i18n = env.i18n();
     let accounts = selected(env, id);
     if matches!(kind, Kind::Write) {
-        return Shown { headline: i18n.tr("mail.widget.write.text").into(), ..Shown::default() };
+        return Shown {
+            headline: i18n.tr("mail.widget.write.text").into(),
+            ..Shown::default()
+        };
     }
     if Account::numbers(env).is_empty() {
-        return Shown { headline: i18n.tr("mail.widget.set-up").into(), ..Shown::default() };
+        return Shown {
+            headline: i18n.tr("mail.widget.set-up").into(),
+            ..Shown::default()
+        };
     }
     let count = env.settings().int(&format!("{id}.count")).clamp(1, 8) as usize;
     match kind {
@@ -212,20 +376,40 @@ fn read(kind: Kind, env: &Env<'_>) -> Shown {
                 .sum();
             let mut items = Vec::new();
             if widgets::shows(env, id, "newest")
-                && let Some((n, row)) = rows(env, &accounts, "INBOX").into_iter().find(|(_, r)| !r.seen())
+                && let Some((n, row)) = rows(env, &accounts, "INBOX")
+                    .into_iter()
+                    .find(|(_, r)| !r.seen())
             {
                 items.push(item(env, n, "INBOX", &row));
             }
             Shown {
-                headline: i18n.plural("mail.widget.unread.count", unseen, &[("count", Arg::Int(unseen))]),
+                headline: i18n.plural(
+                    "mail.widget.unread.count",
+                    unseen,
+                    &[("count", Arg::Int(unseen))],
+                ),
                 items,
-                folder: accounts.first().map(|a| (*a, "INBOX".into())).filter(|_| accounts.len() == 1),
+                folder: accounts
+                    .first()
+                    .map(|a| (*a, "INBOX".into()))
+                    .filter(|_| accounts.len() == 1),
             }
         }
         Kind::Latest => {
             let folder = folder_of(env, id);
-            let items = rows(env, &accounts, &folder).iter().take(count).map(|(n, r)| item(env, *n, &folder, r)).collect();
-            Shown { items, folder: accounts.first().map(|a| (*a, folder)).filter(|_| accounts.len() == 1), ..Shown::default() }
+            let items = rows(env, &accounts, &folder)
+                .iter()
+                .take(count)
+                .map(|(n, r)| item(env, *n, &folder, r))
+                .collect();
+            Shown {
+                items,
+                folder: accounts
+                    .first()
+                    .map(|a| (*a, folder))
+                    .filter(|_| accounts.len() == 1),
+                ..Shown::default()
+            }
         }
         Kind::Flagged => {
             let items = rows(env, &accounts, "INBOX")
@@ -234,24 +418,12 @@ fn read(kind: Kind, env: &Env<'_>) -> Shown {
                 .take(count)
                 .map(|(n, r)| item(env, *n, "INBOX", r))
                 .collect();
-            Shown { items, ..Shown::default() }
+            Shown {
+                items,
+                ..Shown::default()
+            }
         }
-        Kind::Folder => {
-            let folder = folder_of(env, id);
-            let Some(account) = accounts.first() else {
-                return Shown { headline: i18n.tr("mail.widget.set-up").into(), ..Shown::default() };
-            };
-            let counts = Counts::read(env.storage(), &store::status_file(*account, &folder));
-            let headline = counts.map_or(String::new(), |c| {
-                let n = i64::from(c.unseen);
-                i18n.plural("mail.widget.unread.count", n, &[("count", Arg::Int(n))])
-            });
-            let second = counts.filter(|_| widgets::shows(env, id, "total")).map_or(String::new(), |c| {
-                i18n.plural("mail.widget.total", i64::from(c.messages), &[("count", Arg::Int(i64::from(c.messages)))])
-            });
-            let items = if second.is_empty() { Vec::new() } else { alloc::vec![Item { first: second, ..Item::default() }] };
-            Shown { headline, items, folder: Some((*account, folder)) }
-        }
+        Kind::Folder => mailbox(env, id, &accounts),
         Kind::Write => Shown::default(),
     }
 }
@@ -259,7 +431,8 @@ fn read(kind: Kind, env: &Env<'_>) -> Shown {
 impl MailWidget {
     fn lines_per_item(&self, env: &Env<'_>) -> u16 {
         let id = self.kind.id();
-        let subject = matches!(self.kind, Kind::Latest | Kind::Flagged) && widgets::shows(env, id, "subject");
+        let subject =
+            matches!(self.kind, Kind::Latest | Kind::Flagged) && widgets::shows(env, id, "subject");
         1 + u16::from(subject)
     }
 
@@ -268,9 +441,18 @@ impl MailWidget {
         let id = self.kind.id();
         let text = widgets::line_height(env, widgets::size(env, id).text(&style));
         let small = widgets::line_height(env, style.small());
-        let headline = if self.shown.headline.is_empty() { 0 } else { text };
+        let headline = if self.shown.headline.is_empty() {
+            0
+        } else {
+            text
+        };
         let items = self.shown.items.len() as u16;
-        let per = text + if self.lines_per_item(env) > 1 || matches!(self.kind, Kind::Unread) { small } else { 0 };
+        let per = text
+            + if self.lines_per_item(env) > 1 || matches!(self.kind, Kind::Unread) {
+                small
+            } else {
+                0
+            };
         headline + items * per
     }
 }
@@ -290,7 +472,11 @@ impl Widget for MailWidget {
 
     fn height(&self, env: &Env<'_>, _: u16) -> u16 {
         let id = self.kind.id();
-        let caption = if widgets::shows(env, id, "caption") && self.kind != Kind::Write { widgets::caption_height(env) } else { 0 };
+        let caption = if widgets::shows(env, id, "caption") && self.kind != Kind::Write {
+            widgets::caption_height(env)
+        } else {
+            0
+        };
         let empty = if self.shown.headline.is_empty() && self.shown.items.is_empty() {
             widgets::line_height(env, UiStyle::new(env).text())
         } else {
@@ -301,8 +487,14 @@ impl Widget for MailWidget {
 
     fn min_height(&self, env: &Env<'_>, _: u16) -> u16 {
         let id = self.kind.id();
-        let caption = if widgets::shows(env, id, "caption") && self.kind != Kind::Write { widgets::caption_height(env) } else { 0 };
-        widgets::frame_height(env, id) + caption + widgets::line_height(env, UiStyle::new(env).text())
+        let caption = if widgets::shows(env, id, "caption") && self.kind != Kind::Write {
+            widgets::caption_height(env)
+        } else {
+            0
+        };
+        widgets::frame_height(env, id)
+            + caption
+            + widgets::line_height(env, UiStyle::new(env).text())
     }
 
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
@@ -318,7 +510,10 @@ impl Widget for MailWidget {
             return;
         };
         let size = widgets::size(env, id).text(&style);
-        let (text_h, small_h) = (widgets::line_height(env, size), widgets::line_height(env, style.small()));
+        let (text_h, small_h) = (
+            widgets::line_height(env, size),
+            widgets::line_height(env, style.small()),
+        );
         let width = f32::from(inner.width);
         let mut ui = ui::Ui::new(canvas, env, &style);
         let mut y = inner.y;
@@ -329,12 +524,22 @@ impl Widget for MailWidget {
             }
             let text = ui::fit(&font, px, text, width);
             let x = widgets::align(env, id).x(inner, font.measure(px, &text));
-            ui::Label::new(&text).px(px).color(look.ink).draw_from(ui, x, Rect::new(inner.x, *y, inner.width, h));
+            ui::Label::new(&text).px(px).color(look.ink).draw_from(
+                ui,
+                x,
+                Rect::new(inner.x, *y, inner.width, h),
+            );
             *y += h;
             true
         };
         if self.shown.headline.is_empty() && self.shown.items.is_empty() {
-            put(&mut ui, env.i18n().tr("mail.widget.nothing"), style.text(), widgets::line_height(env, style.text()), &mut y);
+            put(
+                &mut ui,
+                env.i18n().tr("mail.widget.nothing"),
+                style.text(),
+                widgets::line_height(env, style.text()),
+                &mut y,
+            );
             return;
         }
         if !self.shown.headline.is_empty() {
@@ -343,12 +548,23 @@ impl Widget for MailWidget {
         let with_second = self.lines_per_item(env) > 1 || matches!(self.kind, Kind::Unread);
         let with_time = widgets::shows(env, id, "time");
         for item in &self.shown.items {
-            let first = if with_time && !item.time.is_empty() { format!("{}  {}", item.first, item.time) } else { item.first.clone() };
-            let (first_px, first_h) = if self.shown.headline.is_empty() { (size, text_h) } else { (style.small(), small_h) };
+            let first = if with_time && !item.time.is_empty() {
+                format!("{}  {}", item.first, item.time)
+            } else {
+                item.first.clone()
+            };
+            let (first_px, first_h) = if self.shown.headline.is_empty() {
+                (size, text_h)
+            } else {
+                (style.small(), small_h)
+            };
             if !put(&mut ui, &first, first_px, first_h, &mut y) {
                 break;
             }
-            if with_second && !item.second.is_empty() && !put(&mut ui, &item.second, style.small(), small_h, &mut y) {
+            if with_second
+                && !item.second.is_empty()
+                && !put(&mut ui, &item.second, style.small(), small_h, &mut y)
+            {
                 break;
             }
         }
@@ -359,7 +575,9 @@ impl Widget for MailWidget {
             (Kind::Write, _) => Command::run(WRITE),
             (_, Some((account, folder))) => Command::OpenScreen(
                 LIST,
-                Params::new().with(param::ACCOUNT, format!("{account}")).with(param::FOLDER, folder.clone()),
+                Params::new()
+                    .with(param::ACCOUNT, format!("{account}"))
+                    .with(param::FOLDER, folder.clone()),
             ),
             _ => Command::run(OPEN),
         };
@@ -387,7 +605,11 @@ mod tests {
         ];
         for (settings, widget) in all {
             for spec in settings {
-                assert!(spec.id.as_str().starts_with(&format!("{widget}.")), "{}", spec.id);
+                assert!(
+                    spec.id.as_str().starts_with(&format!("{widget}.")),
+                    "{}",
+                    spec.id
+                );
                 assert_eq!(spec.group.as_str(), widget);
             }
         }

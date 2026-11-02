@@ -20,7 +20,11 @@ pub struct Socket {
 impl Socket {
     /// A socket named `socket`, heard as `events`.
     pub fn new(socket: Id, events: Id) -> Self {
-        Self { socket, events, commands: Vec::new() }
+        Self {
+            socket,
+            events,
+            commands: Vec::new(),
+        }
     }
 
     /// What was asked since the last call.
@@ -51,25 +55,38 @@ impl Io for Socket {
     }
 
     fn connect_plain(&mut self, host: &str, port: u16) {
-        self.commands.push(Command::connect(self.socket.clone(), host, port, self.events.clone()));
+        self.commands.push(Command::connect(
+            self.socket.clone(),
+            host,
+            port,
+            self.events.clone(),
+        ));
     }
 
     fn start_tls(&mut self, tls: Tls) {
-        self.commands.push(Command::start_tls(self.socket.clone(), tls));
+        self.commands
+            .push(Command::start_tls(self.socket.clone(), tls));
     }
 
     fn send(&mut self, data: Vec<u8>) {
-        self.commands.push(Command::socket_send(self.socket.clone(), data));
+        self.commands
+            .push(Command::socket_send(self.socket.clone(), data));
     }
 
     fn read_bytes(&mut self, max: u32) {
-        self.commands.push(Command::socket_read(self.socket.clone(), SocketRead::Bytes { max }));
+        self.commands.push(Command::socket_read(
+            self.socket.clone(),
+            SocketRead::Bytes { max },
+        ));
     }
 
     fn read_file(&mut self, path: &str, len: u64) {
         self.commands.push(Command::socket_read(
             self.socket.clone(),
-            SocketRead::File { path: String::from(path), len },
+            SocketRead::File {
+                path: String::from(path),
+                len,
+            },
         ));
     }
 
@@ -82,12 +99,26 @@ impl Io for Socket {
 pub fn input_of(notice: SocketNotice) -> Option<Input> {
     Some(match notice {
         SocketNotice::Connected { .. } => Input::Connected,
-        SocketNotice::Secured { certificate, key, time_checked, .. } => {
-            Input::Secured { certificate, key, time_checked }
-        }
-        SocketNotice::Untrusted { certificate, key, why, .. } => {
-            Input::Untrusted { certificate, key, why }
-        }
+        SocketNotice::Secured {
+            certificate,
+            key,
+            time_checked,
+            ..
+        } => Input::Secured {
+            certificate,
+            key,
+            time_checked,
+        },
+        SocketNotice::Untrusted {
+            certificate,
+            key,
+            why,
+            ..
+        } => Input::Untrusted {
+            certificate,
+            key,
+            why,
+        },
         SocketNotice::Bytes { data, .. } => Input::Bytes(data),
         SocketNotice::Saved { path, .. } => Input::Saved(path),
         SocketNotice::Closed { .. } => Input::Closed,
@@ -116,7 +147,14 @@ mod tests {
         s.close();
         let commands = s.take();
         assert_eq!(commands.len(), 6);
-        assert!(matches!(commands[0], Command::Connect { port: 143, tls: None, .. }));
+        assert!(matches!(
+            commands[0],
+            Command::Connect {
+                port: 143,
+                tls: None,
+                ..
+            }
+        ));
         assert!(matches!(commands[4], Command::StartTls { .. }));
         assert!(matches!(commands[5], Command::Disconnect(_)));
         assert!(s.take().is_empty());
@@ -125,11 +163,27 @@ mod tests {
     #[test]
     fn notices_become_input() {
         let id = Id::new_static("mail.socket");
-        assert_eq!(input_of(SocketNotice::Closed { socket: id.clone(), reason: String::new() }), Some(Input::Closed));
         assert_eq!(
-            input_of(SocketNotice::Failed { socket: id.clone(), reason: "x".into(), error: SocketError::Lost }),
+            input_of(SocketNotice::Closed {
+                socket: id.clone(),
+                reason: String::new()
+            }),
+            Some(Input::Closed)
+        );
+        assert_eq!(
+            input_of(SocketNotice::Failed {
+                socket: id.clone(),
+                reason: "x".into(),
+                error: SocketError::Lost
+            }),
             Some(Input::Failed(SocketError::Lost, "x".into()))
         );
-        assert_eq!(input_of(SocketNotice::Done { socket: id, reason: String::new() }), None);
+        assert_eq!(
+            input_of(SocketNotice::Done {
+                socket: id,
+                reason: String::new()
+            }),
+            None
+        );
     }
 }

@@ -6,7 +6,9 @@ use alloc::string::{String, ToString};
 
 use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::ui::{self, Response, TextView, UiStyle};
-use paperpaw_sdk::{Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, Screen};
+use paperpaw_sdk::{
+    Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, Screen,
+};
 
 use crate::account::Account;
 use crate::browser::param;
@@ -52,13 +54,29 @@ impl Reader {
         let top = header.area().height + style.gap();
         let bottom = display.height.saturating_sub(button_h + style.gap());
         let note_h = style.small() as u16 + style.gap();
-        let area = Rect::new(style.margin() / 2, top, display.width.saturating_sub(style.margin()), bottom.saturating_sub(top + note_h));
-        let row = Rect::new(style.margin(), bottom, display.width.saturating_sub(2 * style.margin()), button_h);
+        let area = Rect::new(
+            style.margin() / 2,
+            top,
+            display.width.saturating_sub(style.margin()),
+            bottom.saturating_sub(top + note_h),
+        );
+        let row = Rect::new(
+            style.margin(),
+            bottom,
+            display.width.saturating_sub(2 * style.margin()),
+            button_h,
+        );
         let columns = ui::columns(row, 3, style.gap());
         let buttons = [columns[0], columns[1], columns[2]];
-        let account = params.get(param::ACCOUNT).and_then(|n| n.parse().ok()).unwrap_or(1);
+        let account = params
+            .get(param::ACCOUNT)
+            .and_then(|n| n.parse().ok())
+            .unwrap_or(1);
         let folder = params.get(param::FOLDER).unwrap_or("INBOX").to_string();
-        let uid = params.get(param::UID).and_then(|n| n.parse().ok()).unwrap_or(0);
+        let uid = params
+            .get(param::UID)
+            .and_then(|n| n.parse().ok())
+            .unwrap_or(0);
         let mut screen = Self {
             view: TextView::new(env, &style, area, ""),
             body: area,
@@ -121,7 +139,9 @@ impl Reader {
     }
 
     fn account(&self, env: &Env<'_>) -> Option<Account> {
-        Account::all(env).into_iter().find(|a| a.number == self.account)
+        Account::all(env)
+            .into_iter()
+            .find(|a| a.number == self.account)
     }
 
     /// Fetches the mail (and marks it read on the server, if the settings
@@ -138,7 +158,12 @@ impl Reader {
             out: store::raw_file(self.account, &self.folder, self.uid),
         }];
         if env.settings().read(&MARK_READ) {
-            tasks.push(Task::Flag { folder: self.folder.clone(), uid: self.uid, flag: "\\Seen", on: true });
+            tasks.push(Task::Flag {
+                folder: self.folder.clone(),
+                uid: self.uid,
+                flag: "\\Seen",
+                on: true,
+            });
         }
         for command in self.job.start_imap(&account, tasks) {
             cx.command(command);
@@ -156,9 +181,12 @@ impl Reader {
     }
 
     fn starred(&self, env: &Env<'_>) -> bool {
-        store::read_index(env.storage(), &store::index_file(self.account, &self.folder))
-            .iter()
-            .any(|r| r.uid == self.uid && r.flagged())
+        store::read_index(
+            env.storage(),
+            &store::index_file(self.account, &self.folder),
+        )
+        .iter()
+        .any(|r| r.uid == self.uid && r.flagged())
     }
 
     fn toggle_star(&mut self, cx: &mut Cx<'_, '_>) {
@@ -174,7 +202,12 @@ impl Reader {
             }
         });
         if let Some(account) = self.account(&env) {
-            let task = Task::Flag { folder: self.folder.clone(), uid: self.uid, flag: "\\Flagged", on };
+            let task = Task::Flag {
+                folder: self.folder.clone(),
+                uid: self.uid,
+                flag: "\\Flagged",
+                on,
+            };
             for command in self.job.start_imap(&account, alloc::vec![task]) {
                 cx.command(command);
             }
@@ -237,7 +270,11 @@ impl Screen for Reader {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let subject = self.letter.as_ref().map_or("", |l| l.subject.as_str());
-        let title = if subject.is_empty() { env.i18n().tr("mail.title") } else { subject };
+        let title = if subject.is_empty() {
+            env.i18n().tr("mail.title")
+        } else {
+            subject
+        };
         let mut ui = ui::Ui::new(canvas, env, &style);
         self.header.draw(&mut ui, title, None, None);
         let note = match &self.job.run {
@@ -250,14 +287,30 @@ impl Screen for Reader {
             ui.message(self.view_area(), env.i18n().tr("mail.stage.message"));
         }
         if !note.is_empty() {
-            let at = Rect::new(0, self.buttons[0].y.saturating_sub(style.small() as u16 + style.gap()), env.device().display.width, style.small() as u16 + style.gap());
+            let at = Rect::new(
+                0,
+                self.buttons[0]
+                    .y
+                    .saturating_sub(style.small() as u16 + style.gap()),
+                env.device().display.width,
+                style.small() as u16 + style.gap(),
+            );
             ui.note_line(at, &note);
         }
         let starred = self.starred(env);
         let shown = ui::focus_shown(env);
         for (i, key) in BUTTONS.iter().enumerate() {
-            let key = if i == 2 && starred { "mail.unstar" } else { key };
-            ui.button(self.buttons[i], env.i18n().tr(key), false, shown && self.focus == Some(i));
+            let key = if i == 2 && starred {
+                "mail.unstar"
+            } else {
+                key
+            };
+            ui.button(
+                self.buttons[i],
+                env.i18n().tr(key),
+                false,
+                shown && self.focus == Some(i),
+            );
         }
     }
 
@@ -288,7 +341,11 @@ impl Screen for Reader {
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         if *action == actions::LEFT || *action == actions::RIGHT {
             let step: isize = if *action == actions::RIGHT { 1 } else { -1 };
-            let next = (self.focus.map_or(if step > 0 { -1 } else { 3 }, |f| f as isize) + step).rem_euclid(3) as usize;
+            let next = (self
+                .focus
+                .map_or(if step > 0 { -1 } else { 3 }, |f| f as isize)
+                + step)
+                .rem_euclid(3) as usize;
             self.focus = Some(next);
             cx.request_redraw();
             return Handled::Yes;

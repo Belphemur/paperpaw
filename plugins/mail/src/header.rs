@@ -78,7 +78,10 @@ impl Headers {
 }
 
 fn trim(bytes: &[u8]) -> &[u8] {
-    let start = bytes.iter().position(|b| !matches!(b, b' ' | b'\t')).unwrap_or(bytes.len());
+    let start = bytes
+        .iter()
+        .position(|b| !matches!(b, b' ' | b'\t'))
+        .unwrap_or(bytes.len());
     let end = bytes
         .iter()
         .rposition(|b| !matches!(b, b' ' | b'\t' | b'\r' | b'\n'))
@@ -129,7 +132,11 @@ impl ContentType {
             // RFC 2231: `name*=utf-8''%C3%A4` and pieces `name*0=…`.
             if let Some((base, rest)) = name.split_once('*') {
                 let extended = rest.ends_with('*') || rest.is_empty();
-                let value = if extended { percent_decoded(&value) } else { value };
+                let value = if extended {
+                    percent_decoded(&value)
+                } else {
+                    value
+                };
                 let base = String::from(base);
                 match params.iter_mut().find(|(n, _)| *n == base) {
                     Some((_, existing)) if !rest.is_empty() && !rest.starts_with('0') => {
@@ -196,7 +203,10 @@ fn unquote(value: &str) -> String {
 /// RFC 2231's `utf-8''%C3%A4`: the text with its percent signs undone.
 fn percent_decoded(value: &str) -> String {
     let (charset, rest) = match value.split_once('\'') {
-        Some((charset, rest)) => (charset, rest.split_once('\'').map_or(rest, |(_, text)| text)),
+        Some((charset, rest)) => (
+            charset,
+            rest.split_once('\'').map_or(rest, |(_, text)| text),
+        ),
         None => ("", value),
     };
     let mut bytes = Vec::with_capacity(rest.len());
@@ -216,7 +226,10 @@ fn percent_decoded(value: &str) -> String {
             i += 1;
         }
     }
-    codec::text_of(codec::Charset::of(charset).unwrap_or(codec::Charset::Utf8), &bytes)
+    codec::text_of(
+        codec::Charset::of(charset).unwrap_or(codec::Charset::Utf8),
+        &bytes,
+    )
 }
 
 /// An address as a header gives it: `Ada <ada@example.org>`,
@@ -350,8 +363,15 @@ fn month_of(name: &str) -> Option<i64> {
     const MONTHS: [&str; 12] = [
         "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
     ];
-    let lower: String = name.chars().take(3).map(|c| c.to_ascii_lowercase()).collect();
-    MONTHS.iter().position(|m| *m == lower).map(|i| i as i64 + 1)
+    let lower: String = name
+        .chars()
+        .take(3)
+        .map(|c| c.to_ascii_lowercase())
+        .collect();
+    MONTHS
+        .iter()
+        .position(|m| *m == lower)
+        .map(|i| i as i64 + 1)
 }
 
 fn zone_seconds(zone: &str) -> i64 {
@@ -411,7 +431,11 @@ pub fn civil_from_days(days: i64) -> (i64, i64, i64) {
 /// `subject` for a reply: `Re: ` once, whatever case a former one had.
 pub fn reply_subject(subject: &str) -> String {
     let subject = subject.trim();
-    let lower: String = subject.chars().take(3).map(|c| c.to_ascii_lowercase()).collect();
+    let lower: String = subject
+        .chars()
+        .take(3)
+        .map(|c| c.to_ascii_lowercase())
+        .collect();
     if lower == "re:" {
         String::from(subject)
     } else {

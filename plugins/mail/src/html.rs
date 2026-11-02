@@ -32,8 +32,28 @@ enum State {
 
 /// Elements whose end or start is a line break.
 const BLOCKS: [&str; 22] = [
-    "p", "div", "br", "tr", "li", "ul", "ol", "table", "h1", "h2", "h3", "h4", "h5", "h6",
-    "blockquote", "pre", "hr", "section", "article", "header", "footer", "dl",
+    "p",
+    "div",
+    "br",
+    "tr",
+    "li",
+    "ul",
+    "ol",
+    "table",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "blockquote",
+    "pre",
+    "hr",
+    "section",
+    "article",
+    "header",
+    "footer",
+    "dl",
 ];
 
 impl HtmlText {
@@ -167,7 +187,11 @@ impl HtmlText {
             return;
         }
         if BLOCKS.contains(&name.as_str()) {
-            let lines = if matches!(name.as_str(), "br" | "li" | "tr") { 1 } else { 2 };
+            let lines = if matches!(name.as_str(), "br" | "li" | "tr") {
+                1
+            } else {
+                2
+            };
             self.line_break(out, lines);
         }
     }

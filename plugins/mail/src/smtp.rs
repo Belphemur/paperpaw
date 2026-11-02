@@ -63,7 +63,8 @@ impl ReplyParser {
         }
         self.code = code;
         if self.lines.len() < 64 {
-            self.lines.push(String::from(text.get(4..).unwrap_or("").trim()));
+            self.lines
+                .push(String::from(text.get(4..).unwrap_or("").trim()));
         }
         if sep == b'-' {
             return None;
@@ -162,8 +163,12 @@ pub fn valid_address(address: &str) -> bool {
     !local.is_empty()
         && !domain.is_empty()
         && address.len() <= 254
-        && !address.contains(|c: char| c.is_whitespace() || c.is_control() || matches!(c, '<' | '>' | ',' | ';'))
-        && domain.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '[' | ']' | ':'))
+        && !address.contains(|c: char| {
+            c.is_whitespace() || c.is_control() || matches!(c, '<' | '>' | ',' | ';')
+        })
+        && domain
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '[' | ']' | ':'))
         && !domain.starts_with('.')
         && !domain.ends_with('.')
         && !domain.contains("..")
@@ -214,7 +219,12 @@ mod tests {
         let ext = Extensions::of(&reply);
         assert_eq!(
             ext,
-            Extensions { starttls: true, auth_plain: true, auth_login: true, size: 35_882_577 }
+            Extensions {
+                starttls: true,
+                auth_plain: true,
+                auth_login: true,
+                size: 35_882_577
+            }
         );
         let r = p.line(b"354").unwrap();
         assert_eq!((r.code, r.lines.len()), (354, 1));
@@ -227,10 +237,25 @@ mod tests {
         assert_eq!(auth_plain("u", "p"), "AUTH PLAIN AHUAcA==\r\n");
         assert_eq!(mail_from("a@b.c"), "MAIL FROM:<a@b.c>\r\n");
         assert_eq!(rcpt_to("a@b.c>\r\nDATA"), "RCPT TO:<a@b.cDATA>\r\n");
-        for ok in ["ada@example.org", "a.b+tag@mail.example.co.uk", "x@[127.0.0.1]"] {
+        for ok in [
+            "ada@example.org",
+            "a.b+tag@mail.example.co.uk",
+            "x@[127.0.0.1]",
+        ] {
             assert!(valid_address(ok), "{ok}");
         }
-        for bad in ["", "ada", "@x.org", "ada@", "a b@x.org", "a@x..org", "a@.x.org", "a@b.c\r\nRCPT TO:<x@y.z", "a,b@x.org", "<a@b.c>"] {
+        for bad in [
+            "",
+            "ada",
+            "@x.org",
+            "ada@",
+            "a b@x.org",
+            "a@x..org",
+            "a@.x.org",
+            "a@b.c\r\nRCPT TO:<x@y.z",
+            "a,b@x.org",
+            "<a@b.c>",
+        ] {
             assert!(!valid_address(bad), "{bad:?}");
         }
     }

@@ -272,8 +272,12 @@ impl Walker {
     }
 
     fn attachment(&mut self, headers: &Headers, kind: &ContentType, disposition: Option<&str>) {
-        let from_disposition = disposition
-            .map(|d| ContentType::parse(Some(&alloc::format!("x/x;{}", d.split_once(';').map_or("", |(_, p)| p)))));
+        let from_disposition = disposition.map(|d| {
+            ContentType::parse(Some(&alloc::format!(
+                "x/x;{}",
+                d.split_once(';').map_or("", |(_, p)| p)
+            )))
+        });
         let name = from_disposition
             .as_ref()
             .and_then(|d| d.param("filename"))

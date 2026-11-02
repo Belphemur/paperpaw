@@ -41,11 +41,18 @@ pub fn failure(env: &Env<'_>, failure: &Failure) -> String {
         Failure::Login(words) => {
             return i18n.format("mail.fail.login", &[("words", Arg::Str(words))]);
         }
-        Failure::Refused(words) => return i18n.format("mail.fail.server", &[("words", Arg::Str(words))]),
-        Failure::Recipient(who, words) => {
-            return i18n.format("mail.fail.recipient", &[("who", Arg::Str(who)), ("words", Arg::Str(words))]);
+        Failure::Refused(words) => {
+            return i18n.format("mail.fail.server", &[("words", Arg::Str(words))]);
         }
-        Failure::Temporary(words) => return i18n.format("mail.fail.later", &[("words", Arg::Str(words))]),
+        Failure::Recipient(who, words) => {
+            return i18n.format(
+                "mail.fail.recipient",
+                &[("who", Arg::Str(who)), ("words", Arg::Str(words))],
+            );
+        }
+        Failure::Temporary(words) => {
+            return i18n.format("mail.fail.later", &[("words", Arg::Str(words))]);
+        }
         Failure::Protocol => "mail.fail.protocol",
         Failure::Unsafe => "mail.fail.unsafe",
         Failure::Storage => "mail.fail.storage",
@@ -66,5 +73,11 @@ pub fn when(env: &Env<'_>, date: i64) -> String {
         return time::clock_of(env, (second / 3600) as u8, (second % 3600 / 60) as u8);
     }
     let (_, month, d) = time::civil_from_days(day);
-    env.i18n().format("mail.date", &[("day", Arg::Int(i64::from(d))), ("month", Arg::Int(i64::from(month)))])
+    env.i18n().format(
+        "mail.date",
+        &[
+            ("day", Arg::Int(i64::from(d))),
+            ("month", Arg::Int(i64::from(month))),
+        ],
+    )
 }

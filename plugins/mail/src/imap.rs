@@ -200,7 +200,11 @@ pub enum Status {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Response {
     /// `A3 OK Done`
-    Tagged { tag: String, status: Status, text: String },
+    Tagged {
+        tag: String,
+        status: Status,
+        text: String,
+    },
     /// `+ go ahead`
     Continue(String),
     /// `* …`
@@ -211,13 +215,26 @@ pub enum Response {
 pub enum Untagged {
     Capability(Vec<String>),
     /// `(flags) "delimiter" name`, the name as the server wrote it.
-    List { flags: Vec<String>, delimiter: Option<char>, name: String },
+    List {
+        flags: Vec<String>,
+        delimiter: Option<char>,
+        name: String,
+    },
     Exists(u32),
     Search(Vec<u32>),
-    Status { name: String, items: Vec<(String, u64)> },
-    Fetch { sequence: u32, items: Vec<Token> },
+    Status {
+        name: String,
+        items: Vec<(String, u64)>,
+    },
+    Fetch {
+        sequence: u32,
+        items: Vec<Token>,
+    },
     /// `* OK [UIDVALIDITY 3] …`, `* OK [CAPABILITY …]`
-    Code { code: String, args: Vec<String> },
+    Code {
+        code: String,
+        args: Vec<String>,
+    },
     Bye(String),
     /// Anything else (flags, recent, expunge, text).
     Other,
@@ -270,14 +287,21 @@ fn untagged(rest: &str, raw: &[u8]) -> Untagged {
                 Some(Token::List(items)) => items,
                 _ => Vec::new(),
             };
-            return Untagged::Fetch { sequence: number, items };
+            return Untagged::Fetch {
+                sequence: number,
+                items,
+            };
         }
         return Untagged::Other;
     }
     match upper.as_str() {
         "CAPABILITY" => Untagged::Capability(tail.split_whitespace().map(String::from).collect()),
         "LIST" | "LSUB" => list(tail),
-        "SEARCH" => Untagged::Search(tail.split_whitespace().filter_map(|n| n.parse().ok()).collect()),
+        "SEARCH" => Untagged::Search(
+            tail.split_whitespace()
+                .filter_map(|n| n.parse().ok())
+                .collect(),
+        ),
         "STATUS" => status_line(tail),
         "BYE" => Untagged::Bye(String::from(tail.trim())),
         "OK" | "NO" | "BAD" | "PREAUTH" => code(tail),
@@ -310,7 +334,10 @@ fn list(tail: &str) -> Untagged {
     let tokens = tokens(tail.as_bytes());
     let mut it = tokens.iter();
     let flags = match it.next() {
-        Some(Token::List(flags)) => flags.iter().filter_map(|t| t.text().map(String::from)).collect(),
+        Some(Token::List(flags)) => flags
+            .iter()
+            .filter_map(|t| t.text().map(String::from))
+            .collect(),
         _ => return Untagged::Other,
     };
     let delimiter = match it.next() {
@@ -324,12 +351,20 @@ fn list(tail: &str) -> Untagged {
         },
         None => return Untagged::Other,
     };
-    Untagged::List { flags, delimiter, name }
+    Untagged::List {
+        flags,
+        delimiter,
+        name,
+    }
 }
 
 fn status_line(tail: &str) -> Untagged {
     let tokens = tokens(tail.as_bytes());
-    let name = tokens.first().and_then(Token::text).map(String::from).unwrap_or_default();
+    let name = tokens
+        .first()
+        .and_then(Token::text)
+        .map(String::from)
+        .unwrap_or_default();
     let mut items = Vec::new();
     if let Some(Token::List(list)) = tokens.get(1) {
         for pair in list.chunks(2) {
@@ -368,7 +403,12 @@ pub fn fetch_flags(items: &[Token]) -> Vec<String> {
         .position(|t| t.text().is_some_and(|k| k.eq_ignore_ascii_case("FLAGS")))
         .and_then(|at| items.get(at + 1))
         .and_then(Token::list)
-        .map(|flags| flags.iter().filter_map(|f| f.text().map(String::from)).collect())
+        .map(|flags| {
+            flags
+                .iter()
+                .filter_map(|f| f.text().map(String::from))
+                .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -428,7 +468,10 @@ pub fn mailbox_display(name: &str) -> String {
             if !bytes.len().is_multiple_of(2) {
                 return String::from(name);
             }
-            let units: Vec<u16> = bytes.chunks(2).map(|p| u16::from_be_bytes([p[0], p[1]])).collect();
+            let units: Vec<u16> = bytes
+                .chunks(2)
+                .map(|p| u16::from_be_bytes([p[0], p[1]]))
+                .collect();
             for c in char::decode_utf16(units) {
                 out.push(c.unwrap_or('\u{fffd}'));
             }

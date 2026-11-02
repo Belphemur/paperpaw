@@ -5,14 +5,16 @@ use alloc::boxed::Box;
 
 use paperpaw_sdk::builtin::{events, menus};
 use paperpaw_sdk::{
-    Command, FixedAction, FixedScreen, Instances, Manifest, MenuEntry, Params, Plugin, RegisterError,
-    Registrar,
+    Command, FixedAction, FixedScreen, Instances, Manifest, MenuEntry, Params, Plugin,
+    RegisterError, Registrar,
 };
 
 use crate::browser::{self, Browser};
 use crate::reader::Reader;
 use crate::writer::Writer;
-use crate::{BOXES, COMPOSE, LIST, OPEN, PIN_ANSWER, PLUGIN, READ, WRITE, provider, settings, widgets};
+use crate::{
+    BOXES, COMPOSE, LIST, OPEN, PIN_ANSWER, PLUGIN, READ, WRITE, provider, settings, widgets,
+};
 
 /// How it works, by language (see `Manifest::how`).
 static HOW: [(&str, &str); 2] = [
@@ -21,18 +23,29 @@ static HOW: [(&str, &str); 2] = [
 ];
 
 static ACTIONS: [FixedAction; 2] = [
-    FixedAction::new(OPEN, "mail.title").handler(|_, _, out| out.push(Command::OpenScreen(BOXES, Params::new()))),
-    FixedAction::new(WRITE, "mail.write").handler(|_, params, out| out.push(Command::OpenScreen(COMPOSE, params.clone()))),
+    FixedAction::new(OPEN, "mail.title")
+        .handler(|_, _, out| out.push(Command::OpenScreen(BOXES, Params::new()))),
+    FixedAction::new(WRITE, "mail.write")
+        .handler(|_, params, out| out.push(Command::OpenScreen(COMPOSE, params.clone()))),
 ];
 static ENTRIES: [MenuEntry; 1] = [MenuEntry::new(menus::TOOLS, OPEN).order(47)];
 static ICONS: [(paperpaw_sdk::Id, &str); 2] = [(OPEN, "inbox"), (WRITE, "pencil")];
 
 static SCREENS: [FixedScreen; 4] = [
-    FixedScreen::new(BOXES, "mail.title", |env, params| Box::new(Browser::new(env, params)))
-        .instances(Instances::SINGLE),
-    FixedScreen::new(LIST, "mail.title", |env, params| Box::new(Browser::new(env, params))),
-    FixedScreen::new(READ, "mail.title", |env, params| Box::new(Reader::new(env, params))),
-    FixedScreen::new(COMPOSE, "mail.write", |env, params| Box::new(Writer::new(env, params))).instances(Instances::SINGLE),
+    FixedScreen::new(BOXES, "mail.title", |env, params| {
+        Box::new(Browser::new(env, params))
+    })
+    .instances(Instances::SINGLE),
+    FixedScreen::new(LIST, "mail.title", |env, params| {
+        Box::new(Browser::new(env, params))
+    }),
+    FixedScreen::new(READ, "mail.title", |env, params| {
+        Box::new(Reader::new(env, params))
+    }),
+    FixedScreen::new(COMPOSE, "mail.write", |env, params| {
+        Box::new(Writer::new(env, params))
+    })
+    .instances(Instances::SINGLE),
 ];
 
 /// The Mail plugin.
@@ -65,7 +78,9 @@ impl Plugin for Mail {
         r.on(events::SETTING_CHANGED, |env, changed, out| {
             out.extend(provider::commands(env, changed.id.as_str()));
         })?;
-        r.on(PIN_ANSWER, |_, answer, out| browser::pin_answered(answer, out))?;
+        r.on(PIN_ANSWER, |_, answer, out| {
+            browser::pin_answered(answer, out)
+        })?;
 
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;

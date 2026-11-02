@@ -28,7 +28,10 @@ fn base64_in_pieces_and_whole() {
 
 #[test]
 fn quoted_printable() {
-    assert_eq!(decode_qp(b"caf=C3=A9 =\r\nau lait\r\n", false), "café au lait\r\n".as_bytes());
+    assert_eq!(
+        decode_qp(b"caf=C3=A9 =\r\nau lait\r\n", false),
+        "café au lait\r\n".as_bytes()
+    );
     assert_eq!(decode_qp(b"a=3Db=\n", false), b"a=b");
     assert_eq!(decode_qp(b"x=ZZy=", false), b"x=ZZy");
     assert_eq!(decode_qp(b"Hello_World", true), b"Hello World");
@@ -42,20 +45,46 @@ fn quoted_printable() {
     let encoded = encode_qp(&long);
     assert!(encoded.lines().all(|l| l.len() <= 76));
     assert_eq!(
-        String::from_utf8(decode_qp(encoded.as_bytes(), false)).unwrap().trim_end(),
+        String::from_utf8(decode_qp(encoded.as_bytes(), false))
+            .unwrap()
+            .trim_end(),
         long
     );
 }
 
 #[test]
 fn charsets() {
-    assert_eq!(text_of(Charset::of("iso-8859-1").unwrap(), b"caf\xe9"), "café");
-    assert_eq!(text_of(Charset::of("ISO-8859-15").unwrap(), b"\xa4 5"), "€ 5");
-    assert_eq!(text_of(Charset::of("windows-1252").unwrap(), b"\x93hi\x94 \x80"), "“hi” €");
-    assert_eq!(text_of(Charset::of("windows-1251").unwrap(), b"\xcf\xf0\xe8\xe2\xe5\xf2"), "Привет");
-    assert_eq!(text_of(Charset::of("koi8-r").unwrap(), b"\xf0\xd2\xc9\xd7\xc5\xd4"), "Привет");
-    assert_eq!(text_of(Charset::of("iso-8859-2").unwrap(), b"\xb1\xe6\xea"), "ąćę");
-    assert_eq!(text_of(Charset::of("windows-1250").unwrap(), b"\xb9\xe6\xea"), "ąćę");
+    assert_eq!(
+        text_of(Charset::of("iso-8859-1").unwrap(), b"caf\xe9"),
+        "café"
+    );
+    assert_eq!(
+        text_of(Charset::of("ISO-8859-15").unwrap(), b"\xa4 5"),
+        "€ 5"
+    );
+    assert_eq!(
+        text_of(Charset::of("windows-1252").unwrap(), b"\x93hi\x94 \x80"),
+        "“hi” €"
+    );
+    assert_eq!(
+        text_of(
+            Charset::of("windows-1251").unwrap(),
+            b"\xcf\xf0\xe8\xe2\xe5\xf2"
+        ),
+        "Привет"
+    );
+    assert_eq!(
+        text_of(Charset::of("koi8-r").unwrap(), b"\xf0\xd2\xc9\xd7\xc5\xd4"),
+        "Привет"
+    );
+    assert_eq!(
+        text_of(Charset::of("iso-8859-2").unwrap(), b"\xb1\xe6\xea"),
+        "ąćę"
+    );
+    assert_eq!(
+        text_of(Charset::of("windows-1250").unwrap(), b"\xb9\xe6\xea"),
+        "ąćę"
+    );
     assert_eq!(Charset::of("shift_jis"), None);
     assert_eq!(Charset::of("UTF-8*de"), Some(Charset::Utf8));
     // UTF-8 cut anywhere.
@@ -74,7 +103,10 @@ fn charsets() {
 #[test]
 fn encoded_words() {
     assert_eq!(decode_words(b"=?UTF-8?B?w6TDtsO8?="), "äöü");
-    assert_eq!(decode_words(b"=?iso-8859-1?Q?Caf=E9_au_lait?="), "Café au lait");
+    assert_eq!(
+        decode_words(b"=?iso-8859-1?Q?Caf=E9_au_lait?="),
+        "Café au lait"
+    );
     // White space between two encoded words goes, elsewhere it stays.
     assert_eq!(decode_words(b"=?utf-8?Q?a?= =?utf-8?Q?b?= c  d"), "ab c  d");
     assert_eq!(decode_words(b"plain \xc3\xa4"), "plain ä");
@@ -97,7 +129,13 @@ fn headers_and_addresses() {
     let h = Headers::parse(raw);
     assert_eq!(h.get("subject"), Some("A very long subject"));
     let from = addresses(h.get("from").unwrap());
-    assert_eq!(from, [Address { name: "Jürgen".into(), address: "j@example.org".into() }]);
+    assert_eq!(
+        from,
+        [Address {
+            name: "Jürgen".into(),
+            address: "j@example.org".into()
+        }]
+    );
     let to = addresses(h.get("to").unwrap());
     assert_eq!(to.len(), 2);
     assert_eq!(to[0].name, "Doe, Jane");
@@ -110,7 +148,9 @@ fn headers_and_addresses() {
 
 #[test]
 fn content_types() {
-    let c = ContentType::parse(Some("Multipart/Alternative; boundary=\"b;1\"; charset=utf-8"));
+    let c = ContentType::parse(Some(
+        "Multipart/Alternative; boundary=\"b;1\"; charset=utf-8",
+    ));
     assert_eq!(c.kind, "multipart/alternative");
     assert_eq!(c.param("boundary"), Some("b;1"));
     assert!(c.is_multipart());
@@ -125,9 +165,18 @@ fn content_types() {
 #[test]
 fn dates() {
     assert_eq!(date_seconds("Thu, 1 Jan 1970 00:00:00 +0000"), Some(0));
-    assert_eq!(date_seconds("Tue, 3 Nov 2026 09:15:00 +0100"), Some(1_793_693_700));
-    assert_eq!(date_seconds("3 Nov 2026 09:15 GMT (comment)"), date_seconds("Tue, 03 Nov 2026 09:15:00 +0000"));
-    assert_eq!(date_seconds("Mon, 29 Feb 2016 23:59:59 -0800"), Some(1_456_819_199));
+    assert_eq!(
+        date_seconds("Tue, 3 Nov 2026 09:15:00 +0100"),
+        Some(1_793_693_700)
+    );
+    assert_eq!(
+        date_seconds("3 Nov 2026 09:15 GMT (comment)"),
+        date_seconds("Tue, 03 Nov 2026 09:15:00 +0000")
+    );
+    assert_eq!(
+        date_seconds("Mon, 29 Feb 2016 23:59:59 -0800"),
+        Some(1_456_819_199)
+    );
     assert_eq!(date_seconds("nonsense"), None);
     assert_eq!(date_seconds("32 Jan 2026 00:00:00 +0000"), None);
     assert_eq!(civil_from_days(days_from_civil(2026, 11, 3)), (2026, 11, 3));
@@ -138,7 +187,8 @@ fn dates() {
 fn rendered(message: &str, limit: usize) -> (crate::render::Rendered, String) {
     let storage = MemoryStorage::new().with("m.eml", message);
     let info = render(&storage, "m.eml", "m.txt", limit).unwrap();
-    let text = String::from_utf8(paperpaw_sdk::read_file(&storage, "m.txt", 1 << 20).unwrap()).unwrap();
+    let text =
+        String::from_utf8(paperpaw_sdk::read_file(&storage, "m.txt", 1 << 20).unwrap()).unwrap();
     (info, text)
 }
 
@@ -193,7 +243,17 @@ fn hostile_messages_do_not_panic() {
     ] {
         let _ = rendered(message, 100);
     }
-    let deep = (0..50).map(|i| alloc::format!("--b{i}\r\nContent-Type: multipart/mixed; boundary=b{}\r\n\r\n", i + 1)).collect::<String>();
-    let _ = rendered(&alloc::format!("Content-Type: multipart/mixed; boundary=b0\r\n\r\n{deep}"), 100);
+    let deep = (0..50)
+        .map(|i| {
+            alloc::format!(
+                "--b{i}\r\nContent-Type: multipart/mixed; boundary=b{}\r\n\r\n",
+                i + 1
+            )
+        })
+        .collect::<String>();
+    let _ = rendered(
+        &alloc::format!("Content-Type: multipart/mixed; boundary=b0\r\n\r\n{deep}"),
+        100,
+    );
     let _ = MemoryStorage::new().exists("x");
 }

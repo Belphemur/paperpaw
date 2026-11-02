@@ -55,7 +55,11 @@ impl Security {
     /// The security a setting's value stands for; implicit TLS for any
     /// other (never plain).
     pub fn of_key(key: &str) -> Self {
-        if key == STARTTLS { Security::StartTls } else { Security::Implicit }
+        if key == STARTTLS {
+            Security::StartTls
+        } else {
+            Security::Implicit
+        }
     }
 }
 
@@ -85,16 +89,56 @@ pub const OWN: &str = "mail.provider.own";
 /// The providers to start from. Their servers are public; the reader still
 /// needs the password (often an app password) the provider asks for.
 pub const PRESETS: [Preset; 10] = [
-    preset("mail.provider.gmail", ("imap.gmail.com", 993, Implicit), ("smtp.gmail.com", 465, Implicit)),
-    preset("mail.provider.outlook", ("outlook.office365.com", 993, Implicit), ("smtp-mail.outlook.com", 587, StartTls)),
-    preset("mail.provider.icloud", ("imap.mail.me.com", 993, Implicit), ("smtp.mail.me.com", 587, StartTls)),
-    preset("mail.provider.yahoo", ("imap.mail.yahoo.com", 993, Implicit), ("smtp.mail.yahoo.com", 465, Implicit)),
-    preset("mail.provider.gmx", ("imap.gmx.net", 993, Implicit), ("mail.gmx.net", 465, Implicit)),
-    preset("mail.provider.webde", ("imap.web.de", 993, Implicit), ("smtp.web.de", 587, StartTls)),
-    preset("mail.provider.tonline", ("secureimap.t-online.de", 993, Implicit), ("securesmtp.t-online.de", 465, Implicit)),
-    preset("mail.provider.posteo", ("posteo.de", 993, Implicit), ("posteo.de", 465, Implicit)),
-    preset("mail.provider.mailbox", ("imap.mailbox.org", 993, Implicit), ("smtp.mailbox.org", 465, Implicit)),
-    preset("mail.provider.fastmail", ("imap.fastmail.com", 993, Implicit), ("smtp.fastmail.com", 465, Implicit)),
+    preset(
+        "mail.provider.gmail",
+        ("imap.gmail.com", 993, Implicit),
+        ("smtp.gmail.com", 465, Implicit),
+    ),
+    preset(
+        "mail.provider.outlook",
+        ("outlook.office365.com", 993, Implicit),
+        ("smtp-mail.outlook.com", 587, StartTls),
+    ),
+    preset(
+        "mail.provider.icloud",
+        ("imap.mail.me.com", 993, Implicit),
+        ("smtp.mail.me.com", 587, StartTls),
+    ),
+    preset(
+        "mail.provider.yahoo",
+        ("imap.mail.yahoo.com", 993, Implicit),
+        ("smtp.mail.yahoo.com", 465, Implicit),
+    ),
+    preset(
+        "mail.provider.gmx",
+        ("imap.gmx.net", 993, Implicit),
+        ("mail.gmx.net", 465, Implicit),
+    ),
+    preset(
+        "mail.provider.webde",
+        ("imap.web.de", 993, Implicit),
+        ("smtp.web.de", 587, StartTls),
+    ),
+    preset(
+        "mail.provider.tonline",
+        ("secureimap.t-online.de", 993, Implicit),
+        ("securesmtp.t-online.de", 465, Implicit),
+    ),
+    preset(
+        "mail.provider.posteo",
+        ("posteo.de", 993, Implicit),
+        ("posteo.de", 465, Implicit),
+    ),
+    preset(
+        "mail.provider.mailbox",
+        ("imap.mailbox.org", 993, Implicit),
+        ("smtp.mailbox.org", 465, Implicit),
+    ),
+    preset(
+        "mail.provider.fastmail",
+        ("imap.fastmail.com", 993, Implicit),
+        ("smtp.fastmail.com", 465, Implicit),
+    ),
 ];
 
 /// The provider setting's options: the reader's own servers, then each
@@ -206,9 +250,13 @@ impl Account {
     pub fn read(values: &dyn Values, number: u8) -> Option<Self> {
         let text = |f: &str| values.text(&key(number, f)).trim().to_string();
         let address = text(field::ADDRESS);
-        let password = values.secret(&key(number, field::PASSWORD)).unwrap_or_default();
+        let password = values
+            .secret(&key(number, field::PASSWORD))
+            .unwrap_or_default();
         let server = |host: &str, port: &str, security: &str, pin: &str| {
-            let port = u16::try_from(values.int(&key(number, port))).ok().filter(|p| *p != 0)?;
+            let port = u16::try_from(values.int(&key(number, port)))
+                .ok()
+                .filter(|p| *p != 0)?;
             let host = text(host);
             (!host.is_empty()).then(|| Server {
                 host,
@@ -217,20 +265,42 @@ impl Account {
                 pin: KeyHash::parse(&text(pin)),
             })
         };
-        let imap = server(field::IMAP_HOST, field::IMAP_PORT, field::IMAP_SECURITY, field::IMAP_PIN)?;
-        let smtp = server(field::SMTP_HOST, field::SMTP_PORT, field::SMTP_SECURITY, field::SMTP_PIN)?;
+        let imap = server(
+            field::IMAP_HOST,
+            field::IMAP_PORT,
+            field::IMAP_SECURITY,
+            field::IMAP_PIN,
+        )?;
+        let smtp = server(
+            field::SMTP_HOST,
+            field::SMTP_PORT,
+            field::SMTP_SECURITY,
+            field::SMTP_PIN,
+        )?;
         if address.is_empty() || password.is_empty() {
             return None;
         }
-        let user = Some(text(field::USER)).filter(|u| !u.is_empty()).unwrap_or_else(|| address.clone());
-        Some(Self { number, address, name: text(field::NAME), user, password, imap, smtp })
+        let user = Some(text(field::USER))
+            .filter(|u| !u.is_empty())
+            .unwrap_or_else(|| address.clone());
+        Some(Self {
+            number,
+            address,
+            name: text(field::NAME),
+            user,
+            password,
+            imap,
+            smtp,
+        })
     }
 
     /// The numbers of the accounts with an address, password or not: what a
     /// widget needs to know (it is not handed the passwords, which are the
     /// plugin's own).
     pub fn numbers(values: &dyn Values) -> alloc::vec::Vec<u8> {
-        (1..=MAX).filter(|n| !values.text(&key(*n, field::ADDRESS)).trim().is_empty()).collect()
+        (1..=MAX)
+            .filter(|n| !values.text(&key(*n, field::ADDRESS)).trim().is_empty())
+            .collect()
     }
 
     /// Every account that is set up, in order.
@@ -324,14 +394,23 @@ mod tests {
         f.text.insert(key(1, "user"), "ada".into());
         let a = Account::read(&f, 1).unwrap();
         let e = a.imap.endpoint(&a.user, &a.password);
-        assert_eq!((e.host.as_str(), e.user.as_str(), e.password.as_str()), ("imap.example.org", "ada", "secret"));
+        assert_eq!(
+            (e.host.as_str(), e.user.as_str(), e.password.as_str()),
+            ("imap.example.org", "ada", "secret")
+        );
         assert_eq!(Account::all(&f).len(), 1);
     }
 
     #[test]
     fn the_address_suggests_a_provider() {
-        assert_eq!(preset_for_address("a@GMX.net").unwrap().key, "mail.provider.gmx");
-        assert_eq!(preset_for_address("a@googlemail.com").unwrap().key, "mail.provider.gmail");
+        assert_eq!(
+            preset_for_address("a@GMX.net").unwrap().key,
+            "mail.provider.gmx"
+        );
+        assert_eq!(
+            preset_for_address("a@googlemail.com").unwrap().key,
+            "mail.provider.gmail"
+        );
         assert!(preset_for_address("a@example.org").is_none());
         assert!(preset_for_address("no-at").is_none());
     }

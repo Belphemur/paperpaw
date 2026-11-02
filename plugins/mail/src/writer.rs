@@ -9,7 +9,9 @@ use alloc::vec::Vec;
 use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
-use paperpaw_sdk::{Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, Screen, Storage};
+use paperpaw_sdk::{
+    Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, Screen, Storage,
+};
 
 use crate::account::Account;
 use crate::browser::param;
@@ -53,7 +55,9 @@ impl Part {
     }
 
     fn of_field(field: &str) -> Option<Self> {
-        [Part::To, Part::Cc, Part::Subject, Part::Body].into_iter().find(|p| p.field() == field)
+        [Part::To, Part::Cc, Part::Subject, Part::Body]
+            .into_iter()
+            .find(|p| p.field() == field)
     }
 }
 
@@ -77,11 +81,22 @@ impl Writer {
         let header = ui::Header::new(env, &style, true);
         let display = env.device().display;
         let top = header.area().height + style.gap();
-        let note = Rect::new(0, display.height.saturating_sub(style.row()), display.width, style.row());
+        let note = Rect::new(
+            0,
+            display.height.saturating_sub(style.row()),
+            display.width,
+            style.row(),
+        );
         let area = Rect::new(0, top, display.width, note.y.saturating_sub(top));
         let accounts = Account::all(env);
-        let wanted: u8 = params.get(param::ACCOUNT).and_then(|n| n.parse().ok()).unwrap_or(0);
-        let from = accounts.iter().position(|a| a.number == wanted).unwrap_or(0);
+        let wanted: u8 = params
+            .get(param::ACCOUNT)
+            .and_then(|n| n.parse().ok())
+            .unwrap_or(0);
+        let from = accounts
+            .iter()
+            .position(|a| a.number == wanted)
+            .unwrap_or(0);
         let mut screen = Self {
             list: ListView::new(area, u32::from(style.row())).focus_on_keys(env),
             style,
@@ -111,17 +126,47 @@ impl Writer {
             .get(param::UID)
             .and_then(|uid| uid.parse().ok())
             .zip(params.get(param::FOLDER))
-            .and_then(|(uid, folder)| store::read_letter(env.storage(), &store::text_file(account.number, folder, uid)));
-        let kept = || paperpaw_sdk::files::read_text(env.storage(), &store::draft_file(account.number), compose::MAX_BODY + 4096).ok();
+            .and_then(|(uid, folder)| {
+                store::read_letter(
+                    env.storage(),
+                    &store::text_file(account.number, folder, uid),
+                )
+            });
+        let kept = || {
+            paperpaw_sdk::files::read_text(
+                env.storage(),
+                &store::draft_file(account.number),
+                compose::MAX_BODY + 4096,
+            )
+            .ok()
+        };
         self.draft = if let Some(letter) = letter {
             let who = header_name(&letter.from);
-            let intro = env.i18n().format("mail.reply.intro", &[("who", Arg::Str(&who))]);
-            compose::reply_to(&letter, &account.address, params.get(REPLY) == Some(REPLY_ALL), &intro)
+            let intro = env
+                .i18n()
+                .format("mail.reply.intro", &[("who", Arg::Str(&who))]);
+            compose::reply_to(
+                &letter,
+                &account.address,
+                params.get(REPLY) == Some(REPLY_ALL),
+                &intro,
+            )
         } else if let Some(text) = kept() {
             Draft::from_text(&text)
         } else {
-            let signature = env.settings().text(crate::settings::SIGNATURE.as_str()).trim().to_string();
-            Draft { body: if signature.is_empty() { String::new() } else { format!("\n\n-- \n{signature}\n") }, ..Draft::default() }
+            let signature = env
+                .settings()
+                .text(crate::settings::SIGNATURE.as_str())
+                .trim()
+                .to_string();
+            Draft {
+                body: if signature.is_empty() {
+                    String::new()
+                } else {
+                    format!("\n\n-- \n{signature}\n")
+                },
+                ..Draft::default()
+            }
         };
         let _ = SIGNATURE;
         self.draft.from = account.address.clone();
@@ -139,13 +184,25 @@ impl Writer {
 
     fn value(&self, part: Part, env: &Env<'_>) -> String {
         match part {
-            Part::From => self.account().map(|a| a.address.clone()).unwrap_or_default(),
+            Part::From => self
+                .account()
+                .map(|a| a.address.clone())
+                .unwrap_or_default(),
             Part::To => self.draft.to.clone(),
             Part::Cc => self.draft.cc.clone(),
             Part::Subject => self.draft.subject.clone(),
             Part::Body => {
-                let first = self.draft.body.lines().find(|l| !l.trim().is_empty()).unwrap_or("");
-                if first.is_empty() { env.i18n().tr("mail.body.empty").into() } else { first.to_string() }
+                let first = self
+                    .draft
+                    .body
+                    .lines()
+                    .find(|l| !l.trim().is_empty())
+                    .unwrap_or("");
+                if first.is_empty() {
+                    env.i18n().tr("mail.body.empty").into()
+                } else {
+                    first.to_string()
+                }
             }
             Part::Send => String::new(),
         }
@@ -164,7 +221,9 @@ impl Writer {
         match part {
             Part::From => {
                 self.from = (self.from + 1) % self.accounts.len().max(1);
-                if let Some((address, name)) = self.account().map(|a| (a.address.clone(), a.name.clone())) {
+                if let Some((address, name)) =
+                    self.account().map(|a| (a.address.clone(), a.name.clone()))
+                {
                     self.draft.from = address;
                     self.draft.from_name = name;
                 }
@@ -179,7 +238,9 @@ impl Writer {
                     Part::Subject => &self.draft.subject,
                     _ => &self.draft.body,
                 };
-                let mut question = paperpaw_sdk::ask::text(i18n.tr(part.title()), &TYPED).initial(current.clone()).with("field", part.field());
+                let mut question = paperpaw_sdk::ask::text(i18n.tr(part.title()), &TYPED)
+                    .initial(current.clone())
+                    .with("field", part.field());
                 if matches!(part, Part::To | Part::Cc) {
                     question = question.email();
                 }
@@ -213,9 +274,17 @@ impl Writer {
         };
         let now = paperpaw_sdk::time::unix_seconds(&env).unwrap_or(0);
         let mut random = [0u8; 8];
-        let id = if env.random().fill(&mut random) { random.iter().map(|b| format!("{b:02x}")).collect() } else { format!("{now}") };
+        let id = if env.random().fill(&mut random) {
+            random.iter().map(|b| format!("{b:02x}")).collect()
+        } else {
+            format!("{now}")
+        };
         let message = self.draft.message(&compose::date_header(now), &id);
-        let outgoing = Outgoing { from: account.address.clone(), to, data: smtp::data(&message) };
+        let outgoing = Outgoing {
+            from: account.address.clone(),
+            to,
+            data: smtp::data(&message),
+        };
         self.status.clear();
         for command in self.job.start_smtp(&account, outgoing) {
             cx.command(command);
@@ -244,7 +313,9 @@ impl Writer {
 
 /// The name of a sender, else its address: `Jane Doe <jane@x>` is `Jane Doe`.
 fn header_name(from: &str) -> String {
-    crate::header::addresses(from).first().map_or_else(|| from.to_string(), |a| a.shown().to_string())
+    crate::header::addresses(from)
+        .first()
+        .map_or_else(|| from.to_string(), |a| a.shown().to_string())
 }
 
 impl Screen for Writer {
@@ -252,19 +323,31 @@ impl Screen for Writer {
         let style = self.style;
         let parts = self.parts();
         let mut ui = ui::Ui::new(canvas, env, &style);
-        self.header.draw(&mut ui, env.i18n().tr("mail.write"), None, self.list.paging(parts.len()));
+        self.header.draw(
+            &mut ui,
+            env.i18n().tr("mail.write"),
+            None,
+            self.list.paging(parts.len()),
+        );
         if self.accounts.is_empty() {
             ui.message(self.list.area(), env.i18n().tr("mail.set-up.help"));
             return;
         }
         let values: Vec<String> = parts.iter().map(|p| self.value(*p, env)).collect();
-        self.list.draw(&mut ui, parts.len(), |ui, row, rect, focused| {
-            let Some(part) = parts.get(row) else {
-                return;
-            };
-            let value = if *part == Part::Send { "›" } else { values[row].as_str() };
-            ui::Row::value(env.i18n().tr(part.title()), value).focused(focused).draw(ui, rect);
-        });
+        self.list
+            .draw(&mut ui, parts.len(), |ui, row, rect, focused| {
+                let Some(part) = parts.get(row) else {
+                    return;
+                };
+                let value = if *part == Part::Send {
+                    "›"
+                } else {
+                    values[row].as_str()
+                };
+                ui::Row::value(env.i18n().tr(part.title()), value)
+                    .focused(focused)
+                    .draw(ui, rect);
+            });
         let note = match &self.job.run {
             Run::Working(stage) => texts::stage(env, *stage).to_string(),
             _ => self.status.clone(),
@@ -325,7 +408,12 @@ impl Screen for Writer {
         let env = *cx.env();
         let parts = self.parts();
         if gesture.kind == GestureKind::Tap
-            && let Some(action) = self.header.tap(&env, &self.style, gesture.start, self.list.paging(parts.len()))
+            && let Some(action) = self.header.tap(
+                &env,
+                &self.style,
+                gesture.start,
+                self.list.paging(parts.len()),
+            )
         {
             cx.command(Command::run(action));
             return Handled::Yes;

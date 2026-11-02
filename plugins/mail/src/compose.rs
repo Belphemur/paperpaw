@@ -61,7 +61,10 @@ impl Draft {
     /// A draft kept by [`Draft::to_text`], for the account `from`.
     pub fn from_text(text: &str) -> Self {
         let (head, body) = text.split_once("\n\n").unwrap_or((text, ""));
-        let mut draft = Self { body: body.into(), ..Self::default() };
+        let mut draft = Self {
+            body: body.into(),
+            ..Self::default()
+        };
         for line in head.lines() {
             let Some((name, value)) = line.split_once(": ") else {
                 continue;
@@ -187,7 +190,9 @@ fn one_line(text: &str) -> String {
 fn display_name(name: &str) -> String {
     let name = one_line(name);
     if name.is_ascii() {
-        let plain = name.chars().all(|c| c.is_ascii_alphanumeric() || c == ' ' || c == '-' || c == '_' || c == '\'');
+        let plain = name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == ' ' || c == '-' || c == '_' || c == '\'');
         if plain {
             return name;
         }
@@ -265,15 +270,30 @@ pub fn split_list(list: &str) -> Vec<String> {
 /// `all`; `Re: ` before the subject unless it has one; the original
 /// quoted after `intro`.
 pub fn reply_to(letter: &crate::store::Letter, own: &str, all: bool, intro: &str) -> Draft {
-    let own_address = |field: &str| header::addresses(field).first().is_some_and(|a| a.address.eq_ignore_ascii_case(own));
-    let to = if letter.reply_to.trim().is_empty() { &letter.from } else { &letter.reply_to };
+    let own_address = |field: &str| {
+        header::addresses(field)
+            .first()
+            .is_some_and(|a| a.address.eq_ignore_ascii_case(own))
+    };
+    let to = if letter.reply_to.trim().is_empty() {
+        &letter.from
+    } else {
+        &letter.reply_to
+    };
     let to = String::from(to.trim());
     let mut cc: Vec<String> = Vec::new();
     if all {
-        for field in split_list(&letter.to).into_iter().chain(split_list(&letter.cc)) {
+        for field in split_list(&letter.to)
+            .into_iter()
+            .chain(split_list(&letter.cc))
+        {
             let known = |list: &str| {
                 let found = header::addresses(&field).into_iter().next();
-                found.is_some_and(|f| header::addresses(list).iter().any(|a| a.address.eq_ignore_ascii_case(&f.address)))
+                found.is_some_and(|f| {
+                    header::addresses(list)
+                        .iter()
+                        .any(|a| a.address.eq_ignore_ascii_case(&f.address))
+                })
             };
             if !own_address(&field) && !known(&to) && !cc.iter().any(|c| known(c)) {
                 cc.push(field);
@@ -281,7 +301,9 @@ pub fn reply_to(letter: &crate::store::Letter, own: &str, all: bool, intro: &str
         }
     }
     let subject = letter.subject.trim();
-    let has_re = subject.len() >= 3 && subject.is_char_boundary(3) && subject[..3].eq_ignore_ascii_case("re:");
+    let has_re = subject.len() >= 3
+        && subject.is_char_boundary(3)
+        && subject[..3].eq_ignore_ascii_case("re:");
     let mut references = String::from(letter.references.trim());
     if !references.is_empty() {
         references.push(' ');
@@ -291,7 +313,11 @@ pub fn reply_to(letter: &crate::store::Letter, own: &str, all: bool, intro: &str
         from: String::from(own),
         to,
         cc: cc.join(", "),
-        subject: if has_re { String::from(subject) } else { format!("Re: {subject}") },
+        subject: if has_re {
+            String::from(subject)
+        } else {
+            format!("Re: {subject}")
+        },
         body: format!("\n\n{}", quote(&letter.text, intro, 40)),
         in_reply_to: String::from(letter.message_id.trim()),
         references: String::from(references.trim()),
@@ -302,7 +328,9 @@ pub fn reply_to(letter: &crate::store::Letter, own: &str, all: bool, intro: &str
 /// Date header value for `seconds` since 1970 (UTC).
 pub fn date_header(seconds: i64) -> String {
     const DAYS: [&str; 7] = ["Thu", "Fri", "Sat", "Sun", "Mon", "Tue", "Wed"];
-    const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const MONTHS: [&str; 12] = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    ];
     let days = seconds.div_euclid(86_400);
     let rest = seconds.rem_euclid(86_400);
     let (year, month, day) = header::civil_from_days(days);
@@ -362,9 +390,15 @@ mod tests {
             ..Default::default()
         };
         let one = reply_to(&letter, "ada@example.org", false, "Jane wrote:");
-        assert_eq!((one.to.as_str(), one.cc.as_str()), ("Jane Doe <jane@example.org>", ""));
+        assert_eq!(
+            (one.to.as_str(), one.cc.as_str()),
+            ("Jane Doe <jane@example.org>", "")
+        );
         assert_eq!(one.subject, "Re: Lunch");
-        assert_eq!((one.in_reply_to.as_str(), one.references.as_str()), ("<m1@x>", "<m0@x> <m1@x>"));
+        assert_eq!(
+            (one.in_reply_to.as_str(), one.references.as_str()),
+            ("<m1@x>", "<m0@x> <m1@x>")
+        );
         assert_eq!(one.body, "\n\nJane wrote:\n> Noon?\n");
         let all = reply_to(&letter, "ada@example.org", true, "");
         assert_eq!(all.cc, "bob@example.org, carol@example.org");
@@ -373,8 +407,14 @@ mod tests {
         again.reply_to = "list@example.org".into();
         again.subject = "RE: Lunch".into();
         let d = reply_to(&again, "ada@example.org", false, "");
-        assert_eq!((d.to.as_str(), d.subject.as_str()), ("list@example.org", "RE: Lunch"));
-        assert_eq!(reply_to(&Default::default(), "a@b.c", true, "").subject, "Re: ");
+        assert_eq!(
+            (d.to.as_str(), d.subject.as_str()),
+            ("list@example.org", "RE: Lunch")
+        );
+        assert_eq!(
+            reply_to(&Default::default(), "a@b.c", true, "").subject,
+            "Re: "
+        );
     }
 
     #[test]
@@ -382,8 +422,14 @@ mod tests {
         let mut d = draft();
         d.body = "Line one\n\nLine three\n".into();
         let again = Draft::from_text(&d.to_text());
-        assert_eq!((again.to.as_str(), again.subject.as_str()), (d.to.as_str(), d.subject.as_str()));
-        assert_eq!((again.in_reply_to.as_str(), again.references.as_str()), ("<1@x>", "<0@x>"));
+        assert_eq!(
+            (again.to.as_str(), again.subject.as_str()),
+            (d.to.as_str(), d.subject.as_str())
+        );
+        assert_eq!(
+            (again.in_reply_to.as_str(), again.references.as_str()),
+            ("<1@x>", "<0@x>")
+        );
         assert_eq!(again.body, d.body);
         // Nothing kept is an empty draft.
         assert_eq!(Draft::from_text(""), Draft::default());
@@ -392,9 +438,14 @@ mod tests {
     #[test]
     fn a_draft_becomes_a_message() {
         let d = draft();
-        assert_eq!(d.recipients().unwrap(), ["jane@example.org", "bob@example.org"]);
+        assert_eq!(
+            d.recipients().unwrap(),
+            ["jane@example.org", "bob@example.org"]
+        );
         let m = d.message("Tue, 3 Nov 2026 09:15:00 +0000", "42");
-        assert!(m.starts_with("Date: Tue, 3 Nov 2026 09:15:00 +0000\r\nFrom: Ada Lovelace <ada@example.org>\r\n"));
+        assert!(m.starts_with(
+            "Date: Tue, 3 Nov 2026 09:15:00 +0000\r\nFrom: Ada Lovelace <ada@example.org>\r\n"
+        ));
         assert!(m.contains("To: \"Doe, Jane\" <jane@example.org>, bob@example.org\r\n"));
         assert!(m.contains("Subject: =?utf-8?B?"));
         assert!(m.contains("Message-ID: <42@example.org>\r\n"));
@@ -407,7 +458,10 @@ mod tests {
         assert_eq!(info.subject, "Grüße");
         assert_eq!(info.to.len(), 2);
         let text = paperpaw_sdk::read_file(&storage, "m.txt", 4096).unwrap();
-        assert_eq!(String::from_utf8(text).unwrap(), "Hallo Jürgen,\n.punkt am Anfang\n");
+        assert_eq!(
+            String::from_utf8(text).unwrap(),
+            "Hallo Jürgen,\n.punkt am Anfang\n"
+        );
     }
 
     #[test]
@@ -425,7 +479,10 @@ mod tests {
         d.body = "x".repeat(MAX_BODY + 1);
         assert_eq!(d.check(), Err(Problem::TooLong));
         d.body = "x".into();
-        d.to = (0..21).map(|n| alloc::format!("u{n}@x.org")).collect::<Vec<_>>().join(",");
+        d.to = (0..21)
+            .map(|n| alloc::format!("u{n}@x.org"))
+            .collect::<Vec<_>>()
+            .join(",");
         assert_eq!(d.check(), Err(Problem::TooManyRecipients));
     }
 
@@ -443,9 +500,15 @@ mod tests {
     fn dates_and_quotes() {
         assert_eq!(date_header(0), "Thu, 1 Jan 1970 00:00:00 +0000");
         assert_eq!(date_header(1_793_693_700), "Tue, 3 Nov 2026 08:15:00 +0000");
-        assert_eq!(crate::header::date_seconds(&date_header(1_793_693_700)), Some(1_793_693_700));
+        assert_eq!(
+            crate::header::date_seconds(&date_header(1_793_693_700)),
+            Some(1_793_693_700)
+        );
         assert_eq!(quote("a\nb\n", "Ada wrote:", 10), "Ada wrote:\n> a\n> b\n");
         assert_eq!(quote("a\nb\nc", "", 2), "> a\n> b\n");
-        assert_eq!(split_list("a@b.c, \"x, y\" <z@w.v>;"), ["a@b.c", "\"x, y\" <z@w.v>"]);
+        assert_eq!(
+            split_list("a@b.c, \"x, y\" <z@w.v>;"),
+            ["a@b.c", "\"x, y\" <z@w.v>"]
+        );
     }
 }

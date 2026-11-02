@@ -25,7 +25,12 @@ pub enum Run {
     Failed(Failure),
     /// The server's certificate is not trusted: its hashes for the reader
     /// to compare, and which of the account's servers it is.
-    Untrusted { smtp: bool, certificate: CertificateHash, key: KeyHash, why: Distrust },
+    Untrusted {
+        smtp: bool,
+        certificate: CertificateHash,
+        key: KeyHash,
+        why: Distrust,
+    },
 }
 
 #[derive(Debug)]
@@ -48,7 +53,12 @@ pub struct Job {
 impl Job {
     /// A job on socket `socket`, whose notices come as `events`.
     pub fn new(socket: Id, events: Id) -> Self {
-        Self { socket: Socket::new(socket, events), session: Session::None, run: Run::Idle, account: 0 }
+        Self {
+            socket: Socket::new(socket, events),
+            session: Session::None,
+            run: Run::Idle,
+            account: 0,
+        }
     }
 
     pub fn working(&self) -> bool {
@@ -62,7 +72,10 @@ impl Job {
             return Vec::new();
         }
         self.account = account.number;
-        let mut imap = Imap::new(account.imap.endpoint(&account.user, &account.password), tasks);
+        let mut imap = Imap::new(
+            account.imap.endpoint(&account.user, &account.password),
+            tasks,
+        );
         let events = imap.start(&mut self.socket);
         self.session = Session::Imap(imap);
         self.apply(events);
@@ -75,7 +88,10 @@ impl Job {
             return Vec::new();
         }
         self.account = account.number;
-        let mut smtp = Smtp::new(account.smtp.endpoint(&account.user, &account.password), message);
+        let mut smtp = Smtp::new(
+            account.smtp.endpoint(&account.user, &account.password),
+            message,
+        );
         let events = smtp.start(&mut self.socket);
         self.session = Session::Smtp(smtp);
         self.apply(events);
@@ -122,7 +138,16 @@ impl Job {
                 Event::Stage(stage) => Run::Working(stage),
                 Event::Done => Run::Done,
                 Event::Failed(failure) => Run::Failed(failure),
-                Event::Untrusted { certificate, key, why } => Run::Untrusted { smtp, certificate, key, why },
+                Event::Untrusted {
+                    certificate,
+                    key,
+                    why,
+                } => Run::Untrusted {
+                    smtp,
+                    certificate,
+                    key,
+                    why,
+                },
             };
         }
         if !self.working() {
@@ -133,7 +158,14 @@ impl Job {
 
 /// The command that keeps `key` as the trusted key of the account's server.
 pub fn pin(account: u8, smtp: bool, trusted: &KeyHash) -> Command {
-    let which = if smtp { field::SMTP_PIN } else { field::IMAP_PIN };
+    let which = if smtp {
+        field::SMTP_PIN
+    } else {
+        field::IMAP_PIN
+    };
     let id = Id::parse(&key(account, which)).unwrap_or_else(|_| Id::new_static("mail.1.imap-pin"));
-    Command::SetSetting(id, paperpaw_sdk::SettingValue::Text(alloc::borrow::Cow::Owned(alloc::format!("{trusted}"))))
+    Command::SetSetting(
+        id,
+        paperpaw_sdk::SettingValue::Text(alloc::borrow::Cow::Owned(alloc::format!("{trusted}"))),
+    )
 }

@@ -66,8 +66,16 @@ pub trait Io {
 pub enum Input {
     /// A plain connection is made.
     Connected,
-    Secured { certificate: CertificateHash, key: KeyHash, time_checked: bool },
-    Untrusted { certificate: CertificateHash, key: KeyHash, why: Distrust },
+    Secured {
+        certificate: CertificateHash,
+        key: KeyHash,
+        time_checked: bool,
+    },
+    Untrusted {
+        certificate: CertificateHash,
+        key: KeyHash,
+        why: Distrust,
+    },
     Bytes(Vec<u8>),
     /// A file read is complete.
     Saved(String),
@@ -131,7 +139,11 @@ pub enum Event {
     Failed(Failure),
     /// The server's certificate is not trusted: its hashes, for the
     /// reader to compare and, if they agree, to keep as the pin.
-    Untrusted { certificate: CertificateHash, key: KeyHash, why: Distrust },
+    Untrusted {
+        certificate: CertificateHash,
+        key: KeyHash,
+        why: Distrust,
+    },
 }
 
 fn failure_of(error: SocketError) -> Failure {
@@ -139,7 +151,9 @@ fn failure_of(error: SocketError) -> Failure {
         SocketError::Unsupported => Failure::NoTls,
         SocketError::Busy => Failure::Busy,
         SocketError::NoMemory => Failure::NoMemory,
-        SocketError::Tls | SocketError::NameMismatch | SocketError::Expired => Failure::Secure(error),
+        SocketError::Tls | SocketError::NameMismatch | SocketError::Expired => {
+            Failure::Secure(error)
+        }
         other => Failure::Network(other),
     }
 }
@@ -171,18 +185,35 @@ pub enum Task {
     /// The latest `count` messages of `folder` (as the server names it):
     /// their list to `index`, the counts to `status`; `now` is the time to
     /// keep with them (0 where the clock is not known).
-    Sync { folder: String, count: u32, index: String, status: String, now: i64 },
+    Sync {
+        folder: String,
+        count: u32,
+        index: String,
+        status: String,
+        now: i64,
+    },
     /// The message `uid` of `folder` as the server has it, to `out`.
-    Body { folder: String, uid: u32, out: String },
+    Body {
+        folder: String,
+        uid: u32,
+        out: String,
+    },
     /// Sets (`on`) or clears a flag (`\Seen`, `\Flagged`) of a message.
-    Flag { folder: String, uid: u32, flag: &'static str, on: bool },
+    Flag {
+        folder: String,
+        uid: u32,
+        flag: &'static str,
+        on: bool,
+    },
 }
 
 impl Task {
     fn folder(&self) -> Option<&str> {
         match self {
             Task::Folders { .. } => None,
-            Task::Sync { folder, .. } | Task::Body { folder, .. } | Task::Flag { folder, .. } => Some(folder),
+            Task::Sync { folder, .. } | Task::Body { folder, .. } | Task::Flag { folder, .. } => {
+                Some(folder)
+            }
         }
     }
 }
@@ -208,7 +239,11 @@ enum Command {
 enum Literal {
     /// Into memory (a block of headers); `keep` is false where it is too
     /// large and only skipped.
-    Memory { left: usize, data: Vec<u8>, keep: bool },
+    Memory {
+        left: usize,
+        data: Vec<u8>,
+        keep: bool,
+    },
     /// The rest of a message is read by the socket into a file of its own,
     /// then joined to the first part.
     File { scratch: String },
@@ -284,7 +319,9 @@ impl Imap {
     }
 
     fn has(&self, capability: &str) -> bool {
-        self.capabilities.iter().any(|c| c.eq_ignore_ascii_case(capability))
+        self.capabilities
+            .iter()
+            .any(|c| c.eq_ignore_ascii_case(capability))
     }
 
     /// Sends `text` as the next command, tagged.
@@ -320,10 +357,18 @@ impl Imap {
                 }
                 self.wire.more(io);
             }
-            Input::Untrusted { certificate, key, why } => {
+            Input::Untrusted {
+                certificate,
+                key,
+                why,
+            } => {
                 self.finished = true;
                 io.close();
-                return alloc::vec![Event::Untrusted { certificate, key, why }];
+                return alloc::vec![Event::Untrusted {
+                    certificate,
+                    key,
+                    why
+                }];
             }
             Input::Bytes(bytes) => {
                 self.wire.reading = false;
@@ -334,7 +379,8 @@ impl Imap {
                 self.run(io, storage, &mut events);
             }
             Input::Saved(path) => {
-                let waiting = matches!(&self.literal, Some(Literal::File { scratch }) if *scratch == path);
+                let waiting =
+                    matches!(&self.literal, Some(Literal::File { scratch }) if *scratch == path);
                 if waiting {
                     self.literal = None;
                     if self.join(storage, &path).is_err() {
@@ -357,7 +403,11 @@ impl Imap {
         let after_logout = self.command == Some(Command::Logout);
         self.finished = true;
         io.close();
-        alloc::vec![if after_logout { Event::Done } else { Event::Failed(Failure::Network(SocketError::Lost)) }]
+        alloc::vec![if after_logout {
+            Event::Done
+        } else {
+            Event::Failed(Failure::Network(SocketError::Lost))
+        }]
     }
 
     /// Works through what is in the buffer; asks for more when it is used
@@ -390,7 +440,13 @@ impl Imap {
 
     /// One line of the server. False where the read of a file took over
     /// (no more lines until it is in).
-    fn line(&mut self, line: &[u8], io: &mut dyn Io, storage: &dyn Storage, events: &mut Vec<Event>) -> bool {
+    fn line(
+        &mut self,
+        line: &[u8],
+        io: &mut dyn Io,
+        storage: &dyn Storage,
+        events: &mut Vec<Event>,
+    ) -> bool {
         if self.fetching.is_some() && self.literal.is_none() {
             // What follows a literal: maybe more items, then `)`.
             self.rest_of_fetch(line);
@@ -446,12 +502,21 @@ impl Imap {
         }
     }
 
-    fn untagged(&mut self, u: Untagged, line: &[u8], io: &mut dyn Io, storage: &dyn Storage, events: &mut Vec<Event>) -> bool {
+    fn untagged(
+        &mut self,
+        u: Untagged,
+        line: &[u8],
+        io: &mut dyn Io,
+        storage: &dyn Storage,
+        events: &mut Vec<Event>,
+    ) -> bool {
         match u {
             Untagged::Capability(list) => self.capabilities = list,
             Untagged::Code { code, args } => match code.as_str() {
                 "CAPABILITY" => self.capabilities = args,
-                "UIDVALIDITY" => self.uid_validity = args.first().and_then(|a| a.parse().ok()).unwrap_or(0),
+                "UIDVALIDITY" => {
+                    self.uid_validity = args.first().and_then(|a| a.parse().ok()).unwrap_or(0)
+                }
                 _ => {}
             },
             Untagged::Exists(n) => self.exists = n,
@@ -481,12 +546,21 @@ impl Imap {
     }
 
     /// A FETCH answer: its numbers, and the literal that may follow.
-    fn fetch(&mut self, items: &[Token], line: &[u8], io: &mut dyn Io, storage: &dyn Storage, events: &mut Vec<Event>) -> bool {
+    fn fetch(
+        &mut self,
+        items: &[Token],
+        line: &[u8],
+        io: &mut dyn Io,
+        storage: &dyn Storage,
+        events: &mut Vec<Event>,
+    ) -> bool {
         self.fetching = Some(Fetching {
             uid: imap::fetch_number(items, "UID").unwrap_or(0) as u32,
             flags: imap::fetch_flags(items),
             size: imap::fetch_number(items, "RFC822.SIZE").unwrap_or(0),
-            date: imap::fetch_text(items, "INTERNALDATE").and_then(imap_date).unwrap_or(0),
+            date: imap::fetch_text(items, "INTERNALDATE")
+                .and_then(imap_date)
+                .unwrap_or(0),
             headers: Vec::new(),
         });
         let Some(len) = imap::literal_at_end(line) else {
@@ -496,7 +570,11 @@ impl Imap {
         };
         match self.command {
             Some(Command::FetchHeaders) => {
-                self.literal = Some(Literal::Memory { left: len, data: Vec::new(), keep: len <= 16 * 1024 });
+                self.literal = Some(Literal::Memory {
+                    left: len,
+                    data: Vec::new(),
+                    keep: len <= 16 * 1024,
+                });
             }
             Some(Command::FetchBody) => return self.body_literal(len, io, storage, events),
             _ => self.literal = Some(Literal::Skip { left: len }),
@@ -506,7 +584,13 @@ impl Imap {
 
     /// A message's bytes (`len`): those that came with the line start its
     /// file, the socket reads the rest into a file of its own.
-    fn body_literal(&mut self, len: usize, io: &mut dyn Io, storage: &dyn Storage, events: &mut Vec<Event>) -> bool {
+    fn body_literal(
+        &mut self,
+        len: usize,
+        io: &mut dyn Io,
+        storage: &dyn Storage,
+        events: &mut Vec<Event>,
+    ) -> bool {
         let out = match &self.task {
             Some(Task::Body { out, .. }) if len <= store::MAX_FETCH + 1024 => out.clone(),
             _ => {
@@ -589,8 +673,13 @@ impl Imap {
         let Some(f) = self.fetching.take() else {
             return;
         };
-        if self.command == Some(Command::FetchHeaders) && f.uid != 0 && self.rows.len() < store::MAX_MESSAGES as usize {
-            self.rows.push(Row::from_headers(f.uid, &f.flags, f.date, f.size, &f.headers));
+        if self.command == Some(Command::FetchHeaders)
+            && f.uid != 0
+            && self.rows.len() < store::MAX_MESSAGES as usize
+        {
+            self.rows.push(Row::from_headers(
+                f.uid, &f.flags, f.date, f.size, &f.headers,
+            ));
         }
     }
 
@@ -602,7 +691,9 @@ impl Imap {
         let mut offset = 0u64;
         let mut chunk = [0u8; 1024];
         loop {
-            let n = storage.read_at(scratch, offset, &mut chunk).map_err(|_| ())?;
+            let n = storage
+                .read_at(scratch, offset, &mut chunk)
+                .map_err(|_| ())?;
             if n == 0 {
                 break;
             }
@@ -614,7 +705,14 @@ impl Imap {
     }
 
     /// The command the session waited for is done.
-    fn completed(&mut self, ok: bool, text: String, io: &mut dyn Io, storage: &dyn Storage, events: &mut Vec<Event>) {
+    fn completed(
+        &mut self,
+        ok: bool,
+        text: String,
+        io: &mut dyn Io,
+        storage: &dyn Storage,
+        events: &mut Vec<Event>,
+    ) {
         let Some(command) = self.command else {
             return;
         };
@@ -697,13 +795,20 @@ impl Imap {
             events.extend(self.fail(io, Failure::Unsafe));
         } else if self.has("AUTH=PLAIN") {
             if self.has("SASL-IR") {
-                let text = format!("AUTHENTICATE PLAIN {}", codec::base64_line(&auth_plain_data(&self.endpoint)));
+                let text = format!(
+                    "AUTHENTICATE PLAIN {}",
+                    codec::base64_line(&auth_plain_data(&self.endpoint))
+                );
                 self.send(io, Command::Auth, &text);
             } else {
                 self.send(io, Command::Auth, "AUTHENTICATE PLAIN");
             }
         } else if !self.has("LOGINDISABLED") {
-            let text = format!("LOGIN {} {}", imap::quoted(&self.endpoint.user), imap::quoted(&self.endpoint.password));
+            let text = format!(
+                "LOGIN {} {}",
+                imap::quoted(&self.endpoint.user),
+                imap::quoted(&self.endpoint.password)
+            );
             self.send(io, Command::Login, &text);
         } else {
             events.extend(self.fail(io, Failure::Unsafe));
@@ -745,7 +850,11 @@ impl Imap {
                     self.counts = Some((0, 0));
                     self.finish_sync(io, storage, events);
                 } else {
-                    self.send(io, Command::Status, &format!("STATUS {} (MESSAGES UNSEEN)", imap::quoted(&folder)));
+                    self.send(
+                        io,
+                        Command::Status,
+                        &format!("STATUS {} (MESSAGES UNSEEN)", imap::quoted(&folder)),
+                    );
                 }
             }
             Some(Task::Body { uid, .. }) => {
@@ -754,7 +863,11 @@ impl Imap {
             }
             Some(Task::Flag { uid, flag, on, .. }) => {
                 let sign = if on { '+' } else { '-' };
-                self.send(io, Command::Store, &format!("UID STORE {uid} {sign}FLAGS.SILENT ({flag})"));
+                self.send(
+                    io,
+                    Command::Store,
+                    &format!("UID STORE {uid} {sign}FLAGS.SILENT ({flag})"),
+                );
             }
             _ => self.next_task(io, events),
         }
@@ -764,7 +877,10 @@ impl Imap {
         let Some(Task::Sync { count, .. }) = &self.task else {
             return;
         };
-        let first = self.exists.saturating_sub((*count).clamp(1, store::MAX_MESSAGES) - 1).max(1);
+        let first = self
+            .exists
+            .saturating_sub((*count).clamp(1, store::MAX_MESSAGES) - 1)
+            .max(1);
         let text = format!(
             "FETCH {first}:{} (UID FLAGS INTERNALDATE RFC822.SIZE BODY.PEEK[HEADER.FIELDS (FROM TO CC SUBJECT DATE MESSAGE-ID)])",
             self.exists
@@ -774,16 +890,25 @@ impl Imap {
 
     /// The list and the counts of a folder are written, newest first.
     fn finish_sync(&mut self, io: &mut dyn Io, storage: &dyn Storage, events: &mut Vec<Event>) {
-        let Some(Task::Sync { index, status, now, .. }) = self.task.clone() else {
+        let Some(Task::Sync {
+            index, status, now, ..
+        }) = self.task.clone()
+        else {
             return;
         };
         let mut rows = core::mem::take(&mut self.rows);
         rows.sort_by_key(|r| core::cmp::Reverse(r.uid));
-        let unseen = self
-            .counts
-            .map_or_else(|| rows.iter().filter(|r| !r.seen()).count() as u32, |(_, unseen)| unseen);
+        let unseen = self.counts.map_or_else(
+            || rows.iter().filter(|r| !r.seen()).count() as u32,
+            |(_, unseen)| unseen,
+        );
         let messages = self.counts.map_or(self.exists, |(messages, _)| messages);
-        let counts = Counts { messages, unseen, uid_validity: self.uid_validity, checked: now };
+        let counts = Counts {
+            messages,
+            unseen,
+            uid_validity: self.uid_validity,
+            checked: now,
+        };
         let written = store::write_index(storage, &index, &rows)
             .and_then(|()| storage.write(&status, counts.line().as_bytes()));
         if written.is_err() {
@@ -925,10 +1050,18 @@ impl Smtp {
                 self.wire.more(io);
                 Vec::new()
             }
-            Input::Untrusted { certificate, key, why } => {
+            Input::Untrusted {
+                certificate,
+                key,
+                why,
+            } => {
                 self.finished = true;
                 io.close();
-                alloc::vec![Event::Untrusted { certificate, key, why }]
+                alloc::vec![Event::Untrusted {
+                    certificate,
+                    key,
+                    why
+                }]
             }
             Input::Bytes(bytes) => {
                 self.wire.reading = false;
@@ -1069,7 +1202,11 @@ impl Smtp {
                 if !reply.is_ok() {
                     let who = self.message.to.get(n).cloned().unwrap_or_default();
                     let text = String::from(reply.text());
-                    let failure = if reply.is_temporary() { Failure::Temporary(text) } else { Failure::Recipient(who, text) };
+                    let failure = if reply.is_temporary() {
+                        Failure::Temporary(text)
+                    } else {
+                        Failure::Recipient(who, text)
+                    };
                     events.extend(self.fail(io, failure));
                     return;
                 }
@@ -1087,7 +1224,11 @@ impl Smtp {
             Step::Body => {
                 if !reply.is_ok() {
                     let text = String::from(reply.text());
-                    let failure = if reply.is_temporary() { Failure::Temporary(text) } else { Failure::Refused(text) };
+                    let failure = if reply.is_temporary() {
+                        Failure::Temporary(text)
+                    } else {
+                        Failure::Refused(text)
+                    };
                     events.extend(self.fail(io, failure));
                     return;
                 }
@@ -1116,7 +1257,10 @@ impl Smtp {
 
     fn envelope(&mut self, io: &mut dyn Io, events: &mut Vec<Event>) {
         if self.extensions.size > 0 && self.message.data.len() as u64 > self.extensions.size {
-            events.extend(self.fail(io, Failure::Refused(String::from("the message is larger than the server takes"))));
+            events.extend(self.fail(
+                io,
+                Failure::Refused(String::from("the message is larger than the server takes")),
+            ));
             return;
         }
         let line = smtp::mail_from(&self.message.from);

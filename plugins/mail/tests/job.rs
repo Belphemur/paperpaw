@@ -1,11 +1,17 @@
 //! The job as a screen uses it: commands out, notices in.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, reason = "tests unwrap what they just made")]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests unwrap what they just made"
+)]
 
 use paperpaw_plugin_mail::account::Account;
 use paperpaw_plugin_mail::job::{self, Job, Run};
 use paperpaw_plugin_mail::session::{Failure, Stage, Task};
-use paperpaw_sdk::{CertificateHash, Command, Distrust, Id, KeyHash, MemoryStorage, SocketError, SocketNotice};
+use paperpaw_sdk::{
+    CertificateHash, Command, Distrust, Id, KeyHash, MemoryStorage, SocketError, SocketNotice,
+};
 
 fn account() -> Account {
     struct V;
@@ -34,7 +40,11 @@ fn job() -> Job {
 }
 
 fn notice_failed(error: SocketError) -> SocketNotice {
-    SocketNotice::Failed { socket: Id::new_static("mail.socket"), reason: String::new(), error }
+    SocketNotice::Failed {
+        socket: Id::new_static("mail.socket"),
+        reason: String::new(),
+        error,
+    }
 }
 
 #[test]
@@ -42,15 +52,34 @@ fn starting_connects_and_a_failure_ends_the_run() {
     let mut job = job();
     let storage = MemoryStorage::new();
     let commands = job.start_imap(&account(), vec![Task::Folders { out: "f".into() }]);
-    assert!(matches!(commands.as_slice(), [Command::Connect { port: 993, tls: Some(_), .. }]), "{commands:?}");
+    assert!(
+        matches!(
+            commands.as_slice(),
+            [Command::Connect {
+                port: 993,
+                tls: Some(_),
+                ..
+            }]
+        ),
+        "{commands:?}"
+    );
     assert_eq!(job.run, Run::Working(Stage::Connecting));
     // A second start while one runs does nothing.
     assert!(job.start_imap(&account(), vec![]).is_empty());
     job.notice(notice_failed(SocketError::NoNetwork), &storage);
-    assert_eq!(job.run, Run::Failed(Failure::Network(SocketError::NoNetwork)));
+    assert_eq!(
+        job.run,
+        Run::Failed(Failure::Network(SocketError::NoNetwork))
+    );
     // Notices after the end change nothing.
-    assert!(job.notice(notice_failed(SocketError::Lost), &storage).is_empty());
-    assert_eq!(job.run, Run::Failed(Failure::Network(SocketError::NoNetwork)));
+    assert!(
+        job.notice(notice_failed(SocketError::Lost), &storage)
+            .is_empty()
+    );
+    assert_eq!(
+        job.run,
+        Run::Failed(Failure::Network(SocketError::NoNetwork))
+    );
 }
 
 #[test]
@@ -65,12 +94,24 @@ fn an_untrusted_server_says_which_one_and_the_pin_is_a_setting() {
     job.start_smtp(&account(), out);
     let (certificate, key) = (CertificateHash::new([1; 32]), KeyHash::new([2; 32]));
     job.notice(
-        SocketNotice::Untrusted { socket: Id::new_static("mail.socket"), certificate, key, why: Distrust::UnknownIssuer },
+        SocketNotice::Untrusted {
+            socket: Id::new_static("mail.socket"),
+            certificate,
+            key,
+            why: Distrust::UnknownIssuer,
+        },
         &storage,
     );
-    let Run::Untrusted { smtp, key: shown, .. } = job.run.clone() else { panic!("{:?}", job.run) };
+    let Run::Untrusted {
+        smtp, key: shown, ..
+    } = job.run.clone()
+    else {
+        panic!("{:?}", job.run)
+    };
     assert!(smtp);
-    let Command::SetSetting(id, _) = job::pin(1, smtp, &shown) else { panic!() };
+    let Command::SetSetting(id, _) = job::pin(1, smtp, &shown) else {
+        panic!()
+    };
     assert_eq!(id.as_str(), "mail.1.smtp-pin");
 }
 
