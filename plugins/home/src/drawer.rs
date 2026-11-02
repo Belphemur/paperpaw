@@ -24,9 +24,6 @@ pub(crate) struct DrawerScreen {
     header: ui::Header,
     list: ListView,
     tools: Vec<Id>,
-    /// The interface runs right to left: the grid is laid out from the
-    /// right ([`DrawerScreen::flip`]).
-    rtl: bool,
     /// The lines the longest name takes: every tool keeps room for them.
     lines: usize,
 }
@@ -62,7 +59,6 @@ impl DrawerScreen {
                 .columns(COLUMNS)
                 .focus_on_keys(env),
             tools,
-            rtl: style.is_rtl(),
             lines,
             style,
             header,
@@ -70,20 +66,10 @@ impl DrawerScreen {
     }
 
     /// `rect`, a place of the list's grid (laid out from the left), as it
-    /// lies where the grid runs from the right: the columns' leftover
-    /// width stays at the left.
+    /// lies where the interface runs right to left and the grid with it:
+    /// the columns' leftover width stays at the left.
     fn flip(&self, rect: Rect) -> Rect {
-        if !self.rtl {
-            return rect;
-        }
-        let area = self.list.area();
-        let from_left = rect.x - area.x;
-        Rect::new(
-            (area.right() as u16).saturating_sub(from_left + rect.width),
-            rect.y,
-            rect.width,
-            rect.height,
-        )
+        self.style.flip(self.list.area(), rect)
     }
 
     fn run(&self, index: usize, cx: &mut Cx<'_, '_>) {
@@ -133,7 +119,7 @@ impl Screen for DrawerScreen {
         let columns = COLUMNS as isize;
         // Left and right are where the tools are: from the right, the next
         // one is to the left.
-        let (back, on) = if self.rtl {
+        let (back, on) = if self.style.is_rtl() {
             (actions::RIGHT, actions::LEFT)
         } else {
             (actions::LEFT, actions::RIGHT)
@@ -184,11 +170,11 @@ impl Screen for DrawerScreen {
                 // Where the grid is mirrored, the point is where it would be
                 // on the grid from the left.
                 let area = self.list.area();
-                let start = if self.rtl && area.contains(gesture.start) {
-                    Point::new(
-                        area.x as i32 + area.right() as i32 - 1 - gesture.start.x,
-                        gesture.start.y,
-                    )
+                let start = if self.style.is_rtl() && area.contains(gesture.start) {
+                    // A point mirrors as a rectangle 1 pixel wide.
+                    let x = u16::try_from(gesture.start.x).unwrap_or_default();
+                    let mirrored = self.style.flip(area, Rect::new(x, 0, 1, 1));
+                    Point::new(i32::from(mirrored.x), gesture.start.y)
                 } else {
                     gesture.start
                 };

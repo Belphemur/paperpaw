@@ -64,7 +64,8 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
 
 - UI: `UiStyle::flip` and `UiStyle::flip_x` are public (#33): a screen lays a row or a grid out once from the left
   and mirrors each part where the interface runs right to left, as the SDK's own parts do. New functions, no
-  change of what plugins built before see; their api.txt lines come with the next bless.
+  change of what plugins built before see; their api.txt lines come with the next bless. The library's rows and
+  covers, the reader's menu bar and the home screen's drawer mirror with them now, no copies of their own.
 - Text: `TextInk::RIGHT_TO_LEFT`, a flag of the reserved ones: the lines a handle draws run right to left
   (`TextInk::is_right_to_left`). The kernel sets it for the interface's font where its language runs right to left.
 - Screens mirror in a user-interface language that runs right to left (#33): the switch, value rows and their

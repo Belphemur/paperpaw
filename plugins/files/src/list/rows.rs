@@ -20,55 +20,37 @@ const BADGES: usize = 2;
 
 /// Where the interface runs right to left, what a row lays out from the
 /// left (its cover, its text, its state) stands mirrored in the row: as
-/// far from the row's right edge as it was from its left one. (The same
-/// as the SDK's `UiStyle::flip`, which is not public: for interface 6.)
+/// far from the row's right edge as it was from its left one
+/// ([`UiStyle::flip`], [`UiStyle::flip_x`] for this row).
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct Flip {
-    rtl: bool,
-    x: u16,
-    width: u16,
+pub(crate) struct Flip<'a> {
+    style: &'a UiStyle,
+    row: Rect,
 }
 
-impl Flip {
-    pub(crate) fn new(style: &UiStyle, row: Rect) -> Self {
-        Self {
-            rtl: style.is_rtl(),
-            x: row.x,
-            width: row.width,
-        }
+impl<'a> Flip<'a> {
+    pub(crate) fn new(style: &'a UiStyle, row: Rect) -> Self {
+        Self { style, row }
     }
 
     pub(crate) fn is_rtl(&self) -> bool {
-        self.rtl
+        self.style.is_rtl()
     }
 
     /// Where a span `width` wide, laid out from `x`, starts.
     pub(crate) fn span(&self, x: u16, width: u16) -> u16 {
-        if !self.rtl {
-            return x;
-        }
-        let mirrored =
-            2 * i32::from(self.x) + i32::from(self.width) - i32::from(x) - i32::from(width);
-        mirrored.clamp(0, i32::from(u16::MAX)) as u16
+        self.rect(Rect::new(x, self.row.y, width, 0)).x
     }
 
-    /// The same for a text `width` pixels wide.
+    /// The same for a text `width` pixels wide, never left of 0.
     pub(crate) fn at(&self, x: u16, width: f32) -> f32 {
-        if !self.rtl {
-            return f32::from(x);
-        }
-        let mirrored = 2.0 * f32::from(self.x) + f32::from(self.width) - f32::from(x) - width;
-        mirrored.max(0.0)
+        let at = self.style.flip_x(self.row, f32::from(x), width);
+        if self.is_rtl() { at.max(0.0) } else { at }
     }
 
     /// `rect`, laid out from the left.
     pub(crate) fn rect(&self, rect: Rect) -> Rect {
-        Rect::new(
-            self.span(rect.x, rect.width),
-            rect.y,
-            rect.width,
-            rect.height,
-        )
+        self.style.flip(self.row, rect)
     }
 }
 
@@ -444,7 +426,7 @@ fn state_width(env: &Env<'_>, style: &UiStyle, bar: u16, book: &Loaded) -> u16 {
 fn draw_state(
     ui: &mut ui::Ui<'_>,
     sizes: &Sizes,
-    flip: Flip,
+    flip: Flip<'_>,
     x: u16,
     area: Rect,
     bar: u16,
@@ -501,7 +483,7 @@ fn draw_state(
 fn draw_state_rtl(
     ui: &mut ui::Ui<'_>,
     sizes: &Sizes,
-    flip: Flip,
+    flip: Flip<'_>,
     x: u16,
     area: Rect,
     bar: u16,
@@ -670,7 +652,7 @@ pub(crate) fn prepare_row(
 /// Draws a book's note in `area` from `x`, its badges' icons after it (from
 /// the right, the icons to the left of it, where the interface runs right
 /// to left).
-fn draw_note(ui: &mut ui::Ui<'_>, flip: Flip, x: u16, area: Rect, book: &Loaded, ink: Color) {
+fn draw_note(ui: &mut ui::Ui<'_>, flip: Flip<'_>, x: u16, area: Rect, book: &Loaded, ink: Color) {
     let (env, style) = (ui.env(), ui.style());
     let Some(font) = ui.font() else {
         return;
