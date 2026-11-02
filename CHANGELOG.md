@@ -24,6 +24,8 @@ change the plugin SDK.
   written, followed or freed, the entries that look sane included (its space may hold another file's data; the space
   comes back when the card is checked on a computer). Before, removing the folder, or a book's cache in it, failed
   with "invalid path". Folders of names PaperPaw does not take (made elsewhere: `con`) are removed with all they hold.
+- A book whose cache folder cannot be cleared (a damaged folder, #99) is never read from: the book shows its details,
+  and opening it says the card could not be written, instead of reading another book's chapters as its own.
 
 ## [0.6.0-beta.1] - 2026-11-02
 
