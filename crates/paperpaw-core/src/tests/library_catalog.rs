@@ -239,6 +239,31 @@ fn woken_with_the_library_open_it_is_walked_at_once() {
     assert_eq!(log.borrow().len(), 2);
 }
 
+/// A start that ends a sleep (the X4's deep sleep) tells both the start
+/// and the wake: the library is walked once, when a view first asks, not
+/// twice, and that walk is not started again.
+#[test]
+fn a_start_after_a_sleep_walks_the_library_once() {
+    let log = log();
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(LibraryPlugin { log: log.clone() })
+        .storage(two_books())
+        .after_sleep(true)
+        .build()
+        .unwrap();
+    let effects = kernel.start(Instant(0));
+    let now = run(&mut kernel, 0, effects);
+    assert!(!kernel.storage().exists(".paperpaw/library/catalog.txt"));
+    let now = want(&mut kernel, now, false);
+    assert_eq!(paths(&kernel), ["books/a.txt", "books/b.txt"]);
+    assert_eq!(log.borrow().len(), 1);
+    // Asked again (another view): walked already since the wake.
+    kernel.storage().write("books/c.txt", b"three").unwrap();
+    want(&mut kernel, now + 8_000, false);
+    assert_eq!(paths(&kernel), ["books/a.txt", "books/b.txt"]);
+    assert_eq!(log.borrow().len(), 1);
+}
+
 /// A walk under way at the sleep (no library open) starts again after
 /// the wake, rather than end as the walk after it: it had passed where a
 /// book was copied while it slept.
