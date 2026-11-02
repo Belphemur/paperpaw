@@ -670,3 +670,12 @@ fn imap_tokens_of_hostile_lines_are_quick_and_bounded() {
     buffer.push(&vec![b'a'; imap::MAX_LINE + 1]);
     assert!(buffer.line().is_err());
 }
+
+#[test]
+fn files_are_written_whole_or_not_at_all() {
+    let storage = MemoryStorage::new();
+    store::write_atomic(&storage, "a/b.txt", b"first").unwrap();
+    store::write_atomic(&storage, "a/b.txt", b"second").unwrap();
+    assert_eq!(storage.size("a/b.txt").unwrap(), 6);
+    assert!(!storage.exists("a/b.txt.part"), "no half-way file is left");
+}

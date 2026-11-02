@@ -214,8 +214,7 @@ impl Writer {
     fn keep(&self, storage: &dyn Storage) {
         if let Some(account) = self.account() {
             let file = store::draft_file(account.number);
-            let _ = store::ensure_parent(storage, &file);
-            let _ = storage.write(&file, self.draft.to_text().as_bytes());
+            let _ = store::write_atomic(storage, &file, self.draft.to_text().as_bytes());
         }
     }
 

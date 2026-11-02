@@ -940,7 +940,7 @@ impl Imap {
             checked: now,
         };
         let written = store::write_index(storage, &index, &rows)
-            .and_then(|()| storage.write(&status, counts.line().as_bytes()));
+            .and_then(|()| store::write_atomic(storage, &status, counts.line().as_bytes()));
         if written.is_err() {
             events.extend(self.fail(io, Failure::Storage));
             return;

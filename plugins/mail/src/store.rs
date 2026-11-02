@@ -188,6 +188,26 @@ impl Row {
     }
 }
 
+/// Writes `data` to `file` so that a power cut leaves the old file or the
+/// new, never half of it: to `<file>.part`, then moved over it.
+pub fn write_atomic(storage: &dyn Storage, file: &str, data: &[u8]) -> Result<(), StorageError> {
+    ensure_parent(storage, file)?;
+    let part = format!("{file}.part");
+    storage.write(&part, data)?;
+    match storage.rename(&part, file) {
+        Ok(()) => Ok(()),
+        // A storage that cannot move files writes in place.
+        Err(StorageError::Unsupported) => {
+            let _ = storage.remove(&part);
+            storage.write(file, data)
+        }
+        Err(e) => {
+            let _ = storage.remove(&part);
+            Err(e)
+        }
+    }
+}
+
 /// The list of a folder, newest first, as the file keeps it; rows that
 /// cannot be read are left out.
 pub fn read_index(storage: &dyn Storage, file: &str) -> Vec<Row> {
@@ -202,8 +222,7 @@ pub fn write_index(storage: &dyn Storage, file: &str, rows: &[Row]) -> Result<()
     for row in rows.iter().take(MAX_MESSAGES as usize) {
         text.push_str(&row.line());
     }
-    ensure_parent(storage, file)?;
-    storage.write(file, text.as_bytes())
+    write_atomic(storage, file, text.as_bytes())
 }
 
 /// What a folder holds, as of its last sync.
@@ -295,8 +314,7 @@ pub fn write_folders(
         text.push_str(&field(&folder.flags.join(" ")));
         text.push('\n');
     }
-    ensure_parent(storage, file)?;
-    storage.write(file, text.as_bytes())
+    write_atomic(storage, file, text.as_bytes())
 }
 
 /// The folders sorted for the reader: the inbox first, then the special ones
@@ -459,8 +477,7 @@ pub fn make_letter(storage: &dyn Storage, raw: &str, out: &str) -> Result<Letter
     letter.text = body;
     let mut file = letter.header_text();
     file.push_str(&letter.text);
-    ensure_parent(storage, out)?;
-    storage.write(out, file.as_bytes())?;
+    write_atomic(storage, out, file.as_bytes())?;
     let _ = storage.remove(&scratch);
     let _ = storage.remove(raw);
     Ok(letter)
