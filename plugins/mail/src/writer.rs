@@ -307,7 +307,9 @@ impl Writer {
                 self.status = env.i18n().tr("mail.sent").to_string();
             }
             Run::Failed(failure) => self.status = texts::failure(&env, &failure),
-            Run::Untrusted { .. } => self.status = env.i18n().tr("mail.pin.open-list").to_string(),
+            Run::Untrusted { smtp, .. } => {
+                self.status = texts::untrusted(&env, self.job.account, smtp);
+            }
             Run::Idle | Run::Working(_) => {}
         }
         cx.request_redraw();

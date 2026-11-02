@@ -86,6 +86,41 @@ use Security::{Implicit, StartTls};
 /// The value of the provider setting that sets nothing.
 pub const OWN: &str = "mail.provider.own";
 
+/// What to do about a server whose certificate no authority vouches for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Offer {
+    /// An own server, trusted before by no key: ask once.
+    Ask,
+    /// A key was trusted and is another now: no connection, and no way to
+    /// trust the new one with a tap (clear the old one in the settings).
+    Changed,
+    /// A provider's server (its certificate is one an authority vouches
+    /// for): someone else is answering. No connection, no offer.
+    Attack,
+}
+
+/// What may be offered to the reader for the account's IMAP (`smtp` false)
+/// or SMTP server that was not trusted.
+pub fn offer(values: &dyn Values, number: u8, smtp: bool) -> Offer {
+    let provider = values.text(&key(number, field::PROVIDER));
+    if !provider.is_empty() && provider != OWN {
+        return Offer::Attack;
+    }
+    let pin = values.text(&key(
+        number,
+        if smtp {
+            field::SMTP_PIN
+        } else {
+            field::IMAP_PIN
+        },
+    ));
+    if pin.is_empty() {
+        Offer::Ask
+    } else {
+        Offer::Changed
+    }
+}
+
 /// The providers to start from. Their servers are public; the reader still
 /// needs the password (often an app password) the provider asks for.
 pub const PRESETS: [Preset; 10] = [

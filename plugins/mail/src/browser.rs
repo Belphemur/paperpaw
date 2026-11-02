@@ -7,6 +7,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use paperpaw_sdk::Distrust;
 use paperpaw_sdk::builtin::{actions, params as core_params, slots};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::{Confirmed, SocketNotice};
@@ -304,19 +305,31 @@ impl Browser {
                 self.queue.clear();
                 self.status = texts::failure(&env, &failure);
             }
-            Run::Untrusted {
-                smtp,
-                certificate,
-                key,
-                ..
-            } => {
+            Run::Untrusted { smtp, key, why, .. } => {
                 self.queue.clear();
+                // A provider's server, or one whose trusted key changed, is
+                // not offered with a tap: said so, not connected.
+                if account::offer(&env, self.job.account, smtp) != account::Offer::Ask {
+                    self.status = texts::untrusted(&env, self.job.account, smtp);
+                    cx.request_redraw();
+                    return;
+                }
                 self.asked = Some(self.job.account);
                 let i18n = env.i18n();
-                let shown = grouped(&format!("{certificate}"));
+                // The key is what is kept and what the next connection is
+                // checked against.
+                let shown = grouped(&format!("{key}"));
+                let why = i18n.tr(match why {
+                    Distrust::UnknownIssuer => "mail.pin.why.unknown-issuer",
+                    Distrust::NotPinned => "mail.pin.why.not-pinned",
+                    _ => "mail.pin.why.unknown-issuer",
+                });
                 cx.command(
                     paperpaw_sdk::ask::confirm(i18n.tr("mail.pin.title"), &crate::PIN_ANSWER)
-                        .text(i18n.format("mail.pin.text", &[("hash", Arg::Str(&shown))]))
+                        .text(i18n.format(
+                            "mail.pin.text",
+                            &[("why", Arg::Str(why)), ("hash", Arg::Str(&shown))],
+                        ))
                         .yes(i18n.tr("mail.pin.yes"))
                         .no(i18n.tr("mail.pin.no"))
                         .with("account", format!("{}", self.job.account))

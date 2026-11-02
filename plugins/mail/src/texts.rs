@@ -21,6 +21,17 @@ pub fn stage<'e>(env: &Env<'e>, stage: Stage) -> &'e str {
     env.i18n().tr(key)
 }
 
+/// What a screen says when a server's certificate was not trusted and it
+/// cannot ask (the list does): where to trust it, or why it is not offered.
+pub fn untrusted(env: &Env<'_>, number: u8, smtp: bool) -> String {
+    let key = match crate::account::offer(env, number, smtp) {
+        crate::account::Offer::Ask => "mail.pin.open-list",
+        crate::account::Offer::Changed => "mail.pin.changed",
+        crate::account::Offer::Attack => "mail.pin.attack",
+    };
+    env.i18n().tr(key).to_string()
+}
+
 /// Why a connection failed, kindly, and what to do.
 pub fn failure(env: &Env<'_>, failure: &Failure) -> String {
     use paperpaw_sdk::SocketError as E;
