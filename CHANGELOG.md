@@ -14,7 +14,8 @@ change the plugin SDK.
   the first walk of 1,000 books writes 26,952 blocks instead of 154,558 and reads 71,974 instead of 153,425; the
   X4 test of 3,000 small EPUBs (about 100 books a minute) is to be measured again. Covers are still made for the
   library during the walk, in the book's cache folder with a stamp of the book: a book replaced on the card, or a
-  folder a cut-off removal left behind, is cleared when the book opens.
+  folder a cut-off removal left behind, is cleared when the book opens; one that cannot be cleared (a damaged folder)
+  is never read from: the book shows its details, and opening it says the card could not be written.
 
 ## [0.6.0-beta.1] - 2026-11-02
 
