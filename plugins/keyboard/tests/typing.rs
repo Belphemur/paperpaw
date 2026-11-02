@@ -193,6 +193,63 @@ impl Typing {
         typing
     }
 
+    /// As [`Typing::with_phone`], in a right to left language, `ar`: its
+    /// catalog says the direction and nothing else (the other texts are
+    /// English).
+    fn with_phone_in_arabic(device: DeviceInfo) -> Self {
+        let answers = Rc::new(RefCell::new(Vec::new()));
+        let storage = MemoryStorage::new()
+            .with(
+                "plugins/language-ar/plugin.ini",
+                b"[plugin]\nid = language-ar\nname = Arabic\nversion = 1.0.0\nformats = 3\n"
+                    .to_vec(),
+            )
+            .with(
+                "plugins/language-ar/i18n/ar.ini",
+                b"[meta]\nlanguage = ar\nname = Arabic\nplural = arabic\ndirection = rtl\nscript = Arab\n"
+                    .to_vec(),
+            );
+        let kernel = Kernel::builder(device)
+            .storage(storage)
+            .network(true)
+            .user_config("[core]\nlanguage = ar\n")
+            .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+            .plugin(Keyboard)
+            .plugin(PhoneSlot)
+            .plugin(Listener(answers.clone()))
+            .build()
+            .unwrap();
+        let mut typing = Self {
+            kernel,
+            now: 0,
+            answers,
+        };
+        let effects = typing.kernel.start(Instant(0));
+        typing.settle(effects);
+        typing
+    }
+
+    /// What the screen draws for the first time, a row a pixel row (1 bit
+    /// a pixel, a set bit white).
+    fn picture(&mut self) -> std::collections::BTreeMap<usize, Vec<u8>> {
+        let mut rows = std::collections::BTreeMap::new();
+        self.kernel.render(&mut |y, frame| {
+            for r in 0..usize::from(frame.height) {
+                let data = &frame.data[r * frame.stride..(r + 1) * frame.stride];
+                rows.insert(usize::from(y) + r, data.to_vec());
+            }
+        });
+        rows
+    }
+
+    /// The part of any role that says exactly `label`.
+    fn text_part(&mut self, label: &str) -> Part {
+        self.parts()
+            .into_iter()
+            .find(|p| p.label == label)
+            .unwrap_or_else(|| panic!("no part says {label:?}"))
+    }
+
     fn settle(&mut self, mut effects: Effects) {
         for _ in 0..10_000 {
             let Some(at) = effects.wake_at() else {
@@ -1286,4 +1343,73 @@ fn other_actions_pass_before_a_key_has_the_focus() {
     typing.run(actions::BACK);
     typing.open(&[]);
     assert!(typing.part("Paste").is_some());
+}
+
+/// Where the interface runs right to left the keyboard's header is
+/// mirrored: the title at the right, the hint of how typing ends at the
+/// left, and the field's *Phone* button at the left end of the field; as
+/// they are for the other direction, the other way round.
+#[test]
+fn the_header_and_the_field_buttons_follow_the_interface_direction() {
+    let width = BUTTONS.display.width;
+    for rtl in [false, true] {
+        let make = |device| {
+            if rtl {
+                Typing::with_phone_in_arabic(device)
+            } else {
+                Typing::with_phone(device)
+            }
+        };
+        // The title alone (tapped, there is no hint), then the hint alone
+        // (with buttons, and no title): the header's band.
+        for (device, title, at_right) in [(TOUCH, "Name", rtl), (BUTTONS, "", !rtl)] {
+            let mut typing = make(device);
+            typing.open(&[("title", title)]);
+            let picture = typing.picture();
+            let band = typing
+                .kernel
+                .describe()
+                .into_iter()
+                .find(|p| p.role == Role::Field);
+            let band = band.expect("the field").area;
+            // The header's band, above the field's box: its leftmost and
+            // rightmost dark pixel.
+            let mut ink: Option<(u16, u16)> = None;
+            let rows = picture.range(usize::from(band.y.saturating_sub(40))..usize::from(band.y));
+            for (_, row) in rows {
+                let dark: Vec<u16> = (0..width)
+                    .filter(|&x| row[usize::from(x) / 8] & (0x80 >> (x % 8)) == 0)
+                    .collect();
+                // Not the rule across the screen.
+                if dark.len() > usize::from(width) / 2 {
+                    continue;
+                }
+                if let (Some(&l), Some(&h)) = (dark.first(), dark.last()) {
+                    ink = Some(ink.map_or((l, h), |(a, b)| (a.min(l), b.max(h))));
+                }
+            }
+            let (left, right) = ink.expect("a header");
+            // Within the screen, and against the side it belongs to.
+            assert!(right < width);
+            if at_right {
+                assert!(
+                    left > width / 2 && right > width - 80,
+                    "{rtl} {title:?}: {left} {right}"
+                );
+            } else {
+                assert!(
+                    right < width / 2 + 80 && left < 80,
+                    "{rtl} {title:?}: {left} {right}"
+                );
+            }
+        }
+        let mut typing = make(BUTTONS);
+        typing.open(&[]);
+        let phone = typing.text_part("Phone").area;
+        assert_eq!(
+            phone.x + phone.width / 2 < width / 2,
+            rtl,
+            "phone {phone:?}"
+        );
+    }
 }

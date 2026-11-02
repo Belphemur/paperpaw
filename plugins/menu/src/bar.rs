@@ -319,6 +319,51 @@ impl BarScreen {
     }
 }
 
+impl BarScreen {
+    /// The title and the line about where one is, over the entries.
+    fn draw_info(&self, ui: &mut ui::Ui<'_>, font: paperpaw_sdk::FontHandle<'_>, margin: f32) {
+        let style = self.style;
+        let r = self.region;
+        let line = font.line_metrics(style.text()).line_height as u16;
+        let title = Rect::new(0, self.info.y, r.width, line);
+        let text = Rect::new(0, self.info.y + line, r.width, self.info.height - line);
+        // Where the interface runs right to left the title and the
+        // chapter start at the right, the page at the left.
+        let rtl = style.is_rtl();
+        let right = f32::from(r.width) - margin;
+        let title_x = if rtl {
+            right - font.measure(style.text(), &self.title)
+        } else {
+            margin
+        };
+        ui::Label::new(&self.title)
+            .px(style.text())
+            .font(font)
+            .color(Color::BLACK)
+            .draw_from(ui, title_x, title);
+        let width = f32::from(r.width) - 2.0 * margin;
+        let (chapter, page, page_width) =
+            ui::fit_pair(&font, style.small(), &self.text, &self.page, width, margin);
+        let gray = style.faint(ui::Ink::DETAIL);
+        let chapter_x = if rtl {
+            right - font.measure(style.small(), &chapter)
+        } else {
+            margin
+        };
+        ui::Label::new(&chapter)
+            .px(style.small())
+            .font(font)
+            .color(gray)
+            .draw_from(ui, chapter_x, text);
+        let x = if rtl { margin } else { right - page_width };
+        ui::Label::new(&page)
+            .px(style.small())
+            .font(font)
+            .color(gray)
+            .draw_from(ui, x, text);
+    }
+}
+
 impl Screen for BarScreen {
     fn region(&self, _: &Env<'_>) -> Option<Rect> {
         Some(self.region)
@@ -339,29 +384,7 @@ impl Screen for BarScreen {
         };
         let margin = style.margin() as f32;
         if self.info.height > 0 {
-            let line = font.line_metrics(style.text()).line_height as u16;
-            let title = Rect::new(0, self.info.y, r.width, line);
-            let text = Rect::new(0, self.info.y + line, r.width, self.info.height - line);
-            ui::Label::new(&self.title)
-                .px(style.text())
-                .font(font)
-                .color(Color::BLACK)
-                .draw_from(&mut ui, margin, title);
-            let width = f32::from(r.width) - 2.0 * margin;
-            let (chapter, page, page_width) =
-                ui::fit_pair(&font, style.small(), &self.text, &self.page, width, margin);
-            let gray = style.faint(ui::Ink::DETAIL);
-            ui::Label::new(&chapter)
-                .px(style.small())
-                .font(font)
-                .color(gray)
-                .draw_from(&mut ui, margin, text);
-            let x = f32::from(r.width) - margin - page_width;
-            ui::Label::new(&page)
-                .px(style.small())
-                .font(font)
-                .color(gray)
-                .draw_from(&mut ui, x, text);
+            self.draw_info(&mut ui, font, margin);
         }
         let size = style.text() * ICON_SCALE;
         let small_line = font.line_metrics(style.small()).line_height as u16;

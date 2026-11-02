@@ -1,14 +1,18 @@
 //! Every tool at once, as icons in a grid (as a phone lists its apps):
 //! opened by swiping up on the home screen. Tapping one runs it; the
 //! buttons move between them. And the hint on the gestures, once, the
-//! first time the home screen shows on a touch screen.
+//! first time the home screen shows on a touch screen. Where the interface
+//! runs right to left the grid does too: the first tool at the top right,
+//! the left button on to the next one.
 
 use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::widgets::grid;
-use paperpaw_sdk::{Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Rect, Screen};
+use paperpaw_sdk::{
+    Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Point, Rect, Screen,
+};
 
 use crate::{blocks, pages};
 
@@ -20,6 +24,9 @@ pub(crate) struct DrawerScreen {
     header: ui::Header,
     list: ListView,
     tools: Vec<Id>,
+    /// The interface runs right to left: the grid is laid out from the
+    /// right ([`DrawerScreen::flip`]).
+    rtl: bool,
     /// The lines the longest name takes: every tool keeps room for them.
     lines: usize,
 }
@@ -55,10 +62,28 @@ impl DrawerScreen {
                 .columns(COLUMNS)
                 .focus_on_keys(env),
             tools,
+            rtl: style.is_rtl(),
             lines,
             style,
             header,
         }
+    }
+
+    /// `rect`, a place of the list's grid (laid out from the left), as it
+    /// lies where the grid runs from the right: the columns' leftover
+    /// width stays at the left.
+    fn flip(&self, rect: Rect) -> Rect {
+        if !self.rtl {
+            return rect;
+        }
+        let area = self.list.area();
+        let from_left = rect.x - area.x;
+        Rect::new(
+            (area.right() as u16).saturating_sub(from_left + rect.width),
+            rect.y,
+            rect.width,
+            rect.height,
+        )
     }
 
     fn run(&self, index: usize, cx: &mut Cx<'_, '_>) {
@@ -87,7 +112,7 @@ impl Screen for DrawerScreen {
         // icons and names line up.
         let lines = self.lines;
         for (slot, index) in (first..len).take(list.rows()).enumerate() {
-            let rect = list.row_rect(slot);
+            let rect = self.flip(list.row_rect(slot));
             let focused = list.shown() && index == list.focus();
             // Named after its action, also where its name is not shown.
             let name = grid::What::Tool(tools[index].clone()).title(env);
@@ -106,9 +131,16 @@ impl Screen for DrawerScreen {
         let len = self.tools.len();
         let a = action;
         let columns = COLUMNS as isize;
-        let delta = if *a == actions::LEFT || *a == actions::PREVIOUS {
+        // Left and right are where the tools are: from the right, the next
+        // one is to the left.
+        let (back, on) = if self.rtl {
+            (actions::RIGHT, actions::LEFT)
+        } else {
+            (actions::LEFT, actions::RIGHT)
+        };
+        let delta = if *a == back || *a == actions::PREVIOUS {
             -1
-        } else if *a == actions::RIGHT || *a == actions::NEXT {
+        } else if *a == on || *a == actions::NEXT {
             1
         } else if *a == actions::UP {
             -columns
@@ -129,7 +161,8 @@ impl Screen for DrawerScreen {
                 // The focus goes round a tool's icon and name, a little
                 // past its place.
                 let past = self.style.gap() / 2 + self.style.line() * 3 + 1;
-                ListChange::focus(left.grow(past), reached.grow(past)).request(cx);
+                ListChange::focus(self.flip(left).grow(past), self.flip(reached).grow(past))
+                    .request(cx);
             }
             change => change.request(cx),
         }
@@ -148,7 +181,18 @@ impl Screen for DrawerScreen {
                     cx.command(Command::run(action));
                     return Handled::Yes;
                 }
-                match self.list.hit(gesture.start, len) {
+                // Where the grid is mirrored, the point is where it would be
+                // on the grid from the left.
+                let area = self.list.area();
+                let start = if self.rtl && area.contains(gesture.start) {
+                    Point::new(
+                        area.x as i32 + area.right() as i32 - 1 - gesture.start.x,
+                        gesture.start.y,
+                    )
+                } else {
+                    gesture.start
+                };
+                match self.list.hit(start, len) {
                     Some(index) => {
                         self.run(index, cx);
                         Handled::Yes

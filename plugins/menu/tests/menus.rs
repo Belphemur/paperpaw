@@ -648,3 +648,67 @@ fn the_reader_menu_bar_runs_from_the_right_in_a_right_to_left_language() {
     app.run(actions::CONFIRM);
     assert_eq!(app.screen(), "reader.toc", "{}", app.described());
 }
+
+/// The reader's bar on a card with `language`; for `ar` the catalog says
+/// the direction and nothing else (the other texts are English).
+fn reading_in(language: &str) -> App {
+    let storage = Shared::memory(
+        &format!("[core]\nlanguage = {language}\n[help]\nshow = false\n"),
+        &[
+            (
+                BOOK,
+                "Alice was beginning to get very tired of sitting by her sister.\n\n"
+                    .repeat(200)
+                    .as_bytes(),
+            ),
+            (
+                "plugins/language-ar/plugin.ini",
+                b"[plugin]\nid = language-ar\nname = Arabic\nversion = 1.0.0\nformats = 3\n",
+            ),
+            (
+                "plugins/language-ar/i18n/ar.ini",
+                b"[meta]\nlanguage = ar\nname = Arabic\nplural = arabic\ndirection = rtl\nscript = Arab\n",
+            ),
+        ],
+    );
+    let mut app = App::new(X4, storage);
+    app.open_slot(slots::READER, Params::new().with(params::PATH, BOOK));
+    reader_menu(&mut app);
+    app
+}
+
+/// The dark pixels of the lines over the bar's entries, left and right of
+/// the middle.
+fn info_ink(app: &mut App) -> (u32, u32) {
+    let top = app
+        .parts()
+        .into_iter()
+        .filter(|p| p.role == Role::Button)
+        .map(|p| i32::from(p.area.y))
+        .min()
+        .unwrap();
+    let width = i32::from(app.kernel.device().display.width);
+    let (mut left, mut right) = (0, 0);
+    for y in 0..top {
+        for x in 0..width {
+            if app.dark(x, y) {
+                if x < width / 2 {
+                    left += 1;
+                } else {
+                    right += 1;
+                }
+            }
+        }
+    }
+    (left, right)
+}
+
+#[test]
+fn the_reader_menu_title_starts_at_the_right_where_the_interface_runs_right_to_left() {
+    let (l_left, l_right) = info_ink(&mut reading_in("en"));
+    let (r_left, r_right) = info_ink(&mut reading_in("ar"));
+    // The title (the bigger text) at the left in English, at the right in
+    // Arabic; the page's percentage on the other side.
+    assert!(l_left > l_right, "{l_left}/{l_right}");
+    assert!(r_right > r_left, "{r_left}/{r_right}");
+}

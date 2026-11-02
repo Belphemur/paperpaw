@@ -8,16 +8,15 @@
 use super::*;
 
 impl KeyboardScreen {
-    pub(super) fn draw_field(&self, ui: &mut ui::Ui<'_>) {
-        // Only in the band it lies in: its text is measured to fit.
-        if self.field.intersection(&ui.canvas().clip()).is_none() {
-            return;
-        }
+    /// The title and, opposite, the hint: how typing ends, or the letters
+    /// a held one gives. Where the interface runs right to left the title
+    /// is at the right and the hint at the left.
+    fn draw_title(&self, ui: &mut ui::Ui<'_>, margin: f32) {
         let (env, style) = (ui.env(), self.style);
         let Some(font) = style.font(env) else {
             return;
         };
-        let margin = style.margin() as f32;
+        let rtl = style.is_rtl();
         let f = self.field;
         let title_height = (style.small() * 1.5) as u16;
         let title_area = Rect::new(f.x, f.y, f.width, title_height);
@@ -29,8 +28,14 @@ impl KeyboardScreen {
         let held_width = held
             .as_ref()
             .map_or(0.0, |h| font.measure(style.small(), h) + margin);
+        // Where the interface runs right to left the title is at the right
+        // and the hint at the left.
         if let Some(held) = &held {
-            let x = f32::from(f.x + f.width) - margin - font.measure(style.small(), held);
+            let x = if rtl {
+                f32::from(f.x) + margin
+            } else {
+                f32::from(f.x + f.width) - margin - font.measure(style.small(), held)
+            };
             ui::Label::new(held)
                 .px(style.small())
                 .color(Color::BLACK)
@@ -42,10 +47,29 @@ impl KeyboardScreen {
             &self.title,
             f32::from(f.width) - 2.0 * margin - held_width,
         );
+        let title_x = if rtl {
+            f32::from(f.x + f.width) - margin - font.measure(style.small(), &title)
+        } else {
+            margin
+        };
         ui::Label::new(&title)
             .px(style.small())
             .color(style.faint(ui::Ink::MUTED))
-            .draw_from(ui, margin, title_area);
+            .draw_from(ui, title_x, title_area);
+    }
+
+    pub(super) fn draw_field(&self, ui: &mut ui::Ui<'_>) {
+        // Only in the band it lies in: its text is measured to fit.
+        if self.field.intersection(&ui.canvas().clip()).is_none() {
+            return;
+        }
+        let (env, style) = (ui.env(), self.style);
+        let Some(font) = style.font(env) else {
+            return;
+        };
+        let margin = style.margin() as f32;
+        let rtl = style.is_rtl();
+        self.draw_title(ui, margin);
         let box_area = self.text_box();
         ui::stroke_round(
             ui.canvas(),
@@ -64,9 +88,18 @@ impl KeyboardScreen {
         } else {
             self.text.clone()
         };
-        let buttons_width = self.buttons.first().map_or(0.0, |(_, area)| {
-            f32::from(box_area.x + box_area.width - area.x) + margin
-        });
+        // The field's buttons are at its end: the right, or the left where
+        // the interface runs right to left.
+        let buttons_width = if rtl {
+            self.buttons
+                .iter()
+                .map(|(_, area)| f32::from(area.x + area.width - box_area.x) + margin)
+                .fold(0.0, f32::max)
+        } else {
+            self.buttons.first().map_or(0.0, |(_, area)| {
+                f32::from(box_area.x + box_area.width - area.x) + margin
+            })
+        };
         let room = f32::from(box_area.width) - margin * 1.5 - buttons_width;
         // The longest end of it that fits, found by halving.
         let starts: Vec<usize> = text.char_indices().map(|(i, _)| i).collect();
@@ -81,13 +114,24 @@ impl KeyboardScreen {
             }
         }
         let start = starts.get(low).copied().unwrap_or(text.len());
-        let x = f32::from(box_area.x) + margin / 2.0;
         let shown = &text[start..];
+        let width = font.measure(style.text(), shown);
+        // From the right where the interface does; the cursor after the
+        // text, at its left then.
+        let x = if rtl {
+            f32::from(box_area.x + box_area.width) - margin / 2.0 - width
+        } else {
+            f32::from(box_area.x) + margin / 2.0
+        };
         ui::Label::new(shown)
             .px(style.text())
             .color(Color::BLACK)
             .draw_from(ui, x, box_area);
-        let end = x + font.measure(style.text(), shown);
+        let end = if rtl {
+            x - 4.0 - f32::from(style.line().max(2))
+        } else {
+            x + width
+        };
         let cursor = style.text() as u32;
         ui.canvas().fill_rect(
             end as i32 + 2,

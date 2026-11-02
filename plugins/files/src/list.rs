@@ -942,7 +942,8 @@ impl ListScreen {
             let icon = ui::icon_width(env, "search", size) as u16;
             let right = (row.x + row.width).saturating_sub(style.margin());
             let x = (right + (square - icon) / 2).saturating_sub(square);
-            return Some(Rect::new(x, row.y, square, square));
+            // At the start of it where the interface runs right to left.
+            return Some(rows::Flip::new(style, row).rect(Rect::new(x, row.y, square, square)));
         }
         let a = self.layout.header.area();
         let square = a.height;
@@ -955,7 +956,8 @@ impl ListScreen {
         } else {
             (a.x + a.width).saturating_sub(style.margin())
         };
-        Some(Rect::new(right.saturating_sub(square), a.y, square, square))
+        let button = Rect::new(right.saturating_sub(square), a.y, square, square);
+        Some(rows::Flip::new(style, a).rect(button))
     }
 
     /// Where the filter is: its row, or the chips' band.
@@ -1172,6 +1174,12 @@ impl Screen for ListScreen {
         let a = action;
         let touch = cx.env().device().input.touch;
         let side = *a == actions::LEFT || *a == actions::RIGHT;
+        // Over a grid of covers from the right, the left button goes on.
+        let (back, on) = if self.covers().is_some() && self.layout.style.is_rtl() {
+            (actions::RIGHT, actions::LEFT)
+        } else {
+            (actions::LEFT, actions::RIGHT)
+        };
         if side && self.filter_focused && self.layout.filter_row.is_none() {
             // On the chips, left and right go from chip to chip.
             let steps = if *a == actions::LEFT { -1 } else { 1 };
@@ -1182,9 +1190,9 @@ impl Screen for ListScreen {
             // A row: of covers in the grid.
             let row = self.covers().map_or(1, |g| isize::from(g.columns as i16));
             self.step(if *a == actions::UP { -row } else { row }, cx);
-        } else if [actions::PREVIOUS, actions::LEFT].contains(a) {
+        } else if [actions::PREVIOUS, back].contains(a) {
             self.step(-1, cx);
-        } else if [actions::NEXT, actions::RIGHT].contains(a) {
+        } else if [actions::NEXT, on].contains(a) {
             self.step(1, cx);
         } else if *a == actions::CONFIRM && self.filter_focused {
             self.choose_shown(cx);
