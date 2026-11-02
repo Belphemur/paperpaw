@@ -65,6 +65,7 @@ impl Widget for Sample {
         let ink = (
             t.weight,
             s.read(&crate::settings::TEXT_CONTRAST),
+            s.read(&crate::settings::TEXT_SHARPNESS),
             s.read(&crate::settings::SMOOTH_TEXT),
         );
         let shown = format!("{}|{ink:?}|{text}", t.key);

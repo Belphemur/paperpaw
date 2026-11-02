@@ -80,6 +80,10 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   widgets), up and down go round in the column: up from the top row to the lowest entry below, down from the bottom
   row to the top. Off, as before, they go round the whole list.
   For the lists of PaperPaw's own plugins; store plugins follow once they are built again.
+- **Sharpness** (#122), a new reading setting under *Reading > Display*, next to the text contrast: *Soft*, *Normal*
+  (the default, drawn as before) or *Sharp*. Soft draws letters a step lighter (smooth where the screen shows grays),
+  sharp a step darker and without grays on every screen; each book may have its own. A tone curve set by a theme
+  (`core.text-curve`) still takes its place.
   The library's Find screen follows it too: up and down (and the page buttons) go round the search and the letters in
   the column the focus left.
 - **Secure connections for plugins** (#81). Plugins can open HTTPS, IMAP and SMTP connections: the X4 does the encryption
@@ -112,6 +116,11 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
 
 ### Added
 
+- Settings: `builtin::settings::TEXT_SHARPNESS` (`core.text-sharpness`) and `TEXT_SHARPNESS_LEVELS` (soft, normal,
+  sharp; #122), registered by the kernel with the reading text's look, each book may have its own. The SDK's reading
+  faces move the contrast of `TEXT_CONTRAST` a step lighter (soft) or darker and without grays (sharp); normal and a
+  value it does not know draw as before, and `TEXT_CURVE` takes its place. New constants, no change of what plugins
+  built before see.
 - UI: focus moves that follow *Arrow keys stay on the page* (`builtin::settings::ARROWS_STAY_ON_PAGE`,
   `core.arrows-stay-on-page`, #112): `ListView::navigate_in` and `move_focus_in`, `Rows::step_in`,
   `Sections::step_in` and `ui::step_focus_in` (for a focus of a screen's own over pages of `page` things) take the

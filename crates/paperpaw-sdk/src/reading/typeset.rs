@@ -1138,25 +1138,44 @@ fn reordered_boxes(
 }
 
 /// The tone curve of book text ([`settings::TEXT_CURVE`] if it says one,
-/// else the contrast of [`settings::TEXT_CONTRAST`]), and
-/// whether it is drawn without grays ([`settings::SMOOTH_TEXT`] off).
-/// Not where the panel shows black and white alone: its frame draws the
-/// same letters already, and a page shown in grays there for its
-/// pictures keeps its letters smooth, as before.
+/// else the contrast of [`settings::TEXT_CONTRAST`] a step lighter or
+/// darker as [`settings::TEXT_SHARPNESS`] says), and whether it is drawn
+/// without grays ([`settings::SMOOTH_TEXT`] off, or sharpness sharp).
+/// Smooth text off is not where the panel shows black and white alone:
+/// its frame draws the same letters already, and a page shown in grays
+/// there for its pictures keeps its letters smooth, as before.
 fn ink(env: &Env<'_>, script: Option<&str>) -> (ToneCurve, bool) {
     let s = env.settings();
+    let mono = env.device().display.format.gray_levels() == Some(2);
+    let smooth_off = !mono && !s.read(&settings::SMOOTH_TEXT);
+    // A curve of one's own (a theme's, a language's) takes the place of
+    // the contrast and the sharpness; the entry for the book's script
+    // comes first.
+    if let Some(curve) = ToneCurve::parse_for(s.text(settings::TEXT_CURVE.as_str()), script) {
+        return (curve, smooth_off);
+    }
     let level = s.read(&settings::TEXT_CONTRAST);
     let step = settings::TEXT_CONTRAST_LEVELS
         .iter()
         .position(|l| *l == level)
         .map_or(0, |at| at as i8 + ToneCurve::LIGHTEST);
-    let mono = env.device().display.format.gray_levels() == Some(2);
-    let sharp = !mono && !s.read(&settings::SMOOTH_TEXT);
-    // A curve of one's own (a theme's, a language's) takes the place of
-    // the contrast; the entry for the book's script comes first.
-    let curve = ToneCurve::parse_for(s.text(settings::TEXT_CURVE.as_str()), script)
-        .unwrap_or_else(|| ToneCurve::contrast(step));
-    (curve, sharp)
+    let (shift, sharp) = sharpness(s.read(&settings::TEXT_SHARPNESS));
+    (ToneCurve::contrast(step + shift), smooth_off || sharp)
+}
+
+/// What a value of [`settings::TEXT_SHARPNESS`] does to book text: the
+/// steps it moves the contrast by (soft -1, sharp +1) and whether it
+/// draws without grays (sharp). Normal, and a value it does not know,
+/// change nothing.
+fn sharpness(level: &str) -> (i8, bool) {
+    match settings::TEXT_SHARPNESS_LEVELS
+        .iter()
+        .position(|l| *l == level)
+    {
+        Some(0) => (-1, false),
+        Some(2) => (1, true),
+        _ => (0, false),
+    }
 }
 
 /// Draws `lines` laid out with `faces` in `page_type`, their content box

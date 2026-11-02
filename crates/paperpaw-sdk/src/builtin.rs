@@ -730,6 +730,22 @@ pub mod settings {
         "core.text-contrast.darker",
         "core.text-contrast.darkest",
     ];
+    /// How crisp book letters look, one of [`TEXT_SHARPNESS_LEVELS`]
+    /// (soft, normal, sharp); normal draws as without it. Soft draws
+    /// them a step lighter on the curve of [`TEXT_CONTRAST`] (smooth and
+    /// lighter where the panel shows grays, from more coverage where it
+    /// shows black and white); sharp a step darker and without grays on
+    /// every panel, as [`SMOOTH_TEXT`] off does. A value it does not know
+    /// is normal; [`TEXT_CURVE`], when set, takes its place. Meant to
+    /// choose how a font's glyphs are fitted to the pixels too, where a
+    /// font comes so (soft as drawn, normal lightly, sharp fully). Each
+    /// book may have its own ([`SCOPE_ONLY`]).
+    pub const TEXT_SHARPNESS: Setting<Text> = Setting::new("core.text-sharpness");
+    pub const TEXT_SHARPNESS_LEVELS: &[&str] = &[
+        "core.text-sharpness.soft",
+        "core.text-sharpness.normal",
+        "core.text-sharpness.sharp",
+    ];
     /// Space between words in percent of the font's (50 to 200).
     pub const WORD_SPACING: Setting<i64> = Setting::new("core.word-spacing");
     /// Distance between baselines in percent of the font size, at least
