@@ -1755,7 +1755,10 @@ it comes (`SocketRead::File`), so files of any size never need to fit in
 memory. `Command::Broadcast` finds services in the local network by a
 UDP datagram and their answers. Everything comes back as events
 (`SocketNotice`s); a socket closes when the screen
-that was open as it opened closes.
+that was open as it opened closes. One that background work opens (its
+event's handlers, a job's step) is the run's instead: it closes when the
+run ends (the job done or failed, the work run again, taken back or
+refused, or its plugin gone), whatever screens open and close meanwhile.
 
 A socket may be secure (TLS): `Command::connect_tls(socket, host, 993,
 events, Tls::new())` connects and says `SocketNotice::Secured` once the

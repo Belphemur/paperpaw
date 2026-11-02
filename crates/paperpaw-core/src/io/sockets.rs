@@ -181,6 +181,15 @@ enum Phase {
     Secure,
 }
 
+/// What a socket is of: the screens open when it was opened (it closes
+/// once fewer are), or a run of background work (it closes when the run
+/// ends, whatever screens open and close meanwhile).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Owner {
+    Screens(usize),
+    Run(u32),
+}
+
 /// A plugin's [`Command::Connect`], taken apart.
 struct Connect {
     socket: Id,
@@ -199,8 +208,7 @@ struct Socket {
     /// plugin names another.
     host: String,
     phase: Phase,
-    /// Screens open when it was opened; it closes once fewer are.
-    screens: usize,
+    owner: Owner,
     reading: Option<Reading>,
     /// The start of a character a text read ended in (at most 3 bytes),
     /// kept for the next one.
@@ -274,13 +282,13 @@ impl Sockets {
     }
 
     /// Carries out a plugin's socket command, with `network` whether the
-    /// device has one and `screens` the screens open now; events to emit
-    /// go to `out`.
-    pub fn command(
+    /// device has one and `owner` what a socket it opens is of; events to
+    /// emit go to `out`.
+    pub(crate) fn command(
         &mut self,
         command: Command,
         network: bool,
-        screens: usize,
+        owner: Owner,
         storage: &dyn Storage,
         out: &mut Vec<Command>,
     ) {
@@ -300,7 +308,7 @@ impl Sockets {
                     events,
                     tls,
                 };
-                self.connect(connect, network, screens, out);
+                self.connect(connect, network, owner, out);
             }
             Command::SocketSend { socket, data, .. } => {
                 if let Some(at) = self.at(&socket) {
@@ -357,7 +365,7 @@ impl Sockets {
 
     /// Opens a socket, in place of one with its id; secure from the start
     /// where `tls` says, if the shell does TLS and it is set up right.
-    fn connect(&mut self, connect: Connect, network: bool, screens: usize, out: &mut Vec<Command>) {
+    fn connect(&mut self, connect: Connect, network: bool, owner: Owner, out: &mut Vec<Command>) {
         let Connect {
             socket,
             host,
@@ -396,7 +404,7 @@ impl Sockets {
             } else {
                 Phase::Connecting
             },
-            screens,
+            owner,
             reading: None,
             partial: Vec::new(),
         });
@@ -542,11 +550,24 @@ impl Sockets {
     }
 
     /// Closes the sockets opened while more than `screens` screens were
-    /// open.
+    /// open (not those of background work).
     pub fn close_for_closed_screens(&mut self, screens: usize, out: &mut Vec<Command>) {
-        while let Some(at) = self.sockets.iter().position(|s| s.screens > screens) {
+        let closed = |s: &Socket| matches!(s.owner, Owner::Screens(n) if n > screens);
+        while let Some(at) = self.sockets.iter().position(closed) {
             self.close(at, Some(String::from("screen closed")), out);
         }
+    }
+
+    /// Closes the sockets of the run of background work `run`: it ended.
+    pub(crate) fn close_for_run(&mut self, run: u32, out: &mut Vec<Command>) {
+        while let Some(at) = self.sockets.iter().position(|s| s.owner == Owner::Run(run)) {
+            self.close(at, Some(String::from("work ended")), out);
+        }
+    }
+
+    /// Whether the run of background work `run` has sockets open.
+    pub(crate) fn of_run(&self, run: u32) -> bool {
+        self.sockets.iter().any(|s| s.owner == Owner::Run(run))
     }
 
     /// Whether a socket or broadcast is open, e.g. to keep polling.
@@ -770,7 +791,7 @@ mod tests {
         let mut sockets = Sockets::new(1);
         let mut out = Vec::new();
         let connect = Command::connect(SOCKET, String::from("calibre.local"), 9090, EVENTS);
-        sockets.command(connect, true, 2, storage, &mut out);
+        sockets.command(connect, true, Owner::Screens(2), storage, &mut out);
         assert_eq!(
             sockets.calls.pop(),
             Some(SocketCall::Connect {
@@ -789,9 +810,9 @@ mod tests {
         let storage = MemoryStorage::new();
         let (mut sockets, mut out) = connected(&storage);
         let read = Command::socket_read(SOCKET, SocketRead::Text { max: 100 });
-        sockets.command(read.clone(), true, 2, &storage, &mut out);
+        sockets.command(read.clone(), true, Owner::Screens(2), &storage, &mut out);
         // A second read before the first came fails.
-        sockets.command(read, true, 2, &storage, &mut out);
+        sockets.command(read, true, Owner::Screens(2), &storage, &mut out);
         assert_eq!(
             sockets.calls,
             [SocketCall::Read {
@@ -824,7 +845,7 @@ mod tests {
             out.clear();
             let read = Command::socket_read(SOCKET, SocketRead::Text { max: 4 });
             if sockets.calls.is_empty() {
-                sockets.command(read, true, 2, &storage, &mut out);
+                sockets.command(read, true, Owner::Screens(2), &storage, &mut out);
             }
             assert_eq!(
                 sockets.calls.pop(),
@@ -842,7 +863,7 @@ mod tests {
         assert_eq!(texts, ["Gr", "ü", "ße ", "🐾"]);
         // An invalid byte is replaced, as before.
         let read = Command::socket_read(SOCKET, SocketRead::Text { max: 4 });
-        sockets.command(read, true, 2, &storage, &mut out);
+        sockets.command(read, true, Owner::Screens(2), &storage, &mut out);
         let data = SocketEvent::Data {
             socket: 1,
             data: b"a\xffb".to_vec(),
@@ -866,7 +887,7 @@ mod tests {
                 len,
             },
         );
-        sockets.command(read, true, 2, &storage, &mut out);
+        sockets.command(read, true, Owner::Screens(2), &storage, &mut out);
         assert_eq!(
             sockets.calls.pop(),
             Some(SocketCall::Read {
@@ -912,7 +933,7 @@ mod tests {
                 len: 5,
             },
         );
-        sockets.command(read, true, 2, &storage, &mut out);
+        sockets.command(read, true, Owner::Screens(2), &storage, &mut out);
         sockets.calls.clear();
         sockets.event(
             SocketEvent::Data {
@@ -944,9 +965,9 @@ mod tests {
         let mut sockets = Sockets::default();
         let mut out = Vec::new();
         let connect = Command::connect(SOCKET, String::from("h"), 1, EVENTS);
-        sockets.command(connect, false, 1, &storage, &mut out);
+        sockets.command(connect, false, Owner::Screens(1), &storage, &mut out);
         let broadcast = Command::broadcast(SOCKET, alloc::vec![54982], b"hi".to_vec(), 100, EVENTS);
-        sockets.command(broadcast, false, 1, &storage, &mut out);
+        sockets.command(broadcast, false, Owner::Screens(1), &storage, &mut out);
         assert_eq!(kinds(&out), [p::FAILED, p::DONE]);
         assert!(sockets.calls.is_empty());
     }
@@ -963,7 +984,7 @@ mod tests {
             500,
             EVENTS,
         );
-        sockets.command(broadcast, true, 1, &storage, &mut out);
+        sockets.command(broadcast, true, Owner::Screens(1), &storage, &mut out);
         assert!(matches!(
             sockets.calls[0],
             SocketCall::Broadcast { broadcast: 1, .. }

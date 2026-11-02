@@ -895,11 +895,7 @@ impl Kernel {
             | Command::SocketRead { .. }
             | Command::Disconnect(_)
             | Command::Broadcast(_)
-            | Command::StartTls { .. }) => {
-                self.io
-                    .sockets
-                    .command(command, network, screens, &*self.shared.storage, out);
-            }
+            | Command::StartTls { .. }) => self.socket_command(command),
             Command::Http(request) => {
                 let reader = self.shared.reader;
                 self.io

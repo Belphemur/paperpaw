@@ -3283,6 +3283,7 @@ mod settings_files;
 mod stack;
 mod storage;
 mod ui_ink;
+mod work_sockets;
 
 /// A greeting, provided as a service in a test.
 struct Greeting(&'static str);

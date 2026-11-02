@@ -13,6 +13,8 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::mem;
 
+mod runs;
+
 use paperpaw_platform::Instant;
 use paperpaw_sdk::builtin::{events, params};
 use paperpaw_sdk::event::EventData;
@@ -77,6 +79,11 @@ struct Entry {
 }
 
 impl Entry {
+    /// Whether it is the work `id`, `key`, a job going on.
+    fn going(&self, id: &Id, key: &str) -> bool {
+        self.job.is_some() && self.work.id == *id && self.work.key == key
+    }
+
     fn after(&self) -> Instant {
         self.declared.add_millis(millis(self.work.after))
     }
@@ -233,6 +240,8 @@ pub(crate) struct Queue {
     held: bool,
     /// Plugins that declared work under another's name, to warn of.
     foreign: Vec<String>,
+    /// The runs of work, and the sockets they connect.
+    pub(crate) runs: runs::Runs,
 }
 
 impl Queue {
@@ -334,6 +343,7 @@ impl Queue {
     /// Takes back the work with this id and key (any key: `None`).
     fn cancel(&mut self, id: &Id, key: Option<&str>) {
         self.changed = true;
+        self.runs.end_work(id, key);
         self.entries
             .retain(|e| !(e.work.id == *id && key.is_none_or(|k| e.work.key == k)));
     }
@@ -514,7 +524,10 @@ impl Kernel {
             Command::Work(work) => self
                 .works
                 .declare(*work, self.now, &mut self.output.commands),
-            Command::CancelWork(id, key) => self.works.cancel(&id, key.as_deref()),
+            Command::CancelWork(id, key) => {
+                self.works.cancel(&id, key.as_deref());
+                self.close_ended_runs();
+            }
             Command::CancelHttp(reply) => self.io.http.cancel(&reply, &mut self.output.commands),
             Command::Wear(wear) => self.wear(wear),
             Command::GoOnline => {
@@ -759,6 +772,9 @@ impl Kernel {
             if entry.work.needs.contains(Needs::NETWORK) && self.works.network_off(&entry.owner) {
                 let entry = self.works.entries.remove(index);
                 self.works.changed = true;
+                self.works
+                    .runs
+                    .end_work(&entry.work.id, Some(&entry.work.key));
                 let refused = WorkRefused::new(
                     entry.work.id,
                     Refusal::new(Reason::NetworkOff, Retry::Never),
@@ -771,7 +787,8 @@ impl Kernel {
             }
         }
         let base = self.base_power();
-        let mut due: Vec<(Id, Params)> = Vec::new();
+        // Each work due: its id, parameters, key and plugin.
+        let mut due: Vec<(Id, Params, String, String)> = Vec::new();
         let mut notes: Vec<(Id, paperpaw_sdk::work::Note)> = Vec::new();
         let mut stepped = false;
         {
@@ -794,6 +811,9 @@ impl Kernel {
                 if self.works.specs.iter().any(|s| s.id == entry.work.id) {
                     entry.job = Some(Job::Ready);
                     entry.progress = None;
+                    self.works
+                        .runs
+                        .start(&entry.work.id, &entry.work.key, &entry.owner);
                     index += 1;
                     continue;
                 }
@@ -802,7 +822,12 @@ impl Kernel {
                 if why != Why::Time {
                     why.write(&mut params);
                 }
-                due.push((entry.work.id.clone(), params));
+                due.push((
+                    entry.work.id.clone(),
+                    params,
+                    entry.work.key.clone(),
+                    entry.owner.clone(),
+                ));
                 if again(entry, self.now) {
                     index += 1;
                 } else {
@@ -831,12 +856,13 @@ impl Kernel {
         let ran = !due.is_empty() || stepped;
         if ran {
             let reader = mem::replace(&mut self.shared.reader, false);
-            for (id, params) in due {
-                self.emit(&id, &params);
+            for (id, params, key, owner) in due {
+                self.emit_run(&id, &params, &key, &owner);
             }
             self.run_commands();
             self.shared.reader = reader;
         }
+        self.settle_runs();
         ran || !self.works.moments.is_empty()
     }
 }
@@ -996,6 +1022,9 @@ fn step_job(
     // A job is background work: its notices become its plugin's note.
     let mut said = Queue::default();
     quiet(false, top, now, from, &entry.owner, out, &mut said);
+    if let Some(run) = works.runs.of(&entry.work.id, &entry.work.key) {
+        works.runs.claim(run, out.get(from..).unwrap_or_default());
+    }
     works.foreign.append(&mut said.foreign);
     for (owner, note) in said.notes {
         if let Ok(owner) = Id::parse(&owner) {
@@ -1018,6 +1047,7 @@ fn step_job(
         Step::Wait(at) => entry.job = Some(Job::Until(at)),
         Step::WaitFor(event) => entry.job = Some(Job::For(event)),
         Step::Done => {
+            works.runs.end_work(&entry.work.id, Some(&entry.work.key));
             entry.job = None;
             entry.attempt = 0;
             tell(entry, out);
@@ -1026,6 +1056,7 @@ fn step_job(
             }
         }
         Step::Failed(text) => {
+            works.runs.end_work(&entry.work.id, Some(&entry.work.key));
             entry.job = None;
             entry.attempt = entry.attempt.saturating_add(1);
             entry.declared = now;
