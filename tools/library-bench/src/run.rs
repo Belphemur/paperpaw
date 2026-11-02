@@ -38,13 +38,23 @@ pub(super) fn all(env: &Env<'_>, more: Option<&str>, walks: bool) {
     split(env);
 }
 
-/// The catalog walked to its end.
+/// Steps of work in one kernel call at most (`work::MAX_ROUNDS`): what a
+/// call read is forgotten after it (`recall`), so a walk runs over many
+/// calls, never one.
+const STEPS_A_CALL: u64 = 4;
+
+/// The catalog walked to its end, a few steps a kernel call.
 fn walk(env: &Env<'_>, what: &str) {
     let (steps, took) = measure(|| {
         let mut walk = catalog::Walk::start(env, Vec::new())?;
         let mut steps = 0u64;
         while !walk.step(env)? {
             steps += 1;
+            if steps.is_multiple_of(STEPS_A_CALL) {
+                // The call ends: what it read is forgotten, as removing a
+                // folder makes the kernel do (no such folder is there).
+                let _ = env.storage().remove_dir_all(".paperpaw/bench-call");
+            }
         }
         Ok::<_, paperpaw_sdk::StorageError>((steps, walk.found(), walk.from_old()))
     });

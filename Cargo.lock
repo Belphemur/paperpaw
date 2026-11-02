@@ -1801,6 +1801,7 @@ dependencies = [
  "paperpaw-platform",
  "paperpaw-plugin-format-epub",
  "paperpaw-sdk",
+ "paperpaw-zip",
 ]
 
 [[package]]

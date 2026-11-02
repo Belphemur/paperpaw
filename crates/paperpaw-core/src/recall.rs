@@ -234,6 +234,8 @@ impl Storage for Recalled {
     }
 
     fn remove_dir_all(&self, path: &str) -> Result<(), StorageError> {
+        // Also whatever was read: tools/library-bench ends a kernel call
+        // so, removing a folder that is not there.
         self.recall.clear();
         self.inner.remove_dir_all(path)
     }

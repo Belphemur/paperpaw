@@ -346,6 +346,8 @@ fn report(what: &str, took: &Took, note: &str) {
 }
 
 mod run;
+#[cfg(test)]
+mod tests;
 
 /// The device: the X4's screen and memory class (its index holds fewer
 /// books).

@@ -598,6 +598,52 @@ impl<'a> TocWriter<'a> {
     }
 }
 
+/// What the package says of the book, read from the archive with
+/// nothing written: its metadata, chapters and cover. The contents and
+/// how long they are, the stylesheets and the fonts come with [`build`],
+/// once the book is read (a walk of the library needs none of them).
+pub(crate) fn read(storage: &dyn Storage, archive: &ZipArchive) -> Result<Package, DocumentError> {
+    let opf_path = package_path(storage, archive)?;
+    let opf = read_metadata(storage, archive, &opf_path)?;
+    let items = read_manifest(storage, archive, &opf_path, &opf)?;
+    Ok(Package {
+        metadata: opf.metadata,
+        spine: items.spine,
+        toc_len: 0,
+        cover: items.cover,
+    })
+}
+
+/// Whether a package of some book is in the cache: of another book or
+/// version where [`load`] found none.
+pub(crate) fn cached(storage: &dyn Storage, cache: &str) -> bool {
+    storage.exists(&path(cache, "package.ini"))
+}
+
+/// Whether the cache was made for the book of fingerprint `book`, at this
+/// version, before its package was written (see [`stamp`]).
+pub(crate) fn stamped(storage: &dyn Storage, cache: &str, book: &str) -> bool {
+    let stamp = source_stamp(book);
+    read_cache(storage, &path(cache, SOURCE), stamp.len() + 1)
+        .is_ok_and(|data| data.as_deref() == Some(stamp.as_bytes()))
+}
+
+/// Marks the cache as the book's of fingerprint `book` before anything
+/// else of it is written without its package (a cover for the library):
+/// what a cache holds without the package or this mark is another
+/// book's, or left by a removal cut off, and goes when the book opens.
+pub(crate) fn stamp(storage: &dyn Storage, cache: &str, book: &str) -> Result<(), DocumentError> {
+    storage.write(&path(cache, SOURCE), source_stamp(book).as_bytes())?;
+    Ok(())
+}
+
+/// The file [`stamp`] writes.
+const SOURCE: &str = "source.txt";
+
+fn source_stamp(book: &str) -> String {
+    alloc::format!("{CACHE_VERSION} {book}")
+}
+
 /// Reads the package from the archive and writes it to the cache, for
 /// the book of fingerprint `book`.
 pub(crate) fn build(
