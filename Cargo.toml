@@ -215,7 +215,7 @@ paperpaw-plugin-hyphenation-sv = { path = "plugins/hyphenation-sv", version = "1
 paperpaw-plugin-hyphenation-uk = { path = "plugins/hyphenation-uk", version = "1.0.0" }
 paperpaw-plugin-home = { path = "plugins/home", version = "1.0.2" }
 paperpaw-plugin-settings = { path = "plugins/settings", version = "1.0.2" }
-paperpaw-plugin-files = { path = "plugins/files", version = "1.0.2" }
+paperpaw-plugin-files = { path = "plugins/files", version = "1.0.3" }
 paperpaw-plugin-reader = { path = "plugins/reader", version = "1.0.3" }
 paperpaw-plugin-format-epub = { path = "plugins/format-epub", version = "1.0.2" }
 paperpaw-plugin-format-txt = { path = "plugins/format-txt", version = "1.0.0" }
