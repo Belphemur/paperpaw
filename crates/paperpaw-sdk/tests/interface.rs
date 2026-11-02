@@ -18,6 +18,14 @@
 //! gone raise it. Either way the files are written anew:
 //!
 //! PAPERPAW_BLESS=1 cargo test -p paperpaw-sdk --test interface
+//!
+//! `interface.txt` keeps the fingerprint too ([`fingerprint_line`]): a
+//! plugin is loaded where its fingerprint is the firmware's, and the
+//! fingerprint holds the interface and the sizes of what crosses, not the
+//! order of a trait's items or an enum's variants. So a raise is checked
+//! against the interface the kept fingerprint was made at as well, not
+//! only against the number `interface.txt` says, and layouts that changed
+//! while the shapes did not are a raise too ([`bless_refused`]).
 
 #![allow(
     clippy::unwrap_used,
@@ -28,7 +36,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use paperpaw_sdk::native::{INTERFACE, TOOLCHAIN};
+use paperpaw_sdk::native::{FINGERPRINT, Fingerprint, INTERFACE, TOOLCHAIN};
 
 fn here(path: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join(path)
@@ -94,6 +102,100 @@ fn now() -> Option<String> {
          third-party = {third}\n",
         fnv(&linker)
     ))
+}
+
+/// The fingerprint plugins of this build fit, as `interface.txt` keeps it:
+/// what it was made on, then its value. Made on another, its value
+/// differs (the sizes of what crosses), its interface does not.
+fn fingerprint_line() -> String {
+    format!("fingerprint = {} {FINGERPRINT}\n", made_on())
+}
+
+/// What this build's fingerprint is made on: the architecture, and
+/// `+outline` where the feature adds the outline fonts' layouts (a
+/// workspace build turns it on for the SDK, `-p paperpaw-sdk` does not).
+fn made_on() -> String {
+    let outline = if cfg!(feature = "outline") {
+        "+outline"
+    } else {
+        ""
+    };
+    format!("{}{outline}", std::env::consts::ARCH)
+}
+
+/// The fingerprint `kept` (`interface.txt`) keeps, with the architecture
+/// it was made on; `None` where it keeps none.
+fn kept_fingerprint(kept: &str) -> Option<(String, Fingerprint)> {
+    let line = value(kept, "fingerprint");
+    let (arch, hex) = line.split_once(' ')?;
+    let fingerprint = Fingerprint(u64::from_str_radix(hex.trim(), 16).ok()?);
+    Some((arch.to_string(), fingerprint))
+}
+
+/// `kept` without its fingerprint: what [`now`] writes.
+fn without_fingerprint(kept: &str) -> String {
+    kept.lines()
+        .filter(|line| !line.starts_with("fingerprint ="))
+        .map(|line| format!("{line}\n"))
+        .collect()
+}
+
+/// Whether the layouts of what crosses changed at the interface kept: the
+/// fingerprint `now`, made on `arch`, is another than the one `kept`
+/// keeps of the same architecture, at the same interface. (Made on
+/// another architecture the two cannot be told apart.)
+fn layouts_changed(kept: &str, now: Fingerprint, arch: &str) -> bool {
+    kept_fingerprint(kept).is_some_and(|(made_on, fingerprint)| {
+        made_on == arch && fingerprint != now && fingerprint.interface() == now.interface()
+    })
+}
+
+/// Why writing the files anew is refused, where it is: what plugins built
+/// before rely on changed (`breaking`, or the layouts of what crosses:
+/// [`layouts_changed`]), and the fingerprint `now` (made on `arch`) keeps
+/// the interface of `kept`, as the number it says or as the fingerprint
+/// it keeps. Plugins built before would then be loaded and call what is
+/// not there: the bless of the interface-6 round at interface 5 (#363)
+/// changed the order of the `Screen` trait's items and kept the
+/// fingerprint, the number in `interface.txt` lowered by hand.
+fn bless_refused(kept: &str, breaking: bool, now: Fingerprint, arch: &str) -> Option<String> {
+    let kept_interface: u16 = value(kept, "interface").parse().unwrap_or(0);
+    if !breaking && !layouts_changed(kept, now, arch) {
+        return None;
+    }
+    let interface = now.interface();
+    if interface <= kept_interface {
+        return Some(format!(
+            "what plugins see changed: raise native::INTERFACE (now {interface}) first"
+        ));
+    }
+    let (_, fingerprint) = kept_fingerprint(kept)?;
+    (interface <= fingerprint.interface()).then(|| {
+        format!(
+            "what plugins see changed, and the fingerprint plugins are told by stays at \
+             interface {interface}: the fingerprint kept ({fingerprint}) was made at interface {}, \
+             whatever interface.txt says. Plugins built before would be loaded: raise \
+             native::INTERFACE above it",
+            fingerprint.interface()
+        )
+    })
+}
+
+/// What is wrong with the fingerprint `kept` keeps, where something is:
+/// made at another interface than `now` (made on `arch`), or on the same
+/// architecture another value (the layouts of what crosses changed
+/// without a raise).
+fn fingerprint_drift(kept: &str, now: Fingerprint, arch: &str) -> Option<String> {
+    let (made_on, fingerprint) = kept_fingerprint(kept)?;
+    let wrong =
+        fingerprint.interface() != now.interface() || (made_on == arch && fingerprint != now);
+    wrong.then(|| {
+        format!(
+            "the fingerprint is {now} on {arch}, interface.txt keeps {fingerprint} made on \
+             {made_on}: the layouts of what crosses changed. Raise native::INTERFACE and write \
+             the files anew (PAPERPAW_BLESS=1 cargo test -p paperpaw-sdk --test interface)"
+        )
+    })
 }
 
 /// The crates of others the crossing crates depend on, as `name version`:
@@ -927,13 +1029,16 @@ fn what_plugins_see_changes_only_with_the_interface() {
             .iter()
             .all(|key| value(&now, key) == value(&kept, key));
     let breaking = !all.breaking.is_empty() || !rest_same;
+    let arch = &made_on();
     if bless {
-        assert!(
-            !breaking || INTERFACE > kept_interface,
-            "what plugins see changed: raise native::INTERFACE (now {INTERFACE}) first:\n{}",
-            all.breaking.join("\n")
-        );
-        std::fs::write(here("interface.txt"), &now).unwrap();
+        if let Some(refused) = bless_refused(&kept, breaking, FINGERPRINT, arch) {
+            panic!("{refused}:\n{}", all.breaking.join("\n"));
+        }
+        std::fs::write(
+            here("interface.txt"),
+            format!("{now}{}", fingerprint_line()),
+        )
+        .unwrap();
         for (path, text) in files {
             std::fs::write(here(&path), text).unwrap();
         }
@@ -965,7 +1070,102 @@ fn what_plugins_see_changes_only_with_the_interface() {
          New:\n{}",
         all.new.join("\n")
     );
-    assert_eq!(now, kept);
+    if let Some(drift) = fingerprint_drift(&kept, FINGERPRINT, arch) {
+        panic!("{drift}");
+    }
+    assert!(
+        kept_fingerprint(&kept).is_some(),
+        "interface.txt keeps no fingerprint: write the files anew (PAPERPAW_BLESS=1 cargo test \
+         -p paperpaw-sdk --test interface)"
+    );
+    assert_eq!(now, without_fingerprint(&kept));
+}
+
+/// What `interface.txt` keeps at interface `n`, its fingerprint made on
+/// `arch` as `fingerprint`.
+fn kept_at(n: u16, fingerprint: Option<(&str, u64)>) -> String {
+    let mut kept = format!("interface = {n}\nlinker = b979ebf89df9ea9f\n");
+    if let Some((arch, value)) = fingerprint {
+        kept.push_str(&format!("fingerprint = {arch} {}\n", Fingerprint(value)));
+    }
+    kept
+}
+
+/// The bless of #363 as it was first made: the shapes changed (the
+/// `Screen` trait's items moved), `interface.txt` lowered from 5 to 4 by
+/// hand so that INTERFACE 5 would pass, and the fingerprint stayed
+/// 00053e32940609b9. Refused now, on the architecture it was kept on and
+/// on any other.
+#[test]
+fn a_breaking_bless_that_keeps_the_fingerprint_is_refused_whatever_interface_txt_says() {
+    let fingerprint = 0x0005_3e32_9406_09b9;
+    for arch in ["riscv32", "x86_64", "aarch64"] {
+        let kept = kept_at(4, Some(("riscv32", fingerprint)));
+        let refused = bless_refused(&kept, true, Fingerprint(fingerprint), arch);
+        assert!(
+            refused.is_some_and(|r| r.contains("made at interface 5")),
+            "{arch}"
+        );
+    }
+    // As the number says, too.
+    let kept = kept_at(5, Some(("x86_64", fingerprint)));
+    assert!(bless_refused(&kept, true, Fingerprint(fingerprint), "x86_64").is_some());
+}
+
+/// The raise that was made instead, 5 to 6, is a bless; so is a change
+/// plugins built before do not see (an item appended to a growing trait,
+/// a new type), at the interface and fingerprint kept.
+#[test]
+fn a_raise_and_what_plugins_built_before_do_not_see_are_blessed() {
+    let five = Some(("x86_64", 0x0005_3e32_9406_09b9));
+    let six = Fingerprint(0x0006_3e32_9406_09b9);
+    assert_eq!(bless_refused(&kept_at(5, five), true, six, "x86_64"), None);
+    assert_eq!(bless_refused(&kept_at(5, five), true, six, "aarch64"), None);
+    let kept = kept_at(6, Some(("x86_64", six.0)));
+    assert_eq!(bless_refused(&kept, false, six, "x86_64"), None);
+    // Kept before the fingerprint was: the number alone, as before.
+    assert_eq!(bless_refused(&kept_at(5, None), true, six, "x86_64"), None);
+    assert!(bless_refused(&kept_at(6, None), true, six, "x86_64").is_some());
+    assert_eq!(bless_refused(&kept_at(6, None), false, six, "x86_64"), None);
+}
+
+/// Layouts of what crosses that changed while the shapes did not (a
+/// size): a raise, where the fingerprint kept was made on this
+/// architecture; on another the two cannot be told apart.
+#[test]
+fn layouts_changed_at_the_interface_kept_are_a_raise() {
+    let kept = kept_at(6, Some(("x86_64", 0x0006_0000_0000_0001)));
+    let now = Fingerprint(0x0006_0000_0000_0002);
+    assert!(bless_refused(&kept, false, now, "x86_64").is_some());
+    assert_eq!(bless_refused(&kept, false, now, "aarch64"), None);
+    assert!(fingerprint_drift(&kept, now, "x86_64").is_some());
+    assert_eq!(fingerprint_drift(&kept, now, "aarch64"), None);
+    // The outline feature adds layouts: a build with it is another kind.
+    assert_eq!(bless_refused(&kept, false, now, "x86_64+outline"), None);
+    assert_eq!(fingerprint_drift(&kept, now, "x86_64+outline"), None);
+    // Another interface than the one kept: on any architecture.
+    assert!(fingerprint_drift(&kept, Fingerprint(0x0007_0000_0000_0001), "aarch64").is_some());
+    assert_eq!(
+        fingerprint_drift(&kept, Fingerprint(0x0006_0000_0000_0001), "x86_64"),
+        None
+    );
+}
+
+/// The fingerprint line is read back as written, and left out where the
+/// rest is compared.
+#[test]
+fn the_fingerprint_kept_is_read_back() {
+    let kept = format!("interface = {INTERFACE}\n{}", fingerprint_line());
+    let (arch, fingerprint) = kept_fingerprint(&kept).unwrap();
+    assert_eq!(
+        (arch.as_str(), fingerprint),
+        (made_on().as_str(), FINGERPRINT)
+    );
+    assert_eq!(
+        without_fingerprint(&kept),
+        format!("interface = {INTERFACE}\n")
+    );
+    assert_eq!(kept_fingerprint("interface = 6\n"), None);
 }
 
 /// Every crate of PaperPaw that a crate of `interface/crates.txt` depends

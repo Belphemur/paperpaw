@@ -410,6 +410,11 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
 
 ### Changed
 
+- The plugin interface's gate (ADR 0026, #94): `interface.txt` keeps the fingerprint the bless was made with, and
+  a bless of a change plugins rely on is refused unless the interface rises above the one that fingerprint was made
+  at, whatever number `interface.txt` says; layouts of what crosses that changed while the shapes did not are such a
+  change. The first bless of the interface-6 round kept interface 5 that way and its fingerprint with it (#363). The
+  fingerprint is as it was (X4: `00063e32940609b9`).
 - *Right to left: the overview of every tool and the keyboard's header* (#33): where the interface runs right to
   left the overview's grid starts at the right (the first tool at the top right, the left button on to the next
   tool), and the keyboard's title is at the right, the hint of how typing ends and the field's *Phone* and
