@@ -2684,6 +2684,7 @@ name = "paperpaw-x4"
 version = "0.6.0-beta.1"
 dependencies = [
  "embedded-hal 1.0.0",
+ "paperpaw-config",
  "paperpaw-platform",
  "paperpaw-sdk",
 ]

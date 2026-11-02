@@ -506,7 +506,9 @@ impl Kernel {
             let line = Some(entry.line);
             let value = entry.value.as_str();
             match entry.section {
-                "plugins" => {}
+                // `[firmware]` is the firmware's own, read before the kernel
+                // (`dual-boot`, see the X4's shell): not a plugin's.
+                "plugins" | "firmware" => {}
                 section if section.starts_with("keymap.") || section.starts_with("zones.") => {}
                 "fonts" => match (Id::parse(entry.key), Id::parse(&value)) {
                     (Ok(role), Ok(font)) if self.shared.fonts.contains(font.as_str()) => {

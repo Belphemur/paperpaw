@@ -50,6 +50,7 @@ mod card;
 mod clock;
 mod crash;
 mod device;
+mod dual;
 mod firmware;
 #[cfg(feature = "remote")]
 mod gray_test;
@@ -479,6 +480,10 @@ fn prepare() -> Ready {
     // What the card keeps under PaperPaw's old name, moved before anything
     // is written to its folder (the kernel does it again, finding nothing).
     paperpaw_sdk::data::take_over_old_name(storage.as_ref());
+    // A dual-boot setup, declared by the reader or the bootloader: nothing
+    // is installed into the other firmware's partition, nor read for plugins.
+    let mut ota = ota;
+    let dual = dual::settle(&mut ota, &flash, storage.as_ref());
     // Wi-Fi the web flasher wrote with the firmware: to the card, for the
     // kernel to keep at its start.
     provision::take(&flash, storage.as_ref());
@@ -543,7 +548,7 @@ fn prepare() -> Ready {
     // Plugins the web flasher wrote behind the image, onto the card first.
     let staged = {
         let mut startup = startup::Startup::new(&mut panel);
-        let staged = native::bundle::stage(&flash, storage.as_ref(), &mut |progress| {
+        let staged = native::bundle::stage(&flash, storage.as_ref(), !dual, &mut |progress| {
             startup.update(progress)
         })
         .unwrap_or_default();

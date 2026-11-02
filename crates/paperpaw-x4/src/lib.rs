@@ -44,6 +44,7 @@ pub mod cw2017;
 pub mod dhcp;
 pub mod display;
 pub mod ds3231;
+pub mod dual_boot;
 pub mod flash_room;
 pub mod generation;
 pub mod gt911;

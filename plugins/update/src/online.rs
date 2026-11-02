@@ -376,6 +376,10 @@ pub(crate) fn check(env: &Env<'_>, quiet: bool, trigger: Trigger, out: &mut Comm
     let Some(firmware) = env.firmware() else {
         return;
     };
+    // Beside another firmware nothing is installed: nobody is asked.
+    if crate::dual::declared(env.storage()) {
+        return;
+    }
     let url = format!("{}/api/v1/updates", server(env));
     let request = HttpRequest::new("POST", &url, CHECKED).header(
         String::from("content-type"),

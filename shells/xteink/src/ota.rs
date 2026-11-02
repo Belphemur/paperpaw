@@ -87,6 +87,13 @@ impl ota::Flash for Chip {
 /// Updates on this device.
 pub struct Ota(Updates<Chip>, Option<u32>, bool);
 
+/// Whether the bootloader carries the marker of a dual-boot setup
+/// (`paperpaw_x4::dual_boot`), looked for on the flash `shared`; no marker
+/// where the flash cannot be read.
+pub fn marker(shared: &Flash) -> bool {
+    paperpaw_x4::dual_boot::scan_marker(&mut Chip(shared.clone())).unwrap_or(false)
+}
+
 impl Ota {
     /// Looks at what started and why (see `paperpaw_x4::updates`): an
     /// update that failed its trial restarts into the firmware before it
@@ -106,8 +113,27 @@ impl Ota {
         let this = Firmware::new(env!("PAPERPAW_VERSION"), PROJECT, CHIP)
             .keys(paperpaw_x4::updates::KEYS.to_vec())
             .plugins(Plugins::read_static(&PLUGINS).unwrap_or_default());
-        let (updates, start) =
-            Updates::start(Chip(shared), &slots, running, this, BOARD_TAG).ok()?;
+        // The OTA data is written at a start only where an update ran or
+        // did not start: only then the bootloader is looked at, for the
+        // marker of a dual-boot setup, which writes nothing.
+        let (updates, start) = Updates::start_guarded(
+            Chip(shared),
+            &slots,
+            running,
+            this,
+            BOARD_TAG,
+            &mut |chip| {
+                paperpaw_x4::dual_boot::scan_marker(chip)
+                    .unwrap_or(false)
+                    .then_some(paperpaw_x4::dual_boot::Source::Marker)
+            },
+        )
+        .ok()?;
+        if updates.dual().is_some() {
+            warn!(
+                "OTA: a dual-boot setup (the bootloader's marker): the OTA data is left as it is"
+            );
+        }
         let mut failed = None;
         let mut marked = false;
         match start {
@@ -234,6 +260,22 @@ impl Ota {
     /// meanwhile).
     pub fn installing(&self) -> bool {
         self.0.installing()
+    }
+
+    /// Whether, and by what, the setup is a declared dual-boot one.
+    pub fn dual(&self) -> Option<paperpaw_x4::dual_boot::Source> {
+        self.0.dual()
+    }
+
+    /// The setup is declared a dual-boot one, or not (`dual_boot::decide`,
+    /// once the card gave `paperpaw.ini`): nothing installs from then on.
+    pub fn declare_dual(&mut self, source: Option<paperpaw_x4::dual_boot::Source>) {
+        self.0.declare_dual(source);
+    }
+
+    /// The partition running, 0 or 1.
+    pub fn slot(&self) -> u32 {
+        self.0.slot()
     }
 
     /// Starts installing the update file at `path`, with the `key` the

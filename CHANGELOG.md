@@ -85,6 +85,11 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
 
 ### Added
 
+- Devices (#95): PaperPaw beside another firmware (a tool that puts two firmwares on one X4) can be told so, by
+  `dual-boot = on` in a `[firmware]` section of `paperpaw.ini` or by a marker in the tool's bootloader
+  (`paperpaw-dualboot:1`, see `docs/dual-boot.md`). It then never writes the other partition or the OTA data: no
+  updates, no trial, no way back to another firmware; the *Updates* page says why. Not declared, nothing changes. A
+  `[firmware]` section no longer warns as an unknown plugin. No change for plugins.
 - UI: `UiStyle::flip` and `UiStyle::flip_x` are public (#33): a screen lays a row or a grid out once from the left
   and mirrors each part where the interface runs right to left, as the SDK's own parts do. New functions, no
   change of what plugins built before see; their api.txt lines are part of this release's interface 6. The library's rows and

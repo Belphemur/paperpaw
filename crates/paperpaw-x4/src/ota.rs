@@ -343,29 +343,32 @@ impl OtaData {
     /// again where the update did not start (see [`Start`]). `None` where
     /// writing failed.
     pub fn start(&mut self, flash: &mut impl Flash, running: u32) -> Option<Start> {
+        let start = self.plan(running);
+        match start {
+            Start::Undone => self.choose(flash, running, State::Valid, 0).ok()?,
+            Start::Trial { ran } | Start::Marked { ran } => self
+                .set_state(flash, running, State::PendingVerify, ran)
+                .ok()?,
+            Start::Failed { .. } => self.set_state(flash, running, State::Invalid, 0).ok()?,
+            Start::Kept => {}
+        }
+        Some(start)
+    }
+
+    /// What [`OtaData::start`] would find and do at a start of `running`,
+    /// without doing it: anything but [`Start::Kept`] writes the OTA data.
+    pub fn plan(&self, running: u32) -> Start {
         match (self.chosen(), self.state_of(running)) {
-            (Some(chosen), _) if chosen != running => {
-                self.choose(flash, running, State::Valid, 0).ok()?;
-                Some(Start::Undone)
-            }
+            (Some(chosen), _) if chosen != running => Start::Undone,
             // Undefined: chosen by a tool.
-            (Some(_), Some((State::New | State::Undefined, ran))) => {
-                self.set_state(flash, running, State::PendingVerify, ran)
-                    .ok()?;
-                Some(Start::Trial { ran })
-            }
+            (Some(_), Some((State::New | State::Undefined, ran))) => Start::Trial { ran },
             // Marked by a bootloader with app rollback, not by this
             // firmware: the update's start, not a run that failed.
             (Some(_), Some((State::PendingVerify, ran))) if !self.armed(running) => {
-                self.set_state(flash, running, State::PendingVerify, ran)
-                    .ok()?;
-                Some(Start::Marked { ran })
+                Start::Marked { ran }
             }
-            (Some(_), Some((State::PendingVerify, ran))) => {
-                self.set_state(flash, running, State::Invalid, 0).ok()?;
-                Some(Start::Failed { ran })
-            }
-            _ => Some(Start::Kept),
+            (Some(_), Some((State::PendingVerify, ran))) => Start::Failed { ran },
+            _ => Start::Kept,
         }
     }
 

@@ -48,6 +48,7 @@ use paperpaw_sdk::firmware::{
     Check, Firmware, FirmwareState, ForeignCheck, ForeignImage, InstallFailure, Update,
 };
 
+use crate::dual_boot::Source;
 use crate::ota::{self, Flash, FlashError, Image, OtaData, Start, State};
 use crate::partitions::Slots;
 
@@ -168,6 +169,9 @@ pub struct Updates<F> {
     /// An update did not start cleanly, and this firmware came back.
     undone: bool,
     install: Option<Install>,
+    /// This is a declared dual-boot setup (`dual_boot`): the other app
+    /// partition is another firmware's, nothing is installed there.
+    dual: Option<Source>,
 }
 
 impl<F> core::fmt::Debug for Updates<F> {
@@ -191,18 +195,47 @@ impl<F: Flash> Updates<F> {
     /// where the start could not be marked. `Err` where the OTA data cannot
     /// be read.
     pub fn start(
-        mut flash: F,
+        flash: F,
         slots: &Slots,
         running: u32,
         this: Firmware,
         board: &'static str,
     ) -> Result<(Self, Option<Start>), FlashError> {
+        Self::start_guarded(flash, slots, running, this, board, &mut |_| None)
+    }
+
+    /// As [`Updates::start`], but where a start would write the OTA data
+    /// (an update's first start, one undone), `dual` is asked first, given
+    /// the flash: if it says the setup is a declared dual-boot one
+    /// (`dual_boot`), nothing is written and nothing put on trial, the start
+    /// is [`Start::Kept`], and installs are refused. Where nothing would be
+    /// written `dual` is not asked: a normal start costs nothing.
+    pub fn start_guarded(
+        mut flash: F,
+        slots: &Slots,
+        running: u32,
+        this: Firmware,
+        board: &'static str,
+        dual: &mut dyn FnMut(&mut F) -> Option<Source>,
+    ) -> Result<(Self, Option<Start>), FlashError> {
+        let mut ota_data = OtaData::read(&mut Partition {
+            flash: &mut flash,
+            offset: slots.data,
+        })?;
+        let declared = if ota_data.plan(running) == Start::Kept {
+            None
+        } else {
+            dual(&mut flash)
+        };
         let partition = &mut Partition {
             flash: &mut flash,
             offset: slots.data,
         };
-        let mut ota_data = OtaData::read(partition)?;
-        let start = ota_data.start(partition, running);
+        let start = if declared.is_some() {
+            Some(Start::Kept)
+        } else {
+            ota_data.start(partition, running)
+        };
         let mut trial = None;
         let mut undone = false;
         match start {
@@ -225,6 +258,7 @@ impl<F: Flash> Updates<F> {
             trial,
             undone,
             install: None,
+            dual: declared,
         };
         Ok((updates, start))
     }
@@ -327,7 +361,12 @@ impl<F: Flash> Updates<F> {
         let target = (self.running + 1) % ota::SLOTS;
         self.this
             .clone()
-            .room(u64::from(self.apps[target as usize].1))
+            // Nothing goes into another firmware's partition: no room.
+            .room(if self.dual.is_some() {
+                0
+            } else {
+                u64::from(self.apps[target as usize].1)
+            })
             .undone(self.undone)
             .state(FirmwareState::Idle)
     }
@@ -336,6 +375,24 @@ impl<F: Flash> Updates<F> {
     /// meanwhile).
     pub fn installing(&self) -> bool {
         self.install.is_some()
+    }
+
+    /// The setup is declared a dual-boot one (`dual_boot`), after the start
+    /// (by `paperpaw.ini`, which the card gives only later): from now on
+    /// nothing is installed. A trial under way ends as it began, so that
+    /// the OTA data is not left half done.
+    pub fn declare_dual(&mut self, source: Option<Source>) {
+        self.dual = source;
+    }
+
+    /// Whether, and by what, the setup is declared a dual-boot one.
+    pub fn dual(&self) -> Option<Source> {
+        self.dual
+    }
+
+    /// The partition running, for the note plugins read.
+    pub fn slot(&self) -> u32 {
+        self.running
     }
 
     /// Starts installing the update file at `path`, with the `key` the
@@ -349,6 +406,9 @@ impl<F: Flash> Updates<F> {
         key: Option<&[u8; 32]>,
         older: bool,
     ) -> Result<Installing, InstallFailure> {
+        if self.dual.is_some() {
+            return Err(InstallFailure::TooLarge);
+        }
         let update = Update::read(storage, path)?;
         update.may_install(&self.firmware(), key, older)?;
         let check = Checking::Signed(Check::new(&update.trailer)?);
@@ -364,6 +424,9 @@ impl<F: Flash> Updates<F> {
         storage: &dyn Storage,
         path: &str,
     ) -> Result<(Installing, String), InstallFailure> {
+        if self.dual.is_some() {
+            return Err(InstallFailure::TooLarge);
+        }
         let image = ForeignImage::read(storage, path)?;
         image.fits(&self.firmware())?;
         let len = u32::try_from(image.len).map_err(|_| InstallFailure::TooLarge)?;

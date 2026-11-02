@@ -1307,3 +1307,66 @@ fn another_firmware_installs_only_as_chosen() {
         FirmwareCommand::install_foreign("firmware.bin")
     );
 }
+
+/// What the firmware leaves on the card where PaperPaw shares the device
+/// with another firmware (`paperpaw_x4::dual_boot`).
+const DUAL_NOTE: &str = ".paperpaw/boot.txt";
+
+#[test]
+fn beside_another_firmware_the_page_installs_nothing_and_says_why() {
+    let storage = Shared::default();
+    storage
+        .write(
+            "updates/paperpaw-x4-0.5.0.bin",
+            &update_file(
+                "0.5.0",
+                &[
+                    ("chess-for-paperpaw", "1.1.0"),
+                    ("paperpaw-plugin-stats", "0.5.0"),
+                ],
+            ),
+        )
+        .unwrap();
+    storage
+        .write(DUAL_NOTE, b"dual-boot source=ini slot=1\n")
+        .unwrap();
+    let mut device = Device::new(storage);
+    device.run(OPEN);
+    let shown = device.shown();
+    assert!(shown.contains("Two firmwares on this device"), "{shown}");
+    assert!(
+        shown.contains("would replace the other firmware"),
+        "{shown}"
+    );
+    // An update that is ready, as on any other device, is not offered; nor
+    // is anyone asked for one.
+    assert!(!shown.contains("PaperPaw 0.5.0"), "{shown}");
+    assert!(!shown.contains("Install"), "{shown}");
+    assert!(!shown.contains("Check"), "{shown}");
+    device.run(CHECK);
+    device.no_request();
+}
+
+#[test]
+fn without_the_note_the_same_card_offers_the_update() {
+    let storage = Shared::default();
+    storage
+        .write(
+            "updates/paperpaw-x4-0.5.0.bin",
+            &update_file(
+                "0.5.0",
+                &[
+                    ("chess-for-paperpaw", "1.1.0"),
+                    ("paperpaw-plugin-stats", "0.5.0"),
+                ],
+            ),
+        )
+        .unwrap();
+    // A note that does not say it (cut short, another thing) changes nothing.
+    storage.write(DUAL_NOTE, b"").unwrap();
+    let mut device = Device::new(storage);
+    device.run(OPEN);
+    let shown = device.shown();
+    assert!(!shown.contains("Two firmwares"), "{shown}");
+    assert!(shown.contains("PaperPaw 0.5.0"), "{shown}");
+}
