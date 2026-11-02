@@ -6,7 +6,7 @@
 
 use alloc::string::String;
 
-use paperpaw_sdk::{Command, Commands, Env, FixedAction, Id, Params, Rect, library};
+use paperpaw_sdk::{Command, Commands, Cx, Env, FixedAction, Handled, Id, Params, Rect, library};
 
 /// Looks for new books: the kernel walks the library folder anew.
 pub(crate) const LOOK_AGAIN: Id = Id::new_static("files.look-again");
@@ -20,9 +20,30 @@ pub(crate) const ACTION: FixedAction =
     FixedAction::new(LOOK_AGAIN, "files.look-again").handler(look_again);
 
 fn look_again(env: &Env<'_>, _: &Params, out: &mut Commands) {
-    out.push(library::request_catalog_anew());
-    let said = env.i18n().tr("files.look-again.started");
-    out.push(Command::Notify(said.into()));
+    // A second press while the books are still being collected lets the
+    // walk go on: walked anew, it would start over.
+    let (request, said) = if walking(env) {
+        (library::request_catalog(), "files.look-again.busy")
+    } else {
+        (library::request_catalog_anew(), "files.look-again.started")
+    };
+    out.push(request);
+    out.push(Command::Notify(env.i18n().tr(said).into()));
+}
+
+impl super::ListScreen {
+    /// Looking for new books (the button or the menu, before the action's
+    /// own handler, which it passes on to): an empty library says it
+    /// collects the books from now on, rather than that there are none,
+    /// until the kernel shows the first or says it is done.
+    pub(super) fn looking(&mut self, cx: &mut Cx<'_, '_>) -> Handled {
+        if self.look_again {
+            self.collecting = true;
+            self.refilter(cx.env());
+            cx.request_redraw();
+        }
+        Handled::No
+    }
 }
 
 /// Whether the library's catalog is being made anew: its books are those

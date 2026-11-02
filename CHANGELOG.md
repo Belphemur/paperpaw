@@ -68,8 +68,9 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   every two minutes at least: they can be opened and read at once (the collecting waits meanwhile and goes on when the
   book is closed). The count says *1,240 books so far …* until all are found.
 - **Look for new books** (#109). An empty library has a button that looks for books again, and the library's menu has
-  the same entry: for books copied onto the card while PaperPaw ran. **After swapping the SD card, restart the
-  reader**: PaperPaw reads the card it started with.
+  the same entry: for books copied onto the card while PaperPaw ran. While it looks, the library says it collects the
+  books and shows them as they are found ("N books so far"), as on the first start; pressing it again lets the search
+  go on. **After swapping the SD card, restart the reader**: PaperPaw reads the card it started with.
 - **Arrow keys stay on the page** (#112), a new setting under *Controls*, off by default. On, the arrow keys go
   round on the page shown: back on its first entry goes to its last, on from its last to its first (on a short last
   page among the entries it has); only the page buttons turn pages. In grids (covers, the home screen's tools and
@@ -476,7 +477,9 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   `Library::extended` with the key `core.library-walking` (`walking` = `true` while the catalog is made anew); the
   library's count says *so far* then. No change of interface 6.
 - **Look for new books** (#109): the library (`files`) has the action `files.look-again` (in its menu, and as a
-  button on an empty library), which sends `library::request_catalog_anew()`.
+  button on an empty library), which sends `library::request_catalog_anew()` (`request_catalog()` while a walk that
+  shows its books as it goes is under way, so it is not started over). A walk over a catalog without books removes
+  it first and goes as a first walk does (#108): its books are put into a catalog at checkpoints.
 - **Packs name the letters they need** (#97): the Arabic interface (`language-ar` 1.0.1) says `requires = script-arabic`
   and the rare Hangul syllables (`script-korean-extra` 1.0.1) `requires = script-korean` in their `plugin.ini`
   (formats 4), and their descriptions and *How it works* say it in words. Nothing fetches the letters by itself yet:

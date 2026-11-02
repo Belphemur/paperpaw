@@ -363,3 +363,40 @@ fn checkpoints_of_a_large_slow_walk_grow_by_a_quarter() {
     // Every two minutes would be about 25 (a book a step, two seconds).
     assert!((5..16).contains(&shown.len()), "{shown:?}");
 }
+
+/// A catalog without books (the card was empty when it was made) is as
+/// none (#109): the books copied since show at checkpoints, the library
+/// says they are those found so far, and it ends with all of them.
+#[test]
+fn a_walk_over_a_catalog_without_books_shows_them_as_a_first_walk() {
+    let h = harness(MemoryStorage::new().with("books/readme.md", "no book"));
+    let env = h.env();
+    walk(&env);
+    assert!(
+        library::emptiness::is_empty(&h.storage),
+        "a catalog without books"
+    );
+    for i in 0..200 {
+        h.storage
+            .write(&format!("books/f{}/b{i:04}.txt", i % 5), b"a book")
+            .unwrap();
+    }
+    let mut walk = Walk::start(&env, Vec::new()).unwrap();
+    assert!(!h.storage.exists(CATALOG), "walked as where there is none");
+    let mut shown = Vec::new();
+    while !walk.step(&env).unwrap() {
+        if walk.published() {
+            shown.push(books(&h.storage).len());
+        }
+        assert!(walking(&env) || !h.storage.exists(BUILDING));
+    }
+    assert!(!walking(&env));
+    assert!(shown.len() >= 2 && shown[0] < 200, "{shown:?}");
+    assert_eq!(books(&h.storage).len(), 200);
+    // With books, the catalog stays while a walk goes on.
+    let mut walk = Walk::start(&env, Vec::new()).unwrap();
+    assert!(h.storage.exists(CATALOG));
+    while !walk.step(&env).unwrap() {
+        assert!(!walk.published());
+    }
+}
