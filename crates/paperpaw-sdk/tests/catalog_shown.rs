@@ -18,7 +18,9 @@ use std::borrow::Cow;
 use paperpaw_sdk::document::DocumentError;
 use paperpaw_sdk::library;
 use paperpaw_sdk::library::catalog::{self, Walk};
-use paperpaw_sdk::{Env, FormatSpec, Formats, Id, Instant, MemoryStorage, Params, Storage};
+use paperpaw_sdk::{
+    DirEntry, Env, FormatSpec, Formats, Id, Instant, MemoryStorage, Params, Storage, StorageError,
+};
 
 const CATALOG: &str = ".paperpaw/library/catalog.txt";
 const BUILDING: &str = ".paperpaw/library/catalog.tmp";
@@ -226,4 +228,138 @@ fn a_cut_leaves_books_found_and_the_next_walk_makes_them_all() {
         }
     }
     assert!(cuts > 10, "{cuts}");
+}
+
+/// Cut off while the first checkpoint began the catalog (the power gone
+/// with the file made, its header not or half written): the next walk
+/// takes it for no catalog or a damaged one and ends with all the books.
+#[test]
+fn a_cut_in_the_first_header_leaves_a_catalog_the_next_walk_makes_whole() {
+    let h = harness(library(60));
+    let env = h.env();
+    let (all, bytes) = {
+        let whole = harness(library(60));
+        walk(&whole.env());
+        (books(&whole.storage), whole.storage.get(CATALOG).unwrap())
+    };
+    let mut first = Walk::start(&env, Vec::new()).unwrap();
+    while h.storage.get(CATALOG).is_none() {
+        assert!(!first.step(&env).unwrap());
+    }
+    let catalog = h.storage.get(CATALOG).unwrap();
+    let header = catalog.iter().position(|&b| b == b'\n').unwrap() + 1;
+    for cut in [0, 1, header / 2, header - 1, header] {
+        let card = snapshot(&h.storage);
+        card.write(CATALOG, &catalog[..cut]).unwrap();
+        let after = harness(card);
+        walk(&after.env());
+        assert_eq!(books(&after.storage), all, "{cut}");
+        // Byte for byte but the header, whose generation counts up as
+        // with any catalog made anew where there was one.
+        let made = after.storage.get(CATALOG).unwrap();
+        let books_of = |c: &[u8]| c[c.iter().position(|&b| b == b'\n').unwrap()..].to_vec();
+        assert_eq!(books_of(&made), books_of(&bytes), "{cut}: byte for byte");
+        assert!(!after.storage.exists(BUILDING), "{cut}");
+    }
+}
+
+/// A slow walk of a large library: its end, the rest appended in a few
+/// steps, is no checkpoint (views hear of the catalog made once, as of
+/// any walk's end, not of its books just before).
+#[test]
+fn the_end_of_a_slow_first_walk_is_no_checkpoint() {
+    let mut h = harness(library(1_500));
+    let mut walk = Walk::start(&h.env(), Vec::new()).unwrap();
+    let mut shown = Vec::new();
+    loop {
+        h.now = Instant(h.now.0 + 2_000);
+        let env = h.env();
+        let done = walk.step(&env).unwrap();
+        if walk.published() {
+            shown.push(books(&h.storage).len());
+        }
+        if done {
+            break;
+        }
+    }
+    assert!(shown.len() > 4, "{shown:?}");
+    assert!(shown.last() < Some(&1_500), "{shown:?}");
+    assert_eq!(books(&h.storage).len(), 1_500);
+}
+
+/// A card that takes no file named `walk.first` (full, say, as the first
+/// walk began).
+struct NoNote<'a>(&'a MemoryStorage);
+
+impl Storage for NoNote<'_> {
+    fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
+        self.0.read_at(path, offset, buf)
+    }
+    fn size(&self, path: &str) -> Result<u64, StorageError> {
+        self.0.size(path)
+    }
+    fn write(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+        if path.ends_with("/walk.first") {
+            return Err(StorageError::Full);
+        }
+        self.0.write(path, data)
+    }
+    fn append(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+        self.0.append(path, data)
+    }
+    fn list(&self, dir: &str, visit: &mut dyn FnMut(DirEntry<'_>)) -> Result<(), StorageError> {
+        self.0.list(dir, visit)
+    }
+    fn remove(&self, path: &str) -> Result<(), StorageError> {
+        self.0.remove(path)
+    }
+    fn rename(&self, from: &str, to: &str) -> Result<(), StorageError> {
+        self.0.rename(from, to)
+    }
+}
+
+/// The note that the books are those found so far cannot be written:
+/// the first walk goes on all the same, shows its books and ends whole;
+/// they are just not said to be found so far.
+#[test]
+fn a_first_walk_without_its_note_goes_on() {
+    let h = harness(library(100));
+    let card = NoNote(&h.storage);
+    let env = h.env_on(&card);
+    let mut walk = Walk::start(&env, Vec::new()).unwrap();
+    let mut shown = 0;
+    while !walk.step(&env).unwrap() {
+        shown += usize::from(walk.published());
+        assert!(!walking(&env));
+    }
+    assert!(shown >= 2, "{shown}");
+    assert_eq!(books(&h.storage).len(), 100);
+    assert!(!h.storage.exists(BUILDING));
+}
+
+/// A slow walk of a large library: each checkpoint sorts all books found,
+/// so those after two minutes also want a quarter more books than shown
+/// (not as many sorts as the walk takes minutes).
+#[test]
+fn checkpoints_of_a_large_slow_walk_grow_by_a_quarter() {
+    let mut h = harness(library(1_500));
+    let mut walk = Walk::start(&h.env(), Vec::new()).unwrap();
+    let mut shown = Vec::new();
+    loop {
+        h.now = Instant(h.now.0 + 2_000);
+        let env = h.env();
+        let done = walk.step(&env).unwrap();
+        if walk.published() {
+            shown.push(books(&h.storage).len());
+        }
+        if done {
+            break;
+        }
+    }
+    for pair in shown.windows(2) {
+        let grown = pair[1] >= 2 * pair[0] || pair[1] >= pair[0] + (pair[0] / 4).max(50);
+        assert!(grown, "{shown:?}");
+    }
+    // Every two minutes would be about 25 (a book a step, two seconds).
+    assert!((5..16).contains(&shown.len()), "{shown:?}");
 }
