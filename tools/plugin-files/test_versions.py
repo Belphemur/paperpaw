@@ -56,6 +56,16 @@ class Versions(unittest.TestCase):
         self.assertIsNone(versions.problem("stats", "1.0.0", "1.0.0", [quiet, everything]))
         self.assertIsNotNone(versions.problem("stats", "1.0.0", "1.0.0", [quiet, other]))
 
+    def test_a_built_in_plugin_needs_a_newer_version_for_any_change(self):
+        fix = "refactor(menu): rename"
+        self.assertIsNotNone(versions.builtin_problem("menu", "1.0.2", "1.0.2", [fix]))
+        self.assertIsNone(versions.builtin_problem("menu", "1.0.2", "1.0.3", [fix]))
+        self.assertIsNone(versions.builtin_problem("menu", "1.0.2", "1.0.2", []))
+        self.assertIsNotNone(versions.builtin_problem("menu", "1.0.2", "1.0.1", []))
+        # A trailer does not excuse it: the published sources would differ.
+        quiet = "test(menu): a case\n\nPlugin-unchanged: menu"
+        self.assertIsNotNone(versions.builtin_problem("menu", "1.0.2", "1.0.2", [quiet]))
+
     def test_a_plugin_s_own_tags(self):
         tags = ["v0.5.0-beta.2", "vocabulary-v1.0.1", "reading-goal-v1.0.1", "reading-v2.0.0",
                 "vocabulary-v1.0.2-beta.1", "vocabulary-vx"]
@@ -112,19 +122,63 @@ class Repository(unittest.TestCase):
         self.git("add", "-A")
         self.git("commit", "-q", "-m", message)
 
-    def check(self):
-        """Whether the check passes in the repository."""
+    def check(self, *flags):
+        """Whether the check passes in the repository (`flags`: versions.py's)."""
         here = self.root / "tools" / "plugin-files"
         # As CI runs it: the release before from the tags, not unittest's
         # own arguments.
         with unittest.mock.patch.multiple(versions, ROOT=self.root, HERE=here), \
-                unittest.mock.patch.object(sys, "argv", ["versions.py"]), \
+                unittest.mock.patch.object(sys, "argv", ["versions.py", *flags]), \
                 contextlib.redirect_stdout(io.StringIO()):
             try:
                 versions.main()
             except SystemExit:
                 return False
         return True
+
+    def builtin(self, version, source="// one\n", publish=True):
+        extra = "" if publish else "publish = false\n"
+        self.write("plugins/menu/Cargo.toml",
+                   f'[package]\nname = "m"\nversion = "{version}"\n{extra}')
+        self.write("plugins/menu/src/lib.rs", source)
+
+    def built_in_release(self, **kept):
+        """A release with a built-in plugin, `menu` (not in plugins.txt)."""
+        self.builtin("1.0.2", **kept)
+        self.commit("menu is built in")
+        self.git("tag", "v0.5.0-beta.3")
+
+    def test_a_changed_built_in_plugin_warns_and_fails_for_the_release(self):
+        self.built_in_release()
+        self.assertTrue(self.check())
+        self.assertTrue(self.check("--release"))
+        self.write("plugins/menu/src/lib.rs", "// two\n")
+        self.commit("refactor(menu): rename\n\nPlugin-unchanged: menu")
+        # A warning in CI, an error in the step before the release.
+        self.assertTrue(self.check())
+        self.assertFalse(self.check("--release"))
+        self.builtin("1.0.3", source="// two\n")
+        self.commit("menu 1.0.3")
+        self.assertTrue(self.check("--release"))
+
+    def test_a_built_in_plugin_changed_and_changed_back_is_left_alone(self):
+        self.built_in_release()
+        self.write("plugins/menu/src/lib.rs", "// two\n")
+        self.commit("refactor(menu): rename")
+        self.write("plugins/menu/src/lib.rs", "// one\n")
+        self.commit("revert it")
+        self.assertTrue(self.check("--release"))
+
+    def test_a_built_in_plugin_that_is_not_published_is_left_alone(self):
+        self.built_in_release(publish=False)
+        self.write("plugins/menu/src/lib.rs", "// two\n")
+        self.commit("refactor(menu): rename")
+        self.assertTrue(self.check("--release"))
+
+    def test_a_built_in_plugin_new_since_the_release_is_left_alone(self):
+        self.builtin("1.0.0")
+        self.commit("a new built-in plugin")
+        self.assertTrue(self.check("--release"))
 
     def test_the_fix_alone_merged_back_passes(self):
         self.assertTrue(self.check())

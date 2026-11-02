@@ -4,7 +4,7 @@ that changed since the last release has a newer version of its own:
 devices update a plugin only to a newer version, so a fix under the
 same one would never reach them.
 
-    python3 tools/plugin-files/versions.py [<since>]
+    python3 tools/plugin-files/versions.py [<since>] [--release]
 
 <since> is the release's tag compared with, the newest `v<version>` tag
 before HEAD where not given (CI runs it with the history and the tags).
@@ -21,6 +21,15 @@ trailer of its message:
 
 The release rebuilds such a plugin anyway, for its firmware, at the
 version it has.
+
+The plugins built into the firmware (every other crate of `plugins/` that
+is published) are held to the version of the release too, but the other
+way: crates.io keeps the sources of a published version, so any change in
+`plugins/<id>/` since the release (a comment, a test, a rename included;
+`Plugin-unchanged:` does not apply) needs a newer version before the
+crates are published (docs/releases.md). That is a warning, so that the
+bump can be made once, when the beta's changes are in; with `--release`
+(the step before the release's version bump) it fails.
 
 Where the plugin interface was raised since the release
 (`native::INTERFACE`), every plugin needs a newer version, changed or
@@ -183,6 +192,35 @@ def same_files(tag, paths):
     return done.returncode == 0
 
 
+def builtin_plugins(listed):
+    """The ids of the crates in plugins/ that are built into the firmware:
+    published, and not among `listed` (plugins.txt)."""
+    out = []
+    for manifest in sorted((ROOT / "plugins").glob("*/Cargo.toml")):
+        package = tomllib.loads(manifest.read_text(encoding="utf-8")).get("package", {})
+        if manifest.parent.name not in listed and package.get("publish", True) is not False:
+            out.append(manifest.parent.name)
+    return out
+
+
+def builtin_problem(plugin, before, now, changes):
+    """What is wrong with the built-in `plugin` at version `now`, `before`
+    at the release (published then), `changes` the messages of the commits
+    that changed its `plugins/<id>/` since; None where nothing is. A trailer
+    cannot excuse a change: the published sources would differ."""
+    if semver(now) < semver(before):
+        return f"its version {now} is older than the release's {before}"
+    if changes and semver(now) == semver(before):
+        first = changes[0].splitlines()[0] if changes[0] else ""
+        return (
+            f"built into the firmware, changed since the release ({len(changes)} commits, "
+            f"e.g. \"{first}\"), its version {now} did not: crates.io keeps the sources of the "
+            f"published {before}, so raise it in plugins/{plugin}/Cargo.toml (and the Cargo.lock "
+            f"files that list it) before the crates are published"
+        )
+    return None
+
+
 DATA = "tools/plugin-files/data.toml"
 
 
@@ -228,8 +266,31 @@ def data_problems(since, tags=()):
     return out
 
 
+def builtin_problems(since, listed, workspace_now):
+    """The built-in plugins whose sources changed since `since` without a
+    newer version: (id, what is wrong)."""
+    out = []
+    for plugin in builtin_plugins(listed):
+        manifest = f"plugins/{plugin}/Cargo.toml"
+        before = version_at(since, manifest)
+        if before is None:
+            continue  # new since the release
+        now = version_in((ROOT / manifest).read_text(encoding="utf-8"), workspace_now)
+        if same_files(since, [f"plugins/{plugin}"]):
+            continue  # commits that undid each other leave the published sources
+        log = git("log", "--no-merges", "--format=%B%x00", "HEAD", f"^{since}", "--",
+                  f"plugins/{plugin}") if is_ancestor(since) else ""
+        changes = [m.strip() for m in log.split("\0") if m.strip()]
+        found = builtin_problem(plugin, before, now, changes)
+        if found:
+            out.append((plugin, found))
+    return out
+
+
 def main():
-    since = sys.argv[1] if len(sys.argv) > 1 else git(
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    release = "--release" in sys.argv[1:]
+    since = args[0] if args else git(
         "describe", "--tags", "--abbrev=0", "--match", "v[0-9]*", "HEAD").strip()
     tags = git("tag", "--list").split()
     workspace_now = (ROOT / "Cargo.toml").read_text(encoding="utf-8")
@@ -263,9 +324,17 @@ def main():
     for plugin, found in data_problems(since, tags):
         print(f"::error file=tools/plugin-files/data.toml::{plugin}: {found}")
         failed = True
+    waiting = builtin_problems(since, plugins(), workspace_now)
+    for plugin, found in waiting:
+        level = "error" if release else "warning"
+        print(f"::{level} file=plugins/{plugin}/Cargo.toml::{plugin}: {found}")
+        failed = failed or release
     if failed:
         sys.exit(1)
     print(f"every plugin that changed since {since} or its own release has a newer version")
+    if waiting:
+        print(f"{len(waiting)} built-in plugins still wait for their bump "
+              "(a warning; versions.py --release fails on them)")
 
 
 if __name__ == "__main__":
