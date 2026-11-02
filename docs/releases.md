@@ -138,3 +138,22 @@ Offline regression tests for the publication tools:
 ```sh
 python3 -m unittest discover -s tools -p 'test_publish*.py'
 ```
+
+## A store plugin between releases
+
+One of PaperPaw's own store plugins, an update or a new one, can be published
+between releases with the workflow *Store plugin update* (run by hand, with the
+first-party plugin key): inputs `plugin`, `base` (the release's tag, e.g.
+`v0.6.0-beta.1`), `ref` (a branch made from that tag), `notes` and, only when
+needed, `accept`. It builds the plugin for the base firmware of each device,
+checks that each file has the base firmware's fingerprint, signs it and
+releases it as `<id>-v<version>`; devices are offered no firmware with it.
+
+The published firmware is the base's, so the source must differ from the
+base's tag only in the plugin, its tooling (`tools/plugin-files`), the
+CHANGELOG and docs (`tools/plugin-files/store_update.py` checks this and the
+version: above the base's for an update, any for a plugin the base does not
+have). A change anywhere else (the kernel, the SDK, another plugin) stops the
+run unless its path is named in `accept`: a decision for whoever runs it, who
+has to know the change cannot differ from what the firmware does. A plugin that
+needs a newer interface than the base's waits for the next release.

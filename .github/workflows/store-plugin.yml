@@ -17,6 +17,15 @@ name: Store plugin update
 # base's; its builder makes its folder, nothing is built for a device or
 # signed, and the release holds its folder's ZIP and its entry alone.
 #
+# A code plugin the base does not have (a new one, first published between
+# releases) takes the same path with the version its manifest has. Its
+# source must be made from the base's tag, and differ from it only in the
+# plugin, its tooling (tools/plugin-files), the CHANGELOG and docs, unless
+# `accept` names the rest: the published firmware is the base's, so a change
+# to the kernel, the SDK, the shells or another plugin is not in it
+# (store_update.py). The plugin file must have the base firmware's
+# fingerprint, which build.sh checks.
+#
 # The release is made with this workflow's token, and release.yml runs
 # only for tags of PaperPaw's versions, so nothing else starts with it.
 on:
@@ -34,6 +43,13 @@ on:
       notes:
         description: What the update changes, one line for the release notes
         required: true
+      accept:
+        description: >-
+          Paths or folders outside the plugin that differ from the base's tag and
+          may (comma separated, e.g. plugins/format-epub); anything else that
+          differs stops the run
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -42,6 +58,7 @@ env:
   CARGO_TERM_COLOR: always
   PLUGIN: ${{ inputs.plugin }}
   BASE: ${{ inputs.base }}
+  ACCEPT: ${{ inputs.accept }}
 
 jobs:
   check:
@@ -80,20 +97,12 @@ jobs:
             version="$(python3 tools/plugin-files/data.py --newer "$PLUGIN" "$BASE" 2>&1)" \
               || { echo "::error::$version"; exit 1; }
           else
-          # Its own version, as its manifest says it, newer than the base's.
-          version="$(python3 -c '
-          import subprocess, sys
-          sys.path.insert(0, "tools/plugin-files")
-          import versions
-          plugin, base = sys.argv[1:]
-          manifest = f"plugins/{plugin}/Cargo.toml"
-          now = versions.version_in(open(manifest, encoding="utf-8").read(), open("Cargo.toml", encoding="utf-8").read())
-          then = versions.version_in(versions.git("show", f"{base}:{manifest}"),
-                                     versions.git("show", f"{base}:Cargo.toml"))
-          if versions.semver(now) <= versions.semver(then):
-              sys.exit(f"::error::{plugin} is at {now}, the base has {then}: raise it in {manifest}")
-          print(now)
-          ' "$PLUGIN" "$BASE")"
+            # Its own version, as its manifest says it, newer than the base's
+            # (any, for a plugin the base does not have); the source made from
+            # the base's tag and differing only in the plugin and its tooling,
+            # or in what `accept` names (tools/plugin-files/store_update.py).
+            version="$(python3 tools/plugin-files/store_update.py "$PLUGIN" "$BASE" --accept "$ACCEPT")" \
+              || exit 1
           fi
           tag="$PLUGIN-v$version"
           if gh release view "$tag" -R "$GITHUB_REPOSITORY" > /dev/null 2>&1 \
@@ -217,7 +226,7 @@ jobs:
           NOTES: ${{ inputs.notes }}
         run: |
           {
-            echo "$PLUGIN $VERSION, an update of this plugin alone, for PaperPaw ${BASE#v}."
+            echo "$PLUGIN $VERSION, this plugin alone (an update, or a new plugin between releases), for PaperPaw ${BASE#v}."
             echo
             echo "- $NOTES"
           } > dist/notes.md
