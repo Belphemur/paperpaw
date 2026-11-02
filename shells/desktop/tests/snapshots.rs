@@ -700,12 +700,15 @@ const CASES: &[Case] = &[
         fixtures: false,
     },
     Case {
-        // A tap in the middle of the page: the reader's menu bar.
+        // A tap in the middle of the page: the reader's menu bar. The
+        // pages are counted first (a page turns as its button goes down,
+        // so a tap right after it would find the menu bar before the
+        // count, and show a percentage instead of "2 / 185").
         name: "boox-reader-menu",
         profile: "boox-go-7",
         book: Some("books/alice-in-wonderland.epub"),
         sets: &[],
-        script: "page-forward,tap:632:840,wait:300",
+        script: "wait:500,page-forward,tap:632:840,wait:300",
         colour: 0,
         fixtures: false,
     },
