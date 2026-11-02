@@ -78,7 +78,7 @@ impl core::fmt::Debug for StorePlugins<'_> {
 
 /// The ids of the plugins the store offers as files too: built in only
 /// with the feature `store-plugins`.
-pub const STORE_PLUGINS: [&str; 39] = [
+pub const STORE_PLUGINS: [&str; 40] = [
     "aids",
     "battery",
     "browser",
@@ -104,6 +104,7 @@ pub const STORE_PLUGINS: [&str; 39] = [
     "keys",
     "koreader",
     "kosync",
+    "mail",
     "menu-editor",
     "news",
     "notes-overview",
@@ -158,6 +159,7 @@ pub static NETWORK_SETTINGS: &[paperpaw_core::NetworkSettings] = paperpaw_core::
     "fonts-browser",
     "joplin",
     "kosync",
+    "mail",
     "news",
     "opds",
     "read-later-cloud",
@@ -303,6 +305,7 @@ fn offer_shipped_off(mut b: KernelBuilder, store: StorePlugins<'_>) -> KernelBui
         paperpaw_plugin_read_later_cloud::ReadLaterCloud,
     );
     b = offered(b, shipped_off, paperpaw_plugin_joplin::Joplin);
+    b = offered(b, shipped_off, paperpaw_plugin_mail::Mail);
     b = offered(b, shipped_off, paperpaw_plugin_wallabag::Wallabag);
     b
 }

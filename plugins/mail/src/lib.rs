@@ -14,6 +14,7 @@ pub mod header;
 pub mod html;
 pub mod imap;
 pub mod job;
+mod plugin;
 pub mod provider;
 pub(crate) mod reader;
 pub mod render;
@@ -24,6 +25,8 @@ pub mod store;
 pub mod texts;
 pub mod widgets;
 pub(crate) mod writer;
+
+pub use plugin::Mail;
 
 #[cfg(test)]
 mod tests;

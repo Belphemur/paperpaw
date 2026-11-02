@@ -53,6 +53,12 @@ test = false
 bench = false
 
 [[bin]]
+name = "mail"
+path = "src/bin/mail.rs"
+test = false
+bench = false
+
+[[bin]]
 name = "keys"
 path = "src/bin/keys.rs"
 test = false
@@ -268,6 +274,7 @@ paperpaw-plugin-joplin = { path = "../../plugins/joplin" }
 paperpaw-plugin-keys = { path = "../../plugins/keys" }
 paperpaw-plugin-koreader = { path = "../../plugins/koreader" }
 paperpaw-plugin-kosync = { path = "../../plugins/kosync" }
+paperpaw-plugin-mail = { path = "../../plugins/mail" }
 paperpaw-plugin-menu-editor = { path = "../../plugins/menu-editor" }
 paperpaw-plugin-news = { path = "../../plugins/news" }
 paperpaw-plugin-profiles = { path = "../../plugins/profiles" }

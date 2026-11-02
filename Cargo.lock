@@ -1410,6 +1410,7 @@ dependencies = [
  "paperpaw-plugin-koreader",
  "paperpaw-plugin-kosync",
  "paperpaw-plugin-lock",
+ "paperpaw-plugin-mail",
  "paperpaw-plugin-menu",
  "paperpaw-plugin-menu-editor",
  "paperpaw-plugin-news",

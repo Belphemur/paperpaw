@@ -23,7 +23,7 @@ use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::widgets::{self, Align, FixedWidget, Frame, Padding, TextSize, Widget, WidgetTarget};
 use paperpaw_sdk::{Arg, Canvas, Command, Env, Id, Params, Rect, RegisterError, Registrar, SettingSpec};
 
-use crate::account::{self, Account};
+use crate::account::Account;
 use crate::browser::param;
 use crate::store::{self, Counts};
 use crate::{LIST, OPEN, WRITE, texts};
@@ -323,7 +323,7 @@ impl Widget for MailWidget {
         let mut ui = ui::Ui::new(canvas, env, &style);
         let mut y = inner.y;
         let bottom = i32::from(inner.y) + i32::from(inner.height);
-        let mut put = |ui: &mut ui::Ui<'_>, text: &str, px: f32, h: u16, y: &mut u16| {
+        let put = |ui: &mut ui::Ui<'_>, text: &str, px: f32, h: u16, y: &mut u16| {
             if i32::from(*y) + i32::from(h) > bottom {
                 return false;
             }
@@ -391,6 +391,5 @@ mod tests {
                 assert_eq!(spec.group.as_str(), widget);
             }
         }
-        let _ = account::MAX;
     }
 }

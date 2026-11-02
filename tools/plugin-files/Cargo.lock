@@ -179,6 +179,7 @@ dependencies = [
  "paperpaw-plugin-keys",
  "paperpaw-plugin-koreader",
  "paperpaw-plugin-kosync",
+ "paperpaw-plugin-mail",
  "paperpaw-plugin-menu-editor",
  "paperpaw-plugin-news",
  "paperpaw-plugin-notes-overview",
@@ -345,6 +346,13 @@ dependencies = [
 [[package]]
 name = "paperpaw-plugin-kosync"
 version = "1.0.3"
+dependencies = [
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-mail"
+version = "1.0.0"
 dependencies = [
  "paperpaw-sdk",
 ]
