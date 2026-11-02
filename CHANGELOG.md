@@ -430,6 +430,11 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
 
 ### Changed
 
+- **Greek, Cyrillic and Korean titles in the library's list** (#387): the screens' texts are drawn in Source Sans 3,
+  which has none of these scripts' letters on the X4, and the Hebrew and Arabic packs brought a face for it while
+  these three did not, so a book's title showed as boxes in the list. `script-greek` and `script-cyrillic` 1.0.1
+  bring Source Sans 3's letters (+0.6 and +0.25 MiB on the card), `script-korean` 1.1.2 a second Hangul face for
+  the screens (+1.9 MiB). A store update, no firmware change.
 - The first walk of new books writes about a sixth of what it did (#98): an EPUB is opened for its details only (title,
   authors, series, cover) and its package goes into the reader's cache the first time the book is read, instead of
   a folder and its files written for every book the library finds. On the bench's card (FAT32, clusters of 32 KiB)
