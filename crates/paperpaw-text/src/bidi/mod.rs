@@ -288,6 +288,10 @@ fn is_removed(ch: char) -> bool {
 /// Latin text answers `false` at the cost of a scan of its bytes.
 #[must_use]
 pub fn needs_bidi(text: &str) -> bool {
+    // Nothing below U+0590 counts: most labels are told at once.
+    if text.is_ascii() {
+        return false;
+    }
     text.chars().any(|ch| {
         u32::from(ch) >= 0x0590
             && matches!(

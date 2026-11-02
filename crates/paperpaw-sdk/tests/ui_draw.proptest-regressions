@@ -6,3 +6,4 @@
 # everyone who runs the test benefits from these saved cases.
 cc 08a043b955fcc590971d4f29fed8e41905c7907b1f38cda5c73553a55ac0c599 # shrinks to rect = Rect { x: 0, y: 0, width: 413, height: 60 }, title = "ßPö vßnäAAä üßääüWüßä Sßäük", value = "", note = "", number = "0", focused = false, on = false, touch = false
 cc d9681900f5af14b04ba846bab73cf9a09d1c4924fc49d35d6502ff25f703527d # shrinks to title = "", value = "ÀȺȺ+¬if\\/'0v?𐶎⺀`'🌀\u{13440}�¥0ₐⷀ𱍐𐔰", width = 479.12082
+cc b7c713a2e5d62c61d291fc332842ae0e17c33571e7f5ae4289c60956ca1e751b # shrinks to title = "𞸅-এ꩐'𞥞𑎀¢🫎:Ⱥ𑴀Fa𑄶", value = "", width = 303.18976

@@ -361,7 +361,8 @@ fn right_to_left_text_is_drawn_as_measured() {
 
 /// Fonts for text in more than one font: Latin with punctuation and
 /// digits 5 wide, and a pack extending it with Hebrew letters 2 wide and
-/// Arabic ones (beh 1 alone, 4 final, 3 in the middle, 2 initial).
+/// Arabic ones (beh 1 alone, 4 final, 3 in the middle, 2 initial; lam
+/// and alef 2 in any form, lam-alef 7).
 fn latin_and_letters(also: &str) -> (Fonts, Rc<dyn Storage>) {
     let metrics = LineMetrics::new(8.0, 2.0, 12.0);
     let mut letters = PackBuilder::new();
@@ -375,6 +376,14 @@ fn latin_and_letters(also: &str) -> (Fonts, Rc<dyn Storage>) {
             ('\u{fe90}', 4.0),
             ('\u{fe92}', 3.0),
             ('\u{fe91}', 2.0),
+            // Lam and alef, and lam-alef wider than the two.
+            ('\u{644}', 2.0),
+            ('\u{627}', 2.0),
+            ('\u{fedf}', 2.0),
+            ('\u{fee0}', 2.0),
+            ('\u{fe8e}', 2.0),
+            ('\u{fefb}', 7.0),
+            ('\u{fefc}', 7.0),
         ]
         .map(|(c, a)| (c, Glyph::empty(a))),
     );
