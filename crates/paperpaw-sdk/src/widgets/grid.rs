@@ -420,41 +420,6 @@ pub fn columns_for(area: Rect, portrait_columns: u8) -> u8 {
     wide.clamp(u32::from(portrait), u32::from(MAX_COLUMNS)) as u8
 }
 
-/// `items` laid out anew in `geometry`, in reading order (row by row from
-/// the items' places as they were, the items without a place last), each
-/// in the first free cells of its size: as many cells as it took, no
-/// more than the grid has, narrower or lower where that has no room
-/// (down to what a widget can do with). For a grid made from another one
-/// (a landscape home from the portrait one) rather than [`fit`], which
-/// keeps each item where it was. What has no room comes back as it was
-/// (for the next page). Nothing is stored or changed.
-pub fn refit(env: &Env<'_>, geometry: &Geometry, items: &[Item]) -> (Vec<Item>, Vec<Item>) {
-    let mut order: Vec<usize> = (0..items.len()).collect();
-    order.sort_by_key(|&i| items[i].at.map_or((true, 0, 0), |c| (false, c.row, c.col)));
-    let (mut taken, mut placed, mut left) = (Vec::new(), Vec::new(), Vec::new());
-    for index in order {
-        let item = &items[index];
-        let found = match item.at {
-            Some(c) => {
-                let (w, h) = (c.w.clamp(1, geometry.columns), c.h.clamp(1, geometry.rows));
-                free_place(geometry, &taken, w, h).or_else(|| {
-                    let (_, _, least) = geometry.sizes_of(env, &item.what);
-                    room_of(geometry, &taken, w, h, least)
-                })
-            }
-            None => room_for(env, geometry, &taken, &item.what),
-        };
-        match found {
-            Some(cells) => {
-                taken.push(cells);
-                placed.push(Item::placed(item.what.clone(), cells));
-            }
-            None => left.push(item.clone()),
-        }
-    }
-    (placed, left)
-}
-
 /// [`place`], each item by its index in `items` (equal items apart).
 fn places(env: &Env<'_>, geometry: &Geometry, items: &[Item]) -> Vec<(usize, Cells)> {
     let mut placed: Vec<(usize, Cells)> = Vec::new();

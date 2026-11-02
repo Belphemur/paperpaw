@@ -202,12 +202,13 @@ impl ListView {
         self.columns = columns.clamp(1, u32::from(u16::MAX));
     }
 
-    /// How many columns of at least `cell_min_mm` millimetres fit `area`
-    /// side by side, at least 1: a cover grid's columns for the screen it
-    /// is on ([`columns`](Self::columns), [`set_columns`](Self::set_columns)).
-    pub fn fit_columns(env: &Env<'_>, area: Rect, cell_min_mm: u32) -> u32 {
+    /// How many columns of at least `cell_min_mm` millimetres fit side by
+    /// side in `width` pixels, at least 1: a cover grid's columns for the
+    /// screen it is on ([`columns`](Self::columns),
+    /// [`set_columns`](Self::set_columns)).
+    pub fn fit_columns(env: &Env<'_>, width: u32, cell_min_mm: u32) -> u32 {
         let cell = env.metrics().mm(cell_min_mm).max(1);
-        (u32::from(area.width) / cell).clamp(1, u32::from(u16::MAX))
+        (width / cell).clamp(1, u32::from(u16::MAX))
     }
 
     /// A list of rows `row` high in the readable column of `area`

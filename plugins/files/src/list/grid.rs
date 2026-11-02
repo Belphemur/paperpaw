@@ -48,7 +48,7 @@ impl Grid {
         let columns = if sizes.compact {
             3
         } else {
-            ListView::fit_columns(env, Rect::new(0, 0, width, 0), COLUMN_MM).max(3) as u16
+            ListView::fit_columns(env, u32::from(width), COLUMN_MM).max(3) as u16
         };
         // Covers a gap apart, the first and the last on the margins; the
         // focus a little around each.

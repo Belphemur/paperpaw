@@ -5,6 +5,11 @@
 //! the plugin's reply event, a [`Picked`] with the context it was asked
 //! for and the option chosen. Tapping outside, or *Back*, chooses
 //! nothing.
+//!
+//! The sheet is as wide as the screen's readable column ([`ui::readable`]):
+//! on a screen wider than that it stands in the middle, and what lies
+//! beside it is outside, as what lies above it is: a tap there closes the
+//! choice (the screen below is dimmed, and not usable meanwhile).
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;

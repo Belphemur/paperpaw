@@ -3,7 +3,10 @@
 //! [`CONFIRM`](crate::builtin::slots::CONFIRM), which
 //! [`ask::confirm`](crate::ask::confirm) asks. The answer comes back as
 //! the plugin's reply event, a [`Confirmed`] with the context it was
-//! asked with. *Back*, or a tap outside the box, answers nothing.
+//! asked with. *Back*, or a tap outside the box, answers nothing. On a
+//! screen wider than the readable column ([`ui::readable`](super::readable))
+//! the box is as wide as the column at most, and what lies beside it is
+//! outside.
 //!
 //! A screen of one's own bound to the slot reads the question from
 //! [`params::TITLE`], [`params::TEXT`] (a line of text below it, may be

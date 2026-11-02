@@ -1,7 +1,8 @@
 //! The helpers that adapt a screen to its size (#88): the readable column,
-//! the columns of a cover grid, the columns of a home grid in landscape and
-//! a grid laid out anew from another one. On the X4 in both orientations,
-//! on a tablet, and where the interface runs right to left.
+//! the columns of a cover grid and the columns of a home grid in
+//! landscape; the choice and the question in that column. On the X4 in
+//! both orientations, on a tablet, and where the interface runs right to
+//! left.
 
 #![allow(
     clippy::unwrap_used,
@@ -13,8 +14,8 @@ mod support;
 
 use paperpaw_platform::Rotation;
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
-use paperpaw_sdk::widgets::grid::{self, Cells, Geometry, Item, MAX_COLUMNS, What};
-use paperpaw_sdk::{DeviceInfo, DisplayInfo, Id, InputCaps, MemoryClass, PixelFormat, Point, Rect};
+use paperpaw_sdk::widgets::grid::{self, MAX_COLUMNS};
+use paperpaw_sdk::{DeviceInfo, DisplayInfo, InputCaps, MemoryClass, PixelFormat, Point, Rect};
 
 use support::{Device, Harness};
 
@@ -194,7 +195,7 @@ fn a_cover_grid_gets_the_columns_that_fit() {
     ] {
         let h = harness(device);
         let env = h.env();
-        let fit = ListView::fit_columns(&env, whole(device), 22);
+        let fit = ListView::fit_columns(&env, u32::from(whole(device).width), 22);
         assert_eq!(fit, columns, "{device:?}");
         // Every column is at least as wide as asked, and one more would not be.
         let width = u32::from(whole(device).width);
@@ -207,14 +208,11 @@ fn a_cover_grid_gets_the_columns_that_fit() {
 fn a_grid_is_at_least_one_column_even_where_nothing_fits() {
     let h = harness(X4);
     let env = h.env();
-    assert_eq!(
-        ListView::fit_columns(&env, Rect::new(0, 0, 100, 100), 22),
-        1
-    );
-    assert_eq!(ListView::fit_columns(&env, Rect::new(0, 0, 0, 0), 22), 1);
+    assert_eq!(ListView::fit_columns(&env, 100, 22), 1);
+    assert_eq!(ListView::fit_columns(&env, 0, 22), 1);
     // No size asked for: as many as there are pixels, not a crash.
-    assert!(ListView::fit_columns(&env, whole(X4), 0) <= u32::from(u16::MAX));
-    assert!(ListView::fit_columns(&env, whole(X4), 0) >= 1);
+    assert!(ListView::fit_columns(&env, 480, 0) <= u32::from(u16::MAX));
+    assert!(ListView::fit_columns(&env, 480, 0) >= 1);
 }
 
 #[test]
@@ -226,7 +224,11 @@ fn a_kept_list_changes_its_columns_and_its_area_and_keeps_its_item() {
     assert_eq!((list.column_count(), list.rows(), list.page()), (2, 6, 0));
     // On its side: wider, lower, more columns.
     list.set_area(Rect::new(0, 64, 800, 400));
-    list.set_columns(ListView::fit_columns(&env, list.area(), 22));
+    list.set_columns(ListView::fit_columns(
+        &env,
+        u32::from(list.area().width),
+        22,
+    ));
     assert_eq!(list.column_count(), 4);
     assert_eq!(list.focus(), 5);
     assert_eq!((list.rows(), list.page()), (8, 0));
@@ -261,120 +263,36 @@ fn a_home_grid_gets_more_columns_on_its_side() {
     }
 }
 
-fn tool(name: &str, at: Option<Cells>) -> Item {
-    let what = What::Tool(Id::parse(name).unwrap());
-    at.map_or_else(
-        || Item::new(what.clone()),
-        |c| Item::placed(what.clone(), c),
-    )
-}
-
-/// Each item with its cells, for comparing.
-fn cells(items: &[Item]) -> Vec<(String, Option<Cells>)> {
-    items
-        .iter()
-        .map(|i| {
-            let What::Tool(id) = &i.what else {
-                panic!("tools only")
-            };
-            (id.as_str().to_string(), i.at)
-        })
-        .collect()
-}
-
 #[test]
-fn a_grid_laid_out_anew_keeps_the_reading_order() {
-    let h = harness(X4_SIDE);
+fn a_choice_on_a_wide_screen_is_a_sheet_in_the_column_and_a_tap_beside_it_closes_it() {
+    use paperpaw_sdk::event::Event;
+    use paperpaw_sdk::ui::choice::{Choice, Picked};
+    use paperpaw_sdk::{Command, Outside, Screen};
+    let h = harness(TABLET_SIDE);
     let env = h.env();
-    // Four columns: two rows of four tools, the second row given first.
-    let items = [
-        tool("t.e", Some(Cells::new(0, 1, 1, 1))),
-        tool("t.a", Some(Cells::new(0, 0, 1, 1))),
-        tool("t.f", Some(Cells::new(1, 1, 1, 1))),
-        tool("t.b", Some(Cells::new(1, 0, 1, 1))),
-        tool("t.c", Some(Cells::new(2, 0, 1, 1))),
-        tool("t.d", Some(Cells::new(3, 0, 1, 1))),
-        tool("t.z", None),
-    ];
-    let wide = Geometry::of(whole(X4_SIDE), 6, 3, 8);
-    let (placed, left) = grid::refit(&env, &wide, &items);
-    assert!(left.is_empty());
-    // a b c d e f in the first row of six, then z in the second.
-    let expect = [
-        ("t.a", Cells::new(0, 0, 1, 1)),
-        ("t.b", Cells::new(1, 0, 1, 1)),
-        ("t.c", Cells::new(2, 0, 1, 1)),
-        ("t.d", Cells::new(3, 0, 1, 1)),
-        ("t.e", Cells::new(4, 0, 1, 1)),
-        ("t.f", Cells::new(5, 0, 1, 1)),
-        ("t.z", Cells::new(0, 1, 1, 1)),
-    ];
-    let got = cells(&placed);
-    let want: Vec<_> = expect
-        .iter()
-        .map(|(n, c)| ((*n).to_string(), Some(*c)))
-        .collect();
-    assert_eq!(got, want);
-}
-
-#[test]
-fn what_has_no_room_comes_back_and_nothing_overlaps_or_leaves_the_grid() {
-    let h = harness(X4_SIDE);
-    let env = h.env();
-    // Twelve tools in a 4 by 3 grid, a wider one than any column count.
-    let mut items: Vec<Item> = (0..12)
-        .map(|i| tool(&format!("t.{i:02}"), Some(Cells::new(i % 4, i / 4, 1, 1))))
-        .collect();
-    items.push(tool("t.wide", Some(Cells::new(0, 5, 9, 1))));
-    let small = Geometry::of(whole(X4_SIDE), 3, 3, 8);
-    let (placed, left) = grid::refit(&env, &small, &items);
-    // Nine fit; the other four come back as they were.
-    assert_eq!(placed.len(), 9);
-    assert_eq!(left.len(), 4);
-    assert_eq!(left[3].at, Some(Cells::new(0, 5, 9, 1)));
-    let taken: Vec<Cells> = placed.iter().map(|i| i.at.unwrap()).collect();
-    for (i, a) in taken.iter().enumerate() {
-        assert!(a.fits(small.columns, small.rows));
-        assert!(taken[i + 1..].iter().all(|b| !a.overlaps(b)));
+    let style = UiStyle::new(&env);
+    let Command::OpenSlot(_, params) =
+        paperpaw_sdk::ask::choice("Sort by", &Event::<Picked>::new("t.chosen"))
+            .options("t.option.", &["a", "b", "c"])
+            .command()
+    else {
+        panic!("not a slot");
+    };
+    let choice = Choice::new(&env, &params);
+    let region = choice.region(&env).expect("a sheet");
+    let column = ui::readable(&env, &style, whole(TABLET_SIDE));
+    // The sheet stands in the column, along the bottom.
+    assert_eq!((region.x, region.width), (column.x, column.width));
+    assert_eq!(region.bottom(), u32::from(whole(TABLET_SIDE).height));
+    // Beside it is outside the sheet, as above it: the overlay's default,
+    // a tap there closes it (the screen below is dimmed, not usable).
+    for x in [5, i32::from(region.x) - 1, region.right() as i32 + 1, 1915] {
+        assert!(!region.contains(Point::new(x, 1100)), "{x}");
     }
-    // Nothing is lost or made up.
-    assert_eq!(placed.len() + left.len(), items.len());
-}
-
-#[test]
-fn a_span_wider_than_the_new_grid_is_clamped_to_it() {
-    let h = harness(X4);
-    let env = h.env();
-    let items = [tool("t.a", Some(Cells::new(0, 0, 6, 2)))];
-    let narrow = Geometry::of(whole(X4), 2, 4, 8);
-    let (placed, left) = grid::refit(&env, &narrow, &items);
-    assert!(left.is_empty());
-    assert_eq!(placed[0].at, Some(Cells::new(0, 0, 2, 2)));
-    // A grid with one column, one row.
-    let tiny = Geometry::of(Rect::new(0, 0, 100, 100), 1, 1, 0);
-    let (placed, _) = grid::refit(&env, &tiny, &items);
-    assert_eq!(placed[0].at, Some(Cells::new(0, 0, 1, 1)));
-}
-
-#[test]
-fn laying_out_anew_twice_gives_the_same_grid() {
-    let h = harness(X4_SIDE);
-    let env = h.env();
-    let items: Vec<Item> = (0..9)
-        .map(|i| tool(&format!("t.{i}"), Some(Cells::new(i % 4, i / 4, 1, 1))))
-        .collect();
-    let wide = Geometry::of(whole(X4_SIDE), 6, 3, 8);
-    let (once, _) = grid::refit(&env, &wide, &items);
-    let (twice, _) = grid::refit(&env, &wide, &once);
-    assert_eq!(cells(&once), cells(&twice));
-    // The portrait layout it came from is untouched (not stored).
-    assert_eq!(items[4].at, Some(Cells::new(0, 1, 1, 1)));
-}
-
-#[test]
-fn an_empty_grid_lays_out_to_nothing() {
-    let h = harness(X4);
-    let env = h.env();
-    let (placed, left) = grid::refit(&env, &Geometry::default(), &[]);
-    assert!(placed.is_empty() && left.is_empty());
+    assert_eq!(choice.outside(), Outside::Close);
+    // On the X4 the sheet is as wide as the screen: nothing beside it.
+    let x4 = harness(X4_SIDE);
+    let env = x4.env();
+    let region = Choice::new(&env, &params).region(&env).expect("a sheet");
+    assert_eq!((region.x, region.width), (0, 800));
 }
