@@ -484,3 +484,60 @@ fn an_old_folder_that_cannot_be_read_does_not_keep_the_catalog_from_being_made()
             .exists(".paperpaw/library/books/0123456789abcdef.ini")
     );
 }
+
+const SORTED: &str = ".paperpaw/library/sorted.idx";
+
+fn want_sorted(kernel: &mut Kernel, now: u64, archive: &str) -> u64 {
+    let wanted = events::SortedWanted::new(String::from(archive)).to_params();
+    send(kernel, now, events::SORTED_WANTED.id(), wanted)
+}
+
+/// The books sorted ([`library::sorted`]) are made once a view asks, and
+/// anew (before views hear of it) whenever the catalog is made anew; not
+/// again while they are of the catalog there is.
+#[test]
+fn the_sorted_books_are_made_when_asked_and_after_the_catalog_changed() {
+    let (mut kernel, log, now) = library(two_books());
+    let now = want(&mut kernel, now, false);
+    assert!(!kernel.storage().exists(SORTED), "made unasked");
+    log.borrow_mut().clear();
+    let now = want_sorted(&mut kernel, now, "books/Archive");
+    assert!(kernel.storage().exists(SORTED));
+    assert_eq!(*log.borrow(), ["catalog"]);
+    let made = kernel.storage().size(SORTED).unwrap();
+    // Asked again: as it is.
+    let now = want_sorted(&mut kernel, now, "books/Archive");
+    assert_eq!(log.borrow().len(), 1);
+    // A book came: the catalog anew, then the books sorted anew, then
+    // views hear of it, once.
+    kernel.storage().write("books/c.txt", b"three").unwrap();
+    want(&mut kernel, now, true);
+    assert_eq!(log.borrow().len(), 2);
+    assert!(kernel.storage().size(SORTED).unwrap() > made);
+    assert!(!kernel.storage().exists(".paperpaw/library/sorted.runs"));
+}
+
+/// On the X4 the books are sorted while the library shows (the view says
+/// they are being prepared until then); never while a book is read.
+#[test]
+fn on_small_devices_the_books_are_sorted_beside_the_library() {
+    let device = DEVICE.with_memory(paperpaw_platform::MemoryClass::Small);
+    let (mut kernel, log, now) = library_on(device, two_books());
+    let now = want(&mut kernel, now, false);
+    let effects = kernel.open_slot(Instant(now), slots::LIBRARY, Params::new());
+    let now = run(&mut kernel, now, effects);
+    log.borrow_mut().clear();
+    want_sorted(&mut kernel, now, "");
+    assert!(kernel.storage().exists(SORTED));
+    assert_eq!(*log.borrow(), ["catalog"]);
+}
+
+#[test]
+fn what_a_sorting_cut_short_left_goes_at_a_start() {
+    let storage = two_books()
+        .with(".paperpaw/library/sorted.runs", "runs")
+        .with(".paperpaw/library/sorted.tmp", "half");
+    let (kernel, _, _) = library(storage);
+    assert!(!kernel.storage().exists(".paperpaw/library/sorted.runs"));
+    assert!(!kernel.storage().exists(".paperpaw/library/sorted.tmp"));
+}

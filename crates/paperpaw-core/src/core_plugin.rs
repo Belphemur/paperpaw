@@ -11,7 +11,7 @@ use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
-use catalog_job::CatalogJob;
+use catalog_job::{CatalogJob, make_library_folder, waits};
 use clean_up::{ask_clean_up, register_clean_up};
 
 use paperpaw_sdk::builtin::{
@@ -375,33 +375,9 @@ struct Catalog {
     /// What earlier versions kept for books is to be moved
     /// ([`library::split`]): first, before a walk or catching up.
     split: core::cell::Cell<bool>,
-}
-
-/// Whether the catalog's job waits (paused, it goes on where it was):
-/// while a book is read (the reader is the screen shown, overlays over it
-/// aside), its memory and time are the reader's; on a device of little
-/// memory (the X4), a walk waits while the library is open (shown, or
-/// under the screens it opened: finding, a shelf, a book's information),
-/// whose index takes the memory. Catching up, which takes little, goes on
-/// beside the library; a library with no catalog yet, or a catalog without
-/// books, holds no index.
-fn waits(env: &Env<'_>, walk: bool) -> bool {
-    let shown = env.stack().iter().rev().find(|entry| !entry.overlay);
-    let reading = shown.is_some_and(|entry| entry.slot.as_ref() == Some(&slots::READER));
-    let library_open = env
-        .stack()
-        .iter()
-        .any(|entry| entry.slot.as_ref() == Some(&slots::LIBRARY));
-    reading
-        || (walk
-            && env.device().memory == paperpaw_sdk::MemoryClass::Small
-            && library_open
-            && matches!(
-                library::catalog::state(env.storage()),
-                library::catalog::State::Ready { .. }
-            )
-            && !(library::emptiness::is_empty(env.storage())
-                && !library::emptiness::log_has_entries(env.storage())))
+    /// The archive folder the view of the sorted books leaves out
+    /// ([`library::sorted`]); none until one asked.
+    archive: core::cell::RefCell<Option<String>>,
 }
 
 impl Catalog {
@@ -447,6 +423,13 @@ impl Catalog {
                 .at_moments(calm)
                 .within(core::time::Duration::from_secs(within)),
         ));
+    }
+
+    /// The archive of the view the sorted books are to be made for, where
+    /// they are not of the library there is now.
+    fn sort_wanted(&self, env: &Env<'_>) -> Option<String> {
+        let archive = self.archive.borrow().clone()?;
+        library::sorted::wanted(env, &archive).then_some(archive)
     }
 
     /// Gives what the job under way took back, for the next.
@@ -498,7 +481,7 @@ impl Catalog {
         if waits(env, walk_next) {
             // Goes on where it was once another screen shows.
             if let Some(running) = job.as_mut() {
-                running.pause();
+                running.pause(storage);
             }
             return Step::WaitFor(events::SCREEN_SHOWN.id().clone());
         }
@@ -524,6 +507,8 @@ impl Catalog {
                 library::catalog::Walk::start(env, fresh.clone()).map(CatalogJob::Walk)
             } else if !fresh.is_empty() || library::catalog::log_is_long(storage) {
                 library::catalog::Rewrite::start(env, fresh.clone()).map(CatalogJob::Rewrite)
+            } else if let Some(archive) = self.sort_wanted(env) {
+                library::sorted::Build::start(env, &archive).map(CatalogJob::Sort)
             } else {
                 self.urgent.set(false);
                 return Step::Done;
@@ -543,11 +528,17 @@ impl Catalog {
         match result {
             Ok(false) => Step::Continue,
             Ok(true) => {
+                let sorted = matches!(*job, Some(CatalogJob::Sort(_)));
                 *job = None;
                 self.taken.borrow_mut().clear();
                 self.walked.set(self.walked.get() || walk);
-                out.push(events::CATALOG_CHANGED.emit(()));
-                if self.walk.get() || !self.fresh.borrow().is_empty() {
+                // Views hear of a catalog made anew once its books are
+                // sorted.
+                let sorting = !sorted && self.sort_wanted(env).is_some();
+                if !sorting {
+                    out.push(events::CATALOG_CHANGED.emit(()));
+                }
+                if sorting || self.walk.get() || !self.fresh.borrow().is_empty() {
                     Step::Continue
                 } else {
                     self.urgent.set(false);
@@ -568,24 +559,6 @@ impl Catalog {
 
 /// The library service and what plugins keep for books, which follow
 /// the books.
-/// The library's folder is there from the first start on: made where it
-/// is not (never removed), so that books copied onto the card or sent
-/// over Wi-Fi have their place from the start.
-fn make_library_folder(env: &Env<'_>) {
-    let folder = env.settings().read(&settings::LIBRARY_FOLDER);
-    let folder = folder.trim_matches('/');
-    if folder.is_empty() || paperpaw_sdk::files::is_dir(env.storage(), folder) {
-        return;
-    }
-    let mut made = String::new();
-    for part in folder.split('/') {
-        made = paperpaw_sdk::files::join(&made, part);
-        if !paperpaw_sdk::files::is_dir(env.storage(), &made) {
-            let _ = env.storage().create_dir(&made);
-        }
-    }
-}
-
 fn register_library(r: &mut Registrar) -> Result<(), RegisterError> {
     use alloc::rc::Rc;
     use paperpaw_sdk::work::WorkSpec;
@@ -600,6 +573,10 @@ fn register_library(r: &mut Registrar) -> Result<(), RegisterError> {
     {
         let catalog = Rc::clone(&catalog);
         r.on(events::STARTED, move |env, _, out| {
+            // What a making of the sorted books cut short left goes; the
+            // view it was for is the one it is made anew for.
+            library::sorted::clean_up(env.storage());
+            *catalog.archive.borrow_mut() = library::sorted::kept_archive(env.storage());
             if library::split::wanted(env.storage()) {
                 catalog.split.set(true);
                 catalog.declare(false, out);
@@ -637,6 +614,7 @@ fn register_library(r: &mut Registrar) -> Result<(), RegisterError> {
             }
         })?;
     }
+    catalog_job::register_sorted(r, &catalog)?;
     {
         let catalog = Rc::clone(&catalog);
         r.on(events::LIBRARY_CHANGED, move |_, _, out| {
