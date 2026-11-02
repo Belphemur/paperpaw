@@ -24,8 +24,8 @@
 //! ([`Registrar::add_status_place`](crate::Registrar::add_status_place)):
 //! three settings of the items for a line's left, centre and right. The
 //! reader has one above and one below the text, the home screen one in
-//! its status widget, the quick panel one at its head; a status line
-//! drawn in a place is told which ([`StatusFrame::place`]).
+//! its status widget; a status line drawn in a place is told which
+//! ([`StatusFrame::place`]).
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
