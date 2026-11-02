@@ -1,7 +1,7 @@
 [package]
 name = "paperpaw-plugin-hyphenation"
 description = "PaperPaw hyphenation patterns for English"
-version = "1.1.0"
+version = "1.1.1"
 edition.workspace = true
 rust-version.workspace = true
 # The code is Apache-2.0; the patterns are under the FSF all-permissive

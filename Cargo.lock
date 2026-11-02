@@ -1903,7 +1903,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-hyphenation"
-version = "1.1.0"
+version = "1.1.1"
 dependencies = [
  "paperpaw-hyphen",
  "paperpaw-i18n",

@@ -200,7 +200,7 @@ paperpaw-plugin-weather = { path = "plugins/weather", version = "1.0.2" }
 paperpaw-plugin-widgets = { path = "plugins/widgets", version = "1.0.3" }
 paperpaw-plugin-keyboard = { path = "plugins/keyboard", version = "1.0.1" }
 paperpaw-plugin-plugin-manager = { path = "plugins/plugin-manager", version = "1.0.4" }
-paperpaw-plugin-hyphenation = { path = "plugins/hyphenation", version = "1.1.0" }
+paperpaw-plugin-hyphenation = { path = "plugins/hyphenation", version = "1.1.1" }
 paperpaw-plugin-hyphenation-da = { path = "plugins/hyphenation-da", version = "1.0.0" }
 paperpaw-plugin-hyphenation-es = { path = "plugins/hyphenation-es", version = "1.0.0" }
 paperpaw-plugin-hyphenation-de = { path = "plugins/hyphenation-de", version = "1.0.0" }
