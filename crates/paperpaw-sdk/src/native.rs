@@ -310,6 +310,11 @@ mod installed;
 #[cfg(feature = "kernel")]
 pub use installed::InstalledCodes;
 
+#[cfg(any(test, feature = "kernel"))]
+mod need;
+#[cfg(any(test, feature = "kernel"))]
+pub use need::{InstalledNeed, installed_code_need};
+
 /// The code of `plugin` as installed (`remember_code`): the SHA-256 of
 /// its file's header. The kernel loads a code plugin's file only when its
 /// header says the same, so that a file put into a plugin's folder
@@ -583,60 +588,6 @@ pub fn keep_code_room(storage: &dyn Storage, room: Option<&CodeRoom>) -> bool {
     );
     let _ = storage.create_dir(crate::data::DIR);
     storage.write(ROOM, text.as_bytes()).is_ok()
-}
-
-/// What the code plugins installed take of the room for code, by plugin
-/// state (see [`installed_code_need`]).
-#[cfg(any(test, feature = "kernel"))]
-#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub struct InstalledNeed {
-    /// The bytes those that are on take, and how many they are.
-    pub taken: u64,
-    pub plugins: u32,
-    /// The same for those switched off.
-    pub off: u64,
-    pub off_plugins: u32,
-}
-
-/// The bytes the code plugins installed take where `room` places them:
-/// each folder in `plugins` with a code file named `file`
-/// ([`Native::file`]), by its header. Those installed since the start
-/// (loaded only after a restart) count; those `off` says are switched off
-/// (by the folder's name) are kept apart, as the loader skips their code
-/// at the next start and the room it would have placed them in is free.
-/// Folders whose names begin with a dot (a download being put together,
-/// e.g. `.clock.part`) are no plugins and do not count.
-#[cfg(any(test, feature = "kernel"))]
-#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
-pub fn installed_code_need(
-    storage: &dyn Storage,
-    room: &CodeRoom,
-    file: &str,
-    off: &dyn Fn(&str) -> bool,
-) -> InstalledNeed {
-    let mut folders: Vec<String> = Vec::new();
-    let _ = storage.list(crate::builtin::PLUGIN_DIR, &mut |entry| {
-        if entry.is_dir && !entry.name.starts_with('.') {
-            folders.push(String::from(entry.name));
-        }
-    });
-    let mut installed = InstalledNeed::default();
-    for folder in folders {
-        let path = alloc::format!("{}/{folder}/{file}", crate::builtin::PLUGIN_DIR);
-        let Some(header) = read_header(storage, &path) else {
-            continue;
-        };
-        let need = room.needs(u64::from(header.image_len), header.align);
-        if off(&folder) {
-            installed.off = installed.off.saturating_add(need);
-            installed.off_plugins += 1;
-        } else {
-            installed.taken = installed.taken.saturating_add(need);
-            installed.plugins += 1;
-        }
-    }
-    installed
 }
 
 /// The header of the plugin file at `path`, if it has one this SDK reads
