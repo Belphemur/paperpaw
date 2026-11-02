@@ -452,13 +452,9 @@ impl KeyboardScreen {
             let high = (u32::from(touch_row) * high / 100) as u16;
             (high, ui::edge_room(&style, high))
         };
-        // Text of several lines keeps the status line at the top of the
-        // screen in sight: the panel never reaches into it.
-        let status = if multiline {
-            paperpaw_sdk::widgets::line_height(env, style.small()) + style.gap() / 2
-        } else {
-            0
-        };
+        // The status line at the top of the screen stays in sight: the
+        // panel never reaches into it, whatever the screen's size.
+        let status = paperpaw_sdk::widgets::line_height(env, style.small()) + style.gap() / 2;
         // On the screen whatever the rows: keys get smaller first.
         let room_for_keys = display
             .height
