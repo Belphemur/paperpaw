@@ -292,6 +292,7 @@ impl Writer {
         for command in self.job.start_smtp(&account, outgoing) {
             cx.command(command);
         }
+        self.job.watch(cx);
         cx.request_redraw();
     }
 
@@ -368,6 +369,7 @@ impl Screen for Writer {
             for command in self.job.notice(notice, env.storage()) {
                 cx.command(command);
             }
+            self.job.watch(cx);
             self.progressed(cx);
         } else if let Some(typed) = TYPED.read(event, params).filter(|t: &Typed| !t.typing) {
             let text = typed.text;
@@ -381,6 +383,12 @@ impl Screen for Writer {
             self.keep(env.storage());
             self.status.clear();
             cx.request_redraw();
+        }
+    }
+
+    fn on_timer(&mut self, cx: &mut Cx<'_, '_>) {
+        if self.job.timer(cx) {
+            self.progressed(cx);
         }
     }
 

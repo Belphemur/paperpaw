@@ -272,6 +272,7 @@ impl Browser {
         for command in self.job.start_imap(&account, tasks) {
             cx.command(command);
         }
+        self.job.watch(cx);
         self.status.clear();
     }
 
@@ -523,6 +524,13 @@ impl Screen for Browser {
             for command in self.job.notice(notice, env.storage()) {
                 cx.command(command);
             }
+            self.job.watch(cx);
+            self.progressed(cx);
+        }
+    }
+
+    fn on_timer(&mut self, cx: &mut Cx<'_, '_>) {
+        if self.job.timer(cx) {
             self.progressed(cx);
         }
     }

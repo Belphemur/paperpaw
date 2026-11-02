@@ -171,6 +171,7 @@ impl Reader {
         for command in self.job.start_imap(&account, tasks) {
             cx.command(command);
         }
+        self.job.watch(cx);
     }
 
     /// The row of this mail in the folder's list, changed by `f`.
@@ -214,6 +215,7 @@ impl Reader {
             for command in self.job.start_imap(&account, alloc::vec![task]) {
                 cx.command(command);
             }
+            self.job.watch(cx);
         }
         cx.request_redraw();
     }
@@ -337,6 +339,13 @@ impl Screen for Reader {
             for command in self.job.notice(notice, env.storage()) {
                 cx.command(command);
             }
+            self.job.watch(cx);
+            self.progressed(cx);
+        }
+    }
+
+    fn on_timer(&mut self, cx: &mut Cx<'_, '_>) {
+        if self.job.timer(cx) {
             self.progressed(cx);
         }
     }

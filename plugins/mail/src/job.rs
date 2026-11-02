@@ -9,7 +9,10 @@
 
 use alloc::vec::Vec;
 
-use paperpaw_sdk::{CertificateHash, Command, Distrust, Id, KeyHash, SocketNotice, Storage};
+use paperpaw_sdk::{
+    CertificateHash, Command, Cx, Distrust, Id, Instant, KeyHash, SocketError, SocketNotice,
+    Storage,
+};
 
 use crate::account::{Account, field, key};
 use crate::driver::{self, Socket};
@@ -40,6 +43,11 @@ enum Session {
     Smtp(Smtp),
 }
 
+/// How long a connection may be silent before it is given up: a server
+/// that does not answer on a plain socket (before STARTTLS) is not timed
+/// out by the kernel.
+pub const SILENT_MS: u64 = 45_000;
+
 /// A connection, in the making or over.
 #[derive(Debug)]
 pub struct Job {
@@ -48,6 +56,8 @@ pub struct Job {
     pub run: Run,
     /// The account it is for.
     pub account: u8,
+    /// When it last did something (ms).
+    last: u64,
 }
 
 impl Job {
@@ -58,7 +68,55 @@ impl Job {
             session: Session::None,
             run: Run::Idle,
             account: 0,
+            last: 0,
         }
+    }
+
+    /// Notes that the connection did something at `now`.
+    pub fn touch(&mut self, now: Instant) {
+        self.last = now.millis();
+    }
+
+    /// When a working job is to be looked at for silence.
+    pub fn deadline(&self) -> Option<Instant> {
+        self.working()
+            .then(|| Instant(self.last.saturating_add(SILENT_MS)))
+    }
+
+    /// Notes the activity now and asks to be woken when the job would be
+    /// silent for too long (see [`Job::silent`]).
+    pub fn watch(&mut self, cx: &mut Cx<'_, '_>) {
+        let now = cx.env().now();
+        self.touch(now);
+        if let Some(at) = self.deadline() {
+            cx.wake_at(at);
+        }
+    }
+
+    /// The timer rang: gives up a job gone silent (true), else asks to be
+    /// woken again.
+    pub fn timer(&mut self, cx: &mut Cx<'_, '_>) -> bool {
+        let now = cx.env().now();
+        let commands = self.silent(now);
+        let gave_up = !commands.is_empty();
+        for command in commands {
+            cx.command(command);
+        }
+        if let Some(at) = self.deadline() {
+            cx.wake_at(at);
+        }
+        gave_up
+    }
+
+    /// Gives up a job silent for [`SILENT_MS`]: it failed with a timeout and
+    /// the socket closes.
+    pub fn silent(&mut self, now: Instant) -> Vec<Command> {
+        if !self.working() || now.millis() < self.last.saturating_add(SILENT_MS) {
+            return Vec::new();
+        }
+        self.session = Session::None;
+        self.run = Run::Failed(Failure::Network(SocketError::Timeout));
+        alloc::vec![self.socket.disconnect()]
     }
 
     pub fn working(&self) -> bool {

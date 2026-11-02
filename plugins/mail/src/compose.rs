@@ -12,6 +12,8 @@ use crate::smtp;
 /// The most text of a message written here, in bytes (the keyboard writes
 /// letters, not books; the message is built in memory).
 pub const MAX_BODY: usize = 16 * 1024;
+/// The longest line of a mail, without its line break (RFC 5322).
+const MAX_LINE: usize = 998;
 /// The most recipients of one message.
 pub const MAX_RECIPIENTS: usize = 20;
 
@@ -153,7 +155,13 @@ impl Draft {
         }
         header("MIME-Version", "1.0");
         header("Content-Type", "text/plain; charset=utf-8");
-        let ascii = self.body.is_ascii();
+        // Plain where it is ASCII and no line is longer than mail allows
+        // (998); else quoted-printable, which breaks long lines.
+        let ascii = self.body.is_ascii()
+            && self
+                .body
+                .split(['\n', '\r'])
+                .all(|line| line.len() <= MAX_LINE);
         header(
             "Content-Transfer-Encoding",
             if ascii { "7bit" } else { "quoted-printable" },
@@ -509,6 +517,21 @@ mod tests {
         assert_eq!(
             split_list("a@b.c, \"x, y\" <z@w.v>;"),
             ["a@b.c", "\"x, y\" <z@w.v>"]
+        );
+    }
+
+    #[test]
+    fn no_line_of_a_mail_is_longer_than_mail_allows() {
+        let mut d = draft();
+        d.body = format!("short\n{}\nend\n", "x".repeat(2000));
+        let message = d.message("Tue, 3 Nov 2026 09:15:00 +0100", "1@x");
+        assert!(message.contains("quoted-printable"), "{message}");
+        assert!(message.split("\r\n").all(|l| l.len() <= 998));
+        // A line that fits stays plain.
+        d.body = "x".repeat(900);
+        assert!(
+            d.message("Tue, 3 Nov 2026 09:15:00 +0100", "1@x")
+                .contains("7bit")
         );
     }
 }

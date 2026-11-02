@@ -244,7 +244,7 @@ impl Server {
 }
 
 /// An account, as set.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Account {
     pub number: u8,
     pub address: String,
@@ -255,6 +255,21 @@ pub struct Account {
     pub password: String,
     pub imap: Server,
     pub smtp: Server,
+}
+
+// The password never goes into a log or a test's message.
+impl core::fmt::Debug for Account {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Account")
+            .field("number", &self.number)
+            .field("address", &self.address)
+            .field("name", &self.name)
+            .field("user", &self.user)
+            .field("password", &"…")
+            .field("imap", &self.imap)
+            .field("smtp", &self.smtp)
+            .finish()
+    }
 }
 
 /// Where an account's values are read from: the settings and the secrets,

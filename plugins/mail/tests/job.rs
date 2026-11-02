@@ -206,3 +206,33 @@ fn a_provider_server_or_a_changed_key_is_never_offered_a_pin() {
         Offer::Attack
     );
 }
+
+#[test]
+fn a_password_is_not_in_debug_output() {
+    let account = account();
+    let job = {
+        let mut job = job();
+        job.start_imap(&account, vec![]);
+        job
+    };
+    for text in [format!("{account:?}"), format!("{job:?}")] {
+        assert!(!text.contains("secret"), "{text}");
+    }
+}
+
+#[test]
+fn a_silent_server_is_given_up_after_the_wait() {
+    use paperpaw_sdk::Instant;
+    let mut job = job();
+    assert_eq!(job.deadline(), None);
+    job.start_imap(&account(), vec![]);
+    job.touch(Instant(1_000));
+    assert_eq!(job.deadline(), Some(Instant(1_000 + job::SILENT_MS)));
+    // Not yet.
+    assert!(job.silent(Instant(1_000 + job::SILENT_MS - 1)).is_empty());
+    assert!(job.working());
+    let commands = job.silent(Instant(1_000 + job::SILENT_MS));
+    assert!(matches!(commands.as_slice(), [Command::Disconnect(_)]));
+    assert_eq!(job.run, Run::Failed(Failure::Network(SocketError::Timeout)));
+    assert_eq!(job.deadline(), None);
+}

@@ -197,11 +197,12 @@ pub fn valid_address(address: &str) -> bool {
 pub fn data(message: &str) -> Vec<u8> {
     let mut out = Vec::with_capacity(message.len() + message.len() / 40 + 8);
     let mut at_line_start = true;
-    for &byte in message.as_bytes() {
-        // Bare LF and bare CR are line breaks too.
+    let bytes = message.as_bytes();
+    for (i, &byte) in bytes.iter().enumerate() {
+        // Bare LF and bare CR are line breaks too (CR LF is one).
         match byte {
-            b'\r' => {}
-            b'\n' => {
+            b'\r' if bytes.get(i + 1) == Some(&b'\n') => {}
+            b'\r' | b'\n' => {
                 out.extend_from_slice(b"\r\n");
                 at_line_start = true;
             }
@@ -284,6 +285,7 @@ mod tests {
         assert_eq!(data("no end"), b"no end\r\n.\r\n");
         assert_eq!(data("x\r\n.\r\n"), b"x\r\n..\r\n.\r\n");
         assert_eq!(data(""), b".\r\n");
-        assert_eq!(data("a\rb"), b"ab\r\n.\r\n");
+        assert_eq!(data("a\rb"), b"a\r\nb\r\n.\r\n");
+        assert_eq!(data("a\r\nb\r.c"), b"a\r\nb\r\n..c\r\n.\r\n");
     }
 }

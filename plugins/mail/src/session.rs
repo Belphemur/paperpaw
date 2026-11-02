@@ -30,7 +30,7 @@ pub enum Security {
 }
 
 /// Where and as whom to connect.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Endpoint {
     pub host: String,
     pub port: u16,
@@ -39,6 +39,20 @@ pub struct Endpoint {
     pub password: String,
     /// The key the reader trusted for this server (see [`Event::Untrusted`]).
     pub pin: Option<KeyHash>,
+}
+
+// The password never goes into a log or a test's message.
+impl core::fmt::Debug for Endpoint {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Endpoint")
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("security", &self.security)
+            .field("user", &self.user)
+            .field("password", &"…")
+            .field("pin", &self.pin)
+            .finish()
+    }
 }
 
 impl Endpoint {
