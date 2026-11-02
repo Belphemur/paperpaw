@@ -728,6 +728,7 @@ fn walking(books: usize, battery: Option<u8>) -> Kernel {
         .storage(storage)
         .user_config("[core]\nsleep-after = 1\n")
         .sleep(true)
+        .speech(true)
         .build()
         .unwrap();
     kernel.start(Instant(0));
@@ -833,4 +834,32 @@ fn a_walk_paused_for_a_book_does_not_hold_the_sleep() {
     let path = Params::new().with(params::PATH, "books/b0001.txt");
     kernel.open_slot(Instant(1000), slots::READER, path);
     assert_eq!(first_sleep(&mut kernel, 5), Some(2));
+}
+
+/// The hour counts from the reader's last input, not from a sleep put off
+/// for something else: a text read aloud over the hour's end does not give
+/// the walk another hour once it is over.
+#[test]
+fn the_walks_hour_is_not_restarted_by_a_sleep_put_off_for_speech() {
+    let mut kernel = walking(170, None);
+    for minute in 1..=39u64 {
+        assert!(!kernel.tick(Instant(minute * 60_000)).sleep(), "{minute}");
+    }
+    let hello = paperpaw_sdk::Speech::new("Hello", Id::new_static("lib.spoken"));
+    kernel.output.commands.push(Command::speak(hello));
+    kernel.run_commands();
+    let Some(SpeechCall::Say { id, .. }) = kernel.take_speech().pop() else {
+        panic!("not spoken");
+    };
+    // Spoken through the hour's end: no sleep.
+    for minute in 40..=69u64 {
+        assert!(!kernel.tick(Instant(minute * 60_000)).sleep(), "{minute}");
+    }
+    assert!(kernel.speaking());
+    kernel.speech_done(Instant(69 * 60_000 + 30_000), id, true);
+    // Over: the hour had ended long before, the sleep comes.
+    let minute = (70..=75u64)
+        .find(|minute| kernel.tick(Instant(minute * 60_000)).sleep())
+        .expect("slept after the speech, not an hour later");
+    assert!(minute <= 72, "slept at minute {minute}");
 }

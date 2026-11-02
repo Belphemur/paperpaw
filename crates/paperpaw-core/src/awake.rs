@@ -4,7 +4,7 @@
 //! it. They hold only the sleep after `core.sleep-after` without input,
 //! never while the reader lets no plugin hold it, nor once the battery is
 //! nearly empty. The library's walk holds the sleep too (the kernel's own, not
-//! a plugin's: `Kernel::walk_holds_sleep`), whatever the reader chose, for an
+//! a plugin's: `Kernel::busy_at_sleep`), whatever the reader chose, for an
 //! hour without input at most.
 
 use alloc::borrow::Cow;
@@ -45,10 +45,13 @@ struct Held {
 pub(crate) struct Holds {
     held: Vec<Held>,
     counted_at: Option<Instant>,
-    /// The library's walk kept the sleep off, since the reader's last
-    /// input, and the time the sleep was put off to (the activity to
-    /// compare with: another means the reader pressed something).
-    walk: Option<(Instant, Instant)>,
+    /// The reader's last real input, as of the last time a sleep fell due
+    /// (the kernel counts a sleep put off as activity, to look again one
+    /// "Sleep after" later: that is not the reader's).
+    input: Option<Instant>,
+    /// The activity the kernel set itself at that time: an activity other
+    /// than this one is the reader's.
+    marked: Option<Instant>,
 }
 
 impl Kernel {
@@ -91,8 +94,14 @@ impl Kernel {
     }
 
     /// The sleep is due at `now`: whether something puts it off (reading
-    /// aloud, a download, a server, the library's walk).
+    /// aloud, a download, a server, the library's walk). The caller sets
+    /// the activity to `now` after, to look again one "Sleep after" later.
     pub(crate) fn busy_at_sleep(&mut self, now: Instant) -> bool {
+        // Any activity but the one set at the last look is the reader's.
+        if self.holds.marked != Some(self.last_activity) {
+            self.holds.input = Some(self.last_activity);
+        }
+        self.holds.marked = Some(now);
         let walking = self.walk_holds_sleep(now);
         walking || self.io.speech.speaking() || self.io.http.busy() || self.io.servers.busy()
     }
@@ -102,25 +111,14 @@ impl Kernel {
     /// or the work is held back), so that the sleep does not stop a first
     /// walk that outlasts "Sleep after"; it puts the sleep off by one
     /// "Sleep after" at a time, for [`WALK_AWAKE_MS`] since the reader's
-    /// last input at most, and never at a nearly empty battery. "Switch
-    /// off after" counts from the sleep, so it waits as well.
-    pub(crate) fn walk_holds_sleep(&mut self, now: Instant) -> bool {
-        if !self.works.stepping(&crate::core_plugin::CATALOG_WORK) {
-            self.holds.walk = None;
-            return false;
-        }
-        // Put off before and nothing pressed since: counted from the
-        // reader's last input then.
-        let since = match self.holds.walk {
-            Some((since, marked)) if marked == self.last_activity => since,
-            _ => self.last_activity,
-        };
-        if self.battery_low() || now.since(since) >= WALK_AWAKE_MS {
-            self.holds.walk = None;
-            return false;
-        }
-        self.holds.walk = Some((since, now));
-        true
+    /// last real input at most (not since a sleep put off for a download or
+    /// a server), and never at a nearly empty battery. "Switch off after"
+    /// counts from the sleep, so it waits as well.
+    fn walk_holds_sleep(&self, now: Instant) -> bool {
+        let input = self.holds.input.unwrap_or(self.last_activity);
+        self.works.stepping(&crate::core_plugin::CATALOG_WORK)
+            && !self.battery_low()
+            && now.since(input) < WALK_AWAKE_MS
     }
 
     /// The holds that count now: in force, and a screen's only while it is
