@@ -45,6 +45,13 @@ fn main() {
     println!("cargo::rerun-if-changed=build.rs");
     println!("cargo::rerun-if-changed=fonts");
     println!("cargo::rerun-if-env-changed=PAPERPAW_FONT_SIZES");
+    println!("cargo::rerun-if-env-changed=PAPERPAW_HINT");
+    if let Some(mode) = std::env::var("PAPERPAW_HINT")
+        .ok()
+        .and_then(|m| m.parse().ok())
+    {
+        paperpaw_text::HINTING.store(mode, std::sync::atomic::Ordering::Relaxed);
+    }
     println!("cargo::rerun-if-env-changed=PAPERPAW_FONT_LEAN");
     println!("cargo::rustc-check-cfg=cfg(paperpaw_lean_fonts)");
     // Lean (the firmware): no Literata bold, italic or bold italic (the

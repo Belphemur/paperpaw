@@ -5,7 +5,9 @@ use alloc::vec::Vec;
 use core::fmt;
 
 use skrifa::instance::{Location, Size};
-use skrifa::outline::{DrawSettings, OutlinePen};
+use skrifa::outline::{
+    DrawSettings, Engine, HintingInstance, HintingOptions, OutlinePen, SmoothMode, Target,
+};
 use skrifa::{FontRef, GlyphId, MetadataProvider};
 
 use crate::anchors::Anchors;
@@ -176,8 +178,42 @@ impl OutlineFont {
             .unwrap_or(0.0)
             .max(0.0);
         let mut pen = Pen::default();
-        if let Some(outline) = font.outline_glyphs().get(id) {
-            let settings = DrawSettings::unhinted(Size::new(size), &self.location);
+        let outlines = font.outline_glyphs();
+        // Prototype (#122): grid-fitting, by `crate::HINTING`.
+        let options = match crate::HINTING.load(core::sync::atomic::Ordering::Relaxed) {
+            1 => Some(HintingOptions {
+                engine: Engine::Auto(None),
+                target: Target::Smooth {
+                    mode: SmoothMode::Light,
+                    symmetric_rendering: true,
+                    preserve_linear_metrics: true,
+                },
+            }),
+            2 => Some(HintingOptions {
+                engine: Engine::Auto(None),
+                target: Target::Smooth {
+                    mode: SmoothMode::Normal,
+                    symmetric_rendering: true,
+                    preserve_linear_metrics: false,
+                },
+            }),
+            3 => Some(HintingOptions {
+                engine: Engine::Auto(None),
+                target: Target::Mono,
+            }),
+            4 => Some(HintingOptions {
+                engine: Engine::Interpreter,
+                target: Target::Mono,
+            }),
+            _ => None,
+        };
+        let instance = options
+            .and_then(|o| HintingInstance::new(&outlines, Size::new(size), &self.location, o).ok());
+        if let Some(outline) = outlines.get(id) {
+            let settings = match &instance {
+                Some(instance) => DrawSettings::hinted(instance, false),
+                None => DrawSettings::unhinted(Size::new(size), &self.location),
+            };
             // A broken glyph renders as empty instead of failing the page.
             let _ = outline.draw(settings, &mut pen);
         }

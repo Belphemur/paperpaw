@@ -229,6 +229,10 @@ impl core::fmt::Debug for TextStyle<'_> {
     }
 }
 
+/// Prototype (#122): 0 none, 1 auto light, 2 auto normal, 3 auto mono,
+/// 4 the font's own instructions, mono.
+pub static HINTING: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
+
 paperpaw_table::shared! {
 /// Draws one line of `text` in `style` with its baseline at `baseline` and
 /// returns the advance in pixels, its pairs kerned as [`measure`] kerns
