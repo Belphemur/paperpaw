@@ -192,7 +192,9 @@ impl Sorted {
         if records.is_some_and(|r| r != sum) {
             return None;
         }
-        recent.sort_unstable_by_key(|(rank, r)| (*rank, r.pos));
+        super::sort_by(&mut recent, |(rank, r)| {
+            (u128::from(*rank) << 32) | u128::from(r.pos)
+        });
         apart.sort_unstable();
         self.recent = recent.into_iter().map(|(_, r)| r).collect();
         self.apart = apart;
@@ -432,7 +434,9 @@ impl Sorted {
                 Some((if by_recent { recent } else { NEVER }, item?))
             })
             .collect();
-        order.sort_unstable_by_key(|(recent, item)| (*recent, item.key, item.offset));
+        super::sort_by(&mut order, |(recent, item)| {
+            super::ranked(*recent, item.key, item.offset)
+        });
         order
             .into_iter()
             .map(|(_, item)| Entry { item, stack: 1 })

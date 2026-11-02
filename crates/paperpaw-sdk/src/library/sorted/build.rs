@@ -302,7 +302,7 @@ impl Build {
         if self.run.is_empty() {
             return Ok(());
         }
-        self.run.sort_unstable_by_key(Rec::order);
+        super::sort_by(&mut self.run, |r| super::ranked(0, r.key, r.offset));
         // Written a piece at a time: never the run twice in memory.
         let mut bytes = Vec::with_capacity(self.run.len().min(PIECE) * RECORD);
         for piece in self.run.chunks(PIECE) {

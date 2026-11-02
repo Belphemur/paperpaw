@@ -114,6 +114,42 @@ impl Rec {
     }
 }
 
+/// Sorts `v` by `key`, a heapsort: a few hundred bytes of code where the
+/// standard library's sort takes kilobytes for each type it sorts (the
+/// order of things of the same key is any).
+fn sort_by<T>(v: &mut [T], key: fn(&T) -> u128) {
+    // Moves the thing at `root` down the heap of the first `end` until
+    // none below is greater (`child` and `root` below `end` all along).
+    let sift = |v: &mut [T], mut root: usize, end: usize| loop {
+        let mut child = 2 * root + 1;
+        if child >= end {
+            break;
+        }
+        if child + 1 < end && key(&v[child]) < key(&v[child + 1]) {
+            child += 1;
+        }
+        if key(&v[root]) >= key(&v[child]) {
+            break;
+        }
+        v.swap(root, child);
+        root = child;
+    };
+    let n = v.len();
+    for root in (0..n / 2).rev() {
+        sift(v, root, n);
+    }
+    for end in (1..n).rev() {
+        v.swap(0, end);
+        sift(v, 0, end);
+    }
+}
+
+/// A sort key of a book's title key and its place in the catalog, after
+/// `first`: as `(first, key, offset)` compares.
+fn ranked(first: u8, key: [u8; KEY], offset: u32) -> u128 {
+    (u128::from(first) << 96) | (u128::from(u64::from_be_bytes(key)) << 32) | u128::from(offset)
+}
+
 /// The hash of a series' name as the file keeps it (never 0).
 fn series_hash(name: &str) -> u32 {
     if name.is_empty() {
@@ -390,5 +426,37 @@ impl Sorted {
     /// Whether there are books at all (in the archive too).
     pub fn has_books(&self) -> bool {
         self.count > 0 || self.archived > 0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_heapsort_sorts_as_the_standard_library_does() {
+        let mut seed = 0x2545_f491_u32;
+        for len in (0..40).chain([255, 256, 257, 1000]) {
+            let v: Vec<(u8, [u8; KEY], u32)> = (0..len)
+                .map(|n| {
+                    seed ^= seed << 13;
+                    seed ^= seed >> 17;
+                    seed ^= seed << 5;
+                    let key = (seed % 7).to_be_bytes();
+                    (
+                        (seed % 3) as u8,
+                        [0, 0, 0, 0, key[0], key[1], key[2], key[3]],
+                        n,
+                    )
+                })
+                .collect();
+            let mut ours = v.clone();
+            sort_by(&mut ours, |&(first, key, offset)| {
+                ranked(first, key, offset)
+            });
+            let mut theirs = v;
+            theirs.sort_unstable();
+            assert_eq!(ours, theirs, "{len}");
+        }
     }
 }
