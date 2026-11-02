@@ -479,7 +479,7 @@ fn prepare() -> Ready {
     // that goes back to the firmware before, and before anything else is
     // written to the card.
     let mut ota = ota;
-    let dual = dual::settle(&mut ota, &flash, storage.as_ref());
+    let dual = dual::settle(&mut ota, storage.as_ref());
     // A failed trial that the setup left alone: the message is no longer
     // the other firmware's to read.
     if going_back && ota.as_ref().is_some_and(|ota| ota.failed_trial().is_none()) {

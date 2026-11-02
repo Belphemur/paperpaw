@@ -45,25 +45,47 @@ fn choice(storage: &dyn Storage) -> Choice {
     scan.finish()
 }
 
-/// Settles whether this is a declared dual-boot setup, and lets the start
-/// do what it needs only where it is not (`Ota::settle`: until now the OTA
-/// data was not written), tells updates and writes or removes the note for
-/// plugins. Whether it is declared, for what else must not touch the other
-/// partition.
-#[cold]
-#[inline(never)]
-pub fn settle(ota: &mut Option<Ota>, flash: &ota::Flash, storage: &dyn Storage) -> bool {
+/// Settles the start: where it would write the OTA data (an update to put
+/// on trial, one undone or failed), or where an earlier start left the note
+/// of a declared setup, the reader's choice and the bootloader are looked at
+/// (`decide`) before anything is written. A normal start, with nothing to
+/// write and no note, reads neither: it costs nothing here. Whether the
+/// setup is declared, for what else must not touch the other partition.
+pub fn settle(ota: &mut Option<Ota>, storage: &dyn Storage) -> bool {
     let Some(ota) = ota else {
         return false;
     };
+    if !ota.start_pending() && !noted(storage) {
+        ota.settle(None);
+        return false;
+    }
+    let source = decide(ota, storage);
+    ota.settle(source);
+    source.is_some()
+}
+
+/// Before an install: whether the setup is declared a dual-boot one, looked
+/// at anew (the reader may have written `dual-boot` since the start, or a
+/// tool set the bootloader up). Where it is, nothing is installed.
+pub fn guard(ota: &mut Ota, storage: &dyn Storage) -> bool {
+    if ota.dual().is_none() {
+        let source = decide(ota, storage);
+        ota.declare(source);
+    }
+    ota.dual().is_some()
+}
+
+/// What the reader's choice in `paperpaw.ini` and the bootloader's marker
+/// (looked for only where the reader did not decide) make of this setup,
+/// and the note for plugins to match.
+#[cold]
+#[inline(never)]
+fn decide(ota: &Ota, storage: &dyn Storage) -> Option<Source> {
     let began = millis();
     let choice = choice(storage);
-    // The bootloader is looked at (32 KB of flash) only where the reader
-    // did not decide.
-    let marker = dual_boot::needs_marker(choice).then(|| ota::marker(flash));
+    let marker = dual_boot::needs_marker(choice).then(|| ota::marker(ota.flash()));
     info!("dual boot: looked in {} ms", millis() - began);
     let source = dual_boot::decide(Evidence { choice, marker });
-    ota.settle(source);
     match source {
         Some(source) => info!(
             "dual boot: declared by the {}: nothing is installed in the other slot",
@@ -76,7 +98,17 @@ pub fn settle(ota: &mut Option<Ota>, flash: &ota::Flash, storage: &dyn Storage) 
         storage,
         source.map(|source| dual_boot::note(source, ota.slot())),
     );
-    source.is_some()
+    source
+}
+
+/// Whether an earlier start left the note of a declared setup.
+fn noted(storage: &dyn Storage) -> bool {
+    let mut head = [0u8; 64];
+    storage
+        .read_at(dual_boot::NOTE, 0, &mut head)
+        .ok()
+        .and_then(|n| core::str::from_utf8(&head[..n]).ok())
+        .is_some_and(dual_boot::noted)
 }
 
 /// The note on the card, only where it changes.

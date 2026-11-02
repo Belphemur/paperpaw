@@ -393,6 +393,12 @@ impl<F: Flash> Updates<F> {
         self.install.is_some()
     }
 
+    /// Whether the start found something to write to the OTA data, held
+    /// until [`Updates::settle`].
+    pub fn start_pending(&self) -> bool {
+        self.pending.is_some()
+    }
+
     /// Whether, and by what, the setup is declared a dual-boot one.
     pub fn dual(&self) -> Option<Source> {
         self.dual

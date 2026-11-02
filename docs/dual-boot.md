@@ -30,9 +30,11 @@ Carry the string `paperpaw-dualboot:1` anywhere in the bootloader's window of
 the flash, from 0x0 up to the partition table at 0x8000 (a constant in the
 bootloader's image is enough). It says: *I manage the two slots; PaperPaw,
 never write the other one, nor the OTA data.* PaperPaw reads the 32 KB of the
-window once at each start, unless `dual-boot` in `paperpaw.ini` is set (`on` or
-`off`), and never writes before it has looked: where the window cannot be read, it
-counts as marked.
+window (and `paperpaw.ini`) only where it matters: at a start that would write
+the OTA data, at a start after one that found the setup declared (the note below
+is on the card), and when an install is asked for. A normal start of a setup
+that is not declared reads neither. It never writes before it has looked: where
+the window cannot be read, it counts as marked.
 
 PaperPaw cannot sit well beside a firmware whose tool does not tell it, and
 phase 2 of this work will look for another firmware's image in the other

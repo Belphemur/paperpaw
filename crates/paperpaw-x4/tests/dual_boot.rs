@@ -103,7 +103,10 @@ fn start(
     let (mut updates, plan) = Updates::open(chip, slots, running, this(), "x4").unwrap();
     // Until the setup is known, not one byte is written.
     assert!(updates.flash().0 == before, "open wrote");
+    // Something to write exactly where the plan is not a plain start.
+    assert_eq!(updates.start_pending(), plan != Start::Kept);
     let started = updates.settle(declared);
+    assert!(!updates.start_pending());
     (updates, plan, started)
 }
 
