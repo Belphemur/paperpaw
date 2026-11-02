@@ -404,6 +404,22 @@ pub fn fit(env: &Env<'_>, geometry: &Geometry, items: &[Item]) -> (Vec<Item>, Ve
     (placed, left)
 }
 
+/// The columns a grid made for `portrait_columns` on a screen higher than
+/// wide has in `area`: those, where `area` is not wider than high; else
+/// as many as keep a cell about as wide as it was (the columns times the
+/// area's width over its height, rounded), at most [`MAX_COLUMNS`] and
+/// never fewer than `portrait_columns`. A phone's home of 4 columns in
+/// landscape: 6.
+pub fn columns_for(area: Rect, portrait_columns: u8) -> u8 {
+    let portrait = portrait_columns.clamp(1, MAX_COLUMNS);
+    if area.width <= area.height {
+        return portrait;
+    }
+    let (w, h) = (u32::from(area.width), u32::from(area.height.max(1)));
+    let wide = (u32::from(portrait) * w + h / 2) / h;
+    wide.clamp(u32::from(portrait), u32::from(MAX_COLUMNS)) as u8
+}
+
 /// [`place`], each item by its index in `items` (equal items apart).
 fn places(env: &Env<'_>, geometry: &Geometry, items: &[Item]) -> Vec<(usize, Cells)> {
     let mut placed: Vec<(usize, Cells)> = Vec::new();

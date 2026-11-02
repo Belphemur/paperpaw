@@ -306,14 +306,18 @@ fn frame(env: &Env<'_>, noted: bool) -> (UiStyle, ui::Header, ListView) {
     (style, header, ListView::new(area, row).focus_on_keys(env))
 }
 
-/// The style, header and the area below it for the list of a page.
+/// The style, header and the area below it for the list of a page (the
+/// readable column of it).
 fn page(env: &Env<'_>) -> (UiStyle, ui::Header, Rect) {
     let style = UiStyle::new(env);
     let display = env.device().display;
     let header = ui::Header::new(env, &style, true);
     let top = header.area().height + style.gap();
     let height = display.height.saturating_sub(top);
-    (style, header, Rect::new(0, top, display.width, height))
+    // The rows in the readable column where the screen is wider than that;
+    // the header keeps the whole width.
+    let area = ui::readable(env, &style, Rect::new(0, top, display.width, height));
+    (style, header, area)
 }
 
 /// Moves the focus of `rows` (lists with headings) by the navigation
