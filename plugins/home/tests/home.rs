@@ -685,15 +685,16 @@ fn turned_to_landscape_the_page_and_the_edit_mode_stay() {
     home.now += 100;
     let effects = home.kernel.resize(Instant(home.now), 800, 480);
     home.settle(effects);
-    assert!(home.says("Settings"), "still the second page, turned");
-    assert!(!home.says("Library"));
+    // Turned, the pages are filled in turn: both tools are on the first.
+    assert!(home.says("Settings"), "the page of it, turned");
+    assert!(home.says("Library"));
     let shown = home.shown();
     on_screen(&home, &shown);
-    // And back: the same page again.
+    // And back: the page of the first item shown (the first tool).
     home.now += 100;
     let effects = home.kernel.resize(Instant(home.now), 480, 800);
     home.settle(effects);
-    assert!(home.says("Settings"), "the second page, upright again");
+    assert!(home.says("Library"), "the first page, upright again");
 }
 
 /// Under another screen the home screen let its widgets go: a resize then

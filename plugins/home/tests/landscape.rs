@@ -32,7 +32,7 @@ fn screen(base: DeviceInfo, width: u16, height: u16) -> DeviceInfo {
 /// Eight tools on one page, two rows of four.
 const TOOLS: &str = "[home]\ncolumns = 4\npage-1 = tool:core.library 0/0 1x1, \
     tool:core.settings 1/0 1x1, tool:battery 2/0 1x1, tool:file-manager.open 3/0 1x1, \
-    tool:news.open 0/1 1x1\n";
+    tool:news.open 0/1 1x1\npage-2 = core.space 0/0 4x1\n";
 
 fn setting(app: &App, id: &str) -> String {
     app.kernel.settings().text(id).to_string()
@@ -157,26 +157,24 @@ fn a_page_turned_with_the_screen_is_the_page_with_the_same_first_item() {
         "{}",
         app.described()
     );
+    // On the side the two tools are one page: each page is filled first.
     rotate(&mut app, 800, 480);
     assert!(
-        app.shows("Settings") && !app.shows("Library"),
+        app.shows("Settings") && app.shows("Library"),
         "{}",
         app.described()
     );
+    // Turned back, the page of the first item shown (the first tool).
     rotate(&mut app, 480, 800);
     assert!(
-        app.shows("Settings") && !app.shows("Library"),
+        app.shows("Library") && !app.shows("Settings"),
         "{}",
         app.described()
     );
     // The first page too.
     app.run(actions::PREV_PAGE);
     rotate(&mut app, 800, 480);
-    assert!(
-        app.shows("Library") && !app.shows("Settings"),
-        "{}",
-        app.described()
-    );
+    assert!(app.shows("Library"), "{}", app.described());
     // Where the pages are others: the tools page, upright the second, is
     // on the side the one that shows the first of its tools.
     let mut app = App::new(screen(X4, 480, 800), Shared::memory(BASE_CONFIG, &[]));
@@ -185,6 +183,51 @@ fn a_page_turned_with_the_screen_is_the_page_with_the_same_first_item() {
     rotate(&mut app, 800, 480);
     assert!(app.shows("Library"), "{}", app.described());
     assert!(!app.shows("Start reading"));
+}
+
+/// How wide the book card is: from the first to the last dark pixel on the
+/// row of its second line, which are its borders (the text lies between).
+fn card_width(app: &mut App, width: u16) -> Option<i32> {
+    let line = app
+        .parts()
+        .into_iter()
+        .find(|p| p.label.contains("Choose a book"))?
+        .area;
+    let y = i32::from(line.y) + i32::from(line.height) / 2;
+    let dark: Vec<i32> = (0..i32::from(width)).filter(|&x| app.dark(x, y)).collect();
+    Some(dark.last()? - dark.first()?)
+}
+
+#[test]
+fn a_big_screen_on_its_side_keeps_cards_to_the_readable_column_and_fills_the_page() {
+    // The X4 on its side is narrower than the column: the card is as wide
+    // as the screen, and the page is full without the tools.
+    let mut app = App::new(screen(X4, 800, 480), Shared::memory(BASE_CONFIG, &[]));
+    let wide = card_width(&mut app, 800).expect("the card");
+    assert!(wide > 800 * 9 / 10, "{wide}: {}", app.described());
+    assert!(!app.shows("Library"), "{}", app.described());
+    // Tablets of 1920 and 2560 pixels (220 dpi: 220 and 290 mm): the card is no wider than the column
+    // (110 mm, a half of the screen or so), the tools follow beside and
+    // below it on the same page.
+    for (width, height) in [(1920u16, 1200u16), (2560, 1600)] {
+        let mut app = App::new(
+            screen(TOUCH, width, height),
+            Shared::memory(BASE_CONFIG, &[]),
+        );
+        let wide = card_width(&mut app, width).expect("the card");
+        assert!(
+            wide < i32::from(width) * 3 / 4,
+            "{width}x{height}: card {wide} wide: {}",
+            app.described()
+        );
+        assert!(app.shows("Library"), "{width}x{height}: {}", app.described());
+        // Nothing is stored for it.
+        assert_eq!(setting(&app, "home.page-1.wide"), "");
+    }
+    // Upright is as it was: the card as wide as the screen.
+    let mut app = App::new(screen(TOUCH, 1200, 1920), Shared::memory(BASE_CONFIG, &[]));
+    let wide = card_width(&mut app, 1200).expect("the card");
+    assert!(wide > 1200 * 9 / 10, "{wide}: {}", app.described());
 }
 
 fn edit(app: &mut App) {

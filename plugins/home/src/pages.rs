@@ -6,9 +6,9 @@
 //! Each page has a second setting, `home.page-N.wide`, for a screen on its
 //! side (wider than high). While none of those holds anything, the screen
 //! on its side shows the pages derived from the others, with more columns
-//! ([`pages_wide`]), what has no room flowing on to the next page; nothing
-//! of that is stored, so turning the screen back and forth changes no
-//! page. The first change made on the screen on its side keeps the whole
+//! ([`pages_wide`]), the items of every page flowing on in turn, each
+//! page filled before the next; nothing of that is stored, so turning the
+//! screen back and forth changes no page. The first change made on the screen on its side keeps the whole
 //! derived layout in the `.wide` settings, which from then on are that
 //! orientation's own ([`store`]). A page added and not filled
 //! yet, or emptied, keeps a space ([`widgets::SPACE`], which the grid
@@ -299,43 +299,51 @@ pub(crate) fn columns_upright(env: &Env<'_>) -> u8 {
 }
 
 /// Every page shown for a screen on its side, whose grid is `geometry`:
-/// the pages kept for it where there are any ([`wide_kept`]), else those
-/// of the upright layout laid out anew in it ([`grid::refit`]) in reading
-/// order, what a page has no room for first on the next (a page added where
-/// there is none, eight at most). Nothing is stored.
+/// the pages kept for it where there are any ([`wide_kept`]), else the
+/// items of the upright layout laid out anew in it ([`grid::refit`]), page
+/// after page in reading order, each page filled before the next is begun
+/// (so the room a page has is used, not the split upright; eight pages at
+/// most). A widget is no wider than about 110 mm. Nothing is stored.
 pub(crate) fn pages_wide(env: &Env<'_>, geometry: &Geometry) -> Vec<Page> {
     if wide_kept(env) {
         return read(env, true);
     }
     let from = columns_upright(env);
-    let upright = pages(env);
-    let mut out: Vec<Page> = Vec::new();
+    let widest = widest_widget(env, geometry);
     let mut carried: Vec<Item> = Vec::new();
-    let mut index = 0;
-    while index < upright.len() || (!carried.is_empty() && out.len() < MAX_PAGES) {
-        let mut items = upright
-            .get(index)
-            .map(|page| expand(env, &page.items))
-            .unwrap_or_default();
+    for page in pages(env) {
+        let mut items = expand(env, &page.items);
         // As a page reads: row by row, what has no place last.
         items.sort_by_key(|item| item.at.map_or((true, 0, 0), |c| (false, c.row, c.col)));
-        // What had no room before comes first, so it finds room here.
         carried.append(&mut items);
-        let (placed, left) = grid::refit(env, geometry, from, &carried);
+    }
+    let mut out: Vec<Page> = Vec::new();
+    while out.len() < MAX_PAGES && (out.is_empty() || !carried.is_empty()) {
+        let (placed, left) = grid::refit(env, geometry, from, widest, &carried);
+        // Nothing fits even an empty page (a widget the grid cannot hold):
+        // what remains is not shown here.
+        let stuck = placed.is_empty() && !out.is_empty();
+        if stuck {
+            break;
+        }
         out.push(Page {
             slot: out.len(),
             items: placed,
         });
-        let stuck = out.last().is_some_and(|p| p.items.is_empty()) && index >= upright.len();
         carried = left;
-        index += 1;
-        // Nothing fits even an empty page (a widget the grid cannot hold), or
-        // no page is left: what remains is not shown here.
-        if out.len() == MAX_PAGES || stuck {
-            break;
-        }
     }
     out
+}
+
+/// The most columns of `geometry` a widget takes on a screen on its side:
+/// those that make 110 millimetres (the width of the readable column), rounded
+/// up, all of them where the screen is not wider.
+fn widest_widget(env: &Env<'_>, geometry: &Geometry) -> u8 {
+    let column = u32::from(geometry.cell_w) + u32::from(geometry.gap);
+    env.metrics()
+        .mm(110)
+        .div_ceil(column.max(1))
+        .clamp(1, u32::from(geometry.columns)) as u8
 }
 
 /// A page's items as the grid shows them: the tools for `home.tools`,
