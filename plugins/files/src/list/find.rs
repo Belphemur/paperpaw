@@ -94,7 +94,7 @@ impl FindScreen {
             high.min(display.height.saturating_sub(top)),
         );
         Self {
-            focus: usize::from(!letters.is_empty()),
+            focus: 0,
             shown: ui::focus_shown(env),
             columns: usize::from(columns),
             style,
@@ -112,6 +112,9 @@ impl FindScreen {
         let before = self.focus;
         if !self.shown {
             self.shown = true;
+        } else if delta < -1 && (1..=self.columns).contains(&self.focus) {
+            // Up from the first row of letters is the search.
+            self.focus = 0;
         } else {
             let len = self.letters.len() as isize + 1;
             self.focus = (self.focus as isize + delta).rem_euclid(len) as usize;

@@ -7,8 +7,10 @@
 //! where their lines start is kept. A page's books are read when it is
 //! shown.
 
+use alloc::collections::BinaryHeap;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use core::cmp::Ordering;
 
 use paperpaw_sdk::builtin::{actions, events, params};
 use paperpaw_sdk::library::{self, catalog};
@@ -23,6 +25,10 @@ use super::rows::{self, Loaded, Sizes};
 
 /// The parameter naming the series, folder, letter or search words.
 const NAME: &str = "name";
+
+/// The most books a search lists (the first by title): a word most books
+/// have would else keep a place for each of thousands while it is shown.
+const MAX_FOUND: usize = 500;
 
 /// What a list of books holds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -90,6 +96,30 @@ struct Entry {
     progress: u8,
 }
 
+/// An [`Entry`] ordered as the list is (by title key, then offset), for
+/// the heap that keeps the first of a search's matches.
+struct Ranked(Entry);
+
+impl Ord for Ranked {
+    fn cmp(&self, other: &Self) -> Ordering {
+        (self.0.key, self.0.offset).cmp(&(other.0.key, other.0.offset))
+    }
+}
+
+impl PartialOrd for Ranked {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl PartialEq for Ranked {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other) == Ordering::Equal
+    }
+}
+
+impl Eq for Ranked {}
+
 pub(crate) struct ShelfScreen {
     style: UiStyle,
     /// Covers in grays ([`crate::COVERS`]).
@@ -99,6 +129,9 @@ pub(crate) struct ShelfScreen {
     kind: Kind,
     name: String,
     entries: Vec<Entry>,
+    /// How many books matched: more than `entries` hold for a search that
+    /// found over [`MAX_FOUND`].
+    total: usize,
     /// The series' next book to read.
     next: Option<usize>,
     /// The line below the header: how many books, how many finished.
@@ -135,10 +168,12 @@ impl ShelfScreen {
         let top = summary.y + summary.height;
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let stamp = stamp(env);
+        let (entries, total) = find(env, kind, &name);
         let mut screen = Self {
             grays: crate::covers_in_grays(env),
             list: ListView::new(area, u32::from(sizes.row)).focus_on_keys(env),
-            entries: find(env, kind, &name),
+            entries,
+            total,
             next: None,
             summary,
             title_text: String::new(),
@@ -166,7 +201,17 @@ impl ShelfScreen {
     fn word(&mut self, env: &Env<'_>) {
         self.title_text = self.title(env);
         let len = self.entries.len();
-        let books = env.i18n().plural("files.books", len as i64, &[]);
+        let books = if self.total > len {
+            env.i18n().format(
+                "files.search.capped",
+                &[
+                    ("shown", Arg::Int(len as i64)),
+                    ("total", Arg::Int(self.total as i64)),
+                ],
+            )
+        } else {
+            env.i18n().plural("files.books", len as i64, &[])
+        };
         let finished = self.entries.iter().filter(|e| e.progress == 100).count();
         self.summary_text = if self.kind == Kind::Series && finished > 0 {
             let done = env
@@ -271,7 +316,7 @@ impl ShelfScreen {
         let focus = self.list.focus();
         self.version = library::service(env).version(env);
         self.stamp = stamp(env);
-        self.entries = find(env, self.kind, &self.name);
+        (self.entries, self.total) = find(env, self.kind, &self.name);
         self.mark_next();
         self.list
             .set_focus(focus.min(self.entries.len().saturating_sub(1)));
@@ -299,8 +344,9 @@ fn stamp(env: &Env<'_>) -> Option<u64> {
 }
 
 /// The books of the list `kind` named `name`, in its order: a series by
-/// number, the others by title.
-fn find(env: &Env<'_>, kind: Kind, name: &str) -> Vec<Entry> {
+/// number, the others by title; and how many books matched (a search lists
+/// the first [`MAX_FOUND`] only).
+fn find(env: &Env<'_>, kind: Kind, name: &str) -> (Vec<Entry>, usize) {
     let folder = alloc::format!("{name}/");
     let words: Vec<String> = name
         .to_lowercase()
@@ -308,7 +354,13 @@ fn find(env: &Env<'_>, kind: Kind, name: &str) -> Vec<Entry> {
         .map(String::from)
         .collect();
     let wanted = name.bytes().next().unwrap_or(b'#');
-    let mut entries = Vec::new();
+    let most = if kind == Kind::Search {
+        MAX_FOUND
+    } else {
+        usize::MAX
+    };
+    let mut kept = BinaryHeap::new();
+    let mut total = 0;
     library::service(env).each(env, &mut |offset, line| {
         let found = match kind {
             Kind::Series => line.series == name,
@@ -328,33 +380,47 @@ fn find(env: &Env<'_>, kind: Kind, name: &str) -> Vec<Entry> {
                 title == wanted || (by_author == wanted && by_author != b'#')
             }
             Kind::Search => {
-                let text = alloc::format!(
+                let mut text = alloc::format!(
                     "{} {} {} {}",
                     line.title,
                     line.author,
                     line.series,
                     paperpaw_sdk::files::name(&line.path)
-                )
-                .to_lowercase();
+                );
+                for tag in line.tags() {
+                    text.push(' ');
+                    text.push_str(tag);
+                }
+                let text = text.to_lowercase();
                 !words.is_empty() && words.iter().all(|w| text.contains(w.as_str()))
             }
             Kind::Authors => false,
         };
         if found && let Ok(offset) = u32::try_from(offset) {
-            entries.push(Entry {
+            total += 1;
+            let entry = Ranked(Entry {
                 offset,
                 key: sort_key(&line.title),
                 number: catalog::series_order(&line.number),
                 progress: line.status.progress.unwrap_or(0),
             });
+            if kept.len() < most {
+                kept.push(entry);
+            } else if let Some(mut last) = kept.peek_mut()
+                && entry < *last
+            {
+                // Over the most: the last of the first by title goes.
+                *last = entry;
+            }
         }
     });
+    let mut entries: Vec<Entry> = kept.into_iter().map(|r| r.0).collect();
     if kind == Kind::Series {
         entries.sort_unstable_by_key(|e| (e.number, e.key, e.offset));
     } else {
         entries.sort_unstable_by_key(|e| (e.key, e.offset));
     }
-    entries
+    (entries, total)
 }
 
 impl Screen for ShelfScreen {

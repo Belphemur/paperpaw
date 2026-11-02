@@ -1014,7 +1014,11 @@ impl KeyboardScreen {
         let to = if row == PASTE_ROW {
             // The field's buttons sit above the first row.
             let last = self.buttons.len().saturating_sub(1);
-            if down || *a == actions::NEXT && index == last {
+            if (*a == actions::RIGHT || *a == actions::NEXT) && index == last {
+                // On past the last button: the first key.
+                self.column = Some(self.center(0, 0));
+                (0, 0)
+            } else if down {
                 self.nearest(row, index, 0)
             } else if up {
                 self.nearest(row, index, last_row)
