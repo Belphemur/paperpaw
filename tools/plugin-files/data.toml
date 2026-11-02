@@ -109,18 +109,21 @@ de.name = "Kyrillische Schrift"
 de.description = "Bücher auf Russisch, Ukrainisch, Bulgarisch, Serbisch und anderen kyrillischen Sprachen in Literata."
 
 [language-ar]
-version = "1.0.0"
+version = "1.0.1"
 group = "look"
 licence = "Apache-2.0"
 formats = 4
+requires = ["script-arabic"]
 devices = ["x4", "x4-pro", "x4-classic"]
 off_by_default = true
 build = "tools/language-pack.py"
 inputs = ["tools/plugin-files/languages/ar.ini", "tools/language-pack.py", "tools/sign"]
 name = "Arabic (user interface)"
-description = "PaperPaw's menus and settings in Arabic, running from right to left."
+description = "PaperPaw's menus and settings in Arabic, running from right to left. Needs Arabic letters."
 de.name = "Arabisch (Oberfläche)"
-de.description = "PaperPaws Menüs und Einstellungen auf Arabisch, von rechts nach links."
+de.description = "PaperPaws Menüs und Einstellungen auf Arabisch, von rechts nach links. Braucht die Arabische Schrift."
+how = "PaperPaw's menus and settings in Arabic, running from right to left.\n\nIt needs the Arabic letters pack (Arabic letters, in the store): without it the menus show boxes instead of letters. Install both; PaperPaw does not fetch the letters by itself yet."
+de.how = "PaperPaws Menüs und Einstellungen auf Arabisch, von rechts nach links.\n\nSie braucht die Arabische Schrift (im Store): ohne sie zeigen die Menüs Kästchen statt Buchstaben. Installiere beide; PaperPaw holt die Schrift noch nicht selbst."
 
 # The Korean packs (#61; owner decision: in the store from the beta).
 # script-korean (#61): the 2,350 Hangul syllables of KS X 1001 with CJK
@@ -149,9 +152,11 @@ de.description = "Bücher auf Koreanisch in einer klassischen Buchschrift: die 2
 # brings no letters of its own beyond them). About 30 MiB on the card, so
 # the reader offers it only for a book that uses such syllables.
 [script-korean-extra]
-version = "1.0.0"
+version = "1.0.1"
 group = "look"
 licence = "OFL-1.1"
+formats = 4
+requires = ["script-korean"]
 devices = ["x4", "x4-pro", "x4-classic"]
 off_by_default = true
 build = "tools/script-pack.py"

@@ -44,6 +44,8 @@ META = {
         "description": "PaperPaw's menus and settings in Arabic, running from right to left.",
         "de-name": "Arabisch (Oberfläche)",
         "de-description": "PaperPaws Menüs und Einstellungen auf Arabisch, von rechts nach links.",
+        # The pack with the letters of its script (the interface shows boxes without it).
+        "requires": "script-arabic",
     },
 }
 
@@ -202,7 +204,8 @@ def build(lang, base):
             (out / path).write_text(text, encoding="utf-8", newline="\n")
     else:
         head = (f"[plugin]\nid = {id}\nname = {info['name']}\n"
-                f"description = {info['description']}\nversion = 0.1.0\nformats = 4\n")
+                f"description = {info['description']}\nversion = 0.1.0\nformats = 4\n"
+                f"requires = {info['requires']}\n")
     (out / "plugin.ini").write_text(head, encoding="utf-8", newline="\n")
     subprocess.run(["cargo", "run", "-q", "--release", "-p", "paperpaw-sign", "--", "catalog",
                     str(source), str(out / "i18n" / f"{lang}.ppcat")], cwd=ROOT, check=True)

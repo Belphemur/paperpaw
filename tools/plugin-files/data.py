@@ -31,7 +31,12 @@ def plugins(path=HERE / "data.toml"):
 
 
 def plugin_ini(plugin, fields):
-    """The `plugin.ini` of `plugin`, as its builder writes it."""
+    """The `plugin.ini` of `plugin`, as its builder writes it. `requires`
+    (the plugins it needs, which the store fetches with it) is from formats
+    4."""
+    requires = fields.get("requires", [])
+    if requires and fields.get("formats", 1) < 4:
+        raise ValueError(f"{plugin}: `requires` needs formats 4")
     return (
         "[plugin]\n"
         f"id = {plugin}\n"
@@ -39,6 +44,7 @@ def plugin_ini(plugin, fields):
         f"description = {fields['description']}\n"
         f"version = {fields['version']}\n"
         + (f"formats = {fields['formats']}\n" if "formats" in fields else "")
+        + (f"requires = {', '.join(requires)}\n" if requires else "")
     )
 
 

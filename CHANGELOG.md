@@ -6,6 +6,11 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- **Packs name the letters they need** (#97): the Arabic interface (`language-ar` 1.0.1) says `requires = script-arabic`
+  and the rare Hangul syllables (`script-korean-extra` 1.0.1) `requires = script-korean` in their `plugin.ini`
+  (formats 4), and their descriptions and *How it works* say it in words. Nothing fetches the letters by itself yet:
+  the store reads `requires` in a later release; until then the letters pack is installed by hand.
+
 ## [0.6.0-beta.1] - 2026-11-02
 
 **Plugins of this release must be built from `6c4a19dc` or later** (plugin interface 6, #363). 0.6.0-beta.1 takes
