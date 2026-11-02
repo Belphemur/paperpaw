@@ -255,6 +255,9 @@ pub struct Shown {
 struct MailWidget {
     kind: Kind,
     shown: Shown,
+    /// The newest mails it shows, kept while the card's files are as they
+    /// were: every minute only the times are made anew.
+    cache: Cache,
 }
 
 impl MailWidget {
@@ -262,8 +265,20 @@ impl MailWidget {
         Self {
             kind,
             shown: Shown::default(),
+            cache: Cache::default(),
         }
     }
+}
+
+/// The files the mails shown were read from, as they were (path, time
+/// changed, size), and how many were kept.
+type Stamp = (Vec<(String, Option<i64>, u64)>, usize);
+
+/// The newest mails of a widget, and what they were read from.
+#[derive(Default)]
+struct Cache {
+    stamp: Option<Stamp>,
+    rows: Vec<(u8, store::Row)>,
 }
 
 /// The accounts a widget's `account` setting means: all, or the one.
@@ -284,18 +299,38 @@ fn folder_of(env: &Env<'_>, widget: &str) -> String {
     if raw.is_empty() { "INBOX".into() } else { raw }
 }
 
-/// The mails of the selected accounts' folder, newest first.
-fn rows(env: &Env<'_>, accounts: &[u8], folder: &str) -> Vec<(u8, store::Row)> {
-    let mut all: Vec<(u8, store::Row)> = accounts
+/// The newest `keep` mails of the selected accounts' folder that `wanted`
+/// takes, newest first. Only while the index files changed the card is read
+/// again, and no more than `keep` rows are held.
+fn newest(
+    storage: &dyn paperpaw_sdk::Storage,
+    accounts: &[u8],
+    folder: &str,
+    keep: usize,
+    wanted: fn(&store::Row) -> bool,
+    cache: &mut Cache,
+) -> Vec<(u8, store::Row)> {
+    let files: Vec<(String, Option<i64>, u64)> = accounts
         .iter()
-        .flat_map(|&a| {
-            store::read_index(env.storage(), &store::index_file(a, folder))
-                .into_iter()
-                .map(move |r| (a, r))
+        .map(|&a| {
+            let file = store::index_file(a, folder);
+            let (changed, size) = (storage.modified(&file), storage.size(&file).unwrap_or(0));
+            (file, changed, size)
         })
         .collect();
-    all.sort_by(|a, b| b.1.date.cmp(&a.1.date).then(b.1.uid.cmp(&a.1.uid)));
-    all
+    let stamp = (files, keep);
+    if cache.stamp.as_ref() != Some(&stamp) {
+        let mut all: Vec<(u8, store::Row)> = Vec::new();
+        for &a in accounts {
+            let rows = store::read_index(storage, &store::index_file(a, folder));
+            all.extend(rows.into_iter().filter(|r| wanted(r)).map(|r| (a, r)));
+            all.sort_by(|a, b| b.1.date.cmp(&a.1.date).then(b.1.uid.cmp(&a.1.uid)));
+            all.truncate(keep);
+        }
+        cache.rows = all;
+        cache.stamp = Some(stamp);
+    }
+    cache.rows.clone()
 }
 
 fn item(env: &Env<'_>, account: u8, folder: &str, row: &store::Row) -> Item {
@@ -350,7 +385,7 @@ fn mailbox(env: &Env<'_>, id: &str, accounts: &[u8]) -> Shown {
     }
 }
 
-fn read(kind: Kind, env: &Env<'_>) -> Shown {
+fn read(kind: Kind, env: &Env<'_>, cache: &mut Cache) -> Shown {
     let id = kind.id();
     let i18n = env.i18n();
     let accounts = selected(env, id);
@@ -376,9 +411,10 @@ fn read(kind: Kind, env: &Env<'_>) -> Shown {
                 .sum();
             let mut items = Vec::new();
             if widgets::shows(env, id, "newest")
-                && let Some((n, row)) = rows(env, &accounts, "INBOX")
-                    .into_iter()
-                    .find(|(_, r)| !r.seen())
+                && let Some((n, row)) =
+                    newest(env.storage(), &accounts, "INBOX", 1, |r| !r.seen(), cache)
+                        .into_iter()
+                        .next()
             {
                 items.push(item(env, n, "INBOX", &row));
             }
@@ -397,9 +433,8 @@ fn read(kind: Kind, env: &Env<'_>) -> Shown {
         }
         Kind::Latest => {
             let folder = folder_of(env, id);
-            let items = rows(env, &accounts, &folder)
+            let items = newest(env.storage(), &accounts, &folder, count, |_| true, cache)
                 .iter()
-                .take(count)
                 .map(|(n, r)| item(env, *n, &folder, r))
                 .collect();
             Shown {
@@ -412,12 +447,17 @@ fn read(kind: Kind, env: &Env<'_>) -> Shown {
             }
         }
         Kind::Flagged => {
-            let items = rows(env, &accounts, "INBOX")
-                .iter()
-                .filter(|(_, r)| r.flagged())
-                .take(count)
-                .map(|(n, r)| item(env, *n, "INBOX", r))
-                .collect();
+            let items = newest(
+                env.storage(),
+                &accounts,
+                "INBOX",
+                count,
+                store::Row::flagged,
+                cache,
+            )
+            .iter()
+            .map(|(n, r)| item(env, *n, "INBOX", r))
+            .collect();
             Shown {
                 items,
                 ..Shown::default()
@@ -459,7 +499,7 @@ impl MailWidget {
 
 impl Widget for MailWidget {
     fn update(&mut self, env: &Env<'_>) -> bool {
-        let shown = read(self.kind, env);
+        let shown = read(self.kind, env, &mut self.cache);
         let changed = shown != self.shown;
         self.shown = shown;
         changed
@@ -613,5 +653,51 @@ mod tests {
                 assert_eq!(spec.group.as_str(), widget);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod cache_tests {
+    use super::*;
+    use paperpaw_sdk::{MemoryStorage, Storage};
+
+    fn row(uid: u32, date: i64, flags: &str) -> store::Row {
+        store::Row {
+            uid,
+            flags: flags.into(),
+            date,
+            size: 1,
+            from: "Ada".into(),
+            from_address: "ada@example.org".into(),
+            subject: format!("Subject {uid}"),
+            message_id: String::new(),
+        }
+    }
+
+    #[test]
+    fn the_newest_few_are_kept_and_the_card_is_read_again_only_when_it_changed() {
+        let storage = MemoryStorage::new();
+        let many: Vec<store::Row> = (1..=50).map(|n| row(n, i64::from(n), "")).collect();
+        store::write_index(&storage, &store::index_file(1, "INBOX"), &many).unwrap();
+        let mut cache = Cache::default();
+        let shown = newest(&storage, &[1], "INBOX", 3, |_| true, &mut cache);
+        assert_eq!(
+            shown.iter().map(|(_, r)| r.uid).collect::<Vec<_>>(),
+            [50, 49, 48]
+        );
+        // Held: the three, not the fifty.
+        assert_eq!(cache.rows.len(), 3);
+        // Unchanged files: what was read is what is shown.
+        let again = newest(&storage, &[1], "INBOX", 3, |_| true, &mut cache);
+        assert_eq!(again, shown);
+        // A changed index (another size): read anew.
+        let fewer: Vec<store::Row> = (1..=5).map(|n| row(n, i64::from(n), "F")).collect();
+        store::write_index(&storage, &store::index_file(1, "INBOX"), &fewer).unwrap();
+        let flagged = newest(&storage, &[1], "INBOX", 3, store::Row::flagged, &mut cache);
+        assert_eq!(
+            flagged.iter().map(|(_, r)| r.uid).collect::<Vec<_>>(),
+            [5, 4, 3]
+        );
+        let _ = storage.remove(&store::index_file(1, "INBOX"));
     }
 }
