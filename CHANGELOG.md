@@ -6,6 +6,14 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+### Changed
+
+- The plugin interface's gate (ADR 0026, #94): `interface.txt` keeps the fingerprint the bless was made with, and
+  a bless of a change plugins rely on is refused unless the interface rises above the one that fingerprint was made
+  at, whatever number `interface.txt` says; layouts of what crosses that changed while the shapes did not are such a
+  change. The first bless of the interface-6 round kept interface 5 that way and its fingerprint with it (#363). The
+  fingerprint is as it was (X4: `00063e32940609b9`).
+
 ## [0.6.0-beta.1] - 2026-11-02
 
 **Plugins of this release must be built from `6c4a19dc` or later** (plugin interface 6, #363). 0.6.0-beta.1 takes
