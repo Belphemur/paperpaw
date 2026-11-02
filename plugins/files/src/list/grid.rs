@@ -14,6 +14,29 @@ use paperpaw_sdk::{Canvas, Color, Env, Rect};
 
 use super::rows::{self, Loaded, Sizes};
 
+/// Where a step of `delta` from the row above the books lands among the
+/// books `page` (at least one): down on its first, up on its last; a row
+/// of covers with the arrow keys staying on the page (`on`) in the column
+/// of `focus`, the book left (up on the lowest row that has it).
+pub(crate) fn entered(
+    page: core::ops::Range<usize>,
+    focus: usize,
+    delta: isize,
+    on: bool,
+) -> usize {
+    let last = page.end.saturating_sub(1).max(page.start);
+    let columns = delta.unsigned_abs();
+    if !on || columns < 2 {
+        return if delta > 0 { page.start } else { last };
+    }
+    let column = (focus.clamp(page.start, last) - page.start) % columns;
+    if delta > 0 {
+        page.start + column
+    } else {
+        last - (last - page.start - column) % columns
+    }
+}
+
 /// The grid's measures, worked out once when the library opens.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Grid {

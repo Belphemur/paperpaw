@@ -127,3 +127,127 @@ fn on_a_short_last_page_goes_round_among_its_books() {
     app.run(actions::DOWN);
     assert_eq!(focused(&mut app), page[0]);
 }
+
+/// The library of `count` books as covers, the setting `on` or off.
+fn covers(count: usize, on: bool) -> App {
+    let mut app = library(count, on);
+    app.set("files.view", "files.view.covers");
+    app.run(actions::DOWN);
+    app
+}
+
+/// The covers a row has: those level with the page's first.
+fn columns(app: &mut App) -> usize {
+    let tops: Vec<_> = app
+        .parts()
+        .into_iter()
+        .filter(|p| p.role == Role::Row && p.label.starts_with("Book "))
+        .map(|p| p.area.y)
+        .collect();
+    tops.iter().filter(|y| **y == tops[0]).count()
+}
+
+/// The focus on cover `n` of the page shown, going by next.
+fn on_cover(app: &mut App, n: usize) {
+    let want = shown(app)[n].clone();
+    for _ in 0..80 {
+        if focused(app) == want {
+            return;
+        }
+        app.run(actions::NEXT);
+    }
+    panic!("not on {want}: {}", app.described());
+}
+
+/// Two rows up or down from cover `n` of the page shown: where the
+/// focus is after the first and after the second.
+fn rows_from(app: &mut App, n: usize, action: Id) -> (String, String) {
+    on_cover(app, n);
+    app.run(action.clone());
+    let between = focused(app);
+    app.run(action);
+    (between, focused(app))
+}
+
+/// The books a page of covers has and the covers a row.
+fn measures(app: &mut App) -> (usize, usize) {
+    (shown(app).len(), columns(app))
+}
+
+#[test]
+fn off_a_row_of_covers_leaves_the_page_as_before() {
+    let _turn = turn();
+    let mut app = covers(60, false);
+    let first = shown(&mut app);
+    let c = columns(&mut app);
+    assert!(c > 1 && first.len() > c, "{c} columns, {first:?}");
+    app.run(actions::NEXT_PAGE);
+    on_cover(&mut app, 1);
+    app.run(actions::UP);
+    assert_eq!(
+        focused(&mut app),
+        first[first.len() - c + 1],
+        "the row above"
+    );
+    assert_eq!(shown(&mut app), first);
+}
+
+#[test]
+fn on_a_full_page_a_row_of_covers_goes_round_in_its_column() {
+    let _turn = turn();
+    let mut app = covers(60, true);
+    let page = shown(&mut app);
+    let c = columns(&mut app);
+    assert!(
+        c > 1 && page.len().is_multiple_of(c) && page.len() > c,
+        "{c}, {page:?}"
+    );
+    let bottom = page.len() - c;
+    let row = ALL_BOOKS.to_string();
+    // Up from the top row: the row above the books, then the same
+    // column on the bottom row; down from there the other way.
+    let up = rows_from(&mut app, 1, actions::UP);
+    assert_eq!(up, (row.clone(), page[bottom + 1].clone()));
+    let down = rows_from(&mut app, bottom + 1, actions::DOWN);
+    assert_eq!(down, (row, page[1].clone()));
+    // Within the page as before.
+    let within = rows_from(&mut app, bottom, actions::UP);
+    assert_eq!(within.0, page[bottom - c]);
+    assert_eq!(shown(&mut app), page, "the same page");
+}
+
+#[test]
+fn on_a_short_last_page_a_row_goes_to_the_lowest_cover_of_its_column() {
+    let _turn = turn();
+    let (per_page, c) = measures(&mut covers(60, false));
+    // The last page: a full row and one cover below its first.
+    let mut app = covers(per_page + c + 1, true);
+    app.run(actions::NEXT_PAGE);
+    let page = shown(&mut app);
+    assert_eq!(page.len(), c + 1, "{page:?}");
+    let row = ALL_BOOKS.to_string();
+    // The first column has two rows, the last only the top one.
+    let up = rows_from(&mut app, 0, actions::UP);
+    assert_eq!(up, (row.clone(), page[c].clone()));
+    let up = rows_from(&mut app, c - 1, actions::UP);
+    assert_eq!(up, (row.clone(), page[c - 1].clone()));
+    let down = rows_from(&mut app, c, actions::DOWN);
+    assert_eq!(down, (row, page[0].clone()));
+    assert_eq!(shown(&mut app), page, "the same page");
+}
+
+#[test]
+fn on_a_single_row_a_row_comes_back_to_its_cover() {
+    let _turn = turn();
+    let (per_page, c) = measures(&mut covers(60, false));
+    let mut app = covers(per_page + 2, true);
+    app.run(actions::NEXT_PAGE);
+    let page = shown(&mut app);
+    assert_eq!(page.len(), 2, "{page:?}");
+    let row = ALL_BOOKS.to_string();
+    assert!(c > 1);
+    for action in [actions::UP, actions::DOWN] {
+        let back = rows_from(&mut app, 1, action);
+        assert_eq!(back, (row.clone(), page[1].clone()));
+    }
+}

@@ -243,3 +243,112 @@ fn sections_go_round_their_page_only_where_asked() {
     on.step_in(&env, true);
     assert_eq!(on.focus(), next.start);
 }
+
+/// A grid of three by three a page over 23 items: full pages 0..9 and
+/// 9..18, and the short last page 18..23 (a row of three, one of two).
+const CELLS: usize = 23;
+
+fn grid(rows: u32) -> ListView {
+    ListView::new(Rect::new(0, 0, 300, 100 * rows as u16), 100).columns(3)
+}
+
+/// Where a row step (`delta` of 3 or -3) from `focus` lands, and what
+/// changed.
+fn row_step(
+    env: &paperpaw_sdk::Env<'_>,
+    rows: u32,
+    focus: usize,
+    delta: isize,
+) -> (usize, ListChange) {
+    let mut grid = grid(rows);
+    grid.set_focus(focus);
+    let change = grid.move_focus_in(env, delta, CELLS);
+    (grid.focus(), change)
+}
+
+#[test]
+fn off_a_grid_steps_by_rows_as_before() {
+    let h = harness(false);
+    let env = h.env();
+    for rows in [1, 3] {
+        for focus in 0..CELLS {
+            for delta in [-3, 3, -1, 1] {
+                let mut before = grid(rows);
+                before.set_focus(focus);
+                let change = before.move_focus(delta, CELLS);
+                assert_eq!(
+                    row_step(&env, rows, focus, delta),
+                    (before.focus(), change),
+                    "{rows} {focus} {delta}"
+                );
+            }
+        }
+    }
+    // Up from the top row leaves the page.
+    assert_eq!(row_step(&env, 3, 10, -3), (7, ListChange::Page));
+}
+
+#[test]
+fn on_a_full_page_a_row_step_goes_round_to_the_same_column() {
+    let h = harness(true);
+    let env = h.env();
+    let to = |focus, delta| row_step(&env, 3, focus, delta).0;
+    // Up from the top row: the same column on the bottom row, and back.
+    assert_eq!(to(1, -3), 7);
+    assert_eq!(to(7, 3), 1);
+    assert_eq!(to(9, -3), 15);
+    assert_eq!(to(17, 3), 11);
+    // Within the page as before.
+    assert_eq!(to(4, -3), 1);
+    assert_eq!(to(4, 3), 7);
+    assert!(row_step(&env, 3, 1, -3).1.is_focus(), "no page turned");
+    // Every row step stays on its page, in its column.
+    for focus in 0..CELLS {
+        for delta in [-3, 3] {
+            let next = to(focus, delta);
+            assert_eq!(next / 9, focus / 9, "{focus} {delta}");
+            assert_eq!(next % 3, focus % 3, "{focus} {delta}");
+        }
+    }
+    // The page keys (a page of nine) still turn pages.
+    assert_eq!(row_step(&env, 3, 1, 9), (10, ListChange::Page));
+}
+
+#[test]
+fn on_a_short_last_page_a_row_step_goes_to_the_lowest_row_with_the_column() {
+    let h = harness(true);
+    let env = h.env();
+    let to = |focus, delta| row_step(&env, 3, focus, delta).0;
+    // Rows 18 19 20 and 21 22: up from 19 to 22, from 18 to 21.
+    assert_eq!(to(19, -3), 22);
+    assert_eq!(to(18, -3), 21);
+    assert_eq!(to(22, 3), 19);
+    assert_eq!(to(21, 3), 18);
+    // The third column has one row: the focus stays.
+    assert_eq!(row_step(&env, 3, 20, -3), (20, ListChange::None));
+    assert_eq!(row_step(&env, 3, 20, 3), (20, ListChange::None));
+}
+
+#[test]
+fn on_a_single_row_a_row_step_stays_or_turns_as_a_page() {
+    let h = harness(true);
+    let env = h.env();
+    // A grid whose items fill one row: a row step stays where it is.
+    let mut one = grid(3);
+    one.set_focus(1);
+    assert_eq!(one.move_focus_in(&env, -3, 3), ListChange::None);
+    assert_eq!(one.move_focus_in(&env, 3, 3), ListChange::None);
+    assert_eq!(one.focus(), 1);
+    // A grid of one row a page: a step of a row is one of a page, which
+    // turns it as before (the setting off or on).
+    let h = harness(false);
+    let off = h.env();
+    for focus in 0..CELLS {
+        for delta in [-3, 3] {
+            assert_eq!(
+                row_step(&env, 1, focus, delta),
+                row_step(&off, 1, focus, delta)
+            );
+        }
+    }
+}

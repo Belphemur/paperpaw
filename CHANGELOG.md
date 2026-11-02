@@ -72,7 +72,9 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   reader**: PaperPaw reads the card it started with.
 - **Arrow keys stay on the page** (#112), a new setting under *Controls*, off by default. On, the arrow keys go
   round on the page shown: back on its first entry goes to its last, on from its last to its first (on a short last
-  page among the entries it has); only the page buttons turn pages. Off, as before, they go round the whole list.
+  page among the entries it has); only the page buttons turn pages. In grids (covers, the home screen's tools and
+  widgets), up and down go round in the column: up from the top row to the lowest entry below, down from the bottom
+  row to the top. Off, as before, they go round the whole list.
   For the lists of PaperPaw's own plugins; store plugins follow once they are built again.
 - **Secure connections for plugins** (#81). Plugins can open HTTPS, IMAP and SMTP connections: the X4 does the encryption
   itself (one connection at a time), the emulator and the Android app use rustls. A server whose certificate no authority
@@ -106,7 +108,8 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   `core.arrows-stay-on-page`, #112): `ListView::navigate_in` and `move_focus_in`, `Rows::step_in`,
   `Sections::step_in` and `ui::step_focus_in` (for a focus of a screen's own over pages of `page` things) take the
   `Env` and go round within the page where the reader chose so, else as `navigate`, `move_focus`, `step` and
-  `step_focus`, which stay as they were. New functions and a new constant, no change of what plugins built before
+  `step_focus`, which stay as they were. In a grid `move_focus_in` takes a step of a row (as many as it has columns)
+  round within the page too, in the same column. New functions and a new constant, no change of what plugins built before
   see; the SDK's lists and PaperPaw's plugins use them.
 - UI: `UiStyle::flip` and `UiStyle::flip_x` are public (#33): a screen lays a row or a grid out once from the left
   and mirrors each part where the interface runs right to left, as the SDK's own parts do. New functions, no

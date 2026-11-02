@@ -886,7 +886,8 @@ impl ListScreen {
             // Nothing to move to: no books, no filter shown.
             return;
         }
-        let (first, end) = if cx.env().settings().read(&settings::ARROWS_STAY_ON_PAGE) {
+        let on = cx.env().settings().read(&settings::ARROWS_STAY_ON_PAGE);
+        let (first, end) = if on {
             let page = self.page_of(self.focus.min(len.saturating_sub(1)));
             (self.page_start(page), self.page_start(page + 1).min(len))
         } else {
@@ -894,11 +895,7 @@ impl ListScreen {
         };
         if self.filter_focused {
             self.filter_focused = false;
-            self.focus = if delta > 0 {
-                first
-            } else {
-                end.saturating_sub(1)
-            };
+            self.focus = grid::entered(first..end, self.focus, delta, on);
         } else if !self.shown {
             // The first press shows where the focus is.
             self.shown = true;

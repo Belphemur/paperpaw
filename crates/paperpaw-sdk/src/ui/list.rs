@@ -313,13 +313,18 @@ impl ListView {
     /// does, but where the reader chose that the arrow keys stay on the
     /// page ([`settings::ARROWS_STAY_ON_PAGE`](crate::builtin::settings::ARROWS_STAY_ON_PAGE)),
     /// one step past either end of the page goes round to its other end
-    /// (on a last page shorter than the others, among the items it has):
-    /// only larger steps (pages) turn pages.
+    /// (on a last page shorter than the others, among the items it has),
+    /// and in a grid of more than one row a page, a step of a row (as many
+    /// as it has columns) past its top or bottom row goes to the same
+    /// column on its bottom (the lowest that has it) or top row: only
+    /// larger steps (pages) turn pages.
     pub fn move_focus_in(&mut self, env: &Env<'_>, delta: isize, len: usize) -> ListChange {
-        if delta.abs() != 1 || len == 0 || !self.shown || !stays_on_page(env) {
+        let columns = self.columns as usize;
+        let row = columns > 1 && columns < self.rows() && delta.unsigned_abs() == columns;
+        if (delta.abs() != 1 && !row) || len == 0 || !self.shown || !stays_on_page(env) {
             return self.move_focus(delta, len);
         }
-        let focus = step_on_page(self.focus, delta, len, self.rows());
+        let focus = step_on_page(self.focus, delta, len, self.rows(), columns);
         if focus == self.focus {
             return ListChange::None;
         }
@@ -428,7 +433,7 @@ impl ListView {
 /// or more is one page, as with [`step_focus`].
 pub fn step_focus_in(env: &Env<'_>, focus: usize, delta: isize, len: usize, page: usize) -> usize {
     if delta.abs() == 1 && len > 0 && stays_on_page(env) {
-        step_on_page(focus, delta, len, page)
+        step_on_page(focus, delta, len, page, 1)
     } else {
         step_focus(focus, delta, len)
     }
@@ -440,15 +445,25 @@ pub(crate) fn stays_on_page(env: &Env<'_>) -> bool {
         .read(&crate::builtin::settings::ARROWS_STAY_ON_PAGE)
 }
 
-/// One step (`delta` of 1 or -1) on from `focus` among `len` things
-/// (at least one), round within the page of `page` of them it is on.
-fn step_on_page(focus: usize, delta: isize, len: usize, page: usize) -> usize {
+/// One step (`delta` of 1 or -1, or of a row of `columns`) on from
+/// `focus` among `len` things (at least one), round within the page of
+/// `page` of them it is on: a row step to the same column on the page's
+/// other edge (going up, the lowest row that has that column).
+fn step_on_page(focus: usize, delta: isize, len: usize, page: usize, columns: usize) -> usize {
     let focus = focus.min(len - 1);
     let page = page.clamp(1, len);
     let start = focus / page * page;
     let last = (start + page).min(len) - 1;
+    let row = delta.unsigned_abs() > 1;
+    let column = if row {
+        (focus - start) % columns.max(1)
+    } else {
+        0
+    };
     match focus.checked_add_signed(delta) {
         Some(next) if (start..=last).contains(&next) => next,
+        _ if row && delta < 0 => last - (last - start - column) % columns.max(1),
+        _ if row => start + column,
         _ if delta < 0 => last,
         _ => start,
     }
