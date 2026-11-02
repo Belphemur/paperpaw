@@ -212,6 +212,32 @@ fn the_catalog_is_made_beside_the_library() {
     }
 }
 
+/// A book copied while PaperPaw runs, with no word to it (the X4's
+/// debug link writing to the card): not walked for, however often a view
+/// shows, until a start or a wake. One a plugin brings (transfer over
+/// Wi-Fi or cable, calibre, OPDS) says so (`BOOK_ADDED`): caught up at a
+/// calm moment, within a minute, without a walk.
+#[test]
+fn a_book_added_without_a_word_waits_one_added_by_a_plugin_comes() {
+    let (mut kernel, log, now) = library(two_books());
+    let now = want(&mut kernel, now, false);
+    kernel.storage().write("books/c.txt", b"three").unwrap();
+    let mut now = now;
+    for _ in 0..3 {
+        now = want(&mut kernel, now + 8_000, false);
+    }
+    assert_eq!(paths(&kernel), ["books/a.txt", "books/b.txt"]);
+    assert_eq!(log.borrow().len(), 1);
+    kernel.storage().write("books/d.txt", b"four").unwrap();
+    let added = events::BookAdded::new("books/d.txt".into(), "transfer".into());
+    send(&mut kernel, now, events::BOOK_ADDED.id(), added.to_params());
+    assert_eq!(
+        paths(&kernel),
+        ["books/a.txt", "books/b.txt", "books/d.txt"]
+    );
+    assert_eq!(log.borrow().len(), 2);
+}
+
 #[test]
 fn books_moved_removed_or_changed_are_caught_up() {
     let (mut kernel, log, now) = library(two_books());
