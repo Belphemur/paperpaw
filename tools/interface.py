@@ -5,7 +5,8 @@ a plugin and PaperPaw (ADR 0026), as the plugin interface's test
 
 - `api.txt`, the crate's public API, as cargo-public-api lists it;
 - `shape.txt`, the shape of its types, from rustdoc's JSON with every
-  feature on: the fields, variants and trait items (with their
+  feature a plugin may turn on (not `kernel`: what only the kernel builds
+  never reaches a plugin): the fields, variants and trait items (with their
   signatures) of its public types and of every private type their fields
   and trait items reach, in the order the source
   has them, private fields too, each with its type (functions' pointers
@@ -38,7 +39,7 @@ HEADER = (
     "# The shape of this crate's types and the values of its constants, as\n"
     "# tools/interface.py writes them: fields, variants and trait items in\n"
     "# the source's order, private fields and the private types they reach\n"
-    "# too, every feature on (ADR 0026).\n"
+    "# too, every feature on but the kernel's (ADR 0026).\n"
 )
 
 
@@ -67,11 +68,31 @@ def api(crate):
     return run.stdout.replace("\r\n", "\n")
 
 
+# What only the kernel and the shells build (ADR 0020): never in a
+# plugin, so nothing of it crosses, and its types change with the
+# firmware alone.
+KERNEL_FEATURE = "kernel"
+
+
+def plugin_features(crate):
+    """Every feature of the crate a plugin may turn on: all but
+    `KERNEL_FEATURE`."""
+    run = subprocess.run(
+        ["cargo", "metadata", "--format-version", "1", "--no-deps"],
+        cwd=REPO, capture_output=True, text=True, encoding="utf-8", check=True,
+    )
+    package = next(p for p in json.loads(run.stdout)["packages"] if p["name"] == crate)
+    return sorted(f for f in package["features"] if f not in ("default", KERNEL_FEATURE))
+
+
 def rustdoc(crate, target):
-    """The crate's rustdoc JSON, private items included, every feature on."""
+    """The crate's rustdoc JSON, private items included, with every
+    feature a plugin may turn on (not the kernel's: see
+    `KERNEL_FEATURE`)."""
+    features = ",".join(plugin_features(crate))
     subprocess.run(
         ["cargo", f"+{NIGHTLY}", "rustdoc", "-q", "-p", crate, "--lib",
-         "--all-features", "--",
+         "--no-default-features"] + (["--features", features] if features else []) + ["--",
          "-Z", "unstable-options", "--output-format", "json",
          "--document-private-items"],
         cwd=REPO, check=True, env={**os.environ, "CARGO_TARGET_DIR": target},

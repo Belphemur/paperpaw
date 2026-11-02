@@ -1,7 +1,7 @@
 # The shape of this crate's types and the values of its constants, as
 # tools/interface.py writes them: fields, variants and trait items in
 # the source's order, private fields and the private types they reach
-# too, every feature on (ADR 0026).
+# too, every feature on but the kernel's (ADR 0026).
 const paperpaw_table::BUILT_WITH: paperpaw_table::Revisions = if cfg!(any( all(paperpaw_plugin, target_os = "none", target_arch = "riscv32"), paperpaw_table_host )) { REVISIONS } else { [0
 const paperpaw_table::FAMILIES: usize = 8usize
 const paperpaw_table::Family::CONTRIBUTION: paperpaw_table::Family = Family(4)

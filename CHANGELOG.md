@@ -275,6 +275,8 @@ before it are thrown away.
 
 ### Changed
 
+- `shape.txt` no longer holds what only the kernel builds (the SDK's `kernel` feature, ADR 0020): no plugin
+  has it, so its types change with the firmware alone (ADR 0026, `tools/interface.py`).
 - *Keyboard: wider keys* (#91): the keys' side margin is a quarter of the margin other screens keep (at least
   4 pixels), so on small screens the keys get nearly the whole width. Every layout, tapped or chosen with buttons;
   the text field keeps its margin, the key order and the focus are as before. Round keys are as high as wide, so

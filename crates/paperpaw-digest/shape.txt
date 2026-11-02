@@ -1,7 +1,7 @@
 # The shape of this crate's types and the values of its constants, as
 # tools/interface.py writes them: fields, variants and trait items in
 # the source's order, private fields and the private types they reach
-# too, every feature on (ADR 0026).
+# too, every feature on but the kernel's (ADR 0026).
 struct paperpaw_digest::fnv::Fnv1a64(0: u64)
 struct paperpaw_digest::md5::Md5 { state: [u32; 4], block: [u8; 64], used: usize, length: u64 }
 struct paperpaw_digest::sha1::Sha1 { state: [u32; 5], block: [u8; 64], used: usize, length: u64 }
