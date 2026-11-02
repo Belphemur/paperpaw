@@ -267,6 +267,41 @@ fn a_tap_moves_input_to_the_part_it_lands_in() {
     );
 }
 
+/// A finger on the line between the parts goes to the nearer one (the
+/// list where it is as near to both).
+#[cfg(feature = "panes")]
+#[test]
+fn a_tap_on_the_line_goes_to_the_nearer_part() {
+    let log = log();
+    let mut kernel = with_detail(&log);
+    tap(&mut kernel, 200, 300, 30);
+    tap(&mut kernel, 500, 236, 30);
+    kernel.run_action(Instant(800), PING);
+    assert_eq!(took(&log), ["d1 tap 63,30", "list tap 236,30", "list ping"]);
+}
+
+/// The class goes by the interface's size: larger text that makes the
+/// screen medium shows the detail alone, the list hidden; back to the
+/// default, beside it again.
+#[cfg(feature = "panes")]
+#[test]
+fn larger_interface_text_joins_the_parts() {
+    let log = log();
+    let mut kernel = with_detail(&log);
+    let size = paperpaw_sdk::builtin::settings::UI_SIZE.id().clone();
+    kernel.apply(Command::SetSetting(size.clone(), SettingValue::Int(12)));
+    kernel.finish();
+    assert_eq!(kernel.panes(), None);
+    let whole = Rect::new(0, 0, WIDE.0, WIDE.1);
+    assert_eq!(areas(&kernel), [whole, whole]);
+    assert!(took(&log).contains(&String::from("list hide")));
+    kernel.apply(Command::SetSetting(size, SettingValue::Int(9)));
+    kernel.finish();
+    assert_eq!(kernel.panes(), Some((0, 1)));
+    assert_eq!(areas(&kernel), [LIST, DETAIL]);
+    assert!(took(&log).contains(&String::from("list show")));
+}
+
 /// `core.pane.other` moves keys to the other part and back; alone, the
 /// list keeps them.
 #[cfg(feature = "panes")]

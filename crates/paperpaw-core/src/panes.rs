@@ -209,10 +209,50 @@ impl Kernel {
         let Some((list, detail)) = self.panes_on_top() else {
             return;
         };
-        if self.stack[list].area.contains(point) {
-            self.input.pane_keys = Some(self.stack[list].serial);
-        } else if self.stack[detail].area.contains(point) {
-            self.input.pane_keys = None;
+        let (list_area, detail_area) = (self.stack[list].area, self.stack[detail].area);
+        let to_list = if list_area.contains(point) {
+            true
+        } else if detail_area.contains(point) {
+            false
+        } else if list_area.union(&detail_area).contains(point) {
+            // On the line between them: the nearer part's.
+            let off = |area: Rect| {
+                let (start, end) = (i32::from(area.x), i32::from(area.x) + i32::from(area.width));
+                (start - point.x).max(point.x - end + 1).max(0)
+            };
+            off(list_area) <= off(detail_area)
+        } else {
+            return;
+        };
+        self.input.pane_keys = to_list.then_some(self.stack[list].serial);
+    }
+
+    /// The first screen shown as the screens' parts are now, before they
+    /// are laid out for a change ([`Kernel::shown_base`] tells it after):
+    /// the list where the detail on it has less than its whole part.
+    pub(crate) fn shown_as_laid_out(&self) -> usize {
+        let base = self.full_base();
+        let beside = cfg!(feature = "panes")
+            && self.stack.get(base).is_some_and(|detail| {
+                detail.pane == Pane::DETAIL && detail.area != self.whole_area(base)
+            });
+        match base.checked_sub(1) {
+            Some(list) if beside => list,
+            _ => base,
+        }
+    }
+
+    /// The interface's size changed, and the class of the screen with it
+    /// ([`ScreenClass::of`]): where a detail now shows beside its list, or
+    /// no longer does, the screens are made anew for their parts (`shown`:
+    /// [`Kernel::shown_as_laid_out`] before).
+    pub(crate) fn sync_panes(&mut self, shown: usize) {
+        let base = self.full_base();
+        let stale = cfg!(feature = "panes")
+            && (base.saturating_sub(1)..=base)
+                .any(|i| self.stack.get(i).is_some_and(|s| s.area != self.area_of(i)));
+        if stale {
+            self.remake_screens(shown);
         }
     }
 

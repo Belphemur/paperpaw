@@ -80,7 +80,10 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   are asked `pane` once, when made. A list kept by `on_resize` while a turn puts its detail over it is told
   `on_hide`. The kernel's new `panes` feature (on by default) builds it; the Xteink firmware (X4, X4 Pro, X4
   Classic, X3), never wide, leaves it out and saves its code. There a detail is always a full screen and
-  `core.pane.other` is not offered; the SDK is the same either way.
+  `core.pane.other` is not offered; the SDK is the same either way. Shells with the app's default features
+  (`paperpaw-app/panes`) have it. A finger on the line between the parts goes to the nearer one; a change of the
+  interface text size that makes the screen expanded or no longer so lays the two out again. A class a later
+  kernel adds reads as `Expanded` in `DisplayChanged`, so an older plugin still hears the event.
 - UI: `UiStyle::flip` and `UiStyle::flip_x` are public (#33): a screen lays a row or a grid out once from the left
   and mirrors each part where the interface runs right to left, as the SDK's own parts do. New functions, no
   change of what plugins built before see; their api.txt lines come with the next bless. The library's rows and
@@ -843,6 +846,9 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
 
 ### Fixed
 
+- Tap zones (thirds, corners, the zones of key maps) are measured on the part of the screen the screen has, as
+  the finger's point always was: on touch devices with the row of button hints (the X4 Pro, the emulator) the
+  borders of the lower zones lay about 3 mm off, by part of the row's height (#88).
 - The store no longer counts code plugins that are switched off as taking room (#70): the next start skips their
   code and their room is free, so an install that fits then is offered (its page says it fits while the code
   plugins you switched off stay off), instead of asking to remove a plugin that could have been switched off.

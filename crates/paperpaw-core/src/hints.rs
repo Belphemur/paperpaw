@@ -135,7 +135,7 @@ impl Kernel {
         if height == self.hint.height {
             return;
         }
-        let shown = self.shown_base();
+        let shown = self.shown_as_laid_out();
         self.hint.height = height;
         self.remake_screens(shown);
     }

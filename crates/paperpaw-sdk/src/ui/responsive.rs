@@ -85,12 +85,15 @@ impl ParamValue for ScreenClass {
         String::from(self.name())
     }
 
+    /// A class of a later kernel this one does not know is the widest it
+    /// knows (classes come narrowest first), so that an event carrying it
+    /// still comes.
     fn from_param(text: &str) -> Option<Self> {
         match text {
+            "" => None,
             "compact" => Some(Self::Compact),
             "medium" => Some(Self::Medium),
-            "expanded" => Some(Self::Expanded),
-            _ => None,
+            _ => Some(Self::Expanded),
         }
     }
 }
@@ -188,6 +191,8 @@ mod tests {
         ] {
             assert_eq!(ScreenClass::from_param(&class.to_param()), Some(class));
         }
-        assert_eq!(ScreenClass::from_param("huge"), None);
+        // One of a later kernel: the widest known.
+        assert_eq!(ScreenClass::from_param("huge"), Some(ScreenClass::Expanded));
+        assert_eq!(ScreenClass::from_param(""), None);
     }
 }

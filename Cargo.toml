@@ -151,7 +151,7 @@ paperpaw-json = { path = "crates/paperpaw-json", version = "0.5.0-beta.12" }
 paperpaw-qr = { path = "crates/paperpaw-qr", version = "0.5.0-beta.12" }
 paperpaw-hid = { path = "crates/paperpaw-hid", version = "0.5.0-beta.12" }
 paperpaw-sdk = { path = "crates/paperpaw-sdk", version = "0.5.0-beta.12" }
-# Without `panes`: shells with wide screens ask for it (see its Cargo.toml).
+# Without `panes`: the app's defaults ask for it (see its Cargo.toml).
 paperpaw-core = { path = "crates/paperpaw-core", version = "0.5.0-beta.12", default-features = false }
 paperpaw-hyphen = { path = "crates/paperpaw-hyphen", version = "0.5.0-beta.12" }
 paperpaw-image = { path = "crates/paperpaw-image", version = "0.5.0-beta.12" }
