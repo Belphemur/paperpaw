@@ -800,6 +800,11 @@ pub trait Screen {
     /// (a book open, a list scrolled, a connection). [`Handled::No`], the
     /// default, and it is made anew instead, after
     /// [`on_close`](Self::on_close), as screens of revision 1 always are.
+    /// A screen kept is not told [`on_hide`](Self::on_hide) again: while it
+    /// is hidden (under a book, say), it only notes that it is stale and
+    /// answers [`Handled::Yes`]; it never makes again what `on_hide` let
+    /// go (covers, widgets), which would hold the memory the screen above
+    /// needs. It lays itself out for the size it finds when it shows.
     /// Revision 2.
     fn on_resize(&mut self, cx: &mut Cx<'_, '_>) -> Handled {
         let _ = cx;

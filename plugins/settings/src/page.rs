@@ -587,10 +587,17 @@ impl Screen for GroupPage {
     /// Turned or resized: the page laid out anew, the focus on its row.
     fn on_resize(&mut self, cx: &mut Cx<'_, '_>) -> Handled {
         let focus = self.rows.focus();
+        if !self.covered.changed(cx) {
+            // Hidden: laid out for the new size when it shows.
+            return Handled::Yes;
+        }
         let mut fresh = Self::of(cx.env(), self.group.clone(), self.more);
-        fresh.rows.set_focus(focus);
+        refocus(&mut fresh.rows, focus);
         fresh.keys = self.keys;
         fresh.covered = core::mem::take(&mut self.covered);
+        // An edit or a drag in progress goes on.
+        fresh.edit = core::mem::take(&mut self.edit);
+        (fresh.drag, fresh.dragged) = (self.drag, self.dragged);
         *self = fresh;
         cx.request_redraw();
         Handled::Yes

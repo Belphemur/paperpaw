@@ -186,7 +186,8 @@ struct Screens {
 }
 
 impl Screens {
-    fn new(env: &Env<'_>, params: &Params) -> Self {
+    /// The style, the header and the list placed for `env`'s screen.
+    fn frame(env: &Env<'_>) -> (UiStyle, ui::Header, ListView) {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let top = header.area().height + style.gap();
@@ -194,6 +195,11 @@ impl Screens {
         let area =
             paperpaw_sdk::Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let list = ListView::new(area, style.noted_row()).focus_on_keys(env);
+        (style, header, list)
+    }
+
+    fn new(env: &Env<'_>, params: &Params) -> Self {
+        let (style, header, list) = Self::frame(env);
         let slot = params.get(SLOT).and_then(|s| Id::parse(s).ok());
         let rows = match &slot {
             Some(slot) => core::iter::once(Row::Automatic)
@@ -266,15 +272,10 @@ impl Screen for Screens {
     /// Turned or resized: laid out anew, the focus where it was.
     fn on_resize(&mut self, cx: &mut Cx<'_, '_>) -> Handled {
         let env = *cx.env();
-        let focus = self.list.focus();
-        let style = UiStyle::new(&env);
-        let header = ui::Header::new(&env, &style, true);
-        let top = header.area().height + style.gap();
-        let display = env.device().display;
-        let area =
-            paperpaw_sdk::Rect::new(0, top, display.width, display.height.saturating_sub(top));
-        self.list = ListView::new(area, style.noted_row()).focus_on_keys(&env);
-        self.list.set_focus(focus);
+        let (style, header, fresh) = Self::frame(&env);
+        // The focus, whether it shows and the page stay with the list.
+        self.list.set_area(fresh.area());
+        self.list.set_row(fresh.row());
         (self.style, self.header) = (style, header);
         cx.request_redraw();
         Handled::Yes

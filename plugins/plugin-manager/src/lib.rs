@@ -497,10 +497,11 @@ fn how_file() -> String {
 impl Screen for PluginList {
     /// Turned or resized: laid out anew, the focus where it was.
     fn on_resize(&mut self, cx: &mut Cx<'_, '_>) -> Handled {
-        let focus = self.list.focus();
-        let (style, header, mut list, bar) = Self::frame(cx.env());
-        list.set_focus(focus);
-        (self.style, self.header, self.list, self.bar) = (style, header, list, bar);
+        let (style, header, fresh, bar) = Self::frame(cx.env());
+        // The focus, whether it shows and the page stay with the list.
+        self.list.set_area(fresh.area());
+        self.list.set_row(fresh.row());
+        (self.style, self.header, self.bar) = (style, header, bar);
         cx.request_redraw();
         Handled::Yes
     }

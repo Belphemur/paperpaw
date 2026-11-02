@@ -198,6 +198,9 @@ struct Dashboard {
     /// What the page shows changed (a setting, the library): laid out
     /// anew before it is drawn next, once for many changes.
     stale: bool,
+    /// Hidden by a book or another screen: the widgets are let go and
+    /// stay so (a resize only marks the page stale) until it shows again.
+    hidden: bool,
 }
 
 use widgets::next_minute;
@@ -280,6 +283,7 @@ impl Dashboard {
             books: 0,
             shown: Vec::new(),
             stale: true,
+            hidden: false,
         }
     }
 
@@ -493,7 +497,13 @@ impl Screen for Dashboard {
     /// Turned or resized: the page, the editing and the focus stay, and the
     /// parts are placed again for the new size.
     fn on_resize(&mut self, cx: &mut Cx<'_, '_>) -> Handled {
-        self.relayout(cx);
+        if self.hidden {
+            // Under a book: what `on_hide` let go stays so; it is laid
+            // out for the new size when it shows.
+            self.stale = true;
+        } else {
+            self.relayout(cx);
+        }
         Handled::Yes
     }
 
@@ -503,9 +513,11 @@ impl Screen for Dashboard {
     fn on_hide(&mut self) {
         self.grid.release();
         self.stale = true;
+        self.hidden = true;
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
+        self.hidden = false;
         // The reader may have changed the recent books meanwhile.
         let env = *cx.env();
         // Each time it shows, the page as it is: made anew after it was

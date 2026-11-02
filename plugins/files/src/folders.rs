@@ -74,6 +74,17 @@ pub(crate) struct FolderChooser {
 }
 
 impl FolderChooser {
+    /// The style, the header and the list placed for `env`'s screen.
+    fn frame(env: &Env<'_>) -> (UiStyle, ui::Header, ListView) {
+        let style = UiStyle::new(env);
+        let header = ui::Header::new(env, &style, true);
+        let display = env.device().display;
+        let top = header.area().height + style.gap();
+        let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
+        let list = ListView::new(area, u32::from(style.row())).focus_on_keys(env);
+        (style, header, list)
+    }
+
     pub(crate) fn new(env: &Env<'_>, params: &Params) -> Self {
         let setting = params.get(ID).and_then(|id| Id::parse(id).ok());
         let reply = params
@@ -95,11 +106,7 @@ impl FolderChooser {
         } else {
             String::new()
         };
-        let style = UiStyle::new(env);
-        let display = env.device().display;
-        let header = ui::Header::new(env, &style, true);
-        let top = header.area().height + style.gap();
-        let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
+        let (style, header, list) = Self::frame(env);
         Self {
             setting,
             reply,
@@ -107,7 +114,7 @@ impl FolderChooser {
             len: 0,
             page: Vec::new(),
             first: 0,
-            list: ListView::new(area, u32::from(style.row())).focus_on_keys(env),
+            list,
             style,
             header,
             // Read once the screen shows.
@@ -251,14 +258,10 @@ impl Screen for FolderChooser {
     /// focus kept, the page of folders read again for the rows it holds.
     fn on_resize(&mut self, cx: &mut Cx<'_, '_>) -> Handled {
         let env = *cx.env();
-        let focus = self.list.focus();
-        let style = UiStyle::new(&env);
-        let header = ui::Header::new(&env, &style, true);
-        let display = env.device().display;
-        let top = header.area().height + style.gap();
-        let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
-        self.list = ListView::new(area, u32::from(style.row())).focus_on_keys(&env);
-        self.list.set_focus(focus);
+        let (style, header, fresh) = Self::frame(&env);
+        // The focus, whether it shows and the page stay with the list.
+        self.list.set_area(fresh.area());
+        self.list.set_row(fresh.row());
         (self.style, self.header) = (style, header);
         if self.pending.is_none() {
             self.load_page(&env);

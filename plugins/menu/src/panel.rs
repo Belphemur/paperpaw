@@ -822,9 +822,11 @@ impl PanelScreen {
         let focused = self
             .focus
             .and_then(|at| self.controls().nth(at).map(|(c, _)| c.clone()));
-        let page = self.page;
+        let (page, editing) = (self.page, self.editing);
         let opened = self.params.clone();
         *self = PanelScreen::open(env, &opened);
+        // A number being edited goes on.
+        self.editing = editing;
         self.focus = focused.and_then(|c| self.controls().position(|(d, _)| *d == c));
         self.page = page.min(self.pages().saturating_sub(1));
     }

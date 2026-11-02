@@ -293,6 +293,10 @@ impl Screen for GroupList {
     }
 
     fn on_resize(&mut self, cx: &mut Cx<'_, '_>) -> Handled {
+        if !self.covered.changed(cx) {
+            // Hidden: laid out for the new size when it shows.
+            return Handled::Yes;
+        }
         let focus = self.rows.focus();
         let (style, header, rows, icon_room) = Self::fitted(cx.env(), &self.entries);
         (self.style, self.header, self.rows, self.icon_room) = (style, header, rows, icon_room);

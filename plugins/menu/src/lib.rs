@@ -512,8 +512,11 @@ impl MenuScreen {
     fn remake(&mut self, env: &Env<'_>) {
         let focused = self.items.get(self.rows.focus()).map(|i| i.id.clone());
         let (focus, keys) = (self.rows.focus(), self.keys);
+        // A number being edited goes on.
+        let edit = core::mem::take(&mut self.edit);
         let opened = self.params.clone();
         *self = MenuScreen::new(env, &opened);
+        self.edit = edit;
         let at = focused
             .and_then(|id| self.items.iter().position(|i| i.id == id))
             .unwrap_or(focus.min(self.items.len().saturating_sub(1)));

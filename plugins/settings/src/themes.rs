@@ -180,10 +180,11 @@ impl Themes {
 impl Screen for Themes {
     /// Turned or resized: laid out anew, the focus on its theme.
     fn on_resize(&mut self, cx: &mut Cx<'_, '_>) -> Handled {
-        let focus = self.list.focus();
-        let (style, header, mut list) = frame(cx.env(), true);
-        list.set_focus(focus);
-        (self.style, self.header, self.list) = (style, header, list);
+        let (style, header, fresh) = frame(cx.env(), true);
+        // The focus, whether it shows and the page stay with the list.
+        self.list.set_area(fresh.area());
+        self.list.set_row(fresh.row());
+        (self.style, self.header) = (style, header);
         cx.request_redraw();
         Handled::Yes
     }
