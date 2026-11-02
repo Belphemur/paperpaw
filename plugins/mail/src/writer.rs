@@ -246,6 +246,10 @@ impl Writer {
                 if matches!(part, Part::To | Part::Cc) {
                     question = question.email();
                 }
+                // A message has lines: the keyboard has a key for the break.
+                if part == Part::Body {
+                    question = question.multiline();
+                }
                 cx.command(question.command());
             }
         }
