@@ -4816,6 +4816,8 @@ pub fn paperpaw_sdk::ui::UiStyle::cards(&self) -> bool
 pub fn paperpaw_sdk::ui::UiStyle::control_row(&self) -> u16
 pub fn paperpaw_sdk::ui::UiStyle::corner(&self) -> u16
 pub fn paperpaw_sdk::ui::UiStyle::finger(&self) -> u16
+pub fn paperpaw_sdk::ui::UiStyle::flip(&self, paperpaw_platform::geometry::Rect, paperpaw_platform::geometry::Rect) -> paperpaw_platform::geometry::Rect
+pub fn paperpaw_sdk::ui::UiStyle::flip_x(&self, paperpaw_platform::geometry::Rect, f32, f32) -> f32
 pub fn paperpaw_sdk::ui::UiStyle::focus(&self) -> paperpaw_sdk::ui::Focus
 pub fn paperpaw_sdk::ui::UiStyle::gap(&self) -> u16
 pub fn paperpaw_sdk::ui::UiStyle::head(&self) -> f32
