@@ -45,7 +45,10 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   checked, how it looks to a reader and how it feels on a device are not. Tell us what is wrong.
 - **A wider keyboard** (#91). The keys reach nearer to the sides of the screen; on small screens they get nearly the
   whole width.
-- **The landscape home screen** (#88). Turned on its side, the home screen keeps the start card beside the clock.
+- **The landscape home screen** (#88). Turned on its side, the home screen keeps the start card beside the clock. On a wide
+  screen it shows the same items with more columns, each page filled before the next, and cards no wider than about
+  110 mm; arranging it on its side keeps that layout for that orientation, and *Reset landscape layout* (in Add)
+  goes back. The SDK gets `grid::refit` for it.
 - **A power menu** (#78). Hold the power button: *Sleep*, *Switch off*, *Restart* and, on touch devices, *Lock touch*
   or *Unlock touch*. A short press still sleeps.
 - **All six language packs are in the store**: Arabic, Hebrew, Greek, Cyrillic, Korean (2,350 syllables) and
