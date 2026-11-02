@@ -150,10 +150,23 @@ checks that each file has the base firmware's fingerprint, signs it and
 releases it as `<id>-v<version>`; devices are offered no firmware with it.
 
 The published firmware is the base's, so the source must differ from the
-base's tag only in the plugin, its tooling (`tools/plugin-files`), the
-CHANGELOG and docs (`tools/plugin-files/store_update.py` checks this and the
-version: above the base's for an update, any for a plugin the base does not
-have). A change anywhere else (the kernel, the SDK, another plugin) stops the
-run unless its path is named in `accept`: a decision for whoever runs it, who
-has to know the change cannot differ from what the firmware does. A plugin that
-needs a newer interface than the base's waits for the next release.
+base's tag only in the plugin, the plugin files' project (the manifest, lock
+file, list and binaries of `tools/plugin-files`, none of its scripts), the
+CHANGELOG and docs (`store_update.py` checks this and the version: above the
+base's for an update, any for a plugin the base does not have). A change
+anywhere else (the kernel, the SDK, another plugin, a script or a workflow)
+stops the run unless its path is named in `accept`: a decision for whoever
+runs it, who has to know the change cannot differ from what the firmware does.
+A plugin that needs a newer interface than the base's waits for the next
+release.
+
+The branch is somebody's push, so the workflow runs from `main` and keeps its
+code away from the key: the check, the fingerprint test (`check_files.sh`) and
+the signing run this workflow's own scripts, from a checkout of the commit the
+workflow is at (`github.workflow_sha`), not the branch's. The branch's code
+runs only where there is no secret and the token only reads (building the
+plugin, its catalogue entry); the signing job takes the build's files, accepts
+only the names and the base firmware's fingerprint it expects, and signs them;
+the release job, the only one that writes, runs none of the branch's code. A
+data plugin has no signature, and its version is read by the branch's script
+(`data.py`) with no secret.

