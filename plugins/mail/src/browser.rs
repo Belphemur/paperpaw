@@ -304,16 +304,22 @@ fn message_line(env: &Env<'_>, row: &Row) -> Line {
 }
 
 /// The translation key of a folder the server marks for a purpose (or the
-/// inbox), so that it reads in the reader's language.
+/// inbox), so that it reads in the reader's language; for servers that mark
+/// none, the usual English names of those folders.
 fn special_name(folder: &store::Folder) -> Option<&'static str> {
     if folder.is_inbox() {
         return Some("mail.inbox");
     }
-    let flag = |name: &str| folder.flags.iter().any(|f| f == name);
-    [("\\sent", "mail.folder.sent"), ("\\drafts", "mail.folder.drafts"), ("\\trash", "mail.folder.trash"), ("\\junk", "mail.folder.junk"), ("\\archive", "mail.folder.archive")]
-        .into_iter()
-        .find(|(name, _)| flag(name))
-        .map(|(_, key)| key)
+    const KINDS: [(&str, &str, &str); 5] = [
+        ("\\sent", "sent", "mail.folder.sent"),
+        ("\\drafts", "drafts", "mail.folder.drafts"),
+        ("\\trash", "trash", "mail.folder.trash"),
+        ("\\junk", "junk", "mail.folder.junk"),
+        ("\\archive", "archive", "mail.folder.archive"),
+    ];
+    let marked = KINDS.iter().find(|(flag, _, _)| folder.flags.iter().any(|f| f == flag));
+    let named = || KINDS.iter().find(|(_, name, _)| folder.name.eq_ignore_ascii_case(name));
+    marked.or_else(named).map(|(_, _, key)| *key)
 }
 
 fn folder_name(env: &Env<'_>, account: u8, raw: &str) -> String {
@@ -446,4 +452,24 @@ pub fn pin_answered(answer: &Confirmed, out: &mut paperpaw_sdk::Commands) {
         return;
     };
     out.push(crate::job::pin(number, ctx.get("smtp") == Some("1"), &key));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn folder(name: &str, flags: &[&str]) -> store::Folder {
+        store::Folder { raw: name.into(), name: name.into(), flags: flags.iter().map(|f| (*f).into()).collect() }
+    }
+
+    #[test]
+    fn purposes_are_named_by_flag_or_by_the_usual_name() {
+        assert_eq!(special_name(&folder("inbox", &[])), Some("mail.inbox"));
+        assert_eq!(special_name(&folder("Gesendet", &["\\sent"])), Some("mail.folder.sent"));
+        assert_eq!(special_name(&folder("Archive", &[])), Some("mail.folder.archive"));
+        assert_eq!(special_name(&folder("Drafts", &[])), Some("mail.folder.drafts"));
+        assert_eq!(special_name(&folder("Receipts", &[])), None);
+        // The server's flag wins over the name.
+        assert_eq!(special_name(&folder("Archive", &["\\trash"])), Some("mail.folder.trash"));
+    }
 }
