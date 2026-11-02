@@ -371,6 +371,8 @@ pub struct Sorted {
     opened: Vec<u32>,
     /// Books gone since (hidden until the file is made anew).
     hidden: Vec<u32>,
+    /// The file was gone or damaged when last read through.
+    gone: bool,
 }
 
 impl Sorted {
@@ -404,20 +406,24 @@ impl Sorted {
             changes: Changes::default(),
             opened: Vec::new(),
             hidden: Vec::new(),
+            gone: false,
         };
         sorted.read_through(storage, Some(trailer.records))?;
         Some(sorted)
     }
 
-    /// Whether it is of the library there is now.
+    /// Whether it is of the library there is now, its file still there
+    /// (the kernel keeps the files of two archive folders: a third view's
+    /// takes the place of one).
     pub fn is_current(&self, env: &Env<'_>) -> bool {
-        super::service(env).version(env) == Some(self.version)
+        super::service(env).version(env) == Some(self.version) && env.storage().exists(&self.path)
     }
 
     /// Takes in what changed of single books since (how far read,
     /// favourites, removed, the books read last): read through again.
     pub fn refresh(&mut self, storage: &dyn Storage) {
-        if self.read_through(storage, None).is_none() {
+        self.gone = self.read_through(storage, None).is_none();
+        if self.gone {
             // Gone or damaged meanwhile: nothing shown until made anew.
             self.count = 0;
             self.blocks = Vec::new();
@@ -444,6 +450,14 @@ impl Sorted {
         if self.hidden.len() > before {
             self.refresh(storage);
         }
+    }
+
+    /// Whether the file was gone or damaged when it was last read through
+    /// ([`Sorted::refresh`]; the kernel keeps the files of two archive
+    /// folders, a third view's takes the place of one): then open it anew,
+    /// or ask for it ([`request`]).
+    pub fn is_gone(&self) -> bool {
+        self.gone
     }
 
     /// Books in the library but the archive's.

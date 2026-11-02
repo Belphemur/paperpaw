@@ -95,6 +95,33 @@ fn an_archived_book_goes_from_the_list_at_once() {
     assert_eq!(app.screen(), "reader.screen", "{}", app.described());
 }
 
+/// Two other views (of other archive folders) asked for their sorted
+/// books: the kernel keeps the files of two, so the list's went. The list
+/// asks for it anew and shows its books, not an empty list.
+#[test]
+fn the_list_asks_anew_for_its_sorted_books_when_their_file_went() {
+    let _turn = turn();
+    let mut app = library(LARGE, "[files]\nsort = files.sort.name\n", 3);
+    assert_eq!(rows(&mut app), ["Book 01", "Book 02", "Book 03"]);
+    for archive in ["books/One", "books/Two"] {
+        let wanted = events::SortedWanted::new(archive.into());
+        app.send(events::SORTED_WANTED.id().clone(), wanted.to_params());
+        for _ in 0..5 {
+            app.wait(1000);
+        }
+    }
+    // Read further: the list reads its books again.
+    let changed = events::BookChanged::new(
+        "books/Book 02.txt".into(),
+        paperpaw_sdk::library::what::FIELDS,
+    );
+    app.send(events::BOOK_CHANGED.id().clone(), changed.to_params());
+    for _ in 0..5 {
+        app.wait(1000);
+    }
+    assert_eq!(rows(&mut app), ["Book 01", "Book 02", "Book 03"]);
+}
+
 #[test]
 fn showing_books_as_covers_applies_while_the_library_shows() {
     let _turn = turn();

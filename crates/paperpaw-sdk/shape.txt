@@ -963,7 +963,7 @@ struct paperpaw_sdk::library::service::LibraryService(0: alloc::boxed::Box<dyn p
 struct paperpaw_sdk::library::sorted::Counts { shown: [u16; 5], stacked: [u16; 2] }
 struct paperpaw_sdk::library::sorted::Entry { item: paperpaw_sdk::library::index::Item, stack: u16 }
 struct paperpaw_sdk::library::sorted::Recent { pos: u32, item: paperpaw_sdk::library::index::Item, series: u32, members: u16 }
-struct paperpaw_sdk::library::sorted::Sorted { path: alloc::string::String, version: u64, count: usize, archived: usize, blocks: alloc::vec::Vec<paperpaw_sdk::library::sorted::Counts>, recent: alloc::vec::Vec<paperpaw_sdk::library::sorted::Recent>, apart: alloc::vec::Vec<(u32, u32)>, heads: alloc::vec::Vec<(u32, u8)>, changes: paperpaw_sdk::library::catalog::Changes, opened: alloc::vec::Vec<u32>, hidden: alloc::vec::Vec<u32> }
+struct paperpaw_sdk::library::sorted::Sorted { path: alloc::string::String, version: u64, count: usize, archived: usize, blocks: alloc::vec::Vec<paperpaw_sdk::library::sorted::Counts>, recent: alloc::vec::Vec<paperpaw_sdk::library::sorted::Recent>, apart: alloc::vec::Vec<(u32, u32)>, heads: alloc::vec::Vec<(u32, u8)>, changes: paperpaw_sdk::library::catalog::Changes, opened: alloc::vec::Vec<u32>, hidden: alloc::vec::Vec<u32>, gone: bool }
 struct paperpaw_sdk::library::sorted::View { show: paperpaw_sdk::library::catalog::Show, by_recent: bool, stacked: bool }
 struct paperpaw_sdk::lookup::Asked { entries: alloc::vec::Vec<paperpaw_sdk::lookup::LookupEntry>, pending: alloc::vec::Vec<paperpaw_sdk::id::Id>, commands: alloc::vec::Vec<paperpaw_sdk::command::Command> }
 struct paperpaw_sdk::lookup::LookupEntry { source: alloc::string::String, text: alloc::string::String, more: core::option::Option<paperpaw_sdk::id::Id> }

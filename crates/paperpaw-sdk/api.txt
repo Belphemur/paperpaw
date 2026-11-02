@@ -2663,6 +2663,7 @@ pub fn paperpaw_sdk::library::sorted::Sorted::has_books(&self) -> bool
 pub fn paperpaw_sdk::library::sorted::Sorted::hide(&mut self, &dyn paperpaw_platform::storage::Storage, u32)
 pub fn paperpaw_sdk::library::sorted::Sorted::hide_all(&mut self, &dyn paperpaw_platform::storage::Storage, &[u32])
 pub fn paperpaw_sdk::library::sorted::Sorted::is_current(&self, &paperpaw_sdk::Env<'_>) -> bool
+pub fn paperpaw_sdk::library::sorted::Sorted::is_gone(&self) -> bool
 pub fn paperpaw_sdk::library::sorted::Sorted::open(&paperpaw_sdk::Env<'_>, &str) -> core::option::Option<paperpaw_sdk::library::sorted::Sorted>
 pub fn paperpaw_sdk::library::sorted::Sorted::refresh(&mut self, &dyn paperpaw_platform::storage::Storage)
 pub fn paperpaw_sdk::library::sorted::Sorted::total(&self) -> usize

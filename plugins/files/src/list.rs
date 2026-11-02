@@ -480,6 +480,17 @@ impl ListScreen {
         if let Some(sorted) = &mut self.sorted {
             sorted.hide_all(env.storage(), &self.gone);
         }
+        self.forget_gone();
+    }
+
+    /// The sorted books let go of where their file went meanwhile (the
+    /// kernel keeps those of two archive folders; another view's took its
+    /// place): asked for anew ([`ListScreen::ask`]), being prepared.
+    fn forget_gone(&mut self) {
+        if self.sorted.as_ref().is_some_and(Sorted::is_gone) {
+            self.sorted = None;
+            self.asked = false;
+        }
     }
 
     /// Asks the kernel for the sorted books where they are being made
@@ -964,6 +975,8 @@ impl ListScreen {
         if let Some(sorted) = &mut self.sorted {
             sorted.hide(env.storage(), hash(&path));
         }
+        self.forget_gone();
+        self.ask(cx);
         cx.command(library::request_catalog_anew());
         self.refilter_in_place(&env);
         cx.command(Command::Notify(
@@ -1369,6 +1382,7 @@ impl Screen for ListScreen {
                     Some(sorted) if sorted.is_current(&env) => sorted.refresh(env.storage()),
                     _ => self.reopen(&env),
                 }
+                self.forget_gone();
                 self.loaded_page = None;
                 self.refilter_in_place(&env);
                 self.ask(cx);
@@ -1390,6 +1404,8 @@ impl Screen for ListScreen {
             if let Some(sorted) = &mut self.sorted {
                 sorted.hide(env.storage(), hash(&path));
             }
+            self.forget_gone();
+            self.ask(cx);
             if !self.covered {
                 self.refilter_in_place(&env);
                 cx.request_redraw();
