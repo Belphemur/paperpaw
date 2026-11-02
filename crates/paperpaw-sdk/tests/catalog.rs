@@ -92,11 +92,13 @@ fn a_walk_takes_books_whose_files_did_not_change_from_the_old_catalog() {
     walk(&env);
     assert_eq!(books(&h.storage), found);
     assert!(!h.storage.exists(&details("books/a.txt")));
-    assert_eq!(catalog::generation(&h.storage), Some(first + 1));
+    // Nothing changed: the catalog stays, of the same generation.
+    assert_eq!(catalog::generation(&h.storage), Some(first));
     // A file of another size is read anew; the listing kept goes.
     h.storage.write("books/a.txt", b"one more").unwrap();
     walk(&env);
     assert!(h.storage.exists(&details("books/a.txt")));
+    assert_eq!(catalog::generation(&h.storage), Some(first + 1));
     assert!(!h.storage.exists(".paperpaw/library/walk.list"));
     assert!(!h.storage.exists(".paperpaw/library/catalog.tmp"));
 }
@@ -535,4 +537,225 @@ fn a_book_without_an_extension_known_by_its_first_bytes_is_deleted() {
     assert!(storage.exists("books/README"));
     assert_eq!(deleted.refused, ["books/README"]);
     assert_eq!(deleted.commands.len(), 1);
+}
+
+/// A storage that tells which paths were written (written, appended to,
+/// removed, renamed, made).
+struct Watched<'a> {
+    inner: &'a MemoryStorage,
+    written: std::cell::RefCell<Vec<String>>,
+}
+
+impl<'a> Watched<'a> {
+    fn new(inner: &'a MemoryStorage) -> Self {
+        Watched {
+            inner,
+            written: Default::default(),
+        }
+    }
+
+    fn noted(&self, path: &str) {
+        self.written.borrow_mut().push(path.to_string());
+    }
+
+    /// The paths written since asked last, each once, sorted.
+    fn taken(&self) -> Vec<String> {
+        let mut written = self.written.take();
+        written.sort();
+        written.dedup();
+        written
+    }
+}
+
+impl Storage for Watched<'_> {
+    fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
+        self.inner.read_at(path, offset, buf)
+    }
+    fn size(&self, path: &str) -> Result<u64, StorageError> {
+        self.inner.size(path)
+    }
+    fn write(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+        self.noted(path);
+        self.inner.write(path, data)
+    }
+    fn append(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+        self.noted(path);
+        self.inner.append(path, data)
+    }
+    fn list(&self, dir: &str, visit: &mut dyn FnMut(DirEntry<'_>)) -> Result<(), StorageError> {
+        self.inner.list(dir, visit)
+    }
+    fn list_from(
+        &self,
+        dir: &str,
+        from: u64,
+        visit: &mut dyn FnMut(DirEntry<'_>) -> bool,
+    ) -> Result<Option<u64>, StorageError> {
+        self.inner.list_from(dir, from, visit)
+    }
+    fn remove(&self, path: &str) -> Result<(), StorageError> {
+        self.noted(path);
+        self.inner.remove(path)
+    }
+    fn exists(&self, path: &str) -> bool {
+        self.inner.exists(path)
+    }
+    fn rename(&self, from: &str, to: &str) -> Result<(), StorageError> {
+        self.noted(from);
+        self.noted(to);
+        self.inner.rename(from, to)
+    }
+    fn create_dir(&self, path: &str) -> Result<(), StorageError> {
+        self.noted(path);
+        self.inner.create_dir(path)
+    }
+}
+
+const CATALOG: &str = ".paperpaw/library/catalog.txt";
+const LOG: &str = ".paperpaw/library/status.log";
+
+/// A library of `n` books in three folders, its catalog made.
+fn library_of(n: usize) -> common::Harness {
+    let mut storage = MemoryStorage::new();
+    for i in 0..n {
+        let shelf = ["Alpha", "Beta", "Gamma"][i % 3];
+        storage = storage.with(&format!("books/{shelf}/book number {i:04}.txt"), "text");
+    }
+    let h = harness(storage);
+    walk(&h.env());
+    h
+}
+
+/// The catalog's lines but its header.
+fn lines(storage: &MemoryStorage) -> Vec<String> {
+    let text = String::from_utf8(storage.get(CATALOG).unwrap()).unwrap();
+    text.lines().skip(1).map(str::to_string).collect()
+}
+
+#[test]
+fn a_walk_that_finds_nothing_changed_writes_nothing() {
+    let h = library_of(300);
+    let before = h.storage.get(CATALOG).unwrap();
+    let generation = catalog::generation(&h.storage);
+    let watched = Watched::new(&h.storage);
+    let env = h.env_on(&watched);
+    walk(&env);
+    assert_eq!(watched.taken(), Vec::<String>::new());
+    assert_eq!(h.storage.get(CATALOG).unwrap(), before);
+    assert_eq!(catalog::generation(&h.storage), generation);
+    // Paused after every step: still nothing.
+    let mut walk = Walk::start(&env, Vec::new()).unwrap();
+    loop {
+        walk.pause();
+        if walk.step(&env).unwrap() {
+            break;
+        }
+    }
+    assert_eq!(walk.found(), 300);
+    assert_eq!(watched.taken(), Vec::<String>::new());
+}
+
+#[test]
+fn a_folder_too_large_to_list_in_one_piece_is_listed_into_a_file() {
+    let mut storage = MemoryStorage::new();
+    for i in 0..300 {
+        storage = storage.with(
+            &format!("books/a book with a name long enough to fill a piece {i:04}.txt"),
+            "text",
+        );
+    }
+    let h = harness(storage);
+    walk(&h.env());
+    let before = h.storage.get(CATALOG).unwrap();
+    let watched = Watched::new(&h.storage);
+    walk(&h.env_on(&watched));
+    // Its listing only, gone once it is walked.
+    assert_eq!(watched.taken(), [".paperpaw/library/walk.list"]);
+    assert!(!h.storage.exists(".paperpaw/library/walk.list"));
+    assert_eq!(h.storage.get(CATALOG).unwrap(), before);
+    assert_eq!(books(&h.storage).len(), 300);
+}
+
+#[test]
+fn a_walk_that_finds_a_book_changed_writes_the_catalog_with_it() {
+    for paused in [false, true] {
+        let h = library_of(300);
+        let before = lines(&h.storage);
+        let generation = catalog::generation(&h.storage).unwrap();
+        // In the second folder walked, past the first piece copied.
+        let changed = "books/Beta/book number 0151.txt";
+        h.storage.write(changed, b"longer text").unwrap();
+        let env = h.env();
+        let mut walk = Walk::start(&env, Vec::new()).unwrap();
+        loop {
+            if paused {
+                walk.pause();
+            }
+            if walk.step(&env).unwrap() {
+                break;
+            }
+        }
+        assert_eq!(walk.found(), 300);
+        assert_eq!(catalog::generation(&h.storage), Some(generation + 1));
+        let after = lines(&h.storage);
+        assert_eq!(after.len(), before.len());
+        let differ: Vec<&String> = after
+            .iter()
+            .zip(&before)
+            .filter(|(a, b)| a != b)
+            .map(|(a, _)| a)
+            .collect();
+        assert_eq!(differ.len(), 1, "paused {paused}");
+        assert!(differ[0].starts_with(changed));
+        assert!(!h.storage.exists(".paperpaw/library/catalog.tmp"));
+    }
+}
+
+#[test]
+fn a_walk_that_finds_books_gone_or_come_at_the_end_writes_the_catalog() {
+    let h = library_of(300);
+    let before = lines(&h.storage);
+    // The folder walked last (the first listed: folders are taken from
+    // the end) gone: the old catalog's last lines.
+    let last = before.last().unwrap().split('\t').next().unwrap();
+    let shelf = last.rsplit_once('/').unwrap().0.to_string();
+    h.storage.remove_dir_all(&shelf).unwrap();
+    walk(&h.env());
+    let after = lines(&h.storage);
+    assert_eq!(after.len(), 200);
+    assert_eq!(after[..], before[..200]);
+    // One come at the end of a folder walked last.
+    h.storage
+        .write(
+            &format!("{}/zzz.txt", before[199].rsplit_once('/').unwrap().0),
+            b"new",
+        )
+        .unwrap();
+    walk(&h.env());
+    let again = lines(&h.storage);
+    assert_eq!(again.len(), 201);
+    assert_eq!(again[..200], after[..]);
+}
+
+#[test]
+fn a_walk_that_finds_nothing_changed_cuts_the_log_only_where_the_catalog_has_not_what_it_noted() {
+    let h = library_of(30);
+    let book = "books/Beta/book number 0010.txt";
+    let before = h.storage.get(CATALOG).unwrap();
+    // What the catalog has noted again: the log stays as it is.
+    catalog::note(&h.storage, book, Status::new(None, false, false)).unwrap();
+    let log = h.storage.get(LOG).unwrap();
+    let watched = Watched::new(&h.storage);
+    walk(&h.env_on(&watched));
+    assert_eq!(watched.taken(), Vec::<String>::new());
+    assert_eq!(h.storage.get(LOG).unwrap(), log);
+    // A book noted removed that is there: the catalog as it was, the log
+    // cut (it would hide the book).
+    catalog::forget(&h.storage, book).unwrap();
+    assert!(!books(&h.storage).iter().any(|(p, _)| p == book));
+    walk(&h.env_on(&watched));
+    assert_eq!(watched.taken(), [LOG]);
+    assert_eq!(h.storage.get(CATALOG).unwrap(), before);
+    assert!(catalog::changes(&h.storage).is_empty());
+    assert!(books(&h.storage).iter().any(|(p, _)| p == book));
 }

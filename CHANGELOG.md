@@ -282,6 +282,11 @@ before it are thrown away.
 
 ### Changed
 
+- A catalog walk that finds the library as it was writes nothing (#79): it compares what it makes with the old
+  catalog and writes a new one only from where they part (the lines before copied a piece a step), keeps the
+  catalog and its generation where they never do, and keeps a folder listed in one piece in memory instead of
+  in `walk.list`. The walk after every start at 10,000 books writes 975 blocks instead of 69,744 (bench); after
+  10 books came, 11,350 instead of 71,096.
 - `shape.txt` no longer holds what only the kernel builds (the SDK's `kernel` feature, ADR 0020): no plugin
   has it, so its types change with the firmware alone (ADR 0026, `tools/interface.py`).
 - *Keyboard: wider keys* (#91): the keys' side margin is a quarter of the margin other screens keep (at least
