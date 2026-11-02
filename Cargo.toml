@@ -76,6 +76,7 @@ members = [
     "plugins/read-later-cloud",
     "plugins/joplin",
     "plugins/koreader",
+    "plugins/mail",
     "plugins/wallabag",
     "plugins/about",
     "plugins/setup",
@@ -180,6 +181,7 @@ paperpaw-plugin-fonts-browser = { path = "plugins/fonts-browser", version = "1.0
 paperpaw-plugin-store = { path = "plugins/store", version = "1.0.2" }
 paperpaw-plugin-rules = { path = "plugins/rules", version = "1.0.3" }
 paperpaw-plugin-lock = { path = "plugins/lock", version = "1.0.3" }
+paperpaw-plugin-mail = { path = "plugins/mail", version = "1.0.0" }
 paperpaw-plugin-profiles = { path = "plugins/profiles", version = "1.0.4" }
 paperpaw-plugin-keys = { path = "plugins/keys", version = "1.0.3" }
 paperpaw-plugin-wikipedia = { path = "plugins/wikipedia", version = "1.0.1" }
@@ -198,7 +200,7 @@ paperpaw-plugin-update = { path = "plugins/update", version = "1.0.2" }
 paperpaw-plugin-news = { path = "plugins/news", version = "1.0.5" }
 paperpaw-plugin-weather = { path = "plugins/weather", version = "1.0.2" }
 paperpaw-plugin-widgets = { path = "plugins/widgets", version = "1.0.3" }
-paperpaw-plugin-keyboard = { path = "plugins/keyboard", version = "1.0.1" }
+paperpaw-plugin-keyboard = { path = "plugins/keyboard", version = "1.1.0" }
 paperpaw-plugin-plugin-manager = { path = "plugins/plugin-manager", version = "1.0.4" }
 paperpaw-plugin-hyphenation = { path = "plugins/hyphenation", version = "1.1.1" }
 paperpaw-plugin-hyphenation-da = { path = "plugins/hyphenation-da", version = "1.0.0" }

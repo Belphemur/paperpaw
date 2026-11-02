@@ -6,6 +6,7 @@
     reason = "a part of the plugin, which shares its imports"
 )]
 use super::*;
+use paperpaw_sdk::FontHandle;
 
 impl KeyboardScreen {
     /// The title and, opposite, the hint: how typing ends, or the letters
@@ -100,6 +101,11 @@ impl KeyboardScreen {
                 f32::from(box_area.x + box_area.width - area.x) + margin
             })
         };
+        if self.multiline {
+            self.draw_lines(ui, &font, box_area);
+            self.draw_buttons(ui);
+            return;
+        }
         let room = f32::from(box_area.width) - margin * 1.5 - buttons_width;
         // The longest end of it that fits, found by halving.
         let starts: Vec<usize> = text.char_indices().map(|(i, _)| i).collect();
@@ -140,11 +146,56 @@ impl KeyboardScreen {
             cursor,
             Color::BLACK,
         );
+        self.draw_buttons(ui);
+    }
+
+    fn draw_buttons(&self, ui: &mut ui::Ui<'_>) {
+        let env = ui.env();
         for (index, &(kind, area)) in self.buttons.iter().enumerate() {
             let focused = self.focus == Some((PASTE_ROW, index));
             let label = env.i18n().tr(kind.label());
             ui.button(area, label, false, focused);
         }
+    }
+
+    /// The text of several lines, wrapped to the box, the last lines that
+    /// fit in it (so the cursor, at the end, is always in view); right to
+    /// left where the interface does, each line from the right.
+    fn draw_lines(&self, ui: &mut ui::Ui<'_>, font: &FontHandle<'_>, box_area: Rect) {
+        let style = self.style;
+        let rtl = style.is_rtl();
+        let pad = f32::from(style.margin()) / 2.0;
+        let size = style.text();
+        let line = font.line_metrics(size).line_height.max(1.0);
+        let width = (f32::from(box_area.width) - 2.0 * pad).max(1.0);
+        let fits = ((f32::from(box_area.height) - pad) / line).max(1.0) as usize;
+        let lines = wrapped_lines(font, size, &self.text, width);
+        let first = lines.len().saturating_sub(fits);
+        let top = f32::from(box_area.y) + pad / 2.0;
+        let mut end = (0.0, top);
+        for (n, text) in lines[first..].iter().enumerate() {
+            let y = top + line * n as f32;
+            let row = Rect::new(box_area.x, y as u16, box_area.width, line as u16);
+            let w = font.measure(size, text);
+            let x = if rtl {
+                f32::from(box_area.x + box_area.width) - pad - w
+            } else {
+                f32::from(box_area.x) + pad
+            };
+            ui::Label::new(text)
+                .px(size)
+                .color(Color::BLACK)
+                .draw_from(ui, x, row);
+            end = (if rtl { x - 4.0 } else { x + w }, y);
+        }
+        let cursor = size as u32;
+        ui.canvas().fill_rect(
+            end.0 as i32 + 2,
+            end.1 as i32 + (line as i32 - cursor as i32) / 2,
+            u32::from(style.line()).max(2),
+            cursor,
+            Color::BLACK,
+        );
     }
 
     /// The style keys `height` high are drawn in, by their shape: round
@@ -219,6 +270,7 @@ impl KeyboardScreen {
             Key::Shift => "keyboard.shift",
             Key::Delete => "keyboard.delete",
             Key::Space => "keyboard.space",
+            Key::Enter => "keyboard.enter",
             _ => {
                 let label = self.label(env, key);
                 if filled_only {
@@ -254,10 +306,14 @@ impl KeyboardScreen {
             _ => paperpaw_sdk::icons::SPACE,
         };
         let canvas = ui.canvas();
-        if ui::draw_icon_at(canvas, env, icon, style.text(), (cx, cy), ink) {
+        // The line break has no icon in the font: drawn here, at the right
+        // end of its key where it runs left, turned round where right to
+        // left.
+        if key != Key::Enter && ui::draw_icon_at(canvas, env, icon, style.text(), (cx, cy), ink) {
             return;
         }
         match key {
+            Key::Enter => enter_arrow(canvas, cx, cy, size, style.is_rtl(), ink),
             Key::Shift => arrow_up(canvas, cx, cy, size, ink),
             Key::Delete => arrow_left(canvas, cx, cy, size, ink),
             Key::Space => {
@@ -305,6 +361,21 @@ impl KeyboardScreen {
 
 /// A light line just inside a filled key `r`: the focus on a key that is
 /// filled already (*OK*, *Shift* while locked).
+/// `text` broken into lines that fit `width` (and at each line break), the
+/// line breaks themselves left out; an empty last line where the text ends
+/// with a break, for the cursor to go to.
+fn wrapped_lines(font: &FontHandle<'_>, size: f32, text: &str, width: f32) -> Vec<String> {
+    let mut lines: Vec<String> = font
+        .wrap(size, text, width)
+        .into_iter()
+        .map(|r| text[r].trim_end_matches('\n').to_string())
+        .collect();
+    if lines.is_empty() {
+        lines.push(String::new());
+    }
+    lines
+}
+
 fn inner_ring(ui: &mut ui::Ui<'_>, r: Rect) {
     let style = *ui.style();
     let border = ui::button_border(&style);
@@ -326,6 +397,43 @@ pub(crate) fn arrow_up(canvas: &mut Canvas<'_>, x: i32, y: i32, size: i32, color
     }
     let stem = (size / 4).max(2);
     canvas.fill_rect(x - stem / 2, y, stem as u32, half as u32, color);
+}
+
+/// The arrow of a line break (a stem down, then an arrow back along the
+/// line), centred at `(x, y)`; turned round where `rtl`.
+pub(crate) fn enter_arrow(
+    canvas: &mut Canvas<'_>,
+    x: i32,
+    y: i32,
+    size: i32,
+    rtl: bool,
+    color: Color,
+) {
+    let half = size / 2;
+    let t = (size / 4).max(2);
+    let turn = if rtl { -1 } else { 1 };
+    // `from..to` along the line of text, as a width at its left end.
+    let span = |from: i32, to: i32| {
+        let (a, b) = (x + turn * from, x + turn * to);
+        (a.min(b), (a - b).unsigned_abs())
+    };
+    // The way back, along the bottom: the head at its far end.
+    let base = y + size / 4;
+    for dx in 0..=half {
+        let left = span(-half + dx, -half + dx + 1).0;
+        canvas.fill_rect(left, base - dx, 1, (dx * 2 + 1) as u32, color);
+    }
+    let (left, width) = span(-half, half);
+    canvas.fill_rect(left, base - t / 2, width, t as u32, color);
+    // The stem, from the end of the line up.
+    let (left, width) = span(half - t, half);
+    canvas.fill_rect(
+        left,
+        y - half,
+        width,
+        (base + t / 2 - (y - half)) as u32,
+        color,
+    );
 }
 
 /// An arrow pointing left (*Delete*), centred at `(x, y)`.

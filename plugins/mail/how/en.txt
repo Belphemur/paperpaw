@@ -1,0 +1,9 @@
+Mail reads and sends e-mail over IMAP and SMTP. It signs in with your address and a password, with no browser login, so it works with any provider that allows that.
+
+Set up an account under Settings, Mail. Pick your provider, type your address and the password. Most providers want an app password: make one in your account's security settings and use that here. Your normal password often does not work, and it never goes anywhere but your provider's server. It is kept with the passwords and keys.
+
+Open Mail in the tools. Check for mail fetches the latest mails and the folders. Mails are kept on the card, so you can read them without a network. The device connects, fetches and disconnects, so Wi-Fi is on only for a moment.
+
+If your provider is not on the list, choose Own servers and set the server names, ports and security under the advanced settings. A server whose certificate no authority vouches for asks once whether to trust it; compare the fingerprint with what your provider shows.
+
+Home screen widgets show the unread count, the latest and the starred mails, one mailbox, and a shortcut to write a mail.
