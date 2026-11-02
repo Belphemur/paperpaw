@@ -496,7 +496,7 @@ fn the_widgets_say_what_is_missing_then_show_the_notes() {
 fn the_search_widget_asks_for_words_and_lists_the_notes() {
     let mut vault = with_widgets(&small_vault(), "", "notes-vault.search 0/0 4x1");
     vault.open(Id::new_static("home.dashboard"), Params::new());
-    assert!(vault.says("Search notes…"), "{:?}", vault.labels());
+    assert!(vault.says("Search…"), "{:?}", vault.labels());
 }
 
 #[test]
