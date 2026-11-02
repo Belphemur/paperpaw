@@ -3,3 +3,5 @@ The home screen is made of pages, each a grid of widgets and tools like on a pho
 Tap an item to open it, and swipe or use the page buttons to change pages. With buttons only, the arrow buttons move from one item to the next and Select opens it.
 
 To rearrange it, hold the home screen, tap the pencil below the page or choose Edit home screen in the menu. Drag items to move them or tap one for its options, also with buttons. Add a widget is there too. Columns and Rows are in the settings, under Appearance, in the section Home screen.
+
+On a screen turned on its side, the home screen shows the same pages with more columns, and what no longer fits goes on the next page; nothing you arranged upright is changed. Arrange it on its side and that layout is kept for that orientation on its own: new widgets are added to both. Reset landscape layout in Add (while editing) goes back to the derived one.
