@@ -85,11 +85,24 @@ pub(super) fn register_sorted(
     catalog: &alloc::rc::Rc<super::Catalog>,
 ) -> Result<(), paperpaw_sdk::RegisterError> {
     use paperpaw_sdk::builtin::events;
-    // Woken from a light sleep (no start): the first view of the library
-    // to show walks it again, as after a start, for books copied while it
-    // slept (the card in a computer).
+    // Woken from a light sleep (no start): walked again as after a start,
+    // for books copied while it slept (the card in a computer). By the
+    // first view of the library to show; at once where one is open (it
+    // does not ask again; under a book the walk waits until it closes).
+    // A walk under way at the sleep starts again: it may have passed the
+    // folder a book came into.
     let woken = alloc::rc::Rc::clone(catalog);
-    r.on(events::RESUME, move |_, _, _| woken.walked.set(false))?;
+    r.on(events::RESUME, move |env, _, out| {
+        woken.walked.set(false);
+        let walking = matches!(*woken.job.borrow(), Some(CatalogJob::Walk(_)));
+        let open = env
+            .stack()
+            .iter()
+            .any(|entry| entry.slot.as_ref() == Some(&paperpaw_sdk::builtin::slots::LIBRARY));
+        if walking || (open && !env.formats().is_empty()) {
+            woken.want_walk(true, true, out);
+        }
+    })?;
     let catalog = alloc::rc::Rc::clone(catalog);
     r.on(events::SORTED_WANTED, move |env, wanted, out| {
         let mut archives = catalog.archives.borrow_mut();

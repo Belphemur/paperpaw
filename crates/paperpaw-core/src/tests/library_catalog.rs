@@ -212,6 +212,34 @@ fn the_catalog_is_made_beside_the_library() {
     }
 }
 
+/// Woken with the library open (it asks no more: its view was made
+/// before the sleep), the library is walked at once; a walk under way at
+/// the sleep starts again rather than end as the walk after the wake.
+#[test]
+fn woken_with_the_library_open_it_is_walked_at_once() {
+    let (mut kernel, log, now) = library(two_books());
+    let effects = kernel.run_action(Instant(now), actions::LIBRARY);
+    let now = run(&mut kernel, now, effects);
+    let now = want(&mut kernel, now, false);
+    assert!(
+        kernel
+            .stack
+            .iter()
+            .any(|s| s.slot.as_ref() == Some(&slots::LIBRARY))
+    );
+    assert_eq!(log.borrow().len(), 1);
+    let effects = kernel.suspend(Instant(now + 1000));
+    let now = run(&mut kernel, now + 1000, effects);
+    kernel.storage().write("books/c.txt", b"three").unwrap();
+    let effects = kernel.resume(Instant(now + 60_000));
+    run(&mut kernel, now + 60_000, effects);
+    assert_eq!(
+        paths(&kernel),
+        ["books/a.txt", "books/b.txt", "books/c.txt"]
+    );
+    assert_eq!(log.borrow().len(), 2);
+}
+
 /// A book copied while PaperPaw runs, with no word to it (the X4's
 /// debug link writing to the card): not walked for, however often a view
 /// shows, until a start or a wake. One a plugin brings (transfer over
