@@ -119,15 +119,36 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
     /// to follow: none of its entries damaged (see [`is_damaged`]), its
     /// `.` at its own cluster and its `..` at its parent's.
     fn is_sound(&self, entry: &FatEntry<IO>, parent: Option<u32>) -> Result<bool, StorageError> {
+        match parent {
+            Some(_) => self.is_whole(entry, Some(parent)),
+            None => Ok(false),
+        }
+    }
+
+    /// Whether folder `entry` is intact but for where its `..` points:
+    /// none of its entries damaged, its `.` at its own cluster. One moved
+    /// whose move was cut off before its `..` was pointed up.
+    pub(super) fn is_intact(&self, entry: &FatEntry<IO>) -> Result<bool, StorageError> {
+        self.is_whole(entry, None)
+    }
+
+    /// [`is_sound`](Self::is_sound) with its `..` at `up` where that is
+    /// given, else anywhere ([`is_intact`](Self::is_intact)).
+    fn is_whole(
+        &self,
+        entry: &FatEntry<IO>,
+        up: Option<Option<u32>>,
+    ) -> Result<bool, StorageError> {
         let own = entry.first_cluster();
-        if own.is_none() || parent.is_none() {
+        if own.is_none() {
             return Ok(false);
         }
         let mut seen = 0;
         for (at, found) in entries(&entry.to_dir()).enumerate() {
             let found = found?;
             seen = at + 1;
-            if is_damaged(self.fs, &found, &found.file_name(), at, Some((own, parent))) {
+            let place = (own, up.unwrap_or(found.first_cluster()));
+            if is_damaged(self.fs, &found, &found.file_name(), at, Some(place)) {
                 return Ok(false);
             }
         }
