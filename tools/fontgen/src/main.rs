@@ -22,13 +22,14 @@ card. Then choose it in Settings, under Reading, as Font.
 OPTIONS:
     --sizes <px,...>      Pixel sizes to render (default: 20,24,28,32,36,40,48)
     --axis <tag=value>    Set a variation axis, e.g. --axis wght=700 (repeatable)
-    --hinting <mode>      Fit the letters to the pixel grid: light (default:
-                          even, crisp letters at about the unfitted weight),
-                          normal (stems on whole pixels: heavier), mono (one
-                          pixel stems: the crispest, the lightest) or none
-                          (the outline as drawn). Only the ink changes: a
-                          book breaks into the same pages. The environment
-                          variable PAPERPAW_FONT_HINT sets the default.
+    --hinting <mode>      Fit the letters to the pixel grid: none (default:
+                          the outline as drawn), light (even, crisp letters
+                          at about the unfitted weight: the look of the
+                          default fonts), normal (stems on whole pixels:
+                          heavier) or mono (one pixel stems: the crispest,
+                          the lightest). Only the ink changes: a book breaks
+                          into the same pages. Letters with marks (Arabic,
+                          Devanagari ...) are best left at none.
     --chars <set,...>     Character sets (default: latin,ligatures; the names
                           are listed below), code points: U+EA01, U+EA01-EA0F
                           (e.g. icons), or @FILE: code points listed in a file
@@ -74,14 +75,9 @@ fn run(args: Vec<String>) -> Result<(), String> {
     let mut sizes = vec![20.0, 24.0, 28.0, 32.0, 36.0, 40.0, 48.0];
     let mut axes: Vec<(String, f32)> = Vec::new();
     let mut sets = vec![String::from("latin"), String::from("ligatures")];
-    // The default is light; the environment (as the default fonts' build
-    // reads it) changes it for the scripts that call this tool.
-    let mut hinting = match std::env::var("PAPERPAW_FONT_HINT") {
-        Ok(mode) => paperpaw_text::Hinting::parse(&mode).ok_or_else(|| {
-            format!("PAPERPAW_FONT_HINT: `{mode}` is none, light, normal or mono")
-        })?,
-        Err(_) => paperpaw_text::Hinting::Light,
-    };
+    // Unhinted unless asked: a pack made by a script (marks, other scripts)
+    // keeps the outline as drawn. The default fonts are made light.
+    let mut hinting = paperpaw_text::Hinting::None;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -326,6 +322,54 @@ mod tests {
         assert!(dir.join("fonts/bold.ppfp").is_file());
         assert!(!dir.join("fonts/italic.ppfp").exists());
         std::fs::remove_dir_all(out).ok();
+    }
+
+    /// Packs are unhinted unless `--hinting` asks (#122): the scripts that
+    /// make the script, Literata-style and icon packs rely on it, and say
+    /// so themselves.
+    #[test]
+    fn packs_are_unhinted_unless_asked() {
+        let font = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../plugins/fonts-default/fonts/Literata.ttf"
+        );
+        let out = std::env::temp_dir().join(format!("fontgen-hinting-{}", std::process::id()));
+        let make = |name: &str, extra: &[&str]| {
+            let file = out.join(format!("{name}.ppfp"));
+            let mut args: Vec<String> = [
+                font,
+                file.to_str().unwrap(),
+                "--sizes",
+                "20",
+                "--chars",
+                "latin",
+            ]
+            .map(String::from)
+            .into();
+            args.extend(extra.iter().map(|a| (*a).to_string()));
+            run(args).unwrap();
+            std::fs::read(file).unwrap()
+        };
+        std::fs::create_dir_all(&out).unwrap();
+        let default = make("default", &[]);
+        assert_eq!(default, make("none", &["--hinting", "none"]));
+        assert_ne!(default, make("light", &["--hinting", "light"]));
+        std::fs::remove_dir_all(out).ok();
+    }
+
+    /// The scripts that rebuild released packs name the unhinted mode, so
+    /// that a changed default cannot turn their bytes under the same
+    /// versions.
+    #[test]
+    fn the_pack_scripts_say_none() {
+        for script in ["script-pack.py", "literata-packs.py", "icons/pack.py"] {
+            let path = format!("{}/../{script}", env!("CARGO_MANIFEST_DIR"));
+            let text = std::fs::read_to_string(&path).unwrap();
+            assert!(
+                text.contains("\"--hinting\", \"none\""),
+                "{script} makes packs without saying `--hinting none`"
+            );
+        }
     }
 
     /// The Korean letters come in two packs (#61): `hangul-ks.txt` for the

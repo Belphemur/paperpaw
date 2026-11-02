@@ -18,4 +18,4 @@ This makes the folder plugins/font-my-font. Copy it into the plugins folder on t
 
 Fonts from More fonts work the same way and need no computer.
 
-The tool fits the letters to the pixel grid (light hinting), which keeps small text crisp on the e-ink panel. If a font looks worse that way, add --hinting none to the command; --hinting normal and --hinting mono are stronger.
+For crisper small text on the e-ink panel, add --hinting light to the command: it fits the letters to the pixel grid, as the default fonts are made. Without it the letters are drawn as the font designed them; --hinting normal and --hinting mono fit them more strongly. Fonts with marks, such as Arabic or Devanagari, are best left without.

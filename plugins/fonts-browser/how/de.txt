@@ -18,4 +18,4 @@ Das erzeugt den Ordner plugins/font-meine-schrift. Kopiere ihn in den Ordner plu
 
 Schriften aus Mehr Schriften funktionieren genauso und brauchen keinen Computer.
 
-Das Werkzeug passt die Buchstaben ans Pixelraster an (leichtes Hinting), das hält kleine Schrift auf dem E-Ink-Display scharf. Sieht eine Schrift dadurch schlechter aus, füge --hinting none zum Befehl hinzu; --hinting normal und --hinting mono sind stärker.
+Für schärfere kleine Schrift auf dem E-Ink-Display füge --hinting light zum Befehl hinzu: Es passt die Buchstaben ans Pixelraster an, so wie die mitgelieferten Schriften gemacht sind. Ohne das werden die Buchstaben gezeichnet, wie die Schrift sie entworfen hat; --hinting normal und --hinting mono passen sie stärker an. Schriften mit Zeichen über oder unter den Buchstaben, wie Arabisch oder Devanagari, lässt man besser ohne.
