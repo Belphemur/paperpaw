@@ -24,21 +24,25 @@ mod home;
 mod index;
 mod lines;
 mod list;
+mod markdown;
 mod note;
 mod page;
 mod source;
 mod tags;
 mod widgets;
 
+pub use markdown::MarkdownDocument;
+
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 
 use paperpaw_sdk::builtin::menus;
+use paperpaw_sdk::document::Document;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::{
-    Command, Env, FixedAction, Id, Manifest, MenuEntry, Params, Plugin, RegisterError, Registrar,
-    ScreenSpec, SettingExtra, SettingSpec,
+    Command, Env, FixedAction, FormatSpec, Id, Manifest, MenuEntry, Params, Plugin, RegisterError,
+    Registrar, ScreenSpec, SettingExtra, SettingSpec,
 };
 
 pub const PLUGIN: Id = Id::new_static("notes-vault");
@@ -47,6 +51,9 @@ pub const GROUP: Id = Id::new_static("notes-vault.group");
 /// The folder of the vault, chosen with the folder chooser.
 pub const FOLDER: Setting<Text> = Setting::new("notes-vault.folder");
 /// Opens the vault's page.
+/// The Markdown notes are written in, which replaces the built-in format
+/// for `.md` while this plugin is on (a later format wins an extension).
+pub const MARKDOWN: Id = Id::new_static("notes-vault.markdown");
 pub const OPEN: Id = Id::new_static("notes-vault.open");
 /// The vault's page: where to go, and the index.
 pub(crate) const HOME_SCREEN: Id = Id::new_static("notes-vault.screen");
@@ -100,6 +107,17 @@ impl Plugin for NotesVault {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        // What is converted of each note, moved and removed with it.
+        r.add_book_cache(Env::plugin_dir(PLUGIN.as_str()), "md-")?;
+        r.add_format(FormatSpec::new(
+            MARKDOWN,
+            "notes-vault.markdown",
+            alloc::vec![Cow::Borrowed("md"), Cow::Borrowed("markdown")],
+            Box::new(|storage, path, options| {
+                markdown::MarkdownDocument::open(storage, path, options.publisher_styles)
+                    .map(|d| Box::new(d) as Box<dyn Document>)
+            }),
+        ))?;
         r.add_setting_group({
             static SPEC: paperpaw_sdk::SettingGroupSpec =
                 paperpaw_sdk::SettingGroupSpec::new(GROUP, "notes-vault.title");

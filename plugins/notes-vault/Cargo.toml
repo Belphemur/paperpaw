@@ -12,6 +12,7 @@ categories = ["no-std"]
 
 [dependencies]
 paperpaw-sdk.workspace = true
+paperpaw-plugin-format-epub.workspace = true
 
 [dev-dependencies]
 paperpaw-core.workspace = true
@@ -20,7 +21,6 @@ paperpaw-platform.workspace = true
 paperpaw-plugin-fonts-default = { workspace = true, features = ["packs"] }
 paperpaw-plugin-files.workspace = true
 paperpaw-plugin-home.workspace = true
-paperpaw-plugin-format-epub.workspace = true
 paperpaw-plugin-reader.workspace = true
 
 [lints]

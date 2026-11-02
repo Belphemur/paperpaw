@@ -294,6 +294,8 @@ impl Reading {
             .plugin(paperpaw_plugin_format_txt::TxtFormat)
             .plugin(paperpaw_plugin_format_epub::EpubFormat)
             .plugin(paperpaw_plugin_format_epub::MarkdownFormat)
+            // Later: its Markdown, with wikilinks, is the one used.
+            .plugin(paperpaw_plugin_notes_vault::NotesVault)
             .plugin(paperpaw_plugin_reader::Reader)
             .plugin(Recorder(heard.clone()))
             .build()
