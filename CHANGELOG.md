@@ -13,6 +13,13 @@ change the plugin SDK.
   at, whatever number `interface.txt` says; layouts of what crosses that changed while the shapes did not are such a
   change. The first bless of the interface-6 round kept interface 5 that way and its fingerprint with it (#363). The
   fingerprint is as it was (X4: `00063e32940609b9`).
+- The first walk of new books reads no covers (#398): a book's cover is read from it when a view first shows it (the
+  library's list and grid, its book sheet, the home screen's books, the sleep screen), one book at a time, the books
+  shown first, none begun while keys come (a pause of 0.6 s after the last); a book never shown never costs its cover.
+  Until then the book shows as one without a cover does (title and author). Plugins see such a book not yet indexed
+  (`Book::indexed` off, its title and author there) and read its cover with `library::index`, as for any book not
+  indexed. On the bench's card the first walk of 1,000 books that all have covers writes 26,952 blocks instead of
+  139,557 and reads 75,974 instead of 152,975, its peak 26.2 KiB instead of 70.0 KiB.
 
 ### Fixed
 
