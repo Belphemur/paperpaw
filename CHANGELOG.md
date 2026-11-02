@@ -43,6 +43,9 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   library, the reader's menu, the sliders and the taps and swipes at the sides. The translation comes as the data
   plugin `language-ar` from the store. Nobody on the team reads Arabic: the rules are tested and the pictures
   checked, how it looks to a reader and how it feels on a device are not. Tell us what is wrong.
+- **Text of several lines** (#81). The keyboard can ask for a message of several lines (`ask::text(…).multiline()`):
+  it has an *Enter* key, the field shows the end of the text on as many wrapped lines as fit above the keys, and a
+  text from a phone or the clipboard keeps its line breaks. (A plain question still gets one line.)
 - **A wider keyboard** (#91). The keys reach nearer to the sides of the screen; on small screens they get nearly the
   whole width.
 - **The landscape home screen** (#88). Turned on its side, the home screen keeps the start card beside the clock.
