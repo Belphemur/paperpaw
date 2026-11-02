@@ -1,6 +1,6 @@
 //! The job as a screen uses it: commands out, notices in.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(clippy::unwrap_used, clippy::expect_used, reason = "tests unwrap what they just made")]
 
 use paperpaw_plugin_mail::account::Account;
 use paperpaw_plugin_mail::job::{self, Job, Run};

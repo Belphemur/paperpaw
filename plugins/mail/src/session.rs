@@ -778,7 +778,7 @@ impl Imap {
             return;
         };
         let mut rows = core::mem::take(&mut self.rows);
-        rows.sort_by(|a, b| b.uid.cmp(&a.uid));
+        rows.sort_by_key(|r| core::cmp::Reverse(r.uid));
         let unseen = self
             .counts
             .map_or_else(|| rows.iter().filter(|r| !r.seen()).count() as u32, |(_, unseen)| unseen);
@@ -981,6 +981,10 @@ impl Smtp {
         }
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one match over the steps of the dialogue; split it when it is next changed"
+    )]
     fn reply(&mut self, reply: Reply, io: &mut dyn Io, events: &mut Vec<Event>) {
         if reply.code == 0 {
             events.extend(self.fail(io, Failure::Protocol));

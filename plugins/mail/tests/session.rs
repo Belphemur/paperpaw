@@ -2,7 +2,7 @@
 //! the latest headers, a message into a file, flags) and the SMTP send,
 //! over TLS from the start and with STARTTLS, in pieces of any size.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(clippy::unwrap_used, clippy::expect_used, reason = "tests unwrap what they just made")]
 
 mod fake;
 
@@ -124,8 +124,7 @@ fn a_message_is_read_into_text() {
 
 #[test]
 fn starttls_comes_before_anything_secret() {
-    let mut script = Script::default();
-    script.messages = vec![message(1, "")];
+    let script = Script { messages: vec![message(1, "")], ..Script::default() };
     let (events, fake) = imap(script, Security::StartTls, everything(1, 1));
     assert!(done(&events), "{events:?}");
     assert_eq!(fake.tls_switches, 1);
@@ -236,8 +235,7 @@ fn a_server_that_hangs_up_is_a_lost_connection() {
 
 #[test]
 fn stages_are_told_in_order() {
-    let mut script = Script::default();
-    script.messages = vec![message(1, "")];
+    let script = Script { messages: vec![message(1, "")], ..Script::default() };
     let (events, _) = imap(script, Security::Implicit, everything(1, 1));
     let stages: Vec<_> = events.iter().filter_map(|e| if let Event::Stage(s) = e { Some(*s) } else { None }).collect();
     assert_eq!(

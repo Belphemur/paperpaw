@@ -2,7 +2,7 @@
 //! IMAP and SMTP as the sessions use, in whatever sized pieces the test
 //! wants, and plays the socket's part (reads, file reads, TLS switches).
 
-#![allow(dead_code, missing_debug_implementations, clippy::unwrap_used, clippy::expect_used)]
+#![allow(dead_code, missing_debug_implementations, clippy::unwrap_used, clippy::expect_used, reason = "tests unwrap what they just made")]
 
 use std::collections::VecDeque;
 
@@ -220,6 +220,7 @@ impl Fake {
         }
     }
 
+    #[expect(clippy::too_many_lines, reason = "the fake server's whole IMAP dialogue in one match")]
     fn imap_line(&mut self, line: &str) {
         if self.auth == Auth::PlainWait {
             self.auth = Auth::None;

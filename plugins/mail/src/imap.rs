@@ -425,7 +425,7 @@ pub fn mailbox_display(name: &str) -> String {
             let mut standard = String::from(body);
             standard = standard.replace(',', "/");
             let bytes = crate::codec::decode_base64(standard.as_bytes());
-            if bytes.len() % 2 != 0 {
+            if !bytes.len().is_multiple_of(2) {
                 return String::from(name);
             }
             let units: Vec<u16> = bytes.chunks(2).map(|p| u16::from_be_bytes([p[0], p[1]])).collect();

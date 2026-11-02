@@ -65,7 +65,7 @@ impl Plugin for Mail {
         r.on(events::SETTING_CHANGED, |env, changed, out| {
             out.extend(provider::commands(env, changed.id.as_str()));
         })?;
-        r.on(PIN_ANSWER, |_, answer, out| browser::pin_answered(&answer, out))?;
+        r.on(PIN_ANSWER, |_, answer, out| browser::pin_answered(answer, out))?;
 
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;

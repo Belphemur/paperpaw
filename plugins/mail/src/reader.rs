@@ -52,8 +52,8 @@ impl Reader {
         let top = header.area().height + style.gap();
         let bottom = display.height.saturating_sub(button_h + style.gap());
         let note_h = style.small() as u16 + style.gap();
-        let area = Rect::new(style.margin() as u16 / 2, top, display.width.saturating_sub(style.margin() as u16), bottom.saturating_sub(top + note_h));
-        let row = Rect::new(style.margin() as u16, bottom, display.width.saturating_sub(2 * style.margin() as u16), button_h);
+        let area = Rect::new(style.margin() / 2, top, display.width.saturating_sub(style.margin()), bottom.saturating_sub(top + note_h));
+        let row = Rect::new(style.margin(), bottom, display.width.saturating_sub(2 * style.margin()), button_h);
         let columns = ui::columns(row, 3, style.gap());
         let buttons = [columns[0], columns[1], columns[2]];
         let account = params.get(param::ACCOUNT).and_then(|n| n.parse().ok()).unwrap_or(1);

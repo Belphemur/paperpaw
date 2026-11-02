@@ -158,7 +158,7 @@ impl Browser {
             }
             Mode::Folder { account, raw, .. } => {
                 let mut rows = store::read_index(storage, &store::index_file(*account, raw));
-                rows.sort_by(|a, b| b.uid.cmp(&a.uid));
+                rows.sort_by_key(|r| core::cmp::Reverse(r.uid));
                 lines.extend(rows.iter().map(|row| message_line(env, row)));
                 lines.push(Line { title: i18n.tr("mail.write").into(), note: String::new(), value: "›".into(), target: Target::Write });
             }

@@ -324,11 +324,11 @@ impl Screen for Writer {
     fn on_gesture(&mut self, gesture: Gesture, cx: &mut Cx<'_, '_>) -> Handled {
         let env = *cx.env();
         let parts = self.parts();
-        if gesture.kind == GestureKind::Tap {
-            if let Some(action) = self.header.tap(&env, &self.style, gesture.start, self.list.paging(parts.len())) {
-                cx.command(Command::run(action));
-                return Handled::Yes;
-            }
+        if gesture.kind == GestureKind::Tap
+            && let Some(action) = self.header.tap(&env, &self.style, gesture.start, self.list.paging(parts.len()))
+        {
+            cx.command(Command::run(action));
+            return Handled::Yes;
         }
         let Some(row) = self.list.hit(gesture.start, parts.len()) else {
             return Handled::No;

@@ -211,10 +211,10 @@ fn read(kind: Kind, env: &Env<'_>) -> Shown {
                 .map(|c| i64::from(c.unseen))
                 .sum();
             let mut items = Vec::new();
-            if widgets::shows(env, id, "newest") {
-                if let Some((n, row)) = rows(env, &accounts, "INBOX").into_iter().find(|(_, r)| !r.seen()) {
-                    items.push(item(env, n, "INBOX", &row));
-                }
+            if widgets::shows(env, id, "newest")
+                && let Some((n, row)) = rows(env, &accounts, "INBOX").into_iter().find(|(_, r)| !r.seen())
+            {
+                items.push(item(env, n, "INBOX", &row));
             }
             Shown {
                 headline: i18n.plural("mail.widget.unread.count", unseen, &[("count", Arg::Int(unseen))]),
