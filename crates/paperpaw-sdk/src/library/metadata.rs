@@ -3,7 +3,7 @@
 //! decoding (seconds for a large one on the X4) and its writing. The
 //! details say so (`metadata = on`, `indexed = off`): the walk takes them
 //! as they are next time, and a view that shows the book reads its cover
-//! when it first does ([`index`](super::index), one book at a time), as
+//! when it first does ([`index`](super::index()), one book at a time), as
 //! for any book not indexed yet.
 
 use alloc::format;
@@ -19,7 +19,7 @@ use crate::config;
 /// it, its cover not.
 const METADATA: &str = "metadata";
 
-/// [`index`](super::index) without the cover: reads title, author,
+/// [`index`](super::index()) without the cover: reads title, author,
 /// series and tags from the book and keeps them, marked as read.
 pub(crate) fn index_details(env: &Env<'_>, path: &str) -> Book {
     let storage = env.storage();
