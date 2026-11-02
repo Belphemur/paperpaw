@@ -283,13 +283,14 @@ pub(crate) fn pages(env: &Env<'_>) -> Vec<Page> {
 /// The pages kept in the settings of one layout (`wide`: the screen on its
 /// side).
 fn read(env: &Env<'_>, wide: bool) -> Vec<Page> {
-    (0..MAX_PAGES)
-        .map(|slot| Page {
-            slot,
-            items: grid::parse(env.settings().text(setting_of(slot, wide).as_str())),
-        })
-        .filter(|page| page.slot == 0 || !page.items.is_empty())
-        .collect()
+    let mut pages = Vec::new();
+    for slot in 0..MAX_PAGES {
+        let items = grid::parse(env.settings().text(setting_of(slot, wide).as_str()));
+        if slot == 0 || !items.is_empty() {
+            pages.push(Page { slot, items });
+        }
+    }
+    pages
 }
 
 /// Whether any page has a layout of its own for a screen on its side.
@@ -323,7 +324,7 @@ pub(crate) fn pages_wide(env: &Env<'_>, geometry: &Geometry) -> Vec<Page> {
     for page in pages(env) {
         let mut items = expand(env, &page.items);
         // As a page reads: row by row, what has no place last.
-        items.sort_by_key(|item| item.at.map_or((true, 0, 0), |c| (false, c.row, c.col)));
+        reading_order(&mut items);
         carried.append(&mut items);
     }
     let mut out: Vec<Page> = Vec::new();
@@ -461,16 +462,20 @@ pub(crate) fn store_all(env: &Env<'_>, pages: &[Page], wide: bool) -> Vec<Comman
         let message = env.i18n().tr("home.grid.wide-full").to_string();
         return alloc::vec![Command::Notify(message)];
     }
-    let mut with: Vec<Page> = pages
-        .iter()
-        .map(|page| Page {
+    let mut with: Vec<Page> = Vec::with_capacity(pages.len());
+    for page in pages {
+        let items = with_hidden(env, page.items.clone(), &[setting_wide(page.slot)]);
+        with.push(Page {
             slot: page.slot,
-            items: with_hidden(env, page.items.clone(), &[setting_wide(page.slot)]),
-        })
-        .collect();
+            items,
+        });
+    }
     // What the upright pages keep without showing (their places are theirs
     // and no use here): on the last page, where it is not on a page yet.
-    let upright: Vec<Id> = (0..MAX_PAGES).map(setting).collect();
+    let mut upright: Vec<Id> = Vec::with_capacity(MAX_PAGES);
+    for slot in 0..MAX_PAGES {
+        upright.push(setting(slot));
+    }
     let mut hidden_upright = with_hidden(env, Vec::new(), &upright);
     hidden_upright.retain(|item| {
         !with
@@ -487,15 +492,17 @@ pub(crate) fn store_all(env: &Env<'_>, pages: &[Page], wide: bool) -> Vec<Comman
 
 /// [`store_all`] for the pages as they are.
 fn write_all(pages: &[Page], wide: bool) -> Vec<Command> {
-    (0..MAX_PAGES)
-        .map(|slot| match pages.get(slot) {
+    let mut commands = Vec::with_capacity(MAX_PAGES);
+    for slot in 0..MAX_PAGES {
+        commands.push(match pages.get(slot) {
             Some(page) => write(slot, wide, &page.items),
             None => Command::SetSetting(
                 setting_of(slot, wide),
                 SettingValue::Text(Cow::Borrowed("")),
             ),
-        })
-        .collect()
+        });
+    }
+    commands
 }
 
 /// Whether any page of either layout holds the widget `id`.
@@ -550,9 +557,28 @@ pub(crate) fn add_to_other(env: &Env<'_>, wide: bool, slot: usize, what: What) -
 /// The commands that empty the layout for a screen on its side: the
 /// derived one shows again.
 pub(crate) fn reset_wide() -> Vec<Command> {
-    (0..MAX_PAGES)
-        .map(|slot| Command::SetSetting(setting_wide(slot), SettingValue::Text(Cow::Borrowed(""))))
-        .collect()
+    let mut commands = Vec::with_capacity(MAX_PAGES);
+    for slot in 0..MAX_PAGES {
+        commands.push(Command::SetSetting(
+            setting_wide(slot),
+            SettingValue::Text(Cow::Borrowed("")),
+        ));
+    }
+    commands
+}
+
+/// `items` as a page reads: row by row, what has no place last; stable. An
+/// insertion sort: a page holds a dozen items, and the generic stable sort
+/// costs about 6 KB of code on the X4 for this one type.
+fn reading_order(items: &mut [Item]) {
+    let key = |item: &Item| item.at.map_or((true, 0, 0), |c| (false, c.row, c.col));
+    for i in 1..items.len() {
+        let mut j = i;
+        while j > 0 && key(&items[j - 1]) > key(&items[j]) {
+            items.swap(j - 1, j);
+            j -= 1;
+        }
+    }
 }
 
 /// The pages fitted to `geometry` once its columns or rows changed: every
