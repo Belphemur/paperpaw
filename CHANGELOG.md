@@ -841,6 +841,8 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
 
 ### Fixed
 
+- X4 and X3: books copied to the card while the reader slept lightly (the card in a computer) show in the library
+  again (#79): the first view of the library after a wake walks it, as after a start, now that a wake is no start.
 - The store no longer counts code plugins that are switched off as taking room (#70): the next start skips their
   code and their room is free, so an install that fits then is offered (its page says it fits while the code
   plugins you switched off stay off), instead of asking to remove a plugin that could have been switched off.

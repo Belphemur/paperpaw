@@ -1407,7 +1407,7 @@ pub fn added(path: &str, source: &str) -> crate::Command {
 
 /// The command a view of the library sends as it shows: the kernel makes
 /// the catalog anew in the background where it was not made since
-/// PaperPaw started (books may have been copied meanwhile) or is not
+/// PaperPaw started or woke (books may have been copied meanwhile) or is not
 /// there ([`events::CATALOG_WANTED`](crate::builtin::events::CATALOG_WANTED));
 /// [`events::CATALOG_CHANGED`](crate::builtin::events::CATALOG_CHANGED)
 /// follows where it was.

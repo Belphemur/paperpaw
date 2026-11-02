@@ -79,21 +79,24 @@ pub(super) fn make_library_folder(env: &Env<'_>) {
 
 /// The sorted books, for a view leaving an archive out
 /// ([`library::sorted`]): made where they are not of the library there
-/// is now.
+/// is now. And the walk wanted again after a wake.
 pub(super) fn register_sorted(
     r: &mut paperpaw_sdk::Registrar,
     catalog: &alloc::rc::Rc<super::Catalog>,
 ) -> Result<(), paperpaw_sdk::RegisterError> {
+    use paperpaw_sdk::builtin::events;
+    // Woken from a light sleep (no start): the first view of the library
+    // to show walks it again, as after a start, for books copied while it
+    // slept (the card in a computer).
+    let woken = alloc::rc::Rc::clone(catalog);
+    r.on(events::RESUME, move |_, _, _| woken.walked.set(false))?;
     let catalog = alloc::rc::Rc::clone(catalog);
-    r.on(
-        paperpaw_sdk::builtin::events::SORTED_WANTED,
-        move |env, wanted, out| {
-            let mut archives = catalog.archives.borrow_mut();
-            library::sorted::asked(env.storage(), &mut archives, &wanted.archive);
-            drop(archives);
-            if catalog.sort_wanted(env).is_some() {
-                catalog.declare(true, out);
-            }
-        },
-    )
+    r.on(events::SORTED_WANTED, move |env, wanted, out| {
+        let mut archives = catalog.archives.borrow_mut();
+        library::sorted::asked(env.storage(), &mut archives, &wanted.archive);
+        drop(archives);
+        if catalog.sort_wanted(env).is_some() {
+            catalog.declare(true, out);
+        }
+    })
 }

@@ -149,6 +149,32 @@ fn the_catalog_is_walked_when_a_view_asks_never_at_a_start() {
     assert_eq!(log.borrow().len(), 2);
 }
 
+/// Woken from a light sleep (the X4's power button: no start), the first
+/// view to show walks the library again, as after a start: books may
+/// have been copied while it slept (the card in a computer). Without a
+/// wake, a view showing again does not walk it.
+#[test]
+fn after_a_wake_the_first_view_walks_the_library_again() {
+    let (mut kernel, log, now) = library(two_books());
+    let now = want(&mut kernel, now, false);
+    assert_eq!(log.borrow().len(), 1);
+    kernel.storage().write("books/c.txt", b"three").unwrap();
+    let now = want(&mut kernel, now, false);
+    assert_eq!(paths(&kernel), ["books/a.txt", "books/b.txt"]);
+    let effects = kernel.suspend(Instant(now + 1000));
+    let now = run(&mut kernel, now + 1000, effects);
+    let effects = kernel.resume(Instant(now + 60_000));
+    let now = run(&mut kernel, now + 60_000, effects);
+    // Woken, nothing walked until a view shows.
+    assert_eq!(log.borrow().len(), 1);
+    want(&mut kernel, now, false);
+    assert_eq!(
+        paths(&kernel),
+        ["books/a.txt", "books/b.txt", "books/c.txt"]
+    );
+    assert_eq!(log.borrow().len(), 2);
+}
+
 #[test]
 fn nothing_is_done_while_a_book_is_read() {
     let (mut kernel, log, now) = library(two_books());

@@ -587,12 +587,12 @@ fn register_library(r: &mut Registrar) -> Result<(), RegisterError> {
             move |env, _, out| catalog.step(env, out),
         ))?;
     }
-    // Walked when a view of the library first shows after a start (books
-    // may have been copied meanwhile) or asks for it anew, for another
-    // library folder, and when books came or went without saying which
-    // (`LIBRARY_CHANGED`): at once, taking the books whose files did not
-    // change from the old catalog. Never at every start: on the X4 every
-    // wake is one. Without a format nothing is a book.
+    // Walked when a view of the library first shows after a start or a
+    // wake (books may have been copied meanwhile) or asks for it anew, for
+    // another library folder, and when books came or went without saying
+    // which (`LIBRARY_CHANGED`): at once, taking the books whose files did
+    // not change from the old catalog. Never at every start or wake by
+    // itself: on the X4 they are many. Without a format nothing is a book.
     {
         let catalog = Rc::clone(&catalog);
         r.on(events::CATALOG_WANTED, move |env, wanted, out| {
