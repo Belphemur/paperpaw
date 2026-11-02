@@ -555,7 +555,7 @@ fn settings_rows(size: Option<u32>) -> (u32, usize) {
 /// and the list show fewer rows with smaller text (#119).
 #[test]
 fn rows_do_not_grow_as_the_interface_text_gets_smaller() {
-    let rows: Vec<(u32, (u32, usize))> = (7..=11).map(|n| (n, settings_rows(Some(n)))).collect();
+    let rows: Vec<(u32, (u32, usize))> = (7..=24).map(|n| (n, settings_rows(Some(n)))).collect();
     for pair in rows.windows(2) {
         let ((small, (low, _)), (large, (high, _))) = (pair[0], pair[1]);
         assert!(
@@ -567,5 +567,8 @@ fn rows_do_not_grow_as_the_interface_text_gets_smaller() {
     let default = settings_rows(None);
     assert_eq!(default, rows[1].1, "the default is 8 pt: {rows:?}");
     assert!(default.1 >= rows[2].1.1, "{rows:?}");
+    // From 10 pt up the rows are as they were: 24 pt (whose font steps)
+    // keeps its 153 px, not the 118 px of the two least lines.
+    assert_eq!(rows[17].1.0, 153, "{rows:?}");
     eprintln!("settings rows (height, count) by size: {rows:?}");
 }
