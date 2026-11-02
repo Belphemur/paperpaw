@@ -864,9 +864,11 @@ impl Kernel {
         self.escape(now);
         self.count_awake();
         if self.sleep_due().is_some_and(|at| at <= now) {
+            // Busy: reading aloud, downloading, serving, the library being
+            // walked. Else asleep.
+            let busy = self.busy_at_sleep(now);
             self.last_activity = now;
-            // Busy: reading aloud, downloading, serving. Else asleep.
-            if !self.io.speech.speaking() && !self.io.http.busy() && !self.io.servers.busy() {
+            if !busy {
                 self.output
                     .commands
                     .push(Command::run(paperpaw_sdk::builtin::actions::SLEEP));

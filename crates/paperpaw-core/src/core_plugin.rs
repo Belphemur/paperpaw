@@ -353,7 +353,7 @@ fn register_device_actions(r: &mut Registrar) -> Result<(), RegisterError> {
 
 /// The work that makes the library's catalog anew or catches it up
 /// ([`library::catalog`]).
-const CATALOG_WORK: Id = Id::new_static("core.catalog");
+pub(crate) const CATALOG_WORK: Id = Id::new_static("core.catalog");
 
 /// The making of the catalog, shared by the kernel's handlers and its
 /// job: the only writer of the catalog, one change at a time.

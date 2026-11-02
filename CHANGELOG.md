@@ -858,6 +858,11 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
 
 ### Fixed
 
+- The device no longer falls asleep while the library is being walked (#105): a first walk of a few thousand books
+  takes longer than "Sleep after", and sleep stopped it. The sleep is put off while the walk goes on, for an hour
+  after your last press at most, and not at all with the battery at 10 % or less (not charging); "Switch off after"
+  counts from the sleep, so it waits too. A walk paused for an open book holds nothing. The walk keeps the device
+  awake even with "Plugins may keep awake" switched off (the help of that setting says so).
 - X4 and X3: books copied to the card while the reader slept lightly (the card in a computer) show in the library
   again after the wake (#79, #373), also when the library or a book from it was open at the sleep, and a look at
   the card that was under way at the sleep is started again. A wake is no start, so the library had been left as it was.

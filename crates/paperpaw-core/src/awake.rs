@@ -3,7 +3,9 @@
 //! its end, a screen's counting only while it is on top and ending with
 //! it. They hold only the sleep after `core.sleep-after` without input,
 //! never while the reader lets no plugin hold it, nor once the battery is
-//! nearly empty.
+//! nearly empty. The library's walk holds the sleep too (the kernel's own, not
+//! a plugin's: `Kernel::busy_at_sleep`), whatever the reader chose, for an
+//! hour without input at most.
 
 use alloc::borrow::Cow;
 use alloc::string::String;
@@ -19,6 +21,13 @@ use crate::Kernel;
 /// At or below this charge, not charging, no hold counts: the device
 /// sleeps as it would.
 pub(crate) const LOW_BATTERY_PERCENT: u8 = 10;
+
+/// The library's walk keeps the device awake no longer than this without
+/// the reader pressing anything: a first walk of 3,000 books takes about
+/// 13 minutes on the X4, a slower card or a larger library several times
+/// that. An hour is generous; a walk that goes on after it sleeps and goes
+/// on after the wake.
+pub(crate) const WALK_AWAKE_MS: u64 = 60 * 60_000;
 
 /// A hold in force.
 #[derive(Debug)]
@@ -36,6 +45,13 @@ struct Held {
 pub(crate) struct Holds {
     held: Vec<Held>,
     counted_at: Option<Instant>,
+    /// The reader's last real input, as of the last time a sleep fell due
+    /// (the kernel counts a sleep put off as activity, to look again one
+    /// "Sleep after" later: that is not the reader's).
+    input: Option<Instant>,
+    /// The activity the kernel set itself at that time: an activity other
+    /// than this one is the reader's.
+    marked: Option<Instant>,
 }
 
 impl Kernel {
@@ -63,15 +79,46 @@ impl Kernel {
         self.holds.held.retain(|h| h.id != *id);
     }
 
+    /// Whether the battery is nearly empty and not charging.
+    fn battery_low(&self) -> bool {
+        self.shared
+            .status
+            .battery
+            .is_some_and(|b| !b.charging && b.percent <= LOW_BATTERY_PERCENT)
+    }
+
     /// Whether holds count now: the reader lets plugins hold the device,
     /// and the battery is not nearly empty.
     fn holds_count(&self) -> bool {
-        let low = self
-            .shared
-            .status
-            .battery
-            .is_some_and(|b| !b.charging && b.percent <= LOW_BATTERY_PERCENT);
-        !low && self.shared.settings.read(&core_settings::AWAKE_HOLDS)
+        !self.battery_low() && self.shared.settings.read(&core_settings::AWAKE_HOLDS)
+    }
+
+    /// The sleep is due at `now`: whether something puts it off (reading
+    /// aloud, a download, a server, the library's walk). The caller sets
+    /// the activity to `now` after, to look again one "Sleep after" later.
+    pub(crate) fn busy_at_sleep(&mut self, now: Instant) -> bool {
+        // Any activity but the one set at the last look is the reader's.
+        if self.holds.marked != Some(self.last_activity) {
+            self.holds.input = Some(self.last_activity);
+        }
+        self.holds.marked = Some(now);
+        let walking = self.walk_holds_sleep(now);
+        walking || self.io.speech.speaking() || self.io.http.busy() || self.io.servers.busy()
+    }
+
+    /// The sleep is due at `now`: whether the library's walk puts it off.
+    /// The walk keeps going while it takes steps (not while a book is open
+    /// or the work is held back), so that the sleep does not stop a first
+    /// walk that outlasts "Sleep after"; it puts the sleep off by one
+    /// "Sleep after" at a time, for [`WALK_AWAKE_MS`] since the reader's
+    /// last real input at most (not since a sleep put off for a download or
+    /// a server), and never at a nearly empty battery. "Switch off after"
+    /// counts from the sleep, so it waits as well.
+    fn walk_holds_sleep(&self, now: Instant) -> bool {
+        let input = self.holds.input.unwrap_or(self.last_activity);
+        self.works.stepping(&crate::core_plugin::CATALOG_WORK)
+            && !self.battery_low()
+            && now.since(input) < WALK_AWAKE_MS
     }
 
     /// The holds that count now: in force, and a screen's only while it is
