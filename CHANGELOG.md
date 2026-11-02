@@ -20,6 +20,9 @@ before it are thrown away.
 
 ### Added
 
+- **Text of several lines** (#81). The keyboard can ask for a message of several lines (`ask::text(…).multiline()`):
+  it has a key for the line break, the field shows the end of the text on as many wrapped lines as fit above the
+  keys, and a text from a phone or the clipboard keeps its line breaks. (A plain question still gets one line.)
 - **Mail (#81):** a plugin that reads and sends e-mail over IMAP and SMTP with a password or an app password, no
   browser login. Up to three accounts under Settings, Mail, with presets for ten providers that fill in the
   servers; the folders with how many mails wait, a folder's latest mails, a mail (text, or the text of a simple

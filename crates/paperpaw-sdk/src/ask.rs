@@ -71,6 +71,14 @@ impl TextQuestion {
         self
     }
 
+    /// Text of several lines (a message, a note): the keyboard has a key
+    /// for the line break, and the text comes back with `\n` in it. The
+    /// field shows the end of the text on several lines, wrapped.
+    pub fn multiline(mut self) -> Self {
+        self.params.set(params::MODE, "multiline");
+        self
+    }
+
     /// A web address: typed as it is, never with capitals of its own.
     pub fn url(mut self) -> Self {
         self.params.set(params::MODE, "url");
