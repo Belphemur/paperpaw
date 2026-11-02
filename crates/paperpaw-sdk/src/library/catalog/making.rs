@@ -21,6 +21,14 @@ fn listed_path() -> String {
     format!("{DIR}/walk.list")
 }
 
+/// Where a walk keeps the folders still to walk that it does not hold.
+fn folders_path() -> String {
+    format!("{DIR}/walk.dirs")
+}
+
+/// Bytes of folders still to walk a walk holds; more go to the card.
+const FOLDERS_HELD: usize = 1024;
+
 /// Entries of a folder, or books of the catalog, taken in one step.
 const STEP_LINES: usize = 16;
 /// Bytes of a folder's listing taken in one step: a large folder is
@@ -327,6 +335,82 @@ impl Making {
     fn abort(storage: &dyn Storage) {
         let _ = storage.remove(&building_path());
         let _ = storage.remove(&listed_path());
+        let _ = storage.remove(&folders_path());
+    }
+}
+
+/// The folders a walk has still to walk, the first found walked first: a
+/// few held, the ones before them (found earlier) on the card once there
+/// are more, so that a library of thousands of folders takes no more
+/// than [`FOLDERS_HELD`] bytes of them.
+#[derive(Debug, Default)]
+struct Folders {
+    /// Found after those on the card, if any.
+    held: Vec<String>,
+    held_bytes: usize,
+    /// Where the next folder on the card starts, while there are any.
+    filed: Option<u64>,
+}
+
+impl Folders {
+    fn from(first: String) -> Folders {
+        Folders {
+            held_bytes: first.len() + 1,
+            held: Vec::from([first]),
+            filed: None,
+        }
+    }
+
+    fn add(&mut self, storage: &dyn Storage, folder: String) -> Result<(), StorageError> {
+        self.held_bytes += folder.len() + 1;
+        self.held.push(folder);
+        if self.held_bytes <= FOLDERS_HELD {
+            return Ok(());
+        }
+        let mut lines = String::with_capacity(self.held_bytes);
+        for folder in self.held.drain(..) {
+            lines.push_str(&folder);
+            lines.push('\n');
+        }
+        self.held_bytes = 0;
+        match self.filed {
+            Some(_) => storage.append(&folders_path(), lines.as_bytes())?,
+            None => {
+                storage.write(&folders_path(), lines.as_bytes())?;
+                self.filed = Some(0);
+            }
+        }
+        Ok(())
+    }
+
+    fn next(&mut self, storage: &dyn Storage) -> Result<Option<String>, StorageError> {
+        if let Some(at) = self.filed {
+            let mut found = None;
+            let next = lines_from(storage, &folders_path(), at, &mut |_, line| {
+                found = Some(line.to_string());
+                false
+            })?;
+            match found.filter(|folder| !folder.is_empty()) {
+                Some(folder) => {
+                    self.filed = Some(next);
+                    return Ok(Some(folder));
+                }
+                None => {
+                    self.filed = None;
+                    #[expect(
+                        clippy::let_underscore_must_use,
+                        reason = "folders all walked: the next walk writes the file anew"
+                    )]
+                    let _ = storage.remove(&folders_path());
+                }
+            }
+        }
+        if self.held.is_empty() {
+            return Ok(None);
+        }
+        let folder = self.held.remove(0);
+        self.held_bytes -= folder.len() + 1;
+        Ok(Some(folder))
     }
 }
 
@@ -549,7 +633,7 @@ pub struct Walk {
     /// Books to take from their details whatever the old catalog says
     /// (their details changed).
     fresh: Vec<String>,
-    dirs: Vec<String>,
+    folders: Folders,
     /// The folder being walked, its listing in [`listed_path`] (or
     /// `held`), and where the next entry of it is there.
     dir: Option<String>,
@@ -574,7 +658,7 @@ impl Walk {
             making,
             old,
             fresh,
-            dirs: Vec::from([library::folder(env).to_string()]),
+            folders: Folders::from(library::folder(env).to_string()),
             ..Walk::default()
         })
     }
@@ -621,7 +705,7 @@ impl Walk {
             return Ok(false);
         }
         let Some(dir) = self.dir.clone() else {
-            let Some(dir) = self.dirs.pop() else {
+            let Some(dir) = self.folders.next(storage)? else {
                 if storage.exists(&listed_path()) {
                     #[expect(
                         clippy::let_underscore_must_use,
@@ -654,7 +738,7 @@ impl Walk {
             taken += 1;
             let path = files::join(&dir, &entry.name);
             if entry.is_dir {
-                self.dirs.push(path);
+                self.folders.add(storage, path)?;
                 continue;
             }
             books += 1;

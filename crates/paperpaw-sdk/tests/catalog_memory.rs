@@ -18,6 +18,7 @@ mod common;
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::borrow::Cow;
 use std::io::Cursor;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use paperpaw_fat::FatStorage;
@@ -56,9 +57,15 @@ unsafe impl GlobalAlloc for Counting {
 #[global_allocator]
 static ALLOCATOR: Counting = Counting;
 
+/// One test measures at a time (the counts are the whole process's).
+static TURN: Mutex<()> = Mutex::new(());
+
 /// The most the heap grows above where it is while `run` runs, and what
 /// `run` gives.
 fn growth<T>(run: impl FnOnce() -> T) -> (usize, T) {
+    let _turn = TURN
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let before = NOW.load(Ordering::Relaxed);
     PEAK.store(before, Ordering::Relaxed);
     let out = run();
@@ -91,8 +98,8 @@ fn walk(env: &Env<'_>) -> usize {
     walk.from_old()
 }
 
-#[test]
-fn making_the_catalog_of_a_large_library_takes_a_few_kilobytes() {
+/// A harness whose formats open `.txt` books (as having no details).
+fn harness() -> common::Harness {
     let mut h = common::Harness::new();
     let mut formats = Formats::new();
     formats
@@ -104,6 +111,12 @@ fn making_the_catalog_of_a_large_library_takes_a_few_kilobytes() {
         ))
         .unwrap();
     h.formats = formats;
+    h
+}
+
+#[test]
+fn making_the_catalog_of_a_large_library_takes_a_few_kilobytes() {
+    let h = harness();
     let storage = card();
     storage.create_dir("books").unwrap();
     for shelf in 0..6 {
@@ -153,4 +166,38 @@ fn making_the_catalog_of_a_large_library_takes_a_few_kilobytes() {
     ] {
         assert!(took <= BOUND, "{what} took {took} bytes");
     }
+}
+
+/// Folders in a library of a folder an author, two levels deep.
+const FOLDERS: usize = 2000;
+
+#[test]
+fn a_walk_of_thousands_of_folders_takes_a_few_kilobytes() {
+    let h = harness();
+    let storage = card();
+    let folder = |n: usize| format!("books/Shelf {}/An author of the name {n:04}", n % 4);
+    storage.create_dir("books").unwrap();
+    for shelf in 0..4 {
+        storage.create_dir(&format!("books/Shelf {shelf}")).unwrap();
+    }
+    for n in 0..FOLDERS {
+        storage.create_dir(&folder(n)).unwrap();
+        storage
+            .write(&format!("{}/A book {n:04}.txt", folder(n)), b"text")
+            .unwrap();
+    }
+    let env = h.env_on(&storage);
+    for what in ["first walk", "walk"] {
+        let (took, _) = growth(|| walk(&env));
+        assert!(took <= BOUND, "{what} took {took} bytes");
+        let mut paths = Vec::new();
+        catalog::each(&storage, &mut |record| paths.push(record.path));
+        paths.sort();
+        let mut expected: Vec<String> = (0..FOLDERS)
+            .map(|n| format!("{}/A book {n:04}.txt", folder(n)))
+            .collect();
+        expected.sort();
+        assert_eq!(paths, expected, "every book once after the {what}");
+    }
+    assert!(!storage.exists(".paperpaw/library/walk.dirs"));
 }

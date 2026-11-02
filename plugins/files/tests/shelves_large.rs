@@ -101,12 +101,12 @@ fn library(books: usize) -> App {
             Record::of(path, &book)
         })
         .collect();
-    // In the order a walk meets them (the last folder listed first), as
+    // In the order a walk meets them (the folders in the order found), as
     // the catalog a walk made is: the walk after the start takes each
     // from it.
     records.sort_by(|a, b| {
         let folder = |r: &Record| r.path.rsplit_once('/').map(|(f, _)| f.to_string());
-        folder(b).cmp(&folder(a)).then_with(|| a.path.cmp(&b.path))
+        folder(a).cmp(&folder(b)).then_with(|| a.path.cmp(&b.path))
     });
     storage.create_dir(".paperpaw").unwrap();
     storage.create_dir(".paperpaw/library").unwrap();
