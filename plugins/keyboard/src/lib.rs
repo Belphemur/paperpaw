@@ -425,13 +425,7 @@ impl KeyboardScreen {
         let count = rows.len().max(other).max(4);
         // The field's buttons grow on touch screens, and its row with them.
         let touch_row = style.touch_row(u32::from(style.row())) as u16;
-        // Of several lines the buttons have a strip of their own under the
-        // text, which has the field's whole box.
-        let strip = if multiline && !Self::button_kinds(env).is_empty() {
-            touch_row
-        } else {
-            0
-        };
+        let strip = Self::strip_height(env, multiline, touch_row);
         let mut field_height = (style.small() * 1.5) as u16 + touch_row + strip;
         // Keys that are tapped have the height of their shape and size.
         // Chosen with buttons, they are a row high.
@@ -452,9 +446,7 @@ impl KeyboardScreen {
             let high = (u32::from(touch_row) * high / 100) as u16;
             (high, ui::edge_room(&style, high))
         };
-        // The status line at the top of the screen stays in sight: the
-        // panel never reaches into it, whatever the screen's size.
-        let status = paperpaw_sdk::widgets::line_height(env, style.small()) + style.gap() / 2;
+        let status = Self::status_room(env, &style);
         // On the screen whatever the rows: keys get smaller first.
         let room_for_keys = display
             .height
@@ -463,17 +455,8 @@ impl KeyboardScreen {
         // Text of several lines takes what the keys leave, up to a number
         // of lines: it shows as much of the paragraph as fits.
         if multiline {
-            let line = style
-                .font(env)
-                .map_or(style.text() * 1.3, |f| {
-                    f.line_metrics(style.text()).line_height
-                })
-                .max(1.0);
-            let spare = display
-                .height
-                .saturating_sub(status + field_height + keys_height + gap * 2 + room);
-            let more = ((f32::from(spare) / line) as u16).min(MORE_LINES);
-            field_height += (f32::from(more) * line) as u16;
+            let used = status + field_height + keys_height + gap * 2 + room;
+            field_height += Self::more_lines(env, &style, display.height.saturating_sub(used));
         }
         let height = (field_height + keys_height + gap * 2 + room).min(display.height);
         let region = Rect::new(0, display.height - height, display.width, height);
@@ -518,16 +501,49 @@ impl KeyboardScreen {
         };
         screen.buttons = screen.field_buttons(env);
         screen.shift = screen.auto_shift();
-        // With buttons alone a text is typed a letter at a time: the focus
-        // starts on *Phone*, where it can be typed on a phone instead.
-        let phone = screen
+        screen.focus_phone();
+        screen
+    }
+
+    /// With buttons alone a text is typed a letter at a time: the focus
+    /// starts on *Phone*, where it can be typed on a phone instead.
+    fn focus_phone(&mut self) {
+        let phone = self
             .buttons
             .iter()
             .position(|(kind, _)| *kind == FieldButton::Phone);
-        if let (false, Some(_), Some(index)) = (touch, screen.focus, phone) {
-            screen.focus = Some((PASTE_ROW, index));
+        if let (false, Some(_), Some(index)) = (self.touch, self.focus, phone) {
+            self.focus = Some((PASTE_ROW, index));
         }
-        screen
+    }
+
+    /// The height of the strip of the field's buttons: of several lines they
+    /// have one of their own under the text, which has the field's whole box.
+    fn strip_height(env: &Env<'_>, multiline: bool, touch_row: u16) -> u16 {
+        if multiline && !Self::button_kinds(env).is_empty() {
+            touch_row
+        } else {
+            0
+        }
+    }
+
+    /// The status line at the top of the screen stays in sight: the panel
+    /// never reaches into it, whatever the screen's size.
+    fn status_room(env: &Env<'_>, style: &UiStyle) -> u16 {
+        paperpaw_sdk::widgets::line_height(env, style.small()) + style.gap() / 2
+    }
+
+    /// How much higher the field of several lines is made in `spare` room:
+    /// whole lines, as many as fit up to [`MORE_LINES`].
+    fn more_lines(env: &Env<'_>, style: &UiStyle, spare: u16) -> u16 {
+        let line = style
+            .font(env)
+            .map_or(style.text() * 1.3, |f| {
+                f.line_metrics(style.text()).line_height
+            })
+            .max(1.0);
+        let more = ((f32::from(spare) / line) as u16).min(MORE_LINES);
+        (f32::from(more) * line) as u16
     }
 
     /// The box of the text field: on the margins, like its title above
