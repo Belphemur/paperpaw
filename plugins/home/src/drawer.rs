@@ -46,7 +46,10 @@ impl DrawerScreen {
         // About as high as a column is wide; a line higher where a tool's
         // name takes two (its icon as large as the others').
         let columns = u32::from(grid::columns_for(area, COLUMNS));
-        let row = (u32::from(area.width) / columns * 4 / 5).max(u32::from(style.row()));
+        // Room too for the focus: a half gap of air between a tool's icon
+        // and name and its ring, above and below.
+        let row = (u32::from(area.width) / columns * 4 / 5).max(u32::from(style.row()))
+            + u32::from(style.gap());
         let tools: Vec<Id> = pages::tools(env).into_iter().map(|(id, _)| id).collect();
         // The names' lines as they fall in a row grown by that line.
         let line = u32::from(paperpaw_sdk::widgets::line_height(env, style.small()));
@@ -85,6 +88,29 @@ impl DrawerScreen {
     }
 }
 
+/// Where the focus of the tool at `cell` whose icon and name have ink in
+/// `ink` goes round: a half gap further from the ink than the focus
+/// usually stands, so that the name is not close to the ring, but never
+/// past the cell sideways (the next tool's name is there) and never
+/// through the ink: a name as wide as the cell keeps the usual distance.
+fn clear_of(style: &UiStyle, cell: Rect, ink: Rect) -> Rect {
+    let more = i64::from(style.gap() / 2);
+    // What the ring takes round the ink it is given (see `draw_tool_focus`).
+    let ring = i64::from(style.gap() / 2 + style.line() * 3);
+    let left = (i64::from(ink.x) - more)
+        .max(i64::from(cell.x) + ring)
+        .min(i64::from(ink.x));
+    let right = (i64::from(ink.right()) + more)
+        .min(i64::from(cell.right()) - ring)
+        .max(i64::from(ink.right()));
+    Rect::new(
+        left.max(0) as u16,
+        ink.y.saturating_sub(more as u16),
+        (right - left).max(0) as u16,
+        ink.height.saturating_add(2 * more as u16),
+    )
+}
+
 impl Screen for DrawerScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
@@ -113,7 +139,11 @@ impl Screen for DrawerScreen {
             let ink = blocks::draw_tool_lines(ui.canvas(), env, rect, &tools[index], lines);
             if focused {
                 // Round its icon and name, never through them.
-                paperpaw_sdk::widgets::grid::draw_tool_focus(ui.canvas(), &style, ink);
+                paperpaw_sdk::widgets::grid::draw_tool_focus(
+                    ui.canvas(),
+                    &style,
+                    clear_of(&style, rect, ink),
+                );
             }
         }
     }
@@ -151,7 +181,7 @@ impl Screen for DrawerScreen {
             ListChange::Focus { left, reached, .. } => {
                 // The focus goes round a tool's icon and name, a little
                 // past its place.
-                let past = self.style.gap() / 2 + self.style.line() * 3 + 1;
+                let past = self.style.gap() + self.style.line() * 3 + 1;
                 ListChange::focus(self.flip(left).grow(past), self.flip(reached).grow(past))
                     .request(cx);
             }
