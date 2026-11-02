@@ -44,7 +44,11 @@ what the user is doing.
   and each part appended to the file, so a book never needs to fit in
   memory. Without a network every command fails at once with an event.
 - **Sockets end with their screen**, like servers: closing the screen
-  that was showing when a socket was opened closes it.
+  that was showing when a socket was opened closes it. *Amended
+  2026-11 (#81, owner decision 52):* a socket that background work opens
+  (a work's event handlers, a job's step; ADR 0025) is that run's
+  instead and closes when the run ends: the job done or failed, the work
+  run again, taken back or refused, or its plugin gone.
 - **Shells with the standard library** (the emulator, Android) do it in
   `paperpaw-serve`: a thread per connection for reading, one for writing,
   bounded channels between them and the shell, so a fast network waits

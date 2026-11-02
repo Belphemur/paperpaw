@@ -919,7 +919,9 @@ pub enum Command {
     /// socket ([`params::ID`](crate::builtin::params::ID)) and what
     /// happened, a [`SocketNotice`](crate::SocketNotice): connected,
     /// received, saved, closed, failed. Nothing is read unasked ([`Command::SocketRead`]). A socket
-    /// also closes when the screen showing as it was opened is closed.
+    /// also closes when the screen showing as it was opened is closed;
+    /// one that background work's event or job step opens closes when
+    /// that run ends instead (see [`work`](crate::work)).
     ///
     /// With `tls` the connection is secure from the start (e.g. IMAP on
     /// 993): it comes as [`SocketNotice::Secured`](crate::SocketNotice::Secured) once the handshake is

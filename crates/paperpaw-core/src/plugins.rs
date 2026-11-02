@@ -834,6 +834,9 @@ impl Kernel {
     /// until [`plugins_changed`](Self::plugins_changed) finds it no longer
     /// offered.
     fn unload_plugin(&mut self, id: &Id) {
+        // Its background work's sockets close.
+        self.works.runs.end_plugin(id.as_str());
+        self.close_ended_runs();
         self.shared.data_folders.retain(|(p, _)| p != id);
         self.shared.fonts.remove_plugin(id.as_str());
         // Its key maps and stylesheets; the key map is built anew once the

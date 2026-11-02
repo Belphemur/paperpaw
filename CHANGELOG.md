@@ -113,6 +113,11 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   UTF-8. `Capabilities::tls_sessions` says how many TLS
   connections fit at once, HTTPS among them; with none (every shell for now) TLS sockets fail at once,
   `SocketError::Unsupported`. The shells' TLS comes with the firmware's part of #81.
+- **Sockets of background work are the run's** (#81, owner decision 52): a socket, plain or TLS, that a work's event
+  handlers or a job's step open no longer closes with the screen that was showing then (a run is no screen's: a
+  mail fetch begun while a book was open lost its connection when the book closed). It closes when the run ends:
+  the job done or failed, the work run again (an event's run ends with the next), taken back or refused, or its
+  plugin gone. Sockets a plugin opens for the reader still close with their screen. No change to the interface.
 - **Plugin interface (next raise):** screens fit another size in place (#88). `Screen::on_resize` lays a screen out
   anew when its part of the screen changes size (turned, a window resized, the row of hints): answering
   `Handled::Yes` it keeps everything (a book open, a list scrolled, a connection); by default it is made anew as

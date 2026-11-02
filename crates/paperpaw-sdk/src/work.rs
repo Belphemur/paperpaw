@@ -44,6 +44,14 @@
 //! handler says becomes the plugin's note, and its requests are not the
 //! reader's. Its requests keep the radio on until they are answered.
 //!
+//! **Sockets of background work are the run's**, not the screens': a
+//! socket (plain or TLS) its event's handlers or a job's step connect
+//! stays while screens open and close, and closes when the run ends: a
+//! job done or failed, the work run again (an event's run ends with the
+//! next), taken back or refused, or its plugin gone. A conversation of
+//! several steps (fetching mail) is best a job that waits for the
+//! socket's events ([`Step::WaitFor`]).
+//!
 //! **Jobs** are work in steps: long work (an install, a catalog synced or
 //! walked, a book's pages counted) registers a step function for its id
 //! ([`WorkSpec`], [`Registrar::add_work`]). When it runs, the kernel calls
