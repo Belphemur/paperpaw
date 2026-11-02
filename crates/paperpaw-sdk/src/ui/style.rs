@@ -769,15 +769,23 @@ impl UiStyle {
         let small = m.pt(base * 0.75);
         // A row holds a label on two lines in the smallest size rows set
         // it in (see `draw_value_row`): where even that does not fit (the
-        // fonts come in steps, and the least line is as high as a size
-        // above it: at the smallest sizes), rows are as high as two of
-        // those lines and a little room; at other sizes they stay as they
-        // are. Never more than a row of the next size up, so that rows
-        // do not grow as the text gets smaller.
+        // fonts come in steps), rows are as high as two lines of text.
+        // Up to 9 pt the least line is as high as a size above it, so
+        // rows are as high as two of those lines and a little room (never
+        // more than a row of the next size up: rows do not grow as the
+        // text gets smaller); from 10 pt up they are as high as two lines
+        // of small text and 2 mm, as before. At other sizes they stay as
+        // they are.
         let control_row = line_height * rows;
         let row = match &font {
-            Some(f) if 2.0 * f.line_metrics(small * 0.7).line_height > control_row => control_row
-                .max(2.0 * f.line_metrics(small * 0.7).line_height + m.tenth_mm(6) as f32),
+            Some(f) if 2.0 * f.line_metrics(small * 0.7).line_height > control_row => {
+                if base < 10.0 {
+                    control_row
+                        .max(2.0 * f.line_metrics(small * 0.7).line_height + m.tenth_mm(6) as f32)
+                } else {
+                    control_row.max(2.0 * f.line_metrics(small).line_height + m.mm(2) as f32)
+                }
+            }
             _ => control_row,
         };
         // On touch screens a row is as high as a fingertip at the least
