@@ -896,6 +896,8 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
 
 ### Fixed
 
+- **Device check, first page** (#121): the Screen page opened with the focus on *Pass*, the answer it suggests without measuring anything, so the first arrow went round to *Flip pattern* and a first Select passed the page unseen. It now opens on *Flip pattern*, the first tool, as pages with tools should, and *Pass* stays the answer shown filled. Also, a key on that page took seconds, or showed nothing: the page counted as best in grays, which on the X4 makes every change, a moved focus too, a refresh of all the screen in its four grays, and after it a small change is not shown at all until a bigger one comes. The page now shows its stripes in grays when it opens and after *Full refresh*; moving the focus or flipping the pattern refreshes only what changed, in black and white.
+- **Device check, Buttons page** (#121): the page took every button from the moment it opened, so on a device of buttons alone the arrows, Select and Back did nothing and there was no way to move on or leave. It now opens with *Start* like the other pages' controls: the arrows, Select and Back work as everywhere until *Start* is chosen; then every button counts as the one asked for, as before.
 - The device no longer falls asleep while the library is being walked (#105): a first walk of a few thousand books
   takes longer than "Sleep after", and sleep stopped it. The sleep is put off while the walk goes on, for an hour
   after your last press at most, and not at all with the battery at 10 % or less (not charging); "Switch off after"

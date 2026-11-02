@@ -196,6 +196,7 @@ fn it_goes_through_the_steps_and_writes_the_report() {
 
     // Every button counts, Select and the page buttons too.
     assert!(d.shows("Buttons"), "{:?}", d.texts());
+    d.choose("Start");
     for name in KEYS {
         d.button(name, false);
     }
@@ -246,6 +247,7 @@ fn a_button_held_instead_gives_the_one_asked_up() {
     let mut d = Device::new(None);
     d.open_check();
     d.choose("Pass");
+    d.choose("Start");
     // Page back does not work: page forward held instead.
     d.button("page-forward", true);
     d.button("page-forward", false);
