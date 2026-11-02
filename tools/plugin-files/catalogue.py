@@ -41,6 +41,7 @@ a signature fails.
 import argparse
 import datetime
 import hashlib
+import json
 import pathlib
 import re
 import struct
@@ -120,6 +121,32 @@ def how_files(plugin, plugins=ROOT / "plugins"):
         if re.fullmatch(r"[a-z]{2,3}(-[A-Z]{2})?", path.stem):
             # Read as text: lines end in LF, as from a checkout anywhere.
             out.append((f"how/{path.name}", path.read_text(encoding="utf-8")))
+    return out
+
+
+def card_files(plugin, plugins=ROOT / "plugins"):
+    """The files the plugin reads from its folder on the card: those its
+    `Cargo.toml` lists as `card-files` (globs from the plugin's folder, in
+    `[package.metadata.paperpaw]`, e.g. `pictures/*.png`) as (name, bytes),
+    texts with LF line ends. Only the kinds a package may hold: another
+    (an `.html`, a `.jpg`) is a mistake the plugin library would refuse."""
+    manifest = tomllib.loads((plugins / plugin / "Cargo.toml").read_text(encoding="utf-8"))
+    patterns = manifest["package"].get("metadata", {}).get("paperpaw", {}).get("card-files", [])
+    kinds = json.loads((ROOT / "tools/publish/store-rules.json").read_text())["package_kinds"]
+    out = []
+    for pattern in patterns:
+        found = sorted(path for path in (plugins / plugin).glob(pattern) if path.is_file())
+        if not found:
+            fail(f"{plugin}: card-files `{pattern}` matches no file")
+        for path in found:
+            name = path.relative_to(plugins / plugin).as_posix()
+            kind = path.suffix.lstrip(".").lower()
+            if kind not in kinds:
+                fail(f"{plugin}: {name} is no kind a package may hold ({', '.join(kinds)})")
+            if kind in ("txt", "md", "ini", "css"):
+                out.append((name, path.read_text(encoding="utf-8").encode("utf-8")))
+            else:
+                out.append((name, path.read_bytes()))
     return out
 
 
@@ -245,7 +272,7 @@ def main():
             f"version = {version}\n"
         )
         folder = dist / f"{plugin}-{version}.zip"
-        folder_zip(folder, plugin_ini, how)
+        folder_zip(folder, plugin_ini, [*how, *card_files(plugin)])
         sums.append((sha256(folder), folder.name))
         lines = [
             f"# PaperPaw's own plugin, built for PaperPaw {release} (tools/plugin-files).",

@@ -60,6 +60,11 @@ impl Screen for GoalSleep {
             ui::draw_image(ui.canvas(), env.storage(), image, area);
             ui.canvas().describe(Role::Image, &self.described, area);
         }
+        if self.image.is_none() {
+            // No cat on the card: its mood in words above the minutes.
+            let above = Rect::new(margin, top.saturating_sub(line), room_w, line);
+            widget::says(&mut ui, &font, &style, &self.described, above);
+        }
         let width = f32::from(room_w);
         let text = ui::fit(&font, style.text(), &self.text, width);
         let x = f32::from(margin) + (width - font.measure(style.text(), &text)).max(0.0) / 2.0;

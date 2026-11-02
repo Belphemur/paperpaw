@@ -42,6 +42,10 @@ pub fn check(source: &Source, report: &mut Report) {
             continue;
         }
         for finding in scan(&source.id, &place, &text, path.parent(), &source.dir) {
+            // A plugin built into the firmware says why it embeds files.
+            if source.embedded_assets.is_some() && finding.check == "package.embedded-asset" {
+                continue;
+            }
             report.add(finding.plugin(source.id.clone()));
         }
     }
@@ -111,7 +115,7 @@ fn embedded(place: &str, text: &str, dir: Option<&Path>, out: &mut Vec<Finding>)
             let Ok(size) = std::fs::metadata(&full).map(|m| m.len()) else {
                 continue;
             };
-            if size > MAX_EMBEDDED {
+            if size > MAX_EMBEDDED && !behind_embedded_feature(text, at) {
                 out.push(Finding::warning(
                     "package.embedded-asset",
                     format!("{place}:{}", line_of(text, at)),
@@ -124,6 +128,20 @@ fn embedded(place: &str, text: &str, dir: Option<&Path>, out: &mut Vec<Finding>)
             }
         }
     }
+}
+
+/// Whether the item that holds byte `at` of `text` (up to the empty line
+/// above it) is behind `#[cfg(feature = "embedded-…")]`: a plugin of the
+/// store that is also part of an app carries a copy of the files it reads
+/// from the card there, and its plugin file for a reader is built without
+/// it (docs/plugin-conventions.md).
+fn behind_embedded_feature(text: &str, at: usize) -> bool {
+    text[..at]
+        .lines()
+        .rev()
+        .skip(1)
+        .take_while(|line| !line.trim().is_empty())
+        .any(|line| line.trim().starts_with("#[cfg(feature = \"embedded-"))
 }
 
 /// A line that writes where the plugin is installed (`plugins/<id>/`),
@@ -265,6 +283,43 @@ mod tests {
         assert_eq!(
             findings,
             [("package.embedded-asset", "lib.rs:1".to_string())]
+        );
+    }
+
+    #[test]
+    fn a_copy_behind_an_embedded_feature_is_not_said() {
+        let dir = std::env::temp_dir().join(format!("paperpaw-dev-feature-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("pictures")).unwrap();
+        std::fs::write(dir.join("pictures/big.png"), vec![0u8; 5000]).unwrap();
+        let text = "/// The cats.\n#[cfg(feature = \"embedded-pictures\")]\nconst A: [&[u8]; 1] = [\n    include_bytes!(\"pictures/big.png\"),\n];\n\nconst B: &[u8] = include_bytes!(\"pictures/big.png\");\n";
+        let findings: Vec<_> = scan("owls", "lib.rs", text, Some(&dir), &dir)
+            .into_iter()
+            .map(|f| (f.check, f.place))
+            .collect();
+        let _ = std::fs::remove_dir_all(&dir);
+        // Only the one with no feature.
+        assert_eq!(
+            findings,
+            [("package.embedded-asset", "lib.rs:7".to_string())]
+        );
+    }
+
+    #[test]
+    fn a_plugin_may_say_why_it_embeds_large_files() {
+        let manifest = "[package]\nname = \"x\"\n\n[package.metadata.paperpaw]\ncard-files = [\"a\"]\nembedded-assets = \"in the firmware\"\n\n[features]\nembedded-assets = []\n";
+        assert_eq!(
+            crate::target::embedded_assets(manifest).as_deref(),
+            Some("in the firmware")
+        );
+        // Not under another table, and not without a reason.
+        assert_eq!(
+            crate::target::embedded_assets("[features]\nembedded-assets = \"x\"\n"),
+            None
+        );
+        assert_eq!(
+            crate::target::embedded_assets("[package.metadata.paperpaw]\nembedded-assets = \"\"\n"),
+            None
         );
     }
 

@@ -104,7 +104,7 @@ impl Plugin for Diagnostics {
         r.set_menu_need(OPEN_CHECK, MenuNeed::Firmware)?;
         r.add_icons(&ICONS)?;
         r.add_settings(&SETTINGS)?;
-        r.add_keymap(Cow::Borrowed(include_str!("../keymap.ini")))?;
+        r.add_keymap(Cow::Borrowed(include_str!("../data/keymap.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())

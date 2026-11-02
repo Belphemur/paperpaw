@@ -56,8 +56,17 @@ const MAX_FORM: usize = 16 * 1024;
 /// The longest import taken, in bytes.
 pub(crate) const MAX_IMPORT: u64 = 4 << 20;
 
-/// The web page; its texts come from the translations.
-const HTML: &str = include_str!("phone.html");
+/// The web page; its texts come from the translations. It is on the card,
+/// installed with the plugin (a package holds no `.html`, so it is a
+/// `.txt`).
+const PAGE_FILE: &str = "plugins/vocabulary/data/phone.txt";
+
+/// The same page carried in the code, for where the plugin is part of the
+/// app (a shell with room: there is no installed folder to read from). A
+/// plugin file for a reader leaves it out (`default-features = false` in
+/// tools/plugin-files).
+#[cfg(feature = "embedded-page")]
+const HTML: &str = include_str!("../data/phone.txt");
 
 #[derive(Debug)]
 enum State {
@@ -408,8 +417,52 @@ const TEXTS: [(&str, &str); 37] = [
     ("full", "vocabulary.web.full"),
 ];
 
+/// The page's text, in a buffer with `room` more bytes to fill its marks:
+/// the card's file, else the code's, else `None`.
+fn html(env: &Env<'_>, room: usize) -> Option<Vec<u8>> {
+    if let Ok(mut bytes) = paperpaw_sdk::read_file(env.storage(), PAGE_FILE, MAX_PAGE)
+        && bytes.try_reserve(room).is_ok()
+    {
+        return Some(bytes);
+    }
+    carried(room)
+}
+
+/// The page is at most this large on the card (it is 16 KB).
+const MAX_PAGE: usize = 64 * 1024;
+
+#[cfg(feature = "embedded-page")]
+fn carried(room: usize) -> Option<Vec<u8>> {
+    let mut bytes = Vec::new();
+    bytes.try_reserve(HTML.len() + room).ok()?;
+    bytes.extend_from_slice(HTML.as_bytes());
+    Some(bytes)
+}
+
+/// A plugin file for a reader carries no page.
+#[cfg(not(feature = "embedded-page"))]
+fn carried(_room: usize) -> Option<Vec<u8>> {
+    None
+}
+
+/// `value` where `mark` first is in `page` from `from` on; the end of what
+/// was put in (the next search starts there).
+fn fill(page: &mut Vec<u8>, from: usize, mark: &str, value: &str) -> usize {
+    let tail = &page[from..];
+    let Some(at) = tail
+        .windows(mark.len())
+        .position(|window| window == mark.as_bytes())
+    else {
+        return from;
+    };
+    let at = from + at;
+    page.splice(at..at + mark.len(), value.bytes());
+    at + value.len()
+}
+
 /// The page with its texts in the reader's language and its limits, made
-/// in one pass (the page is large for a small device's memory).
+/// in one pass in the buffer the file was read into (the page is large for
+/// a small device's memory).
 fn page(env: &Env<'_>) -> Vec<u8> {
     let mut json = String::from("{");
     for (i, (name, key)) in TEXTS.iter().enumerate() {
@@ -424,17 +477,17 @@ fn page(env: &Env<'_>) -> Vec<u8> {
         ("/*MAX_IMPORT*/0", MAX_IMPORT.to_string()),
         ("/*MAX_TEXT*/0", cards::MAX_TEXT.to_string()),
     ];
-    let mut out = Vec::with_capacity(HTML.len() + filled[0].1.len());
-    let mut rest = HTML;
+    let room: usize = filled.iter().map(|(_, value)| value.len()).sum();
+    let Some(mut page) = html(env, room) else {
+        // The file is not on the card: its words, as a page.
+        let text = env.i18n().tr("vocabulary.phone.page-missing");
+        return format!("<!doctype html><meta charset=utf-8><p>{text}</p>").into_bytes();
+    };
+    let mut from = 0;
     for (mark, value) in &filled {
-        if let Some((before, after)) = rest.split_once(mark) {
-            out.extend_from_slice(before.as_bytes());
-            out.extend_from_slice(value.as_bytes());
-            rest = after;
-        }
+        from = fill(&mut page, from, mark, value);
     }
-    out.extend_from_slice(rest.as_bytes());
-    out
+    page
 }
 
 impl Screen for PhoneScreen {
@@ -559,9 +612,26 @@ mod tests {
     /// The page's marks are filled in one pass, in the order they come.
     #[test]
     fn the_page_has_its_marks_in_order() {
-        let at = |mark: &str| HTML.find(mark).unwrap();
+        let page = include_str!("../data/phone.txt");
+        let at = |mark: &str| page.find(mark).unwrap();
         assert!(at("/*STRINGS*/{}") < at("/*MAX_IMPORT*/0"));
         assert!(at("/*MAX_IMPORT*/0") < at("/*MAX_TEXT*/0"));
+    }
+
+    /// The marks are filled in the buffer the page was read into, each
+    /// search starting where the last value ended (a value may hold a mark).
+    #[test]
+    fn the_marks_are_filled_in_place_in_order() {
+        let mut page = b"a /*STRINGS*/{} b /*MAX_IMPORT*/0 c".to_vec();
+        let mut from = 0;
+        from = fill(&mut page, from, "/*STRINGS*/{}", "{x:\"/*MAX_IMPORT*/0\"}");
+        from = fill(&mut page, from, "/*MAX_IMPORT*/0", "4");
+        // A mark that is not there changes nothing.
+        assert_eq!(fill(&mut page, from, "/*MAX_TEXT*/0", "9"), from);
+        assert_eq!(
+            String::from_utf8(page).unwrap(),
+            "a {x:\"/*MAX_IMPORT*/0\"} b 4 c"
+        );
     }
 
     #[test]

@@ -350,7 +350,7 @@ fn text_typed_on_a_phone_comes_back() {
 
 #[test]
 fn the_phone_page_takes_its_texts() {
-    assert!(include_str!("phone.html").contains("/*STRINGS*/{}"));
+    assert!(include_str!("../data/phone.html").contains("/*STRINGS*/{}"));
 }
 
 // Hostile paths: requests that try to get at PaperPaw's own data

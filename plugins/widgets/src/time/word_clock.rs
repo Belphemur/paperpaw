@@ -632,8 +632,8 @@ mod tests {
 
     fn translator(language: &str) -> Translator {
         let mut t = Translator::new();
-        t.add(Catalog::parse(include_str!("../../i18n/time.en.ini")).unwrap());
-        t.add(Catalog::parse(include_str!("../../i18n/time.de.ini")).unwrap());
+        t.add(Catalog::parse(include_str!("../../i18n/en.ini")).unwrap());
+        t.add(Catalog::parse(include_str!("../../i18n/de.ini")).unwrap());
         t.set_language(language);
         t
     }

@@ -44,8 +44,6 @@ use paperpaw_sdk::{
 use crate::frame_height;
 
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    r.add_translations(Cow::Borrowed(include_str!("../i18n/time.en.ini")))?;
-    r.add_translations(Cow::Borrowed(include_str!("../i18n/time.de.ini")))?;
     analogue::register(r)?;
     word_clock::register(r)?;
     tiles::register(r)?;

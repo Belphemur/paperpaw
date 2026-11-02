@@ -53,6 +53,47 @@ class HowItWorks(unittest.TestCase):
             files = catalogue.how_files("demo", pathlib.Path(root))
         self.assertEqual(files, [("how/de.txt", "Erstens.\n"), ("how/en.txt", "First.\n\nSecond.\n")])
 
+    def test_the_files_a_plugin_reads_from_the_card_go_in_its_folder(self):
+        with tempfile.TemporaryDirectory() as root:
+            demo = pathlib.Path(root, "demo")
+            (demo / "pictures").mkdir(parents=True)
+            (demo / "data").mkdir()
+            demo.joinpath("Cargo.toml").write_text(
+                '[package]\nname = "demo"\n[package.metadata.paperpaw]\ncard-files = ["pictures/*.png", "data/words.txt"]\n',
+                encoding="utf-8",
+            )
+            demo.joinpath("data/embedded-only.ini").write_text("[a]\n", encoding="utf-8")
+            demo.joinpath("pictures/owl.png").write_bytes(b"\x89PNG\r\n")
+            demo.joinpath("data/words.txt").write_bytes(b"one\r\ntwo\r\n")
+            files = catalogue.card_files("demo", pathlib.Path(root))
+            self.assertEqual(files, [("pictures/owl.png", b"\x89PNG\r\n"), ("data/words.txt", b"one\ntwo\n")])
+            # A kind a package may not hold stops the build: the plugin
+            # library would refuse the package; so does a pattern of no file.
+            demo.joinpath("data/page.html").write_text("<p>", encoding="utf-8")
+            for pattern in ["data/page.html", "data/none-*.txt"]:
+                demo.joinpath("Cargo.toml").write_text(
+                    f'[package]\nname = "demo"\n[package.metadata.paperpaw]\ncard-files = ["{pattern}"]\n',
+                    encoding="utf-8",
+                )
+                with self.assertRaises(SystemExit):
+                    catalogue.card_files("demo", pathlib.Path(root))
+
+    def test_the_plugins_that_read_the_card_have_their_files_in_their_folders(self):
+        with tempfile.TemporaryDirectory() as dist:
+            dist = pathlib.Path(dist)
+            built(dist)
+            argv = ["catalogue.py", str(dist), "0.4.0", "https://example.invalid/r", "--date", "2026-10-23"]
+            with unittest.mock.patch.object(sys, "argv", argv), contextlib.redirect_stdout(io.StringIO()):
+                catalogue.main()
+            for plugin, files in [
+                ("reading-goal", {f"pictures/{mood}.png" for mood in ["sad", "meh", "content", "happy"]}),
+                ("widgets", {"data/quotes.en.txt", "data/quotes.de.txt"}),
+                ("vocabulary", {"data/phone.txt"}),
+            ]:
+                with zipfile.ZipFile(dist / f"{plugin}-{catalogue.plugin_version(plugin)}.zip") as z:
+                    self.assertTrue(files <= set(z.namelist()), (plugin, z.namelist()))
+                    self.assertLessEqual(len(z.namelist()), 63)
+
     def test_the_store_s_folders_carry_it(self):
         with tempfile.TemporaryDirectory() as dist:
             dist = pathlib.Path(dist)

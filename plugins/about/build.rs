@@ -1,6 +1,6 @@
 //! Packs the licences for the build's product: the firmware's
-//! (`licences-firmware.md`, for the readers, `target_os = "none"`) or the
-//! apps' (`licences-app.md`), both from `tools/licences/build.py`. They
+//! (`data/licences-firmware.md`, for the readers, `target_os = "none"`) or the
+//! apps' (`data/licences-app.md`), both from `tools/licences/build.py`. They
 //! are split into parts of about [`PART`] bytes at paragraphs, each
 //! deflated on its own, so that the page writes them out to read one
 //! part at a time, with little memory, and they take little of the
@@ -16,7 +16,7 @@ fn main() {
         Ok("none") => "firmware",
         _ => "app",
     };
-    let source = format!("licences-{product}.md");
+    let source = format!("data/licences-{product}.md");
     println!("cargo:rerun-if-changed={source}");
     println!("cargo:rerun-if-changed=build.rs");
     let text = std::fs::read_to_string(&source).unwrap_or_else(|e| panic!("{source}: {e}"));

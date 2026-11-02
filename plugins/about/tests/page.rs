@@ -34,7 +34,7 @@ const DEVICE: DeviceInfo = DeviceInfo::new(
 
 const PAGE: &str = ".paperpaw/plugins/about/licences.md";
 const LOGO: &str = ".paperpaw/plugins/about/logo.png";
-const BUNDLED: &[u8] = include_bytes!("../logo.png");
+const BUNDLED: &[u8] = include_bytes!("../pictures/logo.png");
 
 /// The paths the reader was opened with.
 type Opened = Rc<RefCell<Vec<String>>>;

@@ -74,6 +74,21 @@ impl Home {
     /// The home screen showing `page`, with `settings` set.
     fn new(page: &str, settings: &[(&str, &str)]) -> Self {
         let storage = Shared::default();
+        // A plugin file for a reader brings PaperPaw's quotes on the card
+        // (its package holds them); the plugin as part of an app carries them.
+        if !cfg!(feature = "embedded-quotes") {
+            for (language, quotes) in [
+                ("en", include_str!("../data/quotes.en.txt")),
+                ("de", include_str!("../data/quotes.de.txt")),
+            ] {
+                storage
+                    .write(
+                        &format!("plugins/widgets/data/quotes.{language}.txt"),
+                        quotes.as_bytes(),
+                    )
+                    .unwrap();
+            }
+        }
         storage
             .write(TODO, b"Return the library book\nBuy bread\n")
             .unwrap();

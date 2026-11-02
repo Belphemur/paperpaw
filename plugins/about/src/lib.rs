@@ -52,7 +52,7 @@ pub const MOST_LINES: usize = 512;
 /// its bytes.
 const LICENCES: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/licences.bin"));
 /// PaperPaw's logo, as the page shows it.
-const LOGO: &[u8] = include_bytes!("../logo.png");
+const LOGO: &[u8] = include_bytes!("../pictures/logo.png");
 /// PaperPaw's version: its kernel's (this plugin has a version of its
 /// own).
 pub(crate) fn version(env: &Env<'_>) -> String {
@@ -333,7 +333,7 @@ mod tests {
         // The crates' notices of this build's product (the apps' here),
         // whole from their parts.
         assert!(all.contains("Third-party crates: MIT License"));
-        let file = concat!(env!("CARGO_MANIFEST_DIR"), "/licences-app.md");
+        let file = concat!(env!("CARGO_MANIFEST_DIR"), "/data/licences-app.md");
         assert_eq!(licences(), std::fs::read_to_string(file).unwrap());
     }
 }

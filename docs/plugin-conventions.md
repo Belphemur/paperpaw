@@ -155,8 +155,35 @@ Every embedded byte is paid by the plugin room of the X4 and every
 download of the store.
 
 First-party plugins that are built into the firmware (the sleep screen's
-cat, the about screen's logo) embed their pictures, as the firmware has
-room for them; a plugin published in the store does not.
+cat, the reading fonts, the transfer pages) embed their files, as the
+firmware has room for them and no installer has run on a first start; they
+say so in their `Cargo.toml`, with the reason, and `paperpaw-dev package`
+leaves them alone:
+
+```toml
+[package.metadata.paperpaw]
+embedded-assets = "built into the firmware: the sleeping cat is drawn before ..."
+```
+
+A plugin of the store whose files are on the card names them in the same
+table, as globs from the plugin's folder, and the store's package holds
+them (`tools/plugin-files/catalogue.py`; only the kinds a package may
+hold: a page of HTML is a `.txt`):
+
+```toml
+[package.metadata.paperpaw]
+card-files = ["pictures/*.png"]
+```
+
+PaperPaw's own plugins of the store are also part of the apps (Android,
+the desktop, the emulator), where nothing installs a folder. They carry
+the same files in the code for those, behind a default feature
+(`embedded-pictures`, `embedded-quotes`, `embedded-page`), and read the
+card's file first. The plugin files for the readers (`tools/plugin-files`)
+are built with `default-features = false`: they carry none, so their
+`.ppn` is smaller, and their package brings the files. A plugin of your
+own that is only ever installed needs no feature: it reads the card, and
+copes where the file is missing (a short text where a picture would be).
 
 ### Pictures for e-ink
 
@@ -187,6 +214,8 @@ small).
   that ships several plugins (`format-epub` ships the formats EPUB,
   HTML, FB2, Markdown and CBZ) has one folder for each:
   `how/<plugin-id>/<lang>.txt`.
+- A crate with several parts that are one plugin (`widgets`) has one
+  catalog a language, `i18n/<lang>.ini`, not one a part.
 - Put the same `how/` files into what you upload: the store shows them.
 - Keep a plugin's catalogs small: they are embedded and loaded when the
   plugin shows text; a catalog over 64 KiB is left out by the loader (a
