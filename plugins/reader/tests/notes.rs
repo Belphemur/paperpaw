@@ -104,3 +104,42 @@ fn a_note_that_is_not_there_is_said_and_the_page_stays() {
     assert_eq!(reading.shown().path, PLAN);
     assert_eq!(reading.screen(), "reader.screen");
 }
+
+/// A note with a long front matter (hidden by the vault's Markdown, text
+/// in the built-in one) and many paragraphs.
+fn long_note() -> String {
+    // 90 lines of properties (the vault's Markdown takes 100 at most).
+    let properties: String = (0..90)
+        .map(|n| {
+            format!("key{n}: the value of the property number {n}, with some more words in it\n")
+        })
+        .collect();
+    format!("---\n{properties}---\n\n{}", numbered_book(120, 12))
+}
+
+#[test]
+fn a_place_kept_with_the_other_markdown_is_found_by_how_far_it_was() {
+    let storage = Shared::default();
+    let data = long_note();
+    let path = "books/long.md";
+    let mut with = Reading::new(BUTTONS, storage.clone(), path, data.as_bytes(), "");
+    with.open();
+    for _ in 0..25 {
+        with.press(actions::NEXT_PAGE);
+    }
+    let before = with.shown().progress;
+    assert!(before > 25.0, "{before}");
+    with.kept();
+    // The plugin off: the built-in Markdown, other text (the front matter
+    // is shown): the place is where it was in the book, not its offset.
+    let mut without = Reading::without_vault(BUTTONS, storage.clone(), path, "");
+    without.open();
+    let there = without.shown().progress;
+    assert!((there - before).abs() < 3.0, "{before} -> {there}");
+    without.kept();
+    // And on again.
+    let mut again = Reading::new(BUTTONS, storage, path, b"", "");
+    again.open();
+    let back = again.shown().progress;
+    assert!((back - before).abs() < 3.0, "{before} -> {back}");
+}

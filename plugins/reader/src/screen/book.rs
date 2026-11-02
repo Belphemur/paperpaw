@@ -249,7 +249,7 @@ impl Book {
             save_failed: false,
             held: false,
             from_progress: false,
-            conversion: paperpaw_sdk::reading::conversion(env),
+            conversion: conversion_of(env, path),
             pointed: true,
             xpointer: None,
             fingerprint: paperpaw_sdk::library::Fingerprint::of(env.storage(), path),
@@ -593,6 +593,17 @@ impl Book {
             }
             _ => None,
         };
+        // Kept with another format's conversion of the file (a plugin that
+        // replaces a format was switched on or off) and with no XPointer
+        // to find it by: its offset is in other text, so the same part of
+        // the book is taken, by how far into it the place was.
+        let by_format = kept
+            .conversion
+            .is_some_and(|c| c ^ self.conversion == REPLACING_FORMAT);
+        let found = found.or_else(|| {
+            (by_format && kept.percent > 0.0)
+                .then(|| self.locator_at(f64::from(kept.percent) / 100.0))
+        });
         Some(found.map_or((kept.at, before), |at| (at, true)))
     }
 
@@ -1321,3 +1332,21 @@ pub(super) fn env_filters_changed(env: &Env<'_>, book: &Book) -> bool {
 
 #[cfg(test)]
 mod chapter_tests;
+
+/// What a format adds to the conversion where it is not one of the format
+/// plugins' own but a plugin's that replaces one for its ending (the Notes
+/// vault's Markdown for the built-in): a bit no style touches.
+const REPLACING_FORMAT: u64 = 1 << 63;
+
+/// The conversion a book's positions are in: what `reading::conversion`
+/// says of the styles, and [`REPLACING_FORMAT`] where such a format opens
+/// the file, so that a place kept with the one is another conversion for
+/// the other, and nothing for the format plugins' own: positions kept
+/// before stay in their conversion.
+fn conversion_of(env: &Env<'_>, path: &str) -> u64 {
+    let replacing = env
+        .formats()
+        .for_path(path)
+        .is_some_and(|spec| !spec.id.as_str().starts_with("format-"));
+    paperpaw_sdk::reading::conversion(env) ^ if replacing { REPLACING_FORMAT } else { 0 }
+}
