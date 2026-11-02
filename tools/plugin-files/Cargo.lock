@@ -183,6 +183,7 @@ dependencies = [
  "paperpaw-plugin-menu-editor",
  "paperpaw-plugin-news",
  "paperpaw-plugin-notes-overview",
+ "paperpaw-plugin-notes-vault",
  "paperpaw-plugin-profiles",
  "paperpaw-plugin-read-later-cloud",
  "paperpaw-plugin-reading-goal",
@@ -373,6 +374,13 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-notes-overview"
+version = "1.0.0"
+dependencies = [
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-notes-vault"
 version = "1.0.0"
 dependencies = [
  "paperpaw-sdk",
