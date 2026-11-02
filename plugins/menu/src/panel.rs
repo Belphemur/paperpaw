@@ -12,7 +12,8 @@
 //! Bound to the `core.panel` slot with the parameter `menu`; what the
 //! panel shows is that menu, so users and plugins choose its entries like
 //! any menu's. With the parameter `mode` set to `top` it hangs from the
-//! top of the screen instead (the quick panel).
+//! top edge of the screen instead (the quick panel), over all that is
+//! there: no band of what is below shows above it.
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -142,9 +143,6 @@ struct Geometry {
     border: u16,
     /// The labels of settings, on the left of their rows.
     label: u16,
-    /// The band above it the screen's status line keeps (hanging from
-    /// the top only): the panel leaves it as it is.
-    head: u16,
     /// The bar that turns pages, where there are several.
     pager: u16,
     /// It hangs from the top of the screen.
@@ -180,9 +178,8 @@ fn height(line: &Line, g: Geometry) -> u16 {
 /// [`MAX_SHARE`] of it high, in pages if they need more.
 fn layout(lines: &[Line], g: Geometry) -> Layout {
     let gap = g.gap;
-    let head = if g.top { g.head } else { 0 };
     let share = if g.top { MAX_SHARE_TOP } else { MAX_SHARE };
-    let room = ((f32::from(g.height) * share) as u16).saturating_sub(g.border + 2 * gap + head);
+    let room = ((f32::from(g.height) * share) as u16).saturating_sub(g.border + 2 * gap);
     let heights: Vec<u16> = lines.iter().map(|line| height(line, g)).collect();
     // Too many rows: pages, with a bar to turn them.
     let paged = heights.iter().map(|h| u32::from(*h)).sum::<u32>() > u32::from(room);
@@ -201,9 +198,10 @@ fn layout(lines: &[Line], g: Geometry) -> Layout {
         tallest = tallest.max(used);
     }
     let height = g.border + 2 * gap + tallest.max(g.row) + bar;
-    // From the top below the screen's status line, which stays as it is.
+    // From the screen's top edge (#120): a band left there showed the
+    // screen below, a status line or a page's first line cut.
     let region = if g.top {
-        Rect::new(0, head, g.width, height)
+        Rect::new(0, 0, g.width, height)
     } else {
         Rect::new(0, g.height - height, g.width, height)
     };
@@ -321,13 +319,6 @@ impl PanelScreen {
         let label =
             ((longest as u16).saturating_add(style.gap() * 2)).min((width - 2 * margin) / 2);
         let gap = style.gap();
-        // As high as a status line at the top of a screen (the home
-        // screen's): it stays in sight above the panel.
-        let head = if top {
-            paperpaw_sdk::widgets::line_height(env, style.small()) + style.gap() / 2
-        } else {
-            0
-        };
         // By touch, buttons a fingertip large and a little apart.
         let touch = env.device().input.touch;
         let geometry = Geometry {
@@ -341,7 +332,6 @@ impl PanelScreen {
             slider: ui::slider::row_height(&style, false).saturating_sub(gap),
             border: (u32::from(style.line()) * 2).max(2) as u16,
             label,
-            head,
             pager: style.touch_row(u32::from(ui::Pager::height(&style))) as u16,
             top,
             style,
@@ -1165,7 +1155,6 @@ mod layout_tests {
             slider: 150,
             border: 2,
             label: 150,
-            head: 40,
             pager: 45,
             top: false,
             style,
@@ -1191,17 +1180,25 @@ mod layout_tests {
         assert_eq!(first.label, Some(id("a.size")));
     }
 
-    /// From the top, below the band of the screen's status line, which
-    /// it leaves as it is.
+    /// From the top, from the screen's very edge (#120): no band of the
+    /// screen below shows above it.
     #[test]
-    fn from_the_top_the_status_line_stays_in_sight() {
+    fn from_the_top_it_starts_at_the_edge() {
         let g = Geometry {
             top: true,
             ..geometry()
         };
         let layout = layout(&[Line::Open(id("a.font"))], g);
-        assert_eq!(layout.region.y, 40);
-        assert!(layout.rows[0].area.y >= 40);
+        assert_eq!(layout.region.y, 0);
+        assert_eq!(layout.rows[0].area.y, 10, "a gap below the edge");
+        // Many rows: at most the share of the screen, the pager at its
+        // foot, above the border towards the rest of the screen.
+        let lines: Vec<Line> = (0..20).map(|_| Line::Open(id("a.font"))).collect();
+        let paged = super::layout(&lines, g);
+        assert_eq!(paged.region.y, 0);
+        assert!(paged.region.height <= (800.0 * MAX_SHARE_TOP) as u16);
+        let pager = paged.pager.expect("a pager");
+        assert_eq!(pager.y + pager.height, paged.region.height - 2);
     }
 
     #[test]

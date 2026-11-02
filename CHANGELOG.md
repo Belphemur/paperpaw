@@ -67,6 +67,9 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   onto a new card), the books found so far are listed after the first 20, then each time they are twice as many, and
   every two minutes at least: they can be opened and read at once (the collecting waits meanwhile and goes on when the
   book is closed). The count says *1,240 books so far …* until all are found.
+- **The quick panel starts at the top edge** (#120). It no longer leaves a band above it, which showed what was
+  below: over a book the first line of the page, cut. Over the home screen it now covers the status line while it is
+  open, as it covers the rest.
 - **Look for new books** (#109). An empty library has a button that looks for books again, and the library's menu has
   the same entry: for books copied onto the card while PaperPaw ran. While it looks, the library says it collects the
   books and shows them as they are found ("N books so far"), as on the first start; pressing it again lets the search

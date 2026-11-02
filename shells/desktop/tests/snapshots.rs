@@ -784,7 +784,7 @@ const CASES: &[Case] = &[
         profile: "xteink-x4-pro",
         book: Some("books/alice-in-wonderland.epub"),
         sets: &[],
-        script: "run:core.quick-panel,wait:300,down:300:410,move:330:415,move:360:420,wait:100",
+        script: "run:core.quick-panel,wait:300,down:300:318,move:330:320,move:360:322,wait:100",
         colour: 0,
         fixtures: false,
     },
@@ -793,7 +793,18 @@ const CASES: &[Case] = &[
         profile: "boox-go-7",
         book: Some("books/alice-in-wonderland.epub"),
         sets: &[],
-        script: "run:core.quick-panel,wait:300,down:1000:565,move:950:570,move:800:575,up:800:575,wait:300",
+        script: "run:core.quick-panel,wait:300,down:1000:435,move:950:437,move:800:439,up:800:439,wait:300",
+        colour: 0,
+        fixtures: false,
+    },
+    // The quick panel over the home screen on the X4: from the screen's
+    // top edge, over its status line (#120), no band of it above.
+    Case {
+        name: "x4-quick-panel",
+        profile: "xteink-x4",
+        book: None,
+        sets: &[],
+        script: "run:core.quick-panel,wait:300",
         colour: 0,
         fixtures: false,
     },
