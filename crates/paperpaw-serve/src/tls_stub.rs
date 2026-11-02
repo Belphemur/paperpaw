@@ -14,6 +14,7 @@ pub const SESSIONS: u8 = 0;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Refusal {
+    #[expect(dead_code, reason = "nothing is secured here: only Failed is made")]
     Untrusted {
         certificate: [u8; 32],
         key: [u8; 32],
