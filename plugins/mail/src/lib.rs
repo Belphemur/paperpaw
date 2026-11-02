@@ -12,8 +12,10 @@ pub mod driver;
 pub mod header;
 pub mod html;
 pub mod imap;
+pub mod provider;
 pub mod render;
 pub mod session;
+pub mod settings;
 pub mod smtp;
 pub mod store;
 
