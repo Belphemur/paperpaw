@@ -14,7 +14,7 @@ use paperpaw_sdk::Id;
 use paperpaw_sdk::builtin::settings as core_settings;
 use paperpaw_sdk::power::WakeHold;
 
-use crate::Kernel;
+use crate::{Effects, Kernel};
 
 /// At or below this charge, not charging, no hold counts: the device
 /// sleeps as it would.
@@ -36,6 +36,9 @@ struct Held {
 pub(crate) struct Holds {
     held: Vec<Held>,
     counted_at: Option<Instant>,
+    /// The shell says the device is on outer power and stays awake there
+    /// ([`Kernel::set_awake_on_usb`]).
+    usb: bool,
 }
 
 impl Kernel {
@@ -63,15 +66,41 @@ impl Kernel {
         self.holds.held.retain(|h| h.id != *id);
     }
 
+    /// The battery is nearly empty and does not charge.
+    fn battery_low(&self) -> bool {
+        self.shared
+            .status
+            .battery
+            .is_some_and(|b| !b.charging && b.percent <= LOW_BATTERY_PERCENT)
+    }
+
     /// Whether holds count now: the reader lets plugins hold the device,
     /// and the battery is not nearly empty.
     fn holds_count(&self) -> bool {
-        let low = self
-            .shared
-            .status
-            .battery
-            .is_some_and(|b| !b.charging && b.percent <= LOW_BATTERY_PERCENT);
-        !low && self.shared.settings.read(&core_settings::AWAKE_HOLDS)
+        !self.battery_low() && self.shared.settings.read(&core_settings::AWAKE_HOLDS)
+    }
+
+    /// Whether the device is kept awake by outer power (a developer's
+    /// choice, [`Kernel::set_awake_on_usb`]): not once the battery is
+    /// nearly empty and does not charge.
+    pub(crate) fn awake_on_usb(&self) -> bool {
+        self.holds.usb && !self.battery_low()
+    }
+
+    /// The shell says the device is on outer power and the reader chose to
+    /// keep it awake there (`on`): the sleep after `core.sleep-after`
+    /// without input does not come. An explicit sleep is the shell's to
+    /// handle; only the timer is held. When it ends (the cable is out),
+    /// the timer counts from `now`, not from the last use, so that the
+    /// device does not fall asleep the moment the cable is pulled.
+    pub fn set_awake_on_usb(&mut self, now: Instant, on: bool) -> Effects {
+        let _running = self.shared.meter.enter(crate::meter::CORE);
+        self.now = now;
+        if self.holds.usb && !on {
+            self.last_activity = now;
+        }
+        self.holds.usb = on;
+        self.finish()
     }
 
     /// The holds that count now: in force, and a screen's only while it is

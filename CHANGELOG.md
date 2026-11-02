@@ -118,6 +118,12 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   (`paperpaw-app/panes`) have it. A finger on the line between the parts goes to the nearer one; a change of the
   interface text size that makes the screen expanded or no longer so lays the two out again. A class a later
   kernel adds reads as `Expanded` in `DisplayChanged`, so an older plugin still hears the event.
+- Devices (#96): a developer setting *Stay awake on USB* (X4, X4 Pro, X4 Classic, X3; off by default). While the cable is in,
+  the sleep after *Sleep after* does not come, and *Sleep* shows the sleep picture but does not sleep, so the computer
+  keeps the link for remote tests; the next press or command wakes it, and a cable pulled meanwhile puts the device
+  to sleep (two seconds after, so a wiggled plug does not). On the X4 the cable is read at its pin; on the X4 Pro, X4
+  Classic and X3 "on USB" means a computer talking to it or charging, so on a wall charger with a full battery the
+  setting does not hold. No change for plugins.
 - UI: `UiStyle::flip` and `UiStyle::flip_x` are public (#33): a screen lays a row or a grid out once from the left
   and mirrors each part where the interface runs right to left, as the SDK's own parts do. New functions, no
   change of what plugins built before see; their api.txt lines are part of this release's interface 6. The library's rows and
