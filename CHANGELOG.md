@@ -85,6 +85,15 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   UTF-8. `Capabilities::tls_sessions` says how many TLS
   connections fit at once, HTTPS among them; with none (every shell for now) TLS sockets fail at once,
   `SocketError::Unsupported`. The shells' TLS comes with the firmware's part of #81.
+- **Plugin interface (next raise):** screens fit another size in place (#88). `Screen::on_resize` lays a screen out
+  anew when its part of the screen changes size (turned, a window resized, the row of hints): answering
+  `Handled::Yes` it keeps everything (a book open, a list scrolled, a connection); by default it is made anew as
+  before. The old screen is now dropped before the new one is made, so a turn never holds both in memory.
+  `Screen::pane` says `Pane::DETAIL` for a screen that shows one thing of the list below it, to show beside it on
+  wide screens (the placement comes later); `Pane` is a number with constants, as `Instances`, and a value a kernel
+  does not know shows as `Pane::FULL`. `Screen` grows at its end from now on: `Screen::revision` (never
+  implemented by plugins) says which items a screen has, and newer ones are called only through
+  `call_since`, so later screen items need no raise.
 - Screens mirror in a user-interface language that runs right to left (#33): the switch, value rows and their
   chevrons, ticked rows, the number buttons, text fields, dialog buttons, list rows' icons, chips, the date
   and time pickers, headings and the reader's menu bar start at the right, and left/right follow them. The

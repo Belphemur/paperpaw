@@ -186,7 +186,8 @@ pub use replies::{
 };
 pub use screen::{
     CloseCause, Cx, FixedFactory, FixedScreen, Handled, Hint, HintVisibility, Instances, Output,
-    Outside, Screen, ScreenFactory, ScreenKey, ScreenList, ScreenSpec, ShowsThrough, StackEntry,
+    Outside, Pane, SCREEN_REVISION, Screen, ScreenFactory, ScreenKey, ScreenList, ScreenSpec,
+    ShowsThrough, StackEntry, call_since, revision_holding,
 };
 pub use setting::{Setting, Text};
 pub use settings::{

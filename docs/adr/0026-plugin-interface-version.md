@@ -122,6 +122,15 @@ with that before the betas of 0.5:
      drops the last handle frees what the firmware allocated, with the
      size the table gives.
 
+  `Screen` (interface 6) is the first such trait plugins implement
+  rather than the firmware: its `revision()` is a default method, so a
+  plugin's screens say the revision of the SDK it was built with, and
+  plugins never implement it. The kernel calls every item newer than
+  revision 1 through one helper, `paperpaw_sdk::call_since`. A screen
+  that passes items on to another it holds (a host, the sleep screen
+  showing another plugin's) says no higher a revision than that one
+  (`revision_holding`), so it is never asked what it could not pass on.
+
   Any other new item of a trait is never free: the firmware would call
   it through the table of a plugin built before, which does not have it,
   and the same holds for the firmware's own trait objects a plugin is

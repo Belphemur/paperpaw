@@ -27,9 +27,17 @@
 //!     fn on_close(&mut self, cx: &mut Cx<'_, '_>) {
 //!         self.host.close(cx);
 //!     }
+//!     // Its revision is no higher than the screen's it holds.
+//!     fn revision(&self) -> u16 {
+//!         self.host.revision()
+//!     }
 //!     // on_action, on_event, on_timer and on_hide passed on alike
 //! }
 //! ```
+//!
+//! A host passes on only items the screen it holds has: its own
+//! [`Screen::revision`] is [`ScreenHost::revision`], and items newer than
+//! revision 1 go through [`call_since`](crate::call_since).
 
 use alloc::boxed::Box;
 
@@ -40,7 +48,7 @@ use crate::env::Env;
 use crate::gesture::Gesture;
 use crate::id::Id;
 use crate::params::Params;
-use crate::screen::{Cx, Handled, Output, Screen};
+use crate::screen::{Cx, Handled, Output, SCREEN_REVISION, Screen, call_since, revision_holding};
 
 /// The screen a host holds.
 struct Hosted {
@@ -93,19 +101,43 @@ impl ScreenHost {
         self.hosted.as_ref().map(|hosted| hosted.area)
     }
 
+    /// The revision of the host ([`Screen::revision`]): no higher than
+    /// that of the screen it holds ([`revision_holding`]), so that it is
+    /// asked only what that one has; this SDK's without one.
+    pub fn revision(&self) -> u16 {
+        self.hosted.as_ref().map_or(SCREEN_REVISION, |hosted| {
+            revision_holding(hosted.screen.as_ref())
+        })
+    }
+
     /// Holds screen `id` with `params` in `area` (of the host's
     /// coordinates) in place of the one held before, which is closed:
-    /// the same screen with the same params and size is only moved (of
-    /// another size, it is made anew for it). Whether it could be made.
+    /// the same screen with the same params is only moved, and of another
+    /// size laid out anew ([`Screen::on_resize`]) or, where it does not
+    /// do that, made anew for it. Whether it could be made.
     pub fn show(&mut self, cx: &mut Cx<'_, '_>, id: Id, params: Params, area: Rect) -> bool {
         if let Some(hosted) = &mut self.hosted
             && hosted.id == id
             && hosted.params == params
-            && (hosted.area.width, hosted.area.height) == (area.width, area.height)
         {
+            let before = hosted.area;
+            let resized = (before.width, before.height) != (area.width, area.height);
             hosted.area = area;
-            cx.request_redraw();
-            return true;
+            // What it asks for is passed on only where it stays: made
+            // anew, it was not asked anything (as the kernel does).
+            let kept = !resized
+                || self.pass_if(cx, true, |held, cx| {
+                    call_since(held, 2, Handled::No, |held| held.on_resize(cx))
+                }) == Handled::Yes;
+            if kept {
+                cx.request_redraw();
+                return true;
+            }
+            // Closed where it was, as the kernel closes a screen it makes
+            // anew.
+            if let Some(hosted) = &mut self.hosted {
+                hosted.area = before;
+            }
         }
         self.close(cx);
         let env = *cx.env();
@@ -142,6 +174,17 @@ impl ScreenHost {
         cx: &mut Cx<'_, '_>,
         f: impl FnOnce(&mut dyn Screen, &mut Cx<'_, '_>) -> Handled,
     ) -> Handled {
+        self.pass_if(cx, false, f)
+    }
+
+    /// [`pass`](Self::pass); with `only_taken`, what it asks for is
+    /// passed on only where `f` answers `Handled::Yes`.
+    fn pass_if(
+        &mut self,
+        cx: &mut Cx<'_, '_>,
+        only_taken: bool,
+        f: impl FnOnce(&mut dyn Screen, &mut Cx<'_, '_>) -> Handled,
+    ) -> Handled {
         let Some(hosted) = &mut self.hosted else {
             return Handled::No;
         };
@@ -151,6 +194,9 @@ impl ScreenHost {
         let own = env.within(&device, place);
         let mut output = Output::default();
         let handled = f(hosted.screen.as_mut(), &mut Cx::new(&own, &mut output));
+        if only_taken && handled == Handled::No {
+            return handled;
+        }
         for command in output.commands {
             cx.command(command);
         }
