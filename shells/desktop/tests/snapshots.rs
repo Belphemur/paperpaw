@@ -1318,7 +1318,8 @@ fn screens_say_what_they_show() {
 
 /// The titles of headers stand in their middle by their capitals: the
 /// first letter of each (a capital) leaves as much room above it as below
-/// (a pixel apart at most), whatever the letters after it (a *g* or a *y*
+/// (a pixel apart at most; two for a round capital, which overshoots the
+/// flat ones by a pixel), whatever the letters after it (a *g* or a *y*
 /// hangs below), not as their lines of text would, with more room above
 /// the letters. On the X4, the X4 Pro and the Boox, on screens with a back
 /// arrow, page arrows, a note and an empty list.
@@ -1407,7 +1408,14 @@ fn headers_are_centred_by_their_capitals() {
             let (first, last) = (rows[0], rows[rows.len() - 1]);
             let above = first - y;
             let below = end - last - 1;
-            if above.abs_diff(below) > 1 {
+            // A round capital (an *S*) overshoots the height of the flat
+            // ones by a pixel, and the baseline's pixel may take that from
+            // one side only: one more pixel apart.
+            let round = text
+                .lines()
+                .find_map(|l| l.strip_prefix("Heading \""))
+                .is_some_and(|t| t.starts_with(['C', 'G', 'J', 'O', 'Q', 'S', 'U']));
+            if above.abs_diff(below) > 1 + u32::from(round) {
                 failures.push(format!(
                     "{profile} screen {n} ({script}): {above} px above the capital, {below} below"
                 ));

@@ -300,14 +300,8 @@ fn an_empty_file_there_deletes_nothing_unless_the_user_says_so() {
     assert!(a.answer(&get[0], 200, &empty, Some("\"v2\"")).is_empty());
     // Asked, the focus on Keep.
     let shown = a.shown();
-    assert!(
-        shown.contains(
-            "
-Statistics were removed
-"
-        ),
-        "{shown}"
-    );
+    // The question wraps over lines as the width lets it.
+    assert!(shown.contains("here too?"), "{shown}");
     assert!(shown.contains(">Keep"), "{shown}");
     assert_eq!(common::stays(&a.storage), before);
     a.press("confirm");
@@ -341,14 +335,8 @@ fn statistics_removed_there_go_here_when_the_user_says_so() {
     assert!(a.answer(&get[0], 200, &one, Some("\"v2\"")).is_empty());
     // Asked, the focus on Keep.
     let shown = a.shown();
-    assert!(
-        shown.contains(
-            "
-Statistics were removed
-"
-        ),
-        "{shown}"
-    );
+    // The question wraps over lines as the width lets it.
+    assert!(shown.contains("here too?"), "{shown}");
     assert!(shown.contains(">Keep"), "{shown}");
     assert_eq!(titles(&a).len(), 3);
     a.press("left");

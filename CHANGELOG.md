@@ -93,6 +93,8 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   vaults and does not change them.
 - **Screens that follow the turn** (#88). Screens lay themselves out again when the screen turns or changes size,
   keeping the focus, instead of staying as they were at the start.
+- **Smaller menu text by default** (#119). The interface text (menus, lists, settings) starts at 8 pt, on every device
+  (it was 9 pt). Anyone who set another size keeps it (Settings, Look); the reading size is unchanged.
 - **Search finds tags, and stays small** (#111). The library search now matches tags too, as its question says
   ("Title, author, series or tag"). A search that finds over 500 books lists the first 500 by title and says
   "First 500 of N books"; narrow it with another word. The Find screen starts on the search field, and Up from the

@@ -836,7 +836,7 @@ fn kernel(
     let builder = builder
         // A full refresh takes 3.5 s on its panel: screens change fast.
         .setting_default(&settings::FLASH_SCREENS, false)
-        .setting_default(&settings::UI_SIZE, 9)
+        .setting_default(&settings::UI_SIZE, 8)
         .setting_default(&settings::FONT_SIZE, 9)
         // The keyboard's size, unless the reader chose another (see
         // `KEYBOARD_SIZE`).

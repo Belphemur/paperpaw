@@ -211,7 +211,8 @@ fn value(rows: &[String], title: &str) -> String {
 fn an_hour_of_reading_on_battery_gives_the_pace() {
     let mut device = Device::new(an_hour(), "");
     device.measure(80, 3950, false);
-    let rows = device.view();
+    // The lines are on the pages the screen's size makes of the view.
+    let rows = every_page(&mut device);
     assert_eq!(value(&rows, "An hour awake"), "5.0 %", "{rows:?}");
     assert_eq!(value(&rows, "100 pages"), "5.0 %", "{rows:?}");
 }
@@ -332,7 +333,7 @@ fn the_view_shows_what_each_plugin_did_with_the_network() {
         .kernel
         .run_action(Instant(device.now), Id::new_static("net.go"));
     device.settle(effects);
-    let rows = device.view();
+    let rows = every_page(&mut device);
     assert!(has(&rows, "Network this time awake"), "{rows:?}");
     assert!(has(&rows, "2 requests"), "{rows:?}");
     assert!(has(&rows, "1 held back · network off"), "{rows:?}");

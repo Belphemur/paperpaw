@@ -1155,7 +1155,7 @@ static LOOK: [SettingSpec; 15] = [
         "core.setting.ui-size",
         7,
         24,
-        9,
+        8,
         groups::LOOK,
     )
     .with_extra(&PT_SLIDER)

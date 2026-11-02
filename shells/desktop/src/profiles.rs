@@ -248,7 +248,7 @@ macro_rules! x4_settings {
     ($keyboard:literal) => {
         [
             // A 4.3" screen: smaller text, so menus and pages hold enough.
-            ("core.ui-size", "9"),
+            ("core.ui-size", "8"),
             ("core.font-size", "9"),
             // The keyboard's size: large keys to tap on the X4 Pro, small ones
             // chosen with the buttons on the others (the firmware's
