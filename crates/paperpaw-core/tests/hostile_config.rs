@@ -93,7 +93,7 @@ fn values_out_of_range_or_of_the_wrong_kind_keep_their_defaults() {
                   keymap-preset = core.no-such-preset\n";
     let (kernel, warnings) = with_config(&harness, config);
     let settings = kernel.settings();
-    assert_eq!(settings.int("core.ui-size"), 9);
+    assert_eq!(settings.int("core.ui-size"), 8);
     assert!(!settings.bool("core.night-mode"));
     assert_eq!(settings.int("core.full-refresh-interval"), 6);
     assert_eq!(settings.int("core.long-press-ms"), 500);
@@ -268,7 +268,7 @@ fn a_broken_device_key_map_is_reported_as_the_devices() {
         .collect();
     assert_eq!(device, [Some(2), Some(4), Some(5)], "{warnings:?}");
     // A key map is no place for settings.
-    assert_eq!(kernel.settings().int("core.ui-size"), 9);
+    assert_eq!(kernel.settings().int("core.ui-size"), 8);
     kernel.start(Instant(0));
     assert_eq!(kernel.active_screen(), Some(&common::BASE));
 }

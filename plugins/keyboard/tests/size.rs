@@ -163,7 +163,9 @@ fn round_keys_take_about_30_40_and_50_percent() {
         let least = Metrics::new(device.display.dpi).mm(4) as u16;
         for (size, near) in SIZES.iter().zip([30, 40, 50]) {
             let parts = sized(device, size);
-            let share = u32::from(height(device, &parts)) * 100 / u32::from(device.display.height);
+            // In whole percent, rounded (303 of 800 px is 38 %, not 37).
+            let screen = u32::from(device.display.height);
+            let share = (u32::from(height(device, &parts)) * 100 + screen / 2) / screen;
             // Where the keys are as small as a finger allows, the
             // keyboard is as low as it can be.
             let floored = step(&parts) == least && share > near;

@@ -768,24 +768,31 @@ impl UiStyle {
         let rows = s.read(&settings::UI_ROW).clamp(120, 300) as f32 / 100.0;
         let small = m.pt(base * 0.75);
         // A row holds a label on two lines in the smallest size rows set
-        // it in (see `draw_value_row`): where even that does not fit (at
-        // the largest sizes, whose fonts come in steps), rows are as high
-        // as two lines of small text; at other sizes they stay as they are.
+        // it in (see `draw_value_row`): where even that does not fit (the
+        // fonts come in steps, and the least line is as high as a size
+        // above it: at the smallest sizes), rows are as high as two of
+        // those lines and a little room; at other sizes they stay as they
+        // are. Never more than a row of the next size up, so that rows
+        // do not grow as the text gets smaller.
         let control_row = line_height * rows;
         let row = match &font {
-            Some(f) if 2.0 * f.line_metrics(small * 0.7).line_height > control_row => {
-                control_row.max(2.0 * f.line_metrics(small).line_height + m.mm(2) as f32)
-            }
+            Some(f) if 2.0 * f.line_metrics(small * 0.7).line_height > control_row => control_row
+                .max(2.0 * f.line_metrics(small * 0.7).line_height + m.tenth_mm(6) as f32),
             _ => control_row,
         };
+        // On touch screens a row is as high as a fingertip at the least
+        // (about 7 mm), however small the text is set: the bars grow with
+        // the rows.
+        let finger = if env.device().input.touch { m.mm(7) } else { 0 };
+        let lift = finger.saturating_sub(row as u32);
         Self {
             text,
             small,
             title: m.pt(base * 1.15),
             head: m.pt(base * s.read(&settings::UI_TITLE).clamp(100, 200) as f32 / 100.0),
-            row: row as u32,
-            control_row: control_row as u32,
-            header: (line_height * (rows + 0.1)) as u32,
+            row: (row as u32).max(finger),
+            control_row: (control_row as u32).max(finger),
+            header: (line_height * (rows + 0.1)) as u32 + lift,
             margin: m.mm(s.read(&settings::UI_MARGIN).clamp(0, 15) as u32),
             gap: m.mm(2),
             line: m
@@ -816,7 +823,7 @@ impl UiStyle {
             plain_header: s.text(settings::UI_HEADER.as_str()) == settings::HEADER_PLAIN,
             cards: s.text(settings::UI_GROUPS.as_str()) == settings::GROUPS_CARDS,
             grays: env.device().display.format.gray_levels().unwrap_or(256),
-            finger: if env.device().input.touch { m.mm(7) } else { 0 },
+            finger,
             look: env.look(),
             palette: Palette::parse(s.text(settings::UI_PALETTE.as_str())),
             direction: u8::from(env.direction() == paperpaw_lang::Direction::Rtl),

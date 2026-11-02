@@ -525,3 +525,47 @@ fn wifi_online_holds_for_the_devices_stdio_starts() {
             .join("\n")
     );
 }
+
+/// The height of the first row of the settings list and how many rows it
+/// shows on the first screen, on the X4 with the interface text set to
+/// `size` points (the default, 8, where `None`).
+fn settings_rows(size: Option<u32>) -> (u32, usize) {
+    let set = size.map(|n| format!("core.ui-size={n}"));
+    let args: Vec<&str> = set.iter().flat_map(|s| ["--set", s.as_str()]).collect();
+    let run = run(
+        "rows",
+        "xteink-x4",
+        "run:core.settings,wait:300,describe",
+        &args,
+    );
+    assert!(run.ok, "{}", run.stderr);
+    // `Row "…" at x,y WxH`
+    let heights: Vec<u32> = run
+        .stdout
+        .lines()
+        .filter(|l| l.starts_with("Row "))
+        .filter_map(|l| l.rsplit_once(" at ")?.1.rsplit_once('x')?.1.parse().ok())
+        .collect();
+    (heights[0], heights.len())
+}
+
+/// Smaller interface text never makes rows taller: the fonts come in steps
+/// and the least line of one is as high as a size above it, which once
+/// made the rows of 8 pt (73 px on the X4) taller than those of 9 pt (63),
+/// and the list show fewer rows with smaller text (#119).
+#[test]
+fn rows_do_not_grow_as_the_interface_text_gets_smaller() {
+    let rows: Vec<(u32, (u32, usize))> = (7..=11).map(|n| (n, settings_rows(Some(n)))).collect();
+    for pair in rows.windows(2) {
+        let ((small, (low, _)), (large, (high, _))) = (pair[0], pair[1]);
+        assert!(
+            low <= high,
+            "rows of {small} pt ({low} px) are taller than of {large} pt ({high} px): {rows:?}"
+        );
+    }
+    // The default is 8 pt, and it shows at least as many rows as 9 pt.
+    let default = settings_rows(None);
+    assert_eq!(default, rows[1].1, "the default is 8 pt: {rows:?}");
+    assert!(default.1 >= rows[2].1.1, "{rows:?}");
+    eprintln!("settings rows (height, count) by size: {rows:?}");
+}

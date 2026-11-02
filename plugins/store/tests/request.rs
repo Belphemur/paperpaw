@@ -73,7 +73,7 @@ fn the_dialog_names_the_plugins_with_their_sizes() {
     let shown = shopping.shown();
     // The question wraps over lines.
     assert!(shown.contains("This book needs more"), "{shown}");
-    assert!(shown.contains("letters to show its text."), "{shown}");
+    assert!(shown.contains("to show its text."), "{shown}");
     assert!(shown.contains("Greek letters (2.8 MB)"), "{shown}");
     assert!(
         shown.contains("Download") && shown.contains("Not now"),

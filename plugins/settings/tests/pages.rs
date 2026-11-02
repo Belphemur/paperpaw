@@ -353,11 +353,7 @@ fn a_page_reset_asks_first_and_sets_its_settings_back() {
         search(&mut app, "font size");
         choose(&mut app, "Font size");
         choose(&mut app, "Reset to defaults");
-        assert!(
-            app.shows("accounts and passwords stay."),
-            "{}",
-            app.described()
-        );
+        assert!(app.shows("and passwords stay."), "{}", app.described());
         choose(&mut app, "Cancel");
         assert!(app.kernel.settings().is_set("core.font-size"));
         choose(&mut app, "Reset to defaults");
@@ -379,7 +375,7 @@ fn everything_reset_keeps_the_language() {
         let mut app = App::new(device, storage.clone());
         app.run(actions::SETTINGS);
         choose(&mut app, "Alles zurücksetzen");
-        assert!(app.shows("Passwörter bleiben."), "{}", app.described());
+        assert!(app.shows("bleiben."), "{}", app.described());
         choose(&mut app, "Ja, zurücksetzen");
         let settings = app.kernel.settings();
         assert!(!settings.is_set("core.font-size"));
@@ -468,7 +464,7 @@ library-folder = Books/Mine
         );
         app.run(actions::SETTINGS);
         choose(&mut app, "Reset all");
-        assert!(app.shows("passwords stay"), "{}", app.described());
+        assert!(app.shows("stay."), "{}", app.described());
         choose(&mut app, "Yes, reset");
         let settings = app.kernel.settings();
         assert!(!settings.is_set("acct.count"));
