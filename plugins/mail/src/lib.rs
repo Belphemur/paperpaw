@@ -5,6 +5,7 @@
 
 extern crate alloc;
 
+pub mod account;
 pub mod codec;
 pub mod compose;
 pub mod driver;
