@@ -24,10 +24,8 @@ use crate::tags;
 const PAGE: u64 = 64;
 /// Notes of the index at most.
 pub(crate) const MAX_NOTES: u32 = 50_000;
-/// Folders waiting to be walked at most.
-const MAX_PENDING: usize = 500;
-/// Folders below one another at most.
-const MAX_DEPTH: usize = 24;
+/// Folders below one another at most (the vault's folder is the first).
+const MAX_DEPTH: u8 = 24;
 /// Notes whose tags are read in one step.
 pub(crate) const TAGGED_PER_STEP: usize = 3;
 /// Distinct tags listed at most.
@@ -110,17 +108,44 @@ pub(crate) enum Step {
     Failed,
 }
 
+/// Which of a folder's entries are looked at.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Look {
+    /// Its notes, a page at a time.
+    Notes,
+    /// Its folders, one after the other: each is walked before the next is
+    /// found, so a folder of thousands of folders costs a frame, not
+    /// thousands.
+    Folders,
+}
+
 /// A folder being walked, and where its listing goes on.
 #[derive(Debug)]
 struct Frame {
     dir: String,
     from: u64,
+    /// Folders above it; the vault's folder has none.
+    depth: u8,
+    look: Look,
+}
+
+impl Frame {
+    fn new(dir: String, depth: u8) -> Self {
+        Self {
+            dir,
+            from: 0,
+            depth,
+            look: Look::Notes,
+        }
+    }
 }
 
 /// Walks the vault a piece at a time and writes the index.
 #[derive(Debug)]
 pub(crate) struct Indexer {
     root: String,
+    /// The folders from the vault's down to the one being walked: at most
+    /// [`MAX_DEPTH`].
     stack: Vec<Frame>,
     buffer: String,
     pub notes: u32,
@@ -132,10 +157,7 @@ impl Indexer {
     pub(crate) fn new(root: &str) -> Self {
         let root = root.trim_matches('/').to_string();
         Self {
-            stack: alloc::vec![Frame {
-                dir: root.clone(),
-                from: 0
-            }],
+            stack: alloc::vec![Frame::new(root.clone(), 0)],
             root,
             buffer: String::new(),
             notes: 0,
@@ -157,16 +179,16 @@ impl Indexer {
                 return Step::Failed;
             }
         }
-        let depth = self.stack.len();
         let Some(frame) = self.stack.last() else {
             return self.finish(storage);
         };
-        let (dir, from) = (frame.dir.clone(), frame.from);
-        let mut below: Vec<String> = Vec::new();
+        let (dir, from, depth, look) = (frame.dir.clone(), frame.from, frame.depth, frame.look);
+        let mut child: Option<String> = None;
         let mut seen = 0u64;
         let (buffer, notes, stamp) = (&mut self.buffer, &mut self.notes, &mut self.stamp);
         let listed = storage.list_from(&dir, from, &mut |entry| {
-            if seen >= PAGE {
+            // A page of entries, or, looking for folders, one found.
+            if seen >= PAGE || child.is_some() {
                 return false;
             }
             seen += 1;
@@ -175,15 +197,17 @@ impl Indexer {
             if note::is_hidden(entry.name) || entry.name.chars().any(char::is_control) {
                 return true;
             }
-            if entry.is_dir {
-                below.push(join(&dir, entry.name));
-            } else if note::is_note(entry.name) && *notes < MAX_NOTES {
-                let modified = entry.modified.unwrap_or(0);
-                buffer.push_str(&alloc::format!("{modified}\t{}\n", join(&dir, entry.name)));
-                *notes += 1;
-                *stamp = stamp
-                    .wrapping_mul(1_000_003)
-                    .wrapping_add(modified as u64 ^ entry.size);
+            match look {
+                Look::Folders if entry.is_dir => child = Some(join(&dir, entry.name)),
+                Look::Notes if !entry.is_dir && note::is_note(entry.name) && *notes < MAX_NOTES => {
+                    let modified = entry.modified.unwrap_or(0);
+                    buffer.push_str(&alloc::format!("{modified}\t{}\n", join(&dir, entry.name)));
+                    *notes += 1;
+                    *stamp = stamp
+                        .wrapping_mul(1_000_003)
+                        .wrapping_add(modified as u64 ^ entry.size);
+                }
+                _ => {}
             }
             true
         });
@@ -193,16 +217,20 @@ impl Indexer {
                     frame.from = next;
                 }
             }
+            // The notes are done: its folders next, from the start.
+            Ok(None) | Err(_) if look == Look::Notes => {
+                if let Some(frame) = self.stack.last_mut() {
+                    (frame.from, frame.look) = (0, Look::Folders);
+                }
+            }
             Ok(None) | Err(_) => {
                 self.stack.pop();
             }
         }
-        if depth < MAX_DEPTH {
-            for sub in below.into_iter().rev() {
-                if self.stack.len() < MAX_PENDING {
-                    self.stack.push(Frame { dir: sub, from: 0 });
-                }
-            }
+        if let Some(sub) = child
+            && depth + 1 < MAX_DEPTH
+        {
+            self.stack.push(Frame::new(sub, depth + 1));
         }
         if self.buffer.len() > 2048 && !self.flush(storage) {
             return Step::Failed;

@@ -345,6 +345,48 @@ fn many(count: usize, folders: usize) -> Vec<(String, String)> {
         .collect()
 }
 
+/// The paths of the index made for `notes`.
+fn indexed(notes: &[(String, String)]) -> Vec<String> {
+    let mut vault = Vault::new(notes, "vault");
+    vault.open(HOME, Params::new());
+    let index = vault
+        .storage
+        .0
+        .get(".paperpaw/plugins/notes-vault/index.txt")
+        .unwrap();
+    String::from_utf8(index)
+        .unwrap()
+        .lines()
+        .filter_map(|l| l.split_once('\t').map(|(_, p)| p.to_string()))
+        .collect()
+}
+
+#[test]
+fn notes_in_nested_folders_are_all_indexed() {
+    // 30 folders side by side, each with a folder holding a note: the
+    // folders waiting must not count as depth.
+    let notes: Vec<_> = (0..30)
+        .map(|k| note(&format!("vault/T{k:02}/Sub/n{k}.md"), "# n\n"))
+        .collect();
+    assert_eq!(indexed(&notes).len(), 30);
+    // Deep, but within the depth (the vault's folder and 22 below).
+    let deep = (0..22)
+        .map(|k| format!("d{k}"))
+        .collect::<Vec<_>>()
+        .join("/");
+    let notes = [note(&format!("vault/{deep}/Deep.md"), "# d\n")];
+    assert_eq!(indexed(&notes).len(), 1);
+}
+
+#[test]
+fn a_folder_of_many_folders_is_indexed_whole() {
+    // More folders than the walk once waited for (500): none left out.
+    let notes: Vec<_> = (0..700)
+        .map(|k| note(&format!("vault/G{k:03}/n{k}.md"), "# n\n"))
+        .collect();
+    assert_eq!(indexed(&notes).len(), 700);
+}
+
 #[test]
 fn five_thousand_notes_are_listed_a_window_at_a_time() {
     let mut vault = Vault::new(&many(5000, 1), "vault");
