@@ -1,11 +1,11 @@
 // Made by tools/shared-table.py from shared.list: do not edit.
 
 /// The revision of each family (`shared.list`).
-pub const REVISIONS: crate::Revisions = [1, 0, 1, 1, 0, 1, 0, 0];
+pub const REVISIONS: crate::Revisions = [1, 0, 2, 1, 0, 1, 0, 0];
 /// The oldest revision of each family whose plugins still run.
-pub const OLDEST: crate::Revisions = [1, 0, 1, 1, 0, 1, 0, 0];
+pub const OLDEST: crate::Revisions = [1, 0, 2, 1, 0, 1, 0, 0];
 /// Eight hex digits naming the tables of this build, for logs.
-pub const HASH: &str = "ab1ff4dc";
+pub const HASH: &str = "3ceb8132";
 
 /// The text family's table.
 pub mod text {
