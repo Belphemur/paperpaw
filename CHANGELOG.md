@@ -76,6 +76,8 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   widgets), up and down go round in the column: up from the top row to the lowest entry below, down from the bottom
   row to the top. Off, as before, they go round the whole list.
   For the lists of PaperPaw's own plugins; store plugins follow once they are built again.
+  The library's Find screen follows it too: up and down (and the page buttons) go round the search and the letters in
+  the column the focus left.
 - **Secure connections for plugins** (#81). Plugins can open HTTPS, IMAP and SMTP connections: the X4 does the encryption
   itself (one connection at a time), the emulator and the Android app use rustls. A server whose certificate no authority
   vouches for is shown and trusted only after you say so, and then only that certificate or key. The X4 just after a

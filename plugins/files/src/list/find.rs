@@ -10,7 +10,7 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use paperpaw_sdk::builtin::actions;
+use paperpaw_sdk::builtin::{actions, settings};
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
@@ -38,6 +38,9 @@ pub(crate) struct FindScreen {
     note: Rect,
     /// 0 is the search, then the letters.
     focus: usize,
+    /// The letters' column the focus last left (for "Arrow keys stay on
+    /// the page": the rows go round in their column).
+    column: usize,
     shown: bool,
 }
 
@@ -95,6 +98,7 @@ impl FindScreen {
         );
         Self {
             focus: 0,
+            column: 0,
             shown: ui::focus_shown(env),
             columns: usize::from(columns),
             style,
@@ -112,6 +116,8 @@ impl FindScreen {
         let before = self.focus;
         if !self.shown {
             self.shown = true;
+        } else if delta.abs() > 1 && cx.env().settings().read(&settings::ARROWS_STAY_ON_PAGE) {
+            self.focus = self.round_row(delta < 0);
         } else if delta < -1 && (1..=self.columns).contains(&self.focus) {
             // Up from the first row of letters is the search.
             self.focus = 0;
@@ -121,6 +127,31 @@ impl FindScreen {
         }
         // The search or the letter the focus left, and where it came to.
         ui::ListChange::focus(self.place(before), self.place(self.focus)).request(cx);
+    }
+
+    /// A row up or down with "Arrow keys stay on the page": the search
+    /// and the rows of letters are the page, and past either end the
+    /// focus goes round to the other, in the column it left (up from the
+    /// search is the lowest row that has the column). Left and right
+    /// already go round the whole screen.
+    fn round_row(&mut self, up: bool) -> usize {
+        let (columns, count) = (self.columns, self.letters.len());
+        if count == 0 {
+            return 0;
+        }
+        if self.focus > 0 {
+            self.column = (self.focus - 1) % columns;
+        }
+        let column = self.column.min(count - 1);
+        let rows = count.div_ceil(columns);
+        let at = |row: usize| (row * columns + column < count).then(|| row * columns + column + 1);
+        match (self.focus.checked_sub(1).map(|n| n / columns), up) {
+            (None, true) => at(rows - 1).or_else(|| at(rows - 2)).unwrap_or(0),
+            (None, false) => at(0).unwrap_or(0),
+            (Some(0), true) => 0,
+            (Some(row), true) => at(row - 1).unwrap_or(0),
+            (Some(row), false) => at(row + 1).unwrap_or(0),
+        }
     }
 
     /// Where place `index` is: the search, then the letters.
