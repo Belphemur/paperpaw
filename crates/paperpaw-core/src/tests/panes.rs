@@ -1,7 +1,12 @@
 //! A list and the item chosen in it beside each other where the screen is
 //! wide (`Pane::DETAIL`): the parts they have, where input goes, a detail
 //! in place of another, what ends it, the X4 never, and the display's new
-//! size told (`events::DISPLAY_CHANGED`).
+//! size told (`events::DISPLAY_CHANGED`). Built without the `panes`
+//! feature (the Xteink devices), never beside each other.
+#![cfg_attr(
+    not(feature = "panes"),
+    allow(dead_code, unused_imports, reason = "the tests of panes are left out")
+)]
 
 use super::*;
 use core::cell::Cell;
@@ -187,6 +192,7 @@ fn took(log: &Log) -> Vec<String> {
     log.take()
 }
 
+#[cfg(feature = "panes")]
 #[test]
 fn a_detail_shows_beside_its_list_where_the_screen_is_wide() {
     let log = log();
@@ -239,6 +245,7 @@ fn a_medium_screen_shows_a_detail_alone() {
 
 /// Keys go to the detail at first; a tap goes to the part it lands in,
 /// in its coordinates, and keys follow it there.
+#[cfg(feature = "panes")]
 #[test]
 fn a_tap_moves_input_to_the_part_it_lands_in() {
     let log = log();
@@ -262,6 +269,7 @@ fn a_tap_moves_input_to_the_part_it_lands_in() {
 
 /// `core.pane.other` moves keys to the other part and back; alone, the
 /// list keeps them.
+#[cfg(feature = "panes")]
 #[test]
 fn the_other_pane_action_moves_keys_between_the_two() {
     let log = log();
@@ -280,6 +288,7 @@ fn the_other_pane_action_moves_keys_between_the_two() {
 /// A detail the list opens while keys are its own takes the place of the
 /// one shown (closed, dropped before): going through a list piles nothing
 /// up, the list is not laid out again, and keys stay with it.
+#[cfg(feature = "panes")]
 #[test]
 fn a_detail_the_list_opens_takes_the_place_of_the_one_shown() {
     let log = log();
@@ -296,6 +305,7 @@ fn a_detail_the_list_opens_takes_the_place_of_the_one_shown() {
 
 /// A detail the detail opens shows alone over both (they are hidden);
 /// *Back* brings the two back, each shown again.
+#[cfg(feature = "panes")]
 #[test]
 fn a_detail_the_detail_opens_shows_alone_over_both() {
     let log = log();
@@ -313,6 +323,7 @@ fn a_detail_the_detail_opens_shows_alone_over_both() {
 
 /// *Back* closes the detail: the list has all of the width again, and
 /// keys are the screen on top's.
+#[cfg(feature = "panes")]
 #[test]
 fn back_closes_the_detail_and_the_list_takes_the_whole_width() {
     let log = log();
@@ -338,6 +349,7 @@ fn back_closes_the_detail_and_the_list_takes_the_whole_width() {
 /// Turned to narrow, the two part: the list laid out for all of the
 /// screen and hidden below the detail; turned back, beside it again and
 /// shown. Plugins hear the display's size once each time.
+#[cfg(feature = "panes")]
 #[test]
 fn turning_narrow_and_back_parts_and_joins_them() {
     let log = log();
@@ -374,6 +386,7 @@ fn turning_narrow_and_back_parts_and_joins_them() {
 
 /// The list beside the detail runs as the screen on top does: its time
 /// comes.
+#[cfg(feature = "panes")]
 #[test]
 fn the_list_beside_the_detail_gets_its_time() {
     let log = log();
@@ -387,6 +400,7 @@ fn the_list_beside_the_detail_gets_its_time() {
 
 /// An overlay over the detail takes input; the two stay beside each
 /// other under it.
+#[cfg(feature = "panes")]
 #[test]
 fn an_overlay_over_the_detail_takes_input() {
     let log = log();
@@ -402,6 +416,7 @@ fn an_overlay_over_the_detail_takes_input() {
 }
 
 /// In a right-to-left interface the list's part is on the right.
+#[cfg(feature = "panes")]
 #[test]
 fn right_to_left_the_list_is_on_the_right() {
     let log = log();
@@ -443,4 +458,24 @@ fn the_display_change_says_the_class() {
             "list show"
         ]
     );
+}
+
+/// Built without panes (the Xteink devices): a detail is a full screen
+/// even where the screen is wide, and there is no action to move input
+/// between parts.
+#[cfg(not(feature = "panes"))]
+#[test]
+fn without_panes_a_detail_is_a_full_screen_even_where_wide() {
+    let log = log();
+    let mut kernel = on(DEVICE, WIDE, &log);
+    kernel.run_action(Instant(100), OPEN);
+    render(&mut kernel);
+    let whole = Rect::new(0, 0, WIDE.0, WIDE.1);
+    assert_eq!(areas(&kernel), [whole, whole]);
+    assert_eq!(kernel.panes(), None);
+    assert_eq!(took(&log), ["list hide", "d1 show"]);
+    let other = actions::PANE_OTHER.as_str();
+    assert!(kernel.shared.actions.get(other).is_none());
+    kernel.run_action(Instant(200), actions::PANE_OTHER);
+    assert_eq!(kernel.input_index(), Some(1));
 }

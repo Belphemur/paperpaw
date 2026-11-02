@@ -12,7 +12,11 @@ categories = ["no-std", "embedded"]
 keywords = ["e-reader", "e-ink", "epaper"]
 
 [features]
-default = []
+default = ["panes"]
+# A list and its detail beside each other on wide screens (`src/panes.rs`).
+# Devices never wide (the Xteink ones) build without it, to save its code;
+# the SDK is the same either way.
+panes = []
 # Colour framebuffers for colour e-ink panels.
 color = ["paperpaw-graphics/color"]
 # Scalable OpenType/TrueType fonts; not available on the ESP32-C3.

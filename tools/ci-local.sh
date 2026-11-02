@@ -131,7 +131,7 @@ g_lint() {
 g_test() {
     run "test: workspace" "cargo test --workspace"
     run "test: tools/bluetooth-tests" "cargo test --manifest-path tools/bluetooth-tests/Cargo.toml --locked --target x86_64-unknown-linux-gnu"
-    run "test: text and fonts without default features" "cargo test -p paperpaw-text -p paperpaw-plugin-fonts-default --no-default-features"
+    run "test: text and fonts without default features" "cargo test -p paperpaw-text -p paperpaw-plugin-fonts-default -p paperpaw-core --no-default-features"
 }
 
 g_doc() {

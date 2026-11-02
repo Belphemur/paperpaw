@@ -4,6 +4,10 @@
 //! Two screens of the stack as ever: nothing routes commands between them,
 //! and where the screen is not wide (the X4 in either orientation) a
 //! detail is an ordinary full screen.
+//!
+//! Built with the `panes` feature (by default): devices that are never
+//! wide (the Xteink ones) build without it, and save its code; there no
+//! screen shows beside another and [`actions::PANE_OTHER`] is not there.
 
 #[allow(
     unused_imports,
@@ -23,6 +27,23 @@ const LIST_PERCENT: u32 = 38;
 /// The line between the two parts, in tenths of a millimetre.
 const LINE_TENTHS: u32 = 2;
 
+/// The action that moves input to the other part, list or detail; none
+/// without the `panes` feature.
+pub(crate) fn register(r: &mut paperpaw_sdk::Registrar) -> Result<(), paperpaw_sdk::RegisterError> {
+    use paperpaw_sdk::FixedAction;
+    use paperpaw_sdk::builtin::actions;
+    static PANES: [FixedAction; 1] =
+        [
+            FixedAction::new(actions::PANE_OTHER, "core.action.pane-other").handler(|_, _, out| {
+                out.push(Command::extended(actions::PANE_OTHER, Params::new()));
+            }),
+        ];
+    if cfg!(feature = "panes") {
+        r.add_actions(&PANES)?;
+    }
+    Ok(())
+}
+
 impl Kernel {
     /// The topmost full screen: it and the overlays above it show (and the
     /// list beside it, see [`Kernel::panes`]).
@@ -41,7 +62,8 @@ impl Kernel {
     /// [`ScreenClass::Expanded`].
     pub(crate) fn panes(&self) -> Option<(usize, usize)> {
         // Most devices never have a detail open: nothing else is asked.
-        if !self.stack.iter().any(|active| active.pane == Pane::DETAIL) {
+        if !cfg!(feature = "panes") || !self.stack.iter().any(|active| active.pane == Pane::DETAIL)
+        {
             return None;
         }
         let detail = self.full_base();
@@ -102,7 +124,11 @@ impl Kernel {
     /// says it is one ([`Pane::DETAIL`]), is a full screen, the screen on
     /// top a full screen that is no detail itself, and `area` is wide.
     pub(crate) fn beside_top(&self, screen: &dyn Screen, pane: Pane, area: Rect) -> Option<Rect> {
-        if pane != Pane::DETAIL || self.guard().is_some() || screen.mode().is_full_screen() {
+        if !cfg!(feature = "panes")
+            || pane != Pane::DETAIL
+            || self.guard().is_some()
+            || screen.mode().is_full_screen()
+        {
             return None;
         }
         let top = self.stack.len().checked_sub(1)?;

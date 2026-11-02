@@ -78,7 +78,9 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   (`DisplayChanged`: the display's width, height, class and whether it is on its side, sent once after a resize
   laid the screens out), `actions::PANE_OTHER` and `Command::extended`, which plugins had no way to make. Screens
   are asked `pane` once, when made. A list kept by `on_resize` while a turn puts its detail over it is told
-  `on_hide`.
+  `on_hide`. The kernel's new `panes` feature (on by default) builds it; the Xteink firmware (X4, X4 Pro, X4
+  Classic, X3), never wide, leaves it out and saves its code. There a detail is always a full screen and
+  `core.pane.other` is not offered; the SDK is the same either way.
 - UI: `UiStyle::flip` and `UiStyle::flip_x` are public (#33): a screen lays a row or a grid out once from the left
   and mirrors each part where the interface runs right to left, as the SDK's own parts do. New functions, no
   change of what plugins built before see; their api.txt lines come with the next bless. The library's rows and
