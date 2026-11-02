@@ -138,11 +138,7 @@ fn with_display(
                 .map(|&size| (size, DISPLAY_CHARS.chars().collect())),
         );
     for (size, chars) in strikes {
-        let glyphs = chars
-            .into_iter()
-            .filter(|&ch| font.has_char(ch))
-            .map(|ch| (ch, font.rasterize(ch, size)))
-            .collect();
+        let glyphs = font.rasterize_chars(chars.into_iter().filter(|&ch| font.has_char(ch)), size);
         builder.add_strike(size, font.line_metrics(size), glyphs);
     }
     builder.build()

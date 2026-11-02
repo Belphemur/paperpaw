@@ -147,7 +147,7 @@ def build(base, sets):
     for name, file, weight, _ in faces:
         axis = ["--axis", f"wght={weight}"] if weight else []
         subprocess.run([str(FONTGEN), str(file), str(out / "fonts" / f"{name}.ppfp"),
-                        "--chars", chars, *axis], check=True)
+                        "--chars", chars, "--hinting", "none", *axis], check=True)
     extends = "\n".join(f"{name}.ppfp = {extended}" for name, _, _, extended in faces)
     listed = data.plugins().get(id)
     if listed:

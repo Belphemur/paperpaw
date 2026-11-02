@@ -348,12 +348,10 @@ pub fn build_pack(
         builder.table(BitmapFont::ANCHORS, 1, &anchors::build(&anchored));
     }
     for &size in sizes {
-        let glyphs = chars
-            .clone()
-            .into_iter()
-            .filter(|&ch| font.has_char(ch))
-            .map(|ch| (ch, font.rasterize(ch, size)))
-            .collect();
+        let glyphs = font.rasterize_chars(
+            chars.clone().into_iter().filter(|&ch| font.has_char(ch)),
+            size,
+        );
         builder.add_strike(size, font.line_metrics(size), glyphs);
     }
     builder.build()

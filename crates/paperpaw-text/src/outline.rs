@@ -186,24 +186,56 @@ impl OutlineFont {
 
     /// Rasterizes `ch`; missing characters render as U+FFFD or `.notdef`.
     pub fn rasterize(&self, ch: char, size: f32) -> Glyph {
+        self.rasterize_chars([ch], size)
+            .pop()
+            .map_or_else(|| Glyph::empty(0.0), |(_, glyph)| glyph)
+    }
+
+    /// Rasterizes each of `chars` at `size`, as [`OutlineFont::rasterize`]
+    /// does, but sets the hinter up once for all of them: for packs.
+    pub fn rasterize_chars(
+        &self,
+        chars: impl IntoIterator<Item = char>,
+        size: f32,
+    ) -> Vec<(char, Glyph)> {
         let Some(font) = self.font_ref() else {
-            return Glyph::empty(0.0);
+            return chars
+                .into_iter()
+                .map(|ch| (ch, Glyph::empty(0.0)))
+                .collect();
         };
-        let id = Self::glyph_id(&font, ch);
-        let advance = font
-            .glyph_metrics(Size::new(size), &self.location)
-            .advance_width(id)
-            .unwrap_or(0.0)
-            .max(0.0);
-        let mut pen = Pen::default();
         let outlines = font.outline_glyphs();
         // A hinter that cannot be made for this font or size draws the
         // outline as it is.
         let hinter = self.hinting.options().and_then(|options| {
             HintingInstance::new(&outlines, Size::new(size), &self.location, options).ok()
         });
+        chars
+            .into_iter()
+            .map(|ch| {
+                let glyph = self.rasterize_with(&font, &outlines, hinter.as_ref(), ch, size);
+                (ch, glyph)
+            })
+            .collect()
+    }
+
+    fn rasterize_with(
+        &self,
+        font: &FontRef<'_>,
+        outlines: &skrifa::outline::OutlineGlyphCollection<'_>,
+        hinter: Option<&HintingInstance>,
+        ch: char,
+        size: f32,
+    ) -> Glyph {
+        let id = Self::glyph_id(font, ch);
+        let advance = font
+            .glyph_metrics(Size::new(size), &self.location)
+            .advance_width(id)
+            .unwrap_or(0.0)
+            .max(0.0);
+        let mut pen = Pen::default();
         if let Some(outline) = outlines.get(id) {
-            let settings = match &hinter {
+            let settings = match hinter {
                 Some(hinter) => DrawSettings::hinted(hinter, false),
                 None => DrawSettings::unhinted(Size::new(size), &self.location),
             };
