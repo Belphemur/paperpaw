@@ -32,6 +32,8 @@ pub(crate) struct Grid {
     pad: u16,
     /// Room between a cell's edges and its focus.
     edge: u16,
+    /// The interface runs right to left: the first cover is at the right.
+    rtl: bool,
 }
 
 /// Width of a cover column, at least, in millimetres (on larger screens).
@@ -70,6 +72,7 @@ impl Grid {
             cover: (cover_w, cover_h),
             pad,
             edge,
+            rtl: style.is_rtl(),
         }
     }
 
@@ -83,6 +86,13 @@ impl Grid {
         let columns = usize::from(self.columns.max(1));
         let (row, column) = (slot / columns, slot % columns);
         let x = area.x + self.left + column as u16 * self.column;
+        let x = if self.rtl {
+            // Mirrored in the area: as far from its right edge as from its left.
+            (2 * i32::from(area.x) + i32::from(area.width) - i32::from(x) - i32::from(self.column))
+                .clamp(0, i32::from(u16::MAX)) as u16
+        } else {
+            x
+        };
         Rect::new(x, top + row as u16 * self.cell, self.column, self.cell)
     }
 
@@ -145,14 +155,25 @@ pub(crate) fn draw_cell(
     let mut cover = Rect::new(around.x + grid.pad, around.y + grid.pad, w, h);
     let stack = count > 1;
     if stack {
-        // Two covers' edges behind, up and to the right.
+        // Two covers' edges behind, up and to the right (to the left where
+        // the interface runs right to left).
         let lift = (gap / 3).max(3);
-        cover = Rect::new(cover.x, cover.y + 2 * lift, w - 2 * lift, h - 2 * lift);
+        let shift = if grid.rtl { 2 * lift } else { 0 };
+        cover = Rect::new(
+            cover.x + shift,
+            cover.y + 2 * lift,
+            w - 2 * lift,
+            h - 2 * lift,
+        );
         let radius = crate::cover_radius(style, cover);
         let line = ui::button_border(style);
         for n in (1..=2u16).rev() {
             let behind = Rect::new(
-                cover.x + n * lift,
+                if grid.rtl {
+                    cover.x - n * lift
+                } else {
+                    cover.x + n * lift
+                },
                 cover.y - n * lift,
                 cover.width,
                 cover.height,
@@ -165,16 +186,19 @@ pub(crate) fn draw_cell(
     rows::draw_cover(ui, cover, book, ink);
     draw_marks(ui, sizes, cover, book, count);
 
-    // The title (or the series), on one or two lines below.
+    // The title (or the series), on one or two lines below (from the
+    // right where the interface runs right to left).
     let x = around.x + grid.pad;
     let width = around.width.saturating_sub(2 * grid.pad);
+    let flip = rows::Flip::new(style, around);
     let mut y = around.y + grid.pad + h + gap / 3;
     for line in &book.lines {
         let area = Rect::new(x, y, width, sizes.small_line);
+        let at = flip.at(x, ui.font().map_or(0.0, |f| f.measure(style.small(), line)));
         ui::Label::new(line)
             .px(style.small())
             .color(ink)
-            .draw_from(ui, f32::from(x), area);
+            .draw_from(ui, at, area);
         y += sizes.small_line;
     }
 }
@@ -216,10 +240,12 @@ fn draw_marks(ui: &mut ui::Ui<'_>, sizes: &Sizes, cover: Rect, book: &Loaded, co
         cover.width.saturating_sub(2 * inset),
         line,
     );
+    let flip = rows::Flip::new(style, cover);
     if count > 1 {
+        let w = rows::tag_width(env, style, &book.stack);
         rows::draw_tag(
             ui,
-            foot.x,
+            flip.span(foot.x, w),
             foot,
             &book.stack,
             true,
@@ -232,7 +258,12 @@ fn draw_marks(ui: &mut ui::Ui<'_>, sizes: &Sizes, cover: Rect, book: &Loaded, co
         100 => {
             // A check in a dark disc, at the foot's end.
             let d = line;
-            let disc = Rect::new((foot.x + foot.width).saturating_sub(d), foot.y, d, d);
+            let disc = flip.rect(Rect::new(
+                (foot.x + foot.width).saturating_sub(d),
+                foot.y,
+                d,
+                d,
+            ));
             ui.canvas().fill_round(disc, u32::from(d / 2), Color::BLACK);
             let size = style.small() * 0.9;
             let w = ui::icon_width(env, "check", size);
@@ -256,11 +287,22 @@ fn draw_marks(ui: &mut ui::Ui<'_>, sizes: &Sizes, cover: Rect, book: &Loaded, co
                 band.width.saturating_sub(2 * pad),
                 band.height,
             );
-            rows::draw_bar(ui, sizes, bar.x, bar, bar.width, p, Color::BLACK);
+            rows::draw_bar(
+                ui,
+                sizes,
+                bar.x,
+                bar,
+                bar.width,
+                p,
+                Color::BLACK,
+                flip.is_rtl(),
+            );
         }
         _ if book.new => {
             let label = env.i18n().tr("files.list.new");
-            rows::draw_tag(ui, foot.x, foot, label, true, Color::BLACK, Color::WHITE);
+            let w = rows::tag_width(env, style, label);
+            let at = flip.span(foot.x, w);
+            rows::draw_tag(ui, at, foot, label, true, Color::BLACK, Color::WHITE);
         }
         _ => {}
     }
