@@ -178,10 +178,6 @@ fn a_plain_field_stays_one_line() {
 }
 
 /// A kernel with the keyboard open in `mode` on text `text`.
-fn open_keyboard(mode: &str, text: &str) -> Kernel {
-    open_keyboard_on(DEVICE, mode, text)
-}
-
 fn open_keyboard_on(device: DeviceInfo, mode: &str, text: &str) -> Kernel {
     use paperpaw_sdk::builtin::{params, slots};
     let mut kernel = Kernel::builder(device)
@@ -225,7 +221,7 @@ fn the_panel_leaves_the_status_line_free_on_every_screen() {
         Rotation::Deg0,
         None,
     ));
-    assert!(field_top(wide.clone(), "multiline") > field_top(wide, "text"));
+    assert!(field_top(wide, "multiline") > field_top(wide, "text"));
     // Upright, the lines of the field stop short of the top.
     assert!(field_top(DEVICE, "multiline") >= 60);
 }
