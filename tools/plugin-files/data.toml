@@ -83,26 +83,26 @@ de.name = "Hebräische Schrift"
 de.description = "Bücher auf Hebräisch in Noto Serif Hebrew, mit ihren Punkten, und eine Tastatur dafür."
 
 [script-greek]
-version = "1.0.0"
+version = "1.0.1"
 group = "look"
 licence = "OFL-1.1"
 devices = ["x4", "x4-pro", "x4-classic"]
 off_by_default = true
 build = "tools/script-pack.py"
-inputs = ["plugins/fonts-default/fonts/Literata.ttf", "plugins/fonts-default/fonts/Literata-Italic.ttf", "tools/fontgen", "crates/paperpaw-text/src/charset.rs"]
+inputs = ["plugins/fonts-default/fonts/Literata.ttf", "plugins/fonts-default/fonts/Literata-Italic.ttf", "plugins/fonts-default/fonts/SourceSans3.ttf", "tools/fontgen", "crates/paperpaw-text/src/charset.rs"]
 name = "Greek letters"
 description = "Greek books in Literata, modern and with the older accents."
 de.name = "Griechische Schrift"
 de.description = "Bücher auf Griechisch in Literata, modern und mit den älteren Akzenten."
 
 [script-cyrillic]
-version = "1.0.0"
+version = "1.0.1"
 group = "look"
 licence = "OFL-1.1"
 devices = ["x4", "x4-pro", "x4-classic"]
 off_by_default = true
 build = "tools/script-pack.py"
-inputs = ["plugins/fonts-default/fonts/Literata.ttf", "plugins/fonts-default/fonts/Literata-Italic.ttf", "tools/fontgen", "crates/paperpaw-text/src/charset.rs"]
+inputs = ["plugins/fonts-default/fonts/Literata.ttf", "plugins/fonts-default/fonts/Literata-Italic.ttf", "plugins/fonts-default/fonts/SourceSans3.ttf", "tools/fontgen", "crates/paperpaw-text/src/charset.rs"]
 name = "Cyrillic letters"
 description = "Russian, Ukrainian, Bulgarian, Serbian and other Cyrillic books in Literata."
 de.name = "Kyrillische Schrift"
@@ -130,7 +130,7 @@ de.description = "PaperPaws Menüs und Einstellungen auf Arabisch, von rechts na
 # fall back to it. A pack holds up to 65,535 characters, so all 11,172
 # syllables (`hangul`) can come later as data, without a new interface.
 [script-korean]
-version = "1.1.1"
+version = "1.1.2"
 group = "look"
 licence = "OFL-1.1"
 formats = 3

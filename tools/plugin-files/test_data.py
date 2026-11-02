@@ -15,9 +15,9 @@ import data  # noqa: E402
 PACKS = {
     "script-arabic": "1.1.1",
     "script-hebrew": "1.1.1",
-    "script-greek": "1.0.0",
-    "script-cyrillic": "1.0.0",
-    "script-korean": "1.1.1",
+    "script-greek": "1.0.1",
+    "script-cyrillic": "1.0.1",
+    "script-korean": "1.1.2",
     "script-korean-extra": "1.0.0",
 }
 
@@ -57,7 +57,7 @@ class ScriptPacks(unittest.TestCase):
 class Korean(unittest.TestCase):
     def test_the_korean_pack_is_ready(self):
         fields = ready()["script-korean"]
-        self.assertEqual(fields["version"], "1.1.1")
+        self.assertEqual(fields["version"], "1.1.2")
         self.assertEqual(fields["build"], "tools/script-pack.py")
         self.assertTrue(fields["off_by_default"])
         self.assertEqual(fields["licence"], "OFL-1.1")

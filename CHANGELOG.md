@@ -6,6 +6,12 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- **Greek, Cyrillic and Korean titles in the library's list** (#387): the screens' texts are drawn in Source Sans 3,
+  which has none of these scripts' letters on the X4, and the Hebrew and Arabic packs brought a face for it while
+  these three did not, so a book's title showed as boxes in the list. `script-greek` and `script-cyrillic` 1.0.1
+  bring Source Sans 3's letters (+0.6 and +0.25 MiB on the card), `script-korean` 1.1.2 a second Hangul face for
+  the screens (+1.9 MiB). A store update, no firmware change.
+
 ## [0.6.0-beta.1] - 2026-11-02
 
 **Plugins of this release must be built from `6c4a19dc` or later** (plugin interface 6, #363). 0.6.0-beta.1 takes

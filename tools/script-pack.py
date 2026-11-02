@@ -1,13 +1,15 @@
 """Builds a data plugin with the letters of other scripts for devices
 whose built-in fonts lack them (the Xteink X4 carries Latin only): packs
 read from the card a glyph at a time and asked for what the built-in
-fonts lack. Cyrillic and Greek come from Literata's faces; Arabic from
+fonts lack. Cyrillic and Greek come from Literata's faces and, for the
+interface's font, Source Sans 3; Arabic from
 Noto Naskh Arabic and Hebrew from Noto Serif Hebrew (tools/fonts), one
 pack for each built-in face they extend, the interface's font too.
 Korean (the 2,350 Hangul syllables of KS X 1001, CJK punctuation,
 compatibility jamo, full-width forms) comes from Nanum Myeongjo, one
-pack for Literata's regular face: the fonts lacking Hangul (bold,
-italic, the interface's) fall back to it.
+pack for Literata's regular face and one for the interface's font (a
+book's title in the library's list): the fonts lacking Hangul (bold,
+italic) fall back to the first.
 
 Usage:
     python tools/script-pack.py OUT_DIR [SET ...]
@@ -57,9 +59,20 @@ def upright(name, file):
     ]
 
 
+def with_sans(faces, file, name):
+    """`faces` and the interface's own: the screens' texts, e.g. a book's title in
+    the library's list, are drawn in Source Sans 3 (`fonts-default.source-sans`),
+    which has none of the script's letters on the device, so a pack of a script
+    brings them for it too, or the list shows boxes (#387)."""
+    return [*faces, (name, file, 400, "fonts-default.source-sans")]
+
+
 # Korean: one static face (no weight axis); its pack is not named after
 # the font, whose licence reserves its name for the font itself (NOTICE).
-KOREAN = [("korean", OTHER_FONTS / "NanumMyeongjo-Regular.ttf", None, "fonts-default.literata")]
+KOREAN = [
+    ("korean", OTHER_FONTS / "NanumMyeongjo-Regular.ttf", None, "fonts-default.literata"),
+    ("korean-sans", OTHER_FONTS / "NanumMyeongjo-Regular.ttf", None, "fonts-default.source-sans"),
+]
 # The other 8,822 syllables, a pack of its own that only adds letters to
 # the Korean pack (about 30 MiB on the card): offered for books that use them.
 KOREAN_EXTRA = [("korean-extra", OTHER_FONTS / "NanumMyeongjo-Regular.ttf", None,
@@ -69,8 +82,11 @@ KOREAN_EXTRA = [("korean-extra", OTHER_FONTS / "NanumMyeongjo-Regular.ttf", None
 # font named in the plugin's description, and the characters
 # (paperpaw-fontgen's --chars) where they are not the set of that name.
 SETS = {
-    "cyrillic": ("Cyrillic", LITERATA, FONTS / "Literata-OFL.txt", "Literata", None),
-    "greek": ("Greek", LITERATA, FONTS / "Literata-OFL.txt", "Literata", None),
+    # Source Sans 3 has these letters: the interface's face keeps its look.
+    "cyrillic": ("Cyrillic", with_sans(LITERATA, FONTS / "SourceSans3.ttf", "cyrillic-sans"),
+                 [FONTS / "Literata-OFL.txt", FONTS / "SourceSans3-OFL.txt"], "Literata", None),
+    "greek": ("Greek", with_sans(LITERATA, FONTS / "SourceSans3.ttf", "greek-sans"),
+              [FONTS / "Literata-OFL.txt", FONTS / "SourceSans3-OFL.txt"], "Literata", None),
     "arabic": ("Arabic", upright("naskh", OTHER_FONTS / "NotoNaskhArabic.ttf"),
                OTHER_FONTS / "NotoNaskhArabic-OFL.txt", "Noto Naskh Arabic", None),
     "hebrew": ("Hebrew", upright("hebrew", OTHER_FONTS / "NotoSerifHebrew.ttf"),
@@ -149,7 +165,8 @@ def build(base, sets):
     layouts(out, sets)
     (out / "plugin.ini").write_text(f"{head}\n[extends]\n{extends}\n", encoding="utf-8",
                                     newline="\n")
-    shutil.copy(licence, out / "fonts" / licence.name)
+    for file in licence if isinstance(licence, list) else [licence]:
+        shutil.copy(file, out / "fonts" / file.name)
     size = sum(f.stat().st_size for f in out.rglob("*") if f.is_file())
     print(f"{out}: {size / 1024 / 1024:.1f} MiB")
 
