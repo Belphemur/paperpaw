@@ -1268,6 +1268,9 @@ impl Screen for ListScreen {
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let a = action;
+        if *a == LOOK_AGAIN {
+            return self.looking(cx);
+        }
         let touch = cx.env().device().input.touch;
         let side = *a == actions::LEFT || *a == actions::RIGHT;
         // Over a grid of covers from the right, the left button goes on.

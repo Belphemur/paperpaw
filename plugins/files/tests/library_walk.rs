@@ -196,3 +196,54 @@ fn a_first_walk_started_again_midway_lists_all_books() {
         assert!(app.shows("Book 0"), "{}", app.described());
     }
 }
+
+/// Books copied onto the card of an empty library, walked already (#109):
+/// once it looks for them, it says it collects them, not that there are
+/// none, lists them as they are found (as a first walk does), and a
+/// second press goes on with the walk under way rather than starting
+/// over.
+#[test]
+fn an_empty_library_collects_new_books_as_a_first_walk() {
+    let _turn = turn();
+    for device in [X4, TOUCH] {
+        let mut app = App::new(device, Shared::memory("", &[]));
+        app.storage.create_dir("books").unwrap();
+        app.run(actions::LIBRARY);
+        app.wait(1_000);
+        assert!(app.shows("No books here yet"), "{}", app.described());
+        for (path, data) in books(200) {
+            app.storage.write(&path, &data).unwrap();
+        }
+        // Pressed, before the kernel walks a step (the button by a key,
+        // or its action, as a tap and the menu run it).
+        app.now += 100;
+        let press = if device.input.touch {
+            Id::new_static("files.look-again")
+        } else {
+            actions::CONFIRM
+        };
+        let _ = app.kernel.run_action(Instant(app.now), press);
+        assert!(app.shows("Collecting the books"), "{}", app.described());
+        assert!(!app.shows("No books here yet"), "{}", app.described());
+        assert!(!app.shows("Look for new books"), "{}", app.described());
+        // Shown before the walk's end, the books found so far.
+        let shown = tick_until(&mut app, |app| {
+            app.storage.exists(BUILDING) && listed(app) > 0 && app.shows("Book 0")
+        });
+        assert!(shown, "{}", app.described());
+        assert!(listed(&app) < 200);
+        // Looking again meanwhile (the menu's action): the walk goes on.
+        let before = app.storage.size(BUILDING).unwrap_or(0);
+        app.now += 5;
+        let _ = (app.kernel).run_action(Instant(app.now), Id::new_static("files.look-again"));
+        app.now += 5;
+        let _ = app.kernel.tick(Instant(app.now));
+        let after = app.storage.size(BUILDING).unwrap_or(0);
+        assert!(after >= before, "started over: {before} then {after}");
+        let done = tick_until(&mut app, |app| !app.storage.exists(BUILDING));
+        assert!(done, "{}", app.described());
+        app.wait(1_000);
+        assert_eq!(listed(&app), 200);
+        assert!(app.shows("Book 0"), "{}", app.described());
+    }
+}

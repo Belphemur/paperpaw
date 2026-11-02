@@ -681,6 +681,17 @@ impl Walk {
     /// `fresh` taken from their details; an error where what it needs
     /// cannot be read (nothing is changed then).
     pub fn start(env: &Env<'_>, fresh: Vec<String>) -> Result<Walk, StorageError> {
+        if library::emptiness::is_empty(env.storage()) {
+            // A catalog without books (the card was empty): walked as
+            // where there is none, so the books found show as it goes on
+            // and the library says it collects them meanwhile. Where it
+            // stays, the walk is one over it, shown at its end.
+            #[expect(
+                clippy::let_underscore_must_use,
+                reason = "where it stays, the walk is shown at its end, as before"
+            )]
+            let _ = env.storage().remove(&catalog_path());
+        }
         let old = OldCatalog::open(env.storage())?;
         let mut making = Making::start(env, true)?;
         // No catalog yet: the books found are shown as it goes on, and
