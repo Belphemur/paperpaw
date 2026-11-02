@@ -17,8 +17,12 @@ use crate::library::catalog::{self, Record};
 use crate::library::index::{self, FAVOURITE, NONE, OPENED};
 use crate::{Env, MemoryClass, Storage, StorageError, files};
 
-/// Books sorted in memory at once (a run).
-const RUN: usize = 512;
+/// Books sorted in memory at once (a run) on a device of little memory
+/// (the X4), and on others.
+const SMALL_RUN: usize = 256;
+const LARGE_RUN: usize = 512;
+/// Books written or read at once (a piece of a run, or of a step).
+const PIECE: usize = 64;
 /// Lines of the catalog read in one step.
 const STEP_LINES: usize = 64;
 /// Books written in one step of the merge.
@@ -97,6 +101,8 @@ pub struct Build {
     /// written (sorted by hash).
     series: Vec<(u32, u16, u16)>,
     max_series: usize,
+    /// Books a run holds at most.
+    run_len: usize,
     count: u32,
     archived: u32,
     cursors: Vec<Cursor>,
@@ -118,10 +124,10 @@ impl Build {
             .version(env)
             .ok_or(StorageError::NotFound)?;
         storage.write(RUNS, b"")?;
-        let max_series = if env.device().memory == MemoryClass::Small {
-            SMALL_SERIES
+        let (max_series, run_len) = if env.device().memory == MemoryClass::Small {
+            (SMALL_SERIES, SMALL_RUN)
         } else {
-            LARGE_SERIES
+            (LARGE_SERIES, LARGE_RUN)
         };
         Ok(Build {
             archive: archive.trim_matches('/').to_string(),
@@ -131,6 +137,7 @@ impl Build {
             runs: Vec::new(),
             series: Vec::new(),
             max_series,
+            run_len,
             count: 0,
             archived: 0,
             cursors: Vec::new(),
@@ -269,7 +276,7 @@ impl Build {
         let status = record.status;
         if self.run.capacity() == 0 {
             self.run
-                .try_reserve_exact(RUN)
+                .try_reserve_exact(self.run_len)
                 .map_err(|_| StorageError::TooLarge)?;
         }
         self.run.push(Rec {
@@ -284,7 +291,7 @@ impl Build {
             flags: (u8::from(status.favourite) * FAVOURITE) | (u8::from(status.opened) * OPENED),
         });
         self.count = self.count.saturating_add(1);
-        if self.run.len() >= RUN {
+        if self.run.len() >= self.run_len {
             self.write_run(storage)?;
         }
         Ok(())
@@ -296,11 +303,15 @@ impl Build {
             return Ok(());
         }
         self.run.sort_unstable_by_key(Rec::order);
-        let mut bytes = Vec::with_capacity(self.run.len() * RECORD);
-        for rec in &self.run {
-            rec.encoded(&mut bytes);
+        // Written a piece at a time: never the run twice in memory.
+        let mut bytes = Vec::with_capacity(self.run.len().min(PIECE) * RECORD);
+        for piece in self.run.chunks(PIECE) {
+            bytes.clear();
+            for rec in piece {
+                rec.encoded(&mut bytes);
+            }
+            storage.append(RUNS, &bytes)?;
         }
-        storage.append(RUNS, &bytes)?;
         self.runs.push(self.run.len() as u32);
         self.run.clear();
         self.mark = None;
@@ -332,7 +343,7 @@ impl Build {
 
     /// Reads ahead the books of each run that has none read.
     fn read_ahead(&mut self, storage: &dyn Storage) -> Result<(), StorageError> {
-        let each = (AHEAD / self.cursors.len().max(1)).max(1);
+        let each = (AHEAD / self.cursors.len().max(1)).clamp(1, PIECE);
         let mut bytes = alloc::vec![0u8; each * RECORD];
         for cursor in &mut self.cursors {
             if !cursor.ahead.is_empty() || cursor.next >= cursor.end {
@@ -356,7 +367,7 @@ impl Build {
     /// A few books merged into the file; the file put in place after the
     /// last.
     fn merge_step(&mut self, storage: &dyn Storage) -> Result<(), StorageError> {
-        let mut bytes = Vec::with_capacity(STEP_BOOKS * RECORD);
+        let mut bytes = Vec::with_capacity(PIECE * RECORD);
         for _ in 0..STEP_BOOKS {
             self.read_ahead(storage)?;
             let first = self
@@ -381,6 +392,11 @@ impl Build {
                 *written = written.saturating_add(1);
             }
             rec.encoded(&mut bytes);
+            if bytes.len() >= PIECE * RECORD {
+                self.sum = checked(self.sum, &bytes);
+                storage.append(BUILDING, &bytes)?;
+                bytes.clear();
+            }
         }
         self.sum = checked(self.sum, &bytes);
         storage.append(BUILDING, &bytes)?;
