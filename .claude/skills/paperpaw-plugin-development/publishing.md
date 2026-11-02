@@ -128,7 +128,16 @@ Ask the user for each, and suggest values from the plugin where you can
 - **sdk**: the PaperPaw SDK it is made for, such as `0.5`.
 - **devices** (data plugins): those it runs on, of `android`, `x4`,
   `x4-pro`, `x4-classic`; left out, every device. A code plugin runs on
-  the readers it has builds for.
+  the readers it has builds for. **A plugin does not have to be for every
+  device**: ask the author which devices it is for (never assume all), and
+  publish only for those. The store shows it, on the site and on each
+  reader, only on the devices it names; a code plugin only on the readers
+  it has a build for, never on Android. To limit a data plugin, write
+  `devices = x4, x4-pro` in `[store]`; to limit a code plugin, give only
+  those readers' `.ppn` files. The X3 is served as `x4`. Say the limit in
+  the description ("for the X4 and X4 Pro"), as the page shows "only"
+  beside it. `docs/plugins.md`, "Which devices your plugin is for", has
+  the rest.
 - **translations** of name and summary, and **screenshots** (up to four,
   of the plugin at work, with what each shows).
 - The author's name is the account's.
