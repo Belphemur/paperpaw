@@ -20,7 +20,9 @@ paperpaw-platform.workspace = true
 paperpaw-plugin-format-epub.workspace = true
 paperpaw-plugin-format-txt.workspace = true
 # Its Markdown (wikilinks) for the tests of links to other notes.
-paperpaw-plugin-notes-vault.workspace = true
+# By path alone, with no version: the vault needs the reader, and a
+# dev-dependency with a version cannot be published before it.
+paperpaw-plugin-notes-vault = { path = "../notes-vault" }
 paperpaw-plugin-fonts-default = { workspace = true, features = ["packs", "outline"] }
 paperpaw-zip = { workspace = true, features = ["testing"] }
 # Scalable fonts, as Android and the emulator have them: a book's own

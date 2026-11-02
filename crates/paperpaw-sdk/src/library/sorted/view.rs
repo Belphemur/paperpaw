@@ -403,7 +403,7 @@ impl Sorted {
 
     /// For each series begun (a book of it opened), its unread book of
     /// the lowest number, the series read last first (`by_recent`), else
-    /// by title; [`MAX_NEXT`] series at most.
+    /// by title; `MAX_NEXT` series at most.
     pub fn next_in_series(&self, storage: &dyn Storage, by_recent: bool) -> Vec<Entry> {
         // The series begun, each with the place its book read last has.
         let mut begun: Vec<(u32, u8)> = Vec::new();

@@ -135,7 +135,7 @@ enum Phase {
     Done,
 }
 
-/// The making of the sorted file (see the [module](self)).
+/// The making of the sorted file (see the module).
 #[derive(Debug)]
 pub struct Build {
     archive: String,

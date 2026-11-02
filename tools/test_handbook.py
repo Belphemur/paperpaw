@@ -55,8 +55,9 @@ class Handbook(unittest.TestCase):
         for part in ["what a plugin may use", "examples of good solutions", "left out on"]:
             self.assertIn(part, readme)
         # Grown past 3 MB with the plugins' docs and sources (flash cards, store),
-        # and by 0.1 MB with the Mail plugin's sources (3.2 to 3.3 MB).
-        self.assertLess(size, 3_400_000, "near 3.4 MB")
+        # and by 0.1 MB with the Mail plugin's sources (3.2 to 3.3 MB), and by
+        # 0.1 MB with the sorted library and the TLS sockets (3.4 to 3.5 MB).
+        self.assertLess(size, 3_500_000, "near 3.5 MB")
 
 
 if __name__ == "__main__":
