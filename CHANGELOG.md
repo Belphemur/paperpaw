@@ -6,16 +6,6 @@ change the plugin SDK.
 
 ## [Unreleased]
 
-### Changed
-
-- The first walk of new books writes about a sixth of what it did (#98): an EPUB is opened for its details only (title,
-  authors, series, cover) and its package goes into the reader's cache the first time the book is read, instead of
-  a folder and its files written for every book the library finds. On the bench's card (FAT32, clusters of 32 KiB)
-  the first walk of 1,000 books writes 26,952 blocks instead of 154,558 and reads 71,974 instead of 153,425; the
-  X4 test of 3,000 small EPUBs (about 100 books a minute) is to be measured again. Covers are still made for the
-  library during the walk, in the book's cache folder with a stamp of the book: a book replaced on the card, or a
-  folder a cut-off removal left behind, is cleared when the book opens.
-
 ## [0.6.0-beta.1] - 2026-11-02
 
 **Plugins of this release must be built from `6c4a19dc` or later** (plugin interface 6, #363). 0.6.0-beta.1 takes
@@ -72,6 +62,7 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   computer). Right after the catalog is made anew the list says *Preparing the library …* for a moment. The shelves
   (authors, series, tags, and now folders) show 200 names at a time and go on when the focus moves past the last. A start
   after nothing changed writes next to nothing to the card, and big folders are read about twice, not once per piece.
+  The first walk of new books writes about a sixth of what it did (#98), because an EPUB is opened for its details only.
 - **Secure connections for plugins** (#81). Plugins can open HTTPS, IMAP and SMTP connections: the X4 does the encryption
   itself (one connection at a time), the emulator and the Android app use rustls. A server whose certificate no authority
   vouches for is shown and trusted only after you say so, and then only that certificate or key. The X4 just after a
@@ -439,6 +430,17 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
 
 ### Changed
 
+- The first walk of new books writes about a sixth of what it did (#98): an EPUB is opened for its details only (title,
+  authors, series, cover) and its package goes into the reader's cache the first time the book is read, instead of
+  a folder and its files written for every book the library finds. On the bench's card (FAT32, clusters of 32 KiB)
+  the first walk of 1,000 books writes 26,952 blocks instead of 154,558 and reads 71,974 instead of 153,425; the
+  X4 test of 3,000 small EPUBs (about 100 books a minute) is to be measured again. Covers are still made for the
+  library during the walk, in the book's cache folder with a stamp of the book: a book replaced on the card, or a
+  folder a cut-off removal left behind, is cleared when the book opens.
+- **Packs name the letters they need** (#97): the Arabic interface (`language-ar` 1.0.1) says `requires = script-arabic`
+  and the rare Hangul syllables (`script-korean-extra` 1.0.1) `requires = script-korean` in their `plugin.ini`
+  (formats 4), and their descriptions and *How it works* say it in words. Nothing fetches the letters by itself yet:
+  the store reads `requires` in a later release; until then the letters pack is installed by hand.
 - *Right to left: the overview of every tool and the keyboard's header* (#33): where the interface runs right to
   left the overview's grid starts at the right (the first tool at the top right, the left button on to the next
   tool), and the keyboard's title is at the right, the hint of how typing ends and the field's *Phone* and

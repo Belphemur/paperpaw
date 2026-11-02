@@ -414,3 +414,45 @@ fn a_font_of_a_plugin_checked_with_it_is_a_font_to_extend() {
     );
     let _ = std::fs::remove_dir_all(&styles);
 }
+
+#[test]
+fn requires_needs_formats_4_and_plugin_ids_the_kernel_reads() {
+    let ini = |extra: &str| format!("[plugin]\nid = cosy\nversion = 1.0.0\n{extra}");
+    let none: &[(&str, &[u8])] = &[];
+    let ok = found(
+        "requires-ok",
+        "package.requires",
+        &ini("formats = 4\nrequires = script-arabic\n"),
+        none,
+    );
+    assert!(ok.is_empty(), "{ok:?}");
+    // Not read as a typo either: the same findings as without it.
+    let typo = found(
+        "requires-typo",
+        "package.manifest",
+        &ini("formats = 4\nrequires = script-arabic\n"),
+        none,
+    );
+    let without = found(
+        "requires-none",
+        "package.manifest",
+        &ini("formats = 4\n"),
+        none,
+    );
+    assert_eq!(typo, without);
+    let old = found(
+        "requires-3",
+        "package.requires",
+        &ini("formats = 3\nrequires = script-arabic\n"),
+        none,
+    );
+    assert_eq!(old, [("plugin.ini".to_string(), Level::Error)]);
+    // A plugin that needs itself is refused by the kernel.
+    let own = found(
+        "requires-own",
+        "package.requires",
+        &ini("formats = 4\nrequires = cosy\n"),
+        none,
+    );
+    assert_eq!(own, [("plugin.ini".to_string(), Level::Error)]);
+}

@@ -18,7 +18,7 @@ PACKS = {
     "script-greek": "1.0.0",
     "script-cyrillic": "1.0.0",
     "script-korean": "1.1.1",
-    "script-korean-extra": "1.0.0",
+    "script-korean-extra": "1.0.1",
 }
 
 
@@ -113,3 +113,36 @@ def sets(name):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Requires(unittest.TestCase):
+    """The packs that bring no letters of their own name the pack that does,
+    so the store can fetch it with them (#97)."""
+
+    def test_the_arabic_interface_needs_the_arabic_letters(self):
+        fields = data.plugins()["language-ar"]
+        self.assertEqual(fields["requires"], ["script-arabic"])
+        self.assertIn("requires = script-arabic\n", data.plugin_ini("language-ar", fields))
+        # Said where a reader looks first, and in German too.
+        self.assertIn("Needs Arabic letters", fields["description"])
+        self.assertIn("Braucht die Arabische Schrift", fields["de"]["description"])
+        self.assertIn("Arabic letters", fields["how"])
+
+    def test_the_rare_hangul_need_the_korean_letters(self):
+        fields = data.plugins()["script-korean-extra"]
+        self.assertEqual(fields["requires"], ["script-korean"])
+        self.assertIn("requires = script-korean\n", data.plugin_ini("script-korean-extra", fields))
+
+    def test_every_requirement_is_a_pack_of_data_toml_and_needs_formats_4(self):
+        entries = data.plugins()
+        for pack, fields in entries.items():
+            for needed in fields.get("requires", []):
+                self.assertIn(needed, entries, (pack, needed))
+                self.assertNotEqual(needed, pack)
+            if fields.get("requires"):
+                self.assertGreaterEqual(fields.get("formats", 1), 4, pack)
+
+    def test_requires_before_formats_4_is_refused(self):
+        fields = dict(data.plugins()["script-korean-extra"], formats=3)
+        with self.assertRaises(ValueError):
+            data.plugin_ini("script-korean-extra", fields)
