@@ -386,7 +386,7 @@ impl Catalog {
     /// where what a walk under way met may have changed (it starts again),
     /// else one under way, paused or not, goes on.
     fn want_walk(&self, now: bool, anew: bool, out: &mut Commands) {
-        let walking = matches!(*self.job.borrow(), Some(CatalogJob::Walk(_)));
+        let walking = self.job.borrow().as_ref().is_some_and(CatalogJob::is_walk);
         if walking && !anew {
             self.declare(now, out);
             return;
@@ -484,7 +484,7 @@ impl Catalog {
         if self.restart.replace(false)
             && let Some(stopped) = job.take()
         {
-            let walk = matches!(stopped, CatalogJob::Walk(_));
+            let walk = stopped.is_walk();
             self.split
                 .set(self.split.get() || matches!(stopped, CatalogJob::Split(_)));
             stopped.abort(storage);
@@ -519,10 +519,10 @@ impl Catalog {
                 }
             }
         }
-        let walk = matches!(*job, Some(CatalogJob::Walk(_)));
+        let walk = job.as_ref().is_some_and(CatalogJob::is_walk);
         let result = job.as_mut().map_or(Ok(true), |job| job.step(env));
         match result {
-            Ok(false) => Step::Continue,
+            Ok(false) => catalog_job::after_step(self, env, &mut job, out),
             Ok(true) => {
                 *job = None;
                 self.taken.borrow_mut().clear();

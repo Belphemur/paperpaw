@@ -63,6 +63,13 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   (authors, series, tags, and now folders) show 200 names at a time and go on when the focus moves past the last. A start
   after nothing changed writes next to nothing to the card, and big folders are read about twice, not once per piece.
   The first walk of new books writes about a sixth of what it did (#98), because an EPUB is opened for its details only.
+- **Read while the library is collected** (#108). The first time the library is collected (thousands of books copied
+  onto a new card), the books found so far are listed after the first 20, then each time they are twice as many, and
+  every two minutes at least: they can be opened and read at once (the collecting waits meanwhile and goes on when the
+  book is closed). The count says *1,240 books so far …* until all are found.
+- **Look for new books** (#109). An empty library has a button that looks for books again, and the library's menu has
+  the same entry: for books copied onto the card while PaperPaw ran. **After swapping the SD card, restart the
+  reader**: PaperPaw reads the card it started with.
 - **Secure connections for plugins** (#81). Plugins can open HTTPS, IMAP and SMTP connections: the X4 does the encryption
   itself (one connection at a time), the emulator and the Android app use rustls. A server whose certificate no authority
   vouches for is shown and trusted only after you say so, and then only that certificate or key. The X4 just after a
@@ -442,6 +449,15 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   X4 test of 3,000 small EPUBs (about 100 books a minute) is to be measured again. Covers are still made for the
   library during the walk, in the book's cache folder with a stamp of the book: a book replaced on the card, or a
   folder a cut-off removal left behind, is cleared when the book opens.
+- **The first walk shows the books found so far** (#108): where there is no catalog yet, the kernel's walk adds the
+  books found to `catalog.txt` at checkpoints (20 books, then each time twice as many, at least every two minutes once
+  50 more were found), whole lines a 2 KB piece a step, sorts them for the views and sends `CATALOG_CHANGED`; the
+  walk then goes on. The catalog it ends with is the one it would have put in place, byte for byte; cut off (the
+  power gone), the catalog left lists the books found, and the next walk completes it. The kernel's library answers
+  `Library::extended` with the key `core.library-walking` (`walking` = `true` while the catalog is made anew); the
+  library's count says *so far* then. No change of interface 6.
+- **Look for new books** (#109): the library (`files`) has the action `files.look-again` (in its menu, and as a
+  button on an empty library), which sends `library::request_catalog_anew()`.
 - **Packs name the letters they need** (#97): the Arabic interface (`language-ar` 1.0.1) says `requires = script-arabic`
   and the rare Hangul syllables (`script-korean-extra` 1.0.1) `requires = script-korean` in their `plugin.ini`
   (formats 4), and their descriptions and *How it works* say it in words. Nothing fetches the letters by itself yet:

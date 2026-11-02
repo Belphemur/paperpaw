@@ -290,7 +290,13 @@ fn a_walk_under_way_at_the_sleep_starts_again_after_the_wake() {
     let found = paths(&kernel);
     assert_eq!(found.len(), BOOKS + 1);
     assert_eq!(found.first().map(String::as_str), Some("books/a.txt"));
-    assert_eq!(log.borrow().len(), 1);
+    // No catalog before: the walk after the wake showed the books it
+    // found as it went (#108), none failed.
+    let log = log.borrow();
+    assert!(
+        log.len() > 1 && log.iter().all(|e| e == "catalog"),
+        "{log:?}"
+    );
 }
 
 /// A book copied while PaperPaw runs, with no word to it (the X4's

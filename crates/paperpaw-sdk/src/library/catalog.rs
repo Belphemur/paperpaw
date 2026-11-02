@@ -11,8 +11,11 @@
 //! library folder, taking each book whose file did not change from the
 //! old catalog, others from their details, opening only books not seen
 //! before; caught up (`Rewrite`) after books came or moved. Until a new
-//! one is complete, the old one is read. It is read a piece at a time,
-//! never held in memory.
+//! one is complete, the old one is read; where there is none yet (a new
+//! card, thousands of books), the walk puts the books it found so far
+//! into one at checkpoints, which views hear of as of a catalog made, so
+//! they can be read at once. It is read a piece at a time, never held in
+//! memory.
 //!
 //! How far a book is read, whether it is a favourite, and that a book was
 //! removed change while the catalog stands: they are appended to a short
@@ -561,6 +564,21 @@ pub enum State {
     Ready { stamp: u64 },
 }
 
+/// Where a walk that began without a catalog notes that the catalog
+/// holds the books found so far: gone when a walk ends, so a walk that
+/// goes on from one cut short (the power gone, the walk started again)
+/// finds it.
+fn first_path() -> String {
+    format!("{DIR}/walk.first")
+}
+
+/// Whether the catalog's books are those found so far: a walk that began
+/// without one is under way, or one that goes on from it. A walk over a
+/// whole catalog (each start) is not.
+pub(crate) fn is_growing(storage: &dyn Storage) -> bool {
+    storage.exists(&building_path()) && storage.exists(&first_path())
+}
+
 /// Whether there is a catalog ([`State`]).
 pub fn state(storage: &dyn Storage) -> State {
     match storage.size(&catalog_path()) {
@@ -947,6 +965,8 @@ pub fn write(storage: &dyn Storage, records: &[Record]) -> Result<(), crate::dat
 
 #[cfg(any(test, feature = "kernel"))]
 mod making;
+#[cfg(any(test, feature = "kernel"))]
+mod publish;
 #[cfg(any(test, feature = "kernel"))]
 pub use making::{Rewrite, Walk};
 

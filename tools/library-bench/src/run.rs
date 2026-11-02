@@ -43,11 +43,15 @@ pub(super) fn all(env: &Env<'_>, more: Option<&str>, walks: bool) {
 /// calls, never one.
 const STEPS_A_CALL: u64 = 4;
 
-/// The catalog walked to its end, a few steps a kernel call.
+/// The catalog walked to its end, a few steps a kernel call; where a
+/// first walk shows the books it found so far, they are sorted as the
+/// kernel does for the library's view (#108), and when the first could
+/// be read is told.
 fn walk(env: &Env<'_>, what: &str) {
     let (steps, took) = measure(|| {
+        let start = std::time::Instant::now();
         let mut walk = catalog::Walk::start(env, Vec::new())?;
-        let mut steps = 0u64;
+        let (mut steps, mut shown, mut first) = (0u64, 0u32, None);
         while !walk.step(env)? {
             steps += 1;
             if steps.is_multiple_of(STEPS_A_CALL) {
@@ -55,11 +59,23 @@ fn walk(env: &Env<'_>, what: &str) {
                 // folder makes the kernel do (no such folder is there).
                 let _ = env.storage().remove_dir_all(".paperpaw/bench-call");
             }
+            if walk.published() {
+                let mut build = sorted::Build::start(env, "")?;
+                while !build.step(env)? {}
+                shown += 1;
+                first.get_or_insert(start.elapsed().as_secs_f64() * 1000.0);
+            }
         }
-        Ok::<_, paperpaw_sdk::StorageError>((steps, walk.found(), walk.from_old()))
+        let note = (walk.found(), walk.from_old(), shown, first);
+        Ok::<_, paperpaw_sdk::StorageError>((steps, note))
     });
     let note = match steps {
-        Ok((steps, found, old)) => format!("{steps} steps, {found} books, {old} from the old"),
+        Ok((steps, (found, old, shown, first))) => {
+            let first = first.map_or(String::new(), |ms| {
+                format!(", first books readable after {ms:.1} ms ({shown} checkpoints)")
+            });
+            format!("{steps} steps, {found} books, {old} from the old{first}")
+        }
         Err(e) => format!("failed: {e:?}"),
     };
     report(what, &took, &note);

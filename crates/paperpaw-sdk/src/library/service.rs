@@ -159,7 +159,10 @@ pub trait Library {
 
     /// A question asked after this release, by its key and parameters:
     /// what PaperPaw asks of libraries later reaches libraries built now,
-    /// which answer `None` to keys they do not know.
+    /// which answer `None` to keys they do not know. The kernel's library
+    /// answers `core.library-walking` with `walking` (`true` while its
+    /// catalog is made where there was none: its books are those found
+    /// so far).
     fn extended(&self, env: &Env<'_>, key: &Id, params: &crate::Params) -> Option<crate::Params> {
         let _ = (env, key, params);
         None
@@ -203,7 +206,21 @@ impl Library for Kept {
         let version = self.version(env);
         Index::of_catalog(env.storage(), cap, archive, &opened, version)
     }
+
+    // `core.library-walking`: whether the kernel is making the catalog
+    // where there was none (`walking` = `true`), its books those found so
+    // far (a view says so with their count).
+    fn extended(&self, env: &Env<'_>, key: &Id, _: &crate::Params) -> Option<crate::Params> {
+        (key.as_str() == WALKING).then(|| {
+            let walking = catalog::is_growing(env.storage());
+            crate::Params::new().with("walking", if walking { "true" } else { "false" })
+        })
+    }
 }
+
+/// The key of [`Library::extended`] that the kernel's library answers
+/// with whether its catalog is being made anew.
+const WALKING: &str = "core.library-walking";
 
 static KEPT: Kept = Kept;
 

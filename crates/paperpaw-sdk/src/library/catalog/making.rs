@@ -7,9 +7,10 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use super::publish::Publish;
 use super::{
     Changes, HEADER, Record, Status, building_path, catalog_path, count_lines, first_generation,
-    lines, lines_from, log_path, next_header, read_changes,
+    first_path, lines, lines_from, log_path, next_header, read_changes,
 };
 use crate::library::{self, DIR};
 use crate::{Env, Storage, StorageError, files};
@@ -112,6 +113,9 @@ struct Making {
     /// The generation of the catalog made where there is none
     /// ([`first_generation`]).
     first: u64,
+    /// Where there was no catalog when it began: the books found so far
+    /// put into one at checkpoints ([`super::publish`]).
+    publish: Option<Publish>,
 }
 
 /// The old catalog's lines up to where a walk found it changed, copied
@@ -307,9 +311,19 @@ impl Making {
     /// the old one has more lines, or the log notes what is not in it (a
     /// book removed that is there), it parts from it: `false`, more steps
     /// to take.
-    fn finish(&mut self, storage: &dyn Storage) -> Result<bool, StorageError> {
+    fn finish(&mut self, storage: &dyn Storage, now: u64) -> Result<bool, StorageError> {
         if self.copy(storage)? {
             return Ok(false);
+        }
+        if let Some(publish) = self.publish.as_mut().filter(|p| p.begun()) {
+            // The catalog holds the books found until the last checkpoint:
+            // the rest added, the building file is what it is now.
+            if publish.step(storage, self.found, now, true)? {
+                return Ok(false);
+            }
+            storage.remove(&building_path())?;
+            self.keep_log_since(storage);
+            return Ok(true);
         }
         if let Some((_, at)) = self.same {
             if self.noted_differs || storage.size(&catalog_path())? != at {
@@ -319,6 +333,13 @@ impl Making {
             return Ok(true);
         }
         files::move_to(storage, &building_path(), &catalog_path())?;
+        self.keep_log_since(storage);
+        Ok(true)
+    }
+
+    /// Keeps the log noted since it began, the catalog in place; the log
+    /// goes where it cannot be read (the details have what it said).
+    fn keep_log_since(&self, storage: &dyn Storage) {
         let mut since = String::new();
         let read = lines_from(storage, &log_path(), self.log_from, &mut |_, line| {
             since.push_str(line);
@@ -335,7 +356,6 @@ impl Making {
             )]
             let _ = storage.remove(&log_path());
         }
-        Ok(true)
     }
 
     #[expect(
@@ -662,8 +682,13 @@ impl Walk {
     /// cannot be read (nothing is changed then).
     pub fn start(env: &Env<'_>, fresh: Vec<String>) -> Result<Walk, StorageError> {
         let old = OldCatalog::open(env.storage())?;
-        let making = Making::start(env, true)?;
-
+        let mut making = Making::start(env, true)?;
+        // No catalog yet: the books found are shown as it goes on, and
+        // said to be those found so far until a walk ends.
+        if making.same.is_none() && !env.storage().exists(&catalog_path()) {
+            making.publish = Some(Publish::new(env.now().millis()));
+            env.storage().write(&first_path(), b"")?;
+        }
         Ok(Walk {
             making,
             old,
@@ -681,6 +706,14 @@ impl Walk {
     /// Books taken from the old catalog so far.
     pub fn from_old(&self) -> usize {
         self.old.found
+    }
+
+    /// Whether, since this was asked last, the walk put the books it
+    /// found so far into the catalog, there being none when it began
+    /// ([`super::publish`]): views are to hear of it (their sorted books
+    /// made anew first), as of a catalog made anew.
+    pub fn published(&mut self) -> bool {
+        self.making.publish.as_mut().is_some_and(Publish::take_news)
     }
 
     /// One step: a piece of a folder listed, or a few of its entries, at
@@ -714,6 +747,12 @@ impl Walk {
             self.old.let_go();
             return Ok(false);
         }
+        let found = self.making.found;
+        if let Some(publish) = &mut self.making.publish
+            && publish.step(storage, found, env.now().millis(), false)?
+        {
+            return Ok(false);
+        }
         let Some(dir) = self.dir.clone() else {
             let Some(dir) = self.folders.next(storage)? else {
                 if storage.exists(&listed_path()) {
@@ -723,7 +762,15 @@ impl Walk {
                     )]
                     let _ = storage.remove(&listed_path());
                 }
-                return self.making.finish(storage);
+                let done = self.making.finish(storage, env.now().millis())?;
+                if done && storage.exists(&first_path()) {
+                    #[expect(
+                        clippy::let_underscore_must_use,
+                        reason = "left (the power gone), it says nothing without a walk under way"
+                    )]
+                    let _ = storage.remove(&first_path());
+                }
+                return Ok(done);
             };
             self.dir = Some(dir);
             self.listed = Some(0);
@@ -991,7 +1038,7 @@ impl Rewrite {
             return Ok(false);
         }
         let Some(path) = self.fresh.pop() else {
-            return self.making.finish(storage);
+            return self.making.finish(storage, env.now().millis());
         };
         match storage.size(&path) {
             Ok(size) => {

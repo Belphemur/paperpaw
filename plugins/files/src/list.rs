@@ -39,6 +39,7 @@ mod index;
 mod rows;
 mod sheet;
 pub(crate) mod shelf;
+mod walking;
 
 use alloc::boxed::Box;
 use alloc::format;
@@ -108,9 +109,13 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     Ok(())
 }
 
-static ACTIONS: [FixedAction; 1] = [FixedAction::new(FIND, "files.list.find")
-    .handler(|_, _, out| out.push(Command::OpenScreen(FIND, Params::new())))];
-static ICONS: [(Id, &str); 1] = [(FIND, "letter-case")];
+static ACTIONS: [FixedAction; 2] = [
+    FixedAction::new(FIND, "files.list.find")
+        .handler(|_, _, out| out.push(Command::OpenScreen(FIND, Params::new()))),
+    walking::ACTION,
+];
+static ICONS: [(Id, &str); 2] = [(FIND, "letter-case"), (LOOK_AGAIN, "refresh")];
+pub(crate) use walking::LOOK_AGAIN;
 
 /// The library screen.
 pub(crate) fn screen(env: &Env<'_>, _params: &Params) -> Box<dyn Screen> {
@@ -369,6 +374,9 @@ struct ListScreen {
     filter_end: String,
     empty_title: String,
     empty_text: String,
+    /// The list is empty, there being no books: it offers to look for
+    /// new ones ([`LOOK_AGAIN`]).
+    look_again: bool,
     /// The search button on touch screens.
     find: Option<Rect>,
     /// Paths (hashed) of books moved or removed since the catalog was
@@ -409,6 +417,7 @@ impl ListScreen {
             filter_end: String::new(),
             empty_title: String::new(),
             empty_text: String::new(),
+            look_again: false,
             find: None,
             gone: Vec::new(),
             kept_focus: None,
@@ -578,8 +587,10 @@ impl ListScreen {
         self.filter_end = if self.filter == Filter::Shelves || self.preparing() {
             String::new()
         } else {
-            env.i18n().plural("files.books", self.len() as i64, &[])
+            walking::count(env, self.len())
         };
+        self.look_again = total == 0 && archived == 0;
+        self.look_again &= !self.failed && !self.collecting && !self.preparing();
         (self.empty_title, self.empty_text) = if self.failed && total == 0 {
             (
                 env.i18n().tr("files.list.failed.title").to_string(),
@@ -1064,6 +1075,14 @@ impl ListScreen {
         self.refilter_keeping(env, keep, true);
     }
 
+    /// The button that looks for new books on an empty library, and the
+    /// room above it.
+    fn look_button(&self) -> Option<(Rect, Rect)> {
+        let style = &self.layout.style;
+        (self.look_again && self.len() == 0)
+            .then(|| walking::button(self.layout.area, style.row(), style.margin()))
+    }
+
     fn draw_shelf(&self, ui: &mut ui::Ui<'_>, row: &ShelfRow, rect: Rect, focused: bool) {
         let style = &self.layout.style;
         // A row, whose words are those drawn in it.
@@ -1143,6 +1162,10 @@ impl Screen for ListScreen {
             let area = layout.area;
             if self.collecting && !self.failed && !has_books {
                 ui.message(area, &self.empty_text);
+            } else if let Some((button, above)) = self.look_button() {
+                ui.empty(above, "books", &self.empty_title, &self.empty_text);
+                let label = env.i18n().tr("files.look-again");
+                ui.button(button, label, false, self.shown);
             } else {
                 let (title, text) = (&self.empty_title, &self.empty_text);
                 ui.empty(area, "books", title, text);
@@ -1259,6 +1282,8 @@ impl Screen for ListScreen {
             self.step(-1, cx);
         } else if [actions::NEXT, on].contains(a) {
             self.step(1, cx);
+        } else if *a == actions::CONFIRM && self.look_button().is_some() {
+            cx.command(Command::run(LOOK_AGAIN));
         } else if *a == actions::CONFIRM && self.filter_focused {
             self.choose_shown(cx);
         } else if *a == actions::CONFIRM {
@@ -1296,6 +1321,10 @@ impl Screen for ListScreen {
         let style = self.layout.style;
         if let Some(action) = self.layout.header.tap(cx.env(), &style, point, paging) {
             cx.command(Command::run(action));
+            return Handled::Yes;
+        }
+        if self.look_button().is_some_and(|(b, _)| b.contains(point)) {
+            cx.command(Command::run(LOOK_AGAIN));
             return Handled::Yes;
         }
         if self.layout.header.area().contains(point) {
@@ -1363,8 +1392,15 @@ impl Screen for ListScreen {
                 self.gone.clear();
                 self.collecting = false;
             } else if !self.collecting && self.sorted.as_ref().is_some_and(|s| s.is_current(&env)) {
-                // The catalog as it was (a walk found nothing changed):
-                // the sorted books hold, nothing is read anew.
+                // The catalog as it was (a walk found nothing changed, or
+                // a first walk's end added none to the books it showed):
+                // the sorted books hold, nothing is read anew; the count
+                // is of the books found so far no more.
+                let said = core::mem::take(&mut self.filter_end);
+                self.word(&env);
+                if self.filter_end != said {
+                    cx.request_redraw();
+                }
             } else {
                 self.rebuild(&env, true);
                 self.ask(cx);
