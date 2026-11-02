@@ -162,3 +162,4 @@ graphics 1 CANVAS_TAKE_DIFFUSION paperpaw_graphics::Canvas::take_diffusion
 graphics 1 ROUND_CORNER_INSET paperpaw_graphics::round::corner_inset
 graphics 1 ROUND_SIN_COS paperpaw_graphics::round::sin_cos
 graphics 1 ROUND_POINT_AT paperpaw_graphics::round::point_at
+bump ui 2
