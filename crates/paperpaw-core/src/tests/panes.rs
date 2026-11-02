@@ -474,8 +474,8 @@ fn without_panes_a_detail_is_a_full_screen_even_where_wide() {
     assert_eq!(areas(&kernel), [whole, whole]);
     assert_eq!(kernel.panes(), None);
     assert_eq!(took(&log), ["list hide", "d1 show"]);
-    let other = actions::PANE_OTHER.as_str();
-    assert!(kernel.shared.actions.get(other).is_none());
+    let other = actions::PANE_OTHER;
+    assert!(kernel.shared.actions.get(other.as_str()).is_none());
     kernel.run_action(Instant(200), actions::PANE_OTHER);
     assert_eq!(kernel.input_index(), Some(1));
 }
