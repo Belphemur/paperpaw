@@ -54,8 +54,9 @@ class Handbook(unittest.TestCase):
         self.assertNotIn("#[cfg(test)]\nmod tests {", battery)
         for part in ["what a plugin may use", "examples of good solutions", "left out on"]:
             self.assertIn(part, readme)
-        # Grown past 3 MB with the plugins' docs and sources (flash cards, store).
-        self.assertLess(size, 3_300_000, "near 3 MB")
+        # Grown past 3 MB with the plugins' docs and sources (flash cards, store),
+        # and by 0.1 MB with the Mail plugin's sources (3.2 to 3.3 MB).
+        self.assertLess(size, 3_400_000, "near 3.4 MB")
 
 
 if __name__ == "__main__":
