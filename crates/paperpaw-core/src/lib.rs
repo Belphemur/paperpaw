@@ -57,6 +57,7 @@ mod io;
 mod keymap;
 mod meter;
 mod network;
+mod panes;
 mod plugins;
 mod realtime;
 mod recall;
@@ -64,6 +65,7 @@ mod refresh;
 mod registry;
 mod room;
 mod screens;
+use screens::ActiveScreen;
 #[cfg(test)]
 mod tests;
 mod work;
@@ -198,37 +200,6 @@ impl fmt::Display for KernelError {
 }
 
 impl core::error::Error for KernelError {}
-
-/// A screen on the navigation stack.
-struct ActiveScreen {
-    id: Id,
-    /// Tells this opening of the screen from every other, also once it was
-    /// made anew (see `Kernel::remake_screens`): e.g. the owner of a
-    /// settings scope.
-    serial: u32,
-    /// The slot it was opened for, if any.
-    slot: Option<Id>,
-    /// Made for the part above the row of hints (when the row shows), as
-    /// it asked ([`HintVisibility::Shown`]).
-    hinted: bool,
-    /// The part of the screen it is made for and drawn into: all of it
-    /// but the bars shown over it and the row of hints (see
-    /// [`Env::content`]).
-    area: Rect,
-    /// What it was opened with, e.g. the book.
-    params: Params,
-    screen: Box<dyn Screen>,
-    /// When it wants [`Screen::on_timer`] ([`Cx::wake_at`]); below another
-    /// screen, once it is on top again.
-    timer: Option<Instant>,
-    /// The key map layer put in front of its slot's while it is on top
-    /// ([`Command::SetKeyLayer`]).
-    key_layer: Option<Id>,
-    /// Opened above a screen guarding the device by that screen (or one
-    /// it opened): its keyboard. Others above it (a sleep screen) get no
-    /// input and are closed as the device wakes.
-    by_guard: bool,
-}
 
 /// An open screen kept while its task is not shown
 /// ([`Command::SwitchTask`]): its id, slot and params.
@@ -896,6 +867,7 @@ impl Kernel {
         }
         self.tick_recognizers();
         self.tick_chromes();
+        self.tick_pane_list();
         if let Some(top) = self.stack.last_mut()
             && top.timer.is_some_and(|at| at <= now)
         {

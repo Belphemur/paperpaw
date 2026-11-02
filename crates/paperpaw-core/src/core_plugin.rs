@@ -271,7 +271,7 @@ fn register_screen_actions(r: &mut Registrar) -> Result<(), RegisterError> {
 /// The actions screens are moved and left with, and what opens the
 /// kernel's slots and menus.
 fn register_moving(r: &mut Registrar) -> Result<(), RegisterError> {
-    static MOVING: [FixedAction; 11] = [
+    static MOVING: [FixedAction; 12] = [
         FixedAction::new(actions::REFRESH_SCREEN, "core.action.refresh-screen").handler(
             |_, _, out| {
                 out.push(Command::Redraw(paperpaw_sdk::RefreshMode::Full));
@@ -306,6 +306,8 @@ fn register_moving(r: &mut Registrar) -> Result<(), RegisterError> {
             .handler(|_, _, out| out.push(Command::open_slot(slots::LIBRARY))),
         FixedAction::new(actions::SETTINGS, "core.action.settings")
             .handler(|_, _, out| out.push(Command::open_slot(slots::SETTINGS))),
+        FixedAction::new(actions::PANE_OTHER, "core.action.pane-other")
+            .handler(|_, _, out| out.push(Command::extended(actions::PANE_OTHER, Params::new()))),
         FixedAction::new(actions::BACK, "core.action.back")
             .hint(label("core.hint.core.back"))
             .handler(|_, _, out| out.push(Command::Back)),
@@ -1535,8 +1537,6 @@ fn register_colors(r: &mut Registrar) -> Result<(), RegisterError> {
     Ok(())
 }
 
-/// The roles of the marks every reader draws: highlights, links, a
-/// search hit, the sentence read aloud (see `paperpaw_sdk::decorations`).
 mod marks;
 /// Smooth text and its contrast, beside the font's weight.
 pub(crate) mod text_look;

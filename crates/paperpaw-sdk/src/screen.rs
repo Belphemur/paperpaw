@@ -813,6 +813,21 @@ pub trait Screen {
 
     /// How it shows where the screen is wide: [`Pane::DETAIL`] for a
     /// screen that shows one thing of the list below it. Revision 2.
+    ///
+    /// Asked once, when it is made. Where the part of the screen it would
+    /// have is [expanded](crate::ui::ScreenClass::Expanded) and the screen
+    /// below it is a full screen that is no detail itself, the two show
+    /// beside each other: the list at the start (on the left, on the right
+    /// in a right-to-left interface), at least 60 mm or 38 % wide, the
+    /// detail in the rest, a line between them, bars and the row of hints
+    /// over both. Each is laid out for its part ([`on_resize`](Self::on_resize)).
+    /// A tap goes to the part it lands in, and keys and buttons go there
+    /// from then on (to the detail at first);
+    /// [`actions::PANE_OTHER`](crate::builtin::actions::PANE_OTHER) moves
+    /// them to the other. A detail the list opens while keys are its own
+    /// takes the place of the one shown, so that going through a list
+    /// never piles details up. Elsewhere (compact and medium screens, the
+    /// X4 in either orientation) a detail is a full screen as any other.
     fn pane(&self) -> Pane {
         Pane::FULL
     }

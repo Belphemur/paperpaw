@@ -65,6 +65,20 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
 
 ### Added
 
+- **A list and the item chosen in it beside each other on wide screens** (#88). Where the screen is expanded (a
+  tablet, a phone on its side; never the X4, which is compact in both orientations), a screen that says
+  `Pane::DETAIL` shows beside the full screen below it: the list at the start (on the right in a right-to-left
+  interface), at least 60 mm or 38 % wide, a line between them, bars and the row of hints over both, each laid out
+  for its part through `Screen::on_resize`. A tap goes to the part it lands in and keys follow it; the new action
+  `core.pane.other` moves them to the other part. A detail the list opens takes the place of the one shown, so
+  going through a list piles nothing up; one the detail opens shows alone over both, and *Back* brings the two back.
+  Free additions, no change of the interface: `ui::ScreenClass` (compact below `ui::COMPACT_BELOW_MM`, 100 mm,
+  expanded from `ui::EXPANDED_FROM_MM`, 140 mm, by the width scaled by the reader's interface text size against
+  its default), `Env::screen_class` and `Env::landscape` (of the screen's own part), `events::DISPLAY_CHANGED`
+  (`DisplayChanged`: the display's width, height, class and whether it is on its side, sent once after a resize
+  laid the screens out), `actions::PANE_OTHER` and `Command::extended`, which plugins had no way to make. Screens
+  are asked `pane` once, when made. A list kept by `on_resize` while a turn puts its detail over it is told
+  `on_hide`.
 - UI: `UiStyle::flip` and `UiStyle::flip_x` are public (#33): a screen lays a row or a grid out once from the left
   and mirrors each part where the interface runs right to left, as the SDK's own parts do. New functions, no
   change of what plugins built before see; their api.txt lines come with the next bless. The library's rows and
@@ -134,7 +148,7 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   `Handled::Yes` it keeps everything (a book open, a list scrolled, a connection); by default it is made anew as
   before. The old screen is now dropped before the new one is made, so a turn never holds both in memory.
   `Screen::pane` says `Pane::DETAIL` for a screen that shows one thing of the list below it, to show beside it on
-  wide screens (the placement comes later); `Pane` is a number with constants, as `Instances`, and a value a kernel
+  wide screens (placed since #88, see *Added*); `Pane` is a number with constants, as `Instances`, and a value a kernel
   does not know shows as `Pane::FULL`. `Screen` grows at its end from now on: `Screen::revision` (never
   implemented by plugins) says which items a screen has, and newer ones are called only through
   `call_since`, so later screen items need no raise.

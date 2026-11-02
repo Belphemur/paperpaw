@@ -506,6 +506,7 @@ pub const paperpaw_sdk::builtin::actions::NEXT: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::actions::NEXT_PAGE: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::actions::NOTHING: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::actions::OPEN_WITH: paperpaw_sdk::Id
+pub const paperpaw_sdk::builtin::actions::PANE_OTHER: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::actions::PREVIOUS: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::actions::PREV_PAGE: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::actions::QUICK_PANEL: paperpaw_sdk::Id
@@ -596,6 +597,17 @@ impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::Decoratio
 pub fn paperpaw_sdk::builtin::events::DecorationTapped::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::DecorationTapped::into_params(self) -> paperpaw_sdk::Params
 pub fn paperpaw_sdk::builtin::events::DecorationTapped::to_params(&self) -> paperpaw_sdk::Params
+#[non_exhaustive] pub struct paperpaw_sdk::builtin::events::DisplayChanged
+pub paperpaw_sdk::builtin::events::DisplayChanged::class: paperpaw_sdk::ui::ScreenClass
+pub paperpaw_sdk::builtin::events::DisplayChanged::height: u16
+pub paperpaw_sdk::builtin::events::DisplayChanged::landscape: bool
+pub paperpaw_sdk::builtin::events::DisplayChanged::width: u16
+impl paperpaw_sdk::builtin::events::DisplayChanged
+pub fn paperpaw_sdk::builtin::events::DisplayChanged::new(u16, u16, paperpaw_sdk::ui::ScreenClass, bool) -> Self
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::DisplayChanged
+pub fn paperpaw_sdk::builtin::events::DisplayChanged::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::builtin::events::DisplayChanged::into_params(self) -> paperpaw_sdk::Params
+pub fn paperpaw_sdk::builtin::events::DisplayChanged::to_params(&self) -> paperpaw_sdk::Params
 #[non_exhaustive] pub struct paperpaw_sdk::builtin::events::DocumentReady
 pub paperpaw_sdk::builtin::events::DocumentReady::path: alloc::string::String
 impl paperpaw_sdk::builtin::events::DocumentReady
@@ -897,6 +909,7 @@ pub const paperpaw_sdk::builtin::events::CATALOG_CHANGED: paperpaw_sdk::event::E
 pub const paperpaw_sdk::builtin::events::CATALOG_FAILED: paperpaw_sdk::event::Event<()>
 pub const paperpaw_sdk::builtin::events::CATALOG_WANTED: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::CatalogWanted>
 pub const paperpaw_sdk::builtin::events::DECORATION_TAPPED: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::DecorationTapped>
+pub const paperpaw_sdk::builtin::events::DISPLAY_CHANGED: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::DisplayChanged>
 pub const paperpaw_sdk::builtin::events::DOCUMENT_READY: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::DocumentReady>
 pub const paperpaw_sdk::builtin::events::FIRMWARE_CHANGED: paperpaw_sdk::event::Event<()>
 pub const paperpaw_sdk::builtin::events::FOCUS_CHANGED: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::FocusChanged>
@@ -1670,6 +1683,10 @@ impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::Decoratio
 pub fn paperpaw_sdk::builtin::events::DecorationTapped::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::DecorationTapped::into_params(self) -> paperpaw_sdk::Params
 pub fn paperpaw_sdk::builtin::events::DecorationTapped::to_params(&self) -> paperpaw_sdk::Params
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::DisplayChanged
+pub fn paperpaw_sdk::builtin::events::DisplayChanged::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::builtin::events::DisplayChanged::into_params(self) -> paperpaw_sdk::Params
+pub fn paperpaw_sdk::builtin::events::DisplayChanged::to_params(&self) -> paperpaw_sdk::Params
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::DocumentReady
 pub fn paperpaw_sdk::builtin::events::DocumentReady::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::DocumentReady::into_params(self) -> paperpaw_sdk::Params
@@ -1854,6 +1871,10 @@ impl paperpaw_sdk::event::ParamValue for paperpaw_sdk::bluetooth::DeviceId
 pub fn paperpaw_sdk::bluetooth::DeviceId::from_param(&str) -> core::option::Option<Self>
 pub fn paperpaw_sdk::bluetooth::DeviceId::missing() -> core::option::Option<Self>
 pub fn paperpaw_sdk::bluetooth::DeviceId::to_param(&self) -> alloc::string::String
+impl paperpaw_sdk::event::ParamValue for paperpaw_sdk::ui::ScreenClass
+pub fn paperpaw_sdk::ui::ScreenClass::from_param(&str) -> core::option::Option<Self>
+pub fn paperpaw_sdk::ui::ScreenClass::missing() -> core::option::Option<Self>
+pub fn paperpaw_sdk::ui::ScreenClass::to_param(&self) -> alloc::string::String
 impl paperpaw_sdk::event::ParamValue for paperpaw_sdk::wifi::JoinFailure
 pub fn paperpaw_sdk::wifi::JoinFailure::from_param(&str) -> core::option::Option<Self>
 pub fn paperpaw_sdk::wifi::JoinFailure::missing() -> core::option::Option<Self>
@@ -4554,6 +4575,17 @@ pub paperpaw_sdk::ui::RowPart::Minus
 pub paperpaw_sdk::ui::RowPart::Plus
 pub paperpaw_sdk::ui::RowPart::Row
 pub paperpaw_sdk::ui::RowPart::Switch
+#[non_exhaustive] pub enum paperpaw_sdk::ui::ScreenClass
+pub paperpaw_sdk::ui::ScreenClass::Compact
+pub paperpaw_sdk::ui::ScreenClass::Expanded
+pub paperpaw_sdk::ui::ScreenClass::Medium
+impl paperpaw_sdk::ui::ScreenClass
+pub const fn paperpaw_sdk::ui::ScreenClass::name(self) -> &'static str
+pub fn paperpaw_sdk::ui::ScreenClass::of(&paperpaw_sdk::Env<'_>, paperpaw_platform::geometry::Rect) -> Self
+impl paperpaw_sdk::event::ParamValue for paperpaw_sdk::ui::ScreenClass
+pub fn paperpaw_sdk::ui::ScreenClass::from_param(&str) -> core::option::Option<Self>
+pub fn paperpaw_sdk::ui::ScreenClass::missing() -> core::option::Option<Self>
+pub fn paperpaw_sdk::ui::ScreenClass::to_param(&self) -> alloc::string::String
 #[non_exhaustive] pub enum paperpaw_sdk::ui::Separators
 pub paperpaw_sdk::ui::Separators::Inset
 pub paperpaw_sdk::ui::Separators::Line
@@ -4916,6 +4948,8 @@ pub fn paperpaw_sdk::ui::UiStyle::with_rtl(self, bool) -> Self
 pub fn paperpaw_sdk::ui::UiStyle::with_separators(self, paperpaw_sdk::ui::Separators) -> Self
 pub fn paperpaw_sdk::ui::UiStyle::with_strong(self, bool) -> Self
 pub fn paperpaw_sdk::ui::UiStyle::with_text(self, f32) -> Self
+pub const paperpaw_sdk::ui::COMPACT_BELOW_MM: u32
+pub const paperpaw_sdk::ui::EXPANDED_FROM_MM: u32
 pub const paperpaw_sdk::ui::ICON_SCALE: f32
 pub const paperpaw_sdk::ui::NOTE_LINES: usize
 pub const paperpaw_sdk::ui::NOTE_LINES_MOST: usize
@@ -5805,6 +5839,7 @@ pub fn paperpaw_sdk::Command::speak(paperpaw_sdk::Speech) -> Self
 pub fn paperpaw_sdk::Command::start_tls(paperpaw_sdk::Id, paperpaw_sdk::Tls) -> Self
 pub fn paperpaw_sdk::Command::work(paperpaw_sdk::work::Work) -> Self
 impl paperpaw_sdk::Command
+pub fn paperpaw_sdk::Command::extended(impl core::convert::Into<paperpaw_sdk::Id>, paperpaw_sdk::Params) -> paperpaw_sdk::Command
 pub fn paperpaw_sdk::Command::open_slot(paperpaw_sdk::Id) -> paperpaw_sdk::Command
 pub fn paperpaw_sdk::Command::run(impl core::convert::Into<paperpaw_sdk::Id>) -> paperpaw_sdk::Command
 pub fn paperpaw_sdk::Command::set<T: paperpaw_sdk::setting::SettingType>(&paperpaw_sdk::setting::Setting<T>, <T as paperpaw_sdk::setting::SettingType>::Input) -> paperpaw_sdk::Command
@@ -6251,6 +6286,7 @@ pub fn paperpaw_sdk::Env<'a>::i18n(&self) -> &'a paperpaw_i18n::Translator
 pub fn paperpaw_sdk::Env<'a>::inputs(&self) -> &'a [paperpaw_sdk::keys::InputSpec]
 pub fn paperpaw_sdk::Env<'a>::keys(&self) -> &'a dyn paperpaw_sdk::keys::KeyBindings
 pub fn paperpaw_sdk::Env<'a>::keys_held(&self) -> paperpaw_sdk::realtime::KeysHeld<'a>
+pub fn paperpaw_sdk::Env<'a>::landscape(&self) -> bool
 pub fn paperpaw_sdk::Env<'a>::lang(&self) -> paperpaw_lang::Lang
 pub fn paperpaw_sdk::Env<'a>::last_input(&self) -> paperpaw_sdk::keys::InputMode
 pub fn paperpaw_sdk::Env<'a>::look(&self) -> paperpaw_sdk::ui::look::Look
@@ -6268,6 +6304,7 @@ pub fn paperpaw_sdk::Env<'a>::random(&self) -> paperpaw_sdk::random::Random
 pub fn paperpaw_sdk::Env<'a>::reader(&self) -> bool
 pub fn paperpaw_sdk::Env<'a>::readers(&self) -> &'a paperpaw_sdk::readers::Readers
 pub fn paperpaw_sdk::Env<'a>::room(&self) -> paperpaw_sdk::realtime::Room
+pub fn paperpaw_sdk::Env<'a>::screen_class(&self) -> paperpaw_sdk::ui::ScreenClass
 pub fn paperpaw_sdk::Env<'a>::screens(&self) -> paperpaw_sdk::ScreenList<'a>
 pub fn paperpaw_sdk::Env<'a>::secrets(&self) -> paperpaw_sdk::secrets::Visible<'a>
 pub fn paperpaw_sdk::Env<'a>::services(&self) -> &'a paperpaw_sdk::services::Services
@@ -7303,6 +7340,10 @@ impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::Decoratio
 pub fn paperpaw_sdk::builtin::events::DecorationTapped::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::DecorationTapped::into_params(self) -> paperpaw_sdk::Params
 pub fn paperpaw_sdk::builtin::events::DecorationTapped::to_params(&self) -> paperpaw_sdk::Params
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::DisplayChanged
+pub fn paperpaw_sdk::builtin::events::DisplayChanged::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::builtin::events::DisplayChanged::into_params(self) -> paperpaw_sdk::Params
+pub fn paperpaw_sdk::builtin::events::DisplayChanged::to_params(&self) -> paperpaw_sdk::Params
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::DocumentReady
 pub fn paperpaw_sdk::builtin::events::DocumentReady::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::DocumentReady::into_params(self) -> paperpaw_sdk::Params
