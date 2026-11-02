@@ -19,6 +19,11 @@ change the plugin SDK.
 - Tap zones (thirds, corners, the zones of key maps) are measured on the part of the screen the screen has, as
   the finger's point always was: on touch devices with the row of button hints (the X4 Pro, the emulator) the
   borders of the lower zones lay about 3 mm off, by part of the row's height (#88).
+- A damaged folder on the memory card (entries with names no file system gives, as a reset can leave) can be removed
+  again, and the folders above it (#388, #99): the folder is cut off where its parent names it, and nothing in it is
+  written, followed or freed, the entries that look sane included (its space may hold another file's data; the space
+  comes back when the card is checked on a computer). Before, removing the folder, or a book's cache in it, failed
+  with "invalid path". Folders of names PaperPaw does not take (made elsewhere: `con`) are removed with all they hold.
 
 ## [0.6.0-beta.1] - 2026-11-02
 
