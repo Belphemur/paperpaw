@@ -18,10 +18,10 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use paperpaw_core::sdk::{CertificateHash, SocketError, Trust};
+use paperpaw_core::sdk::{SocketError, Trust};
 use paperpaw_core::{Effects, Kernel, SocketCall, SocketEvent, TlsSetup};
 use paperpaw_platform::Instant;
-use paperpaw_x4::tls_trust::{self, Outcome};
+use paperpaw_x4::tls_trust::{self, Leaf, Outcome};
 use paperpaw_x4::tls_watch::{Stage, Watch};
 use smoltcp::socket::tcp;
 use smoltcp::wire::IpAddress;
@@ -419,13 +419,14 @@ fn fault_event(
     socket: u32,
     fault: tls_trust::Fault,
     secure: &Secure,
-    leaf: Option<CertificateHash>,
+    leaf: Option<Leaf>,
 ) -> SocketEvent {
     let pinned = matches!(secure.setup.trust, Trust::Pinned(_));
     match (tls_trust::outcome(fault, pinned, leaf.is_some()), leaf) {
-        (Outcome::Untrusted(why), Some(certificate)) => SocketEvent::Untrusted {
+        (Outcome::Untrusted(why), Some(leaf)) => SocketEvent::Untrusted {
             socket,
-            certificate,
+            certificate: leaf.certificate,
+            key: leaf.key,
             why,
         },
         (Outcome::Untrusted(_), None) => {
@@ -702,7 +703,7 @@ impl Socket {
         if !link.ready(net) {
             return true;
         }
-        let Some(certificate) = link.session().and_then(tls::Session::leaf) else {
+        let Some(leaf) = link.session().and_then(tls::Session::leaf) else {
             events.push(failed(
                 number,
                 SocketError::Tls,
@@ -720,7 +721,9 @@ impl Socket {
         );
         events.push(SocketEvent::Secured {
             socket: number,
-            certificate,
+            certificate: leaf.certificate,
+            key: leaf.key,
+            time_checked: leaf.time_checked,
         });
         secure.watch.secured(now.0);
         let Phase::Handshake(link) = core::mem::replace(&mut self.phase, Phase::Ended) else {

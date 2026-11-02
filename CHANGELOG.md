@@ -43,8 +43,9 @@ before it are thrown away.
   `SocketError::Unsupported`. The shells' TLS comes with the firmware's part of #81.
 - **X4, X4 Pro and X4 Classic: TLS for plugins' sockets** (#81): a socket made secure from the start or switched
   to it (STARTTLS) is an mbedTLS session over the same connection HTTPS uses, the authorities of the firmware
-  (Mozilla's) or up to four pinned certificates (the server's own, by its SHA-256), the name asked for (SNI) and
-  checked, the dates checked once the time is known. The X4 holds one TLS session at a time and the X4 Pro and
+  (Mozilla's) or up to four pinned certificates or keys (the server's own, by the SHA-256 of its DER or of its
+  public key), the name asked for (SNI) and checked, the dates checked once the time is known (`Secured` says
+  whether they were). The X4 holds one TLS session at a time and the X4 Pro and
   Classic two, shared with HTTPS and served in the order asked: a socket that waits longer than its timeout fails
   `Busy`. Nothing is sent or read before `Secured`; a switch to TLS over bytes that came after the server's
   go-ahead fails (`NotReady`, socket closed), as they might be injected.

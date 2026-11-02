@@ -10,7 +10,7 @@
 
 use alloc::vec::Vec;
 
-use paperpaw_sdk::{CertificateHash, Distrust, SocketError, Trust};
+use paperpaw_sdk::{CertificateHash, Distrust, KeyHash, SocketError, Trust};
 
 /// `MBEDTLS_X509_BADCERT_EXPIRED`.
 pub const EXPIRED: u32 = 0x01;
@@ -21,76 +21,114 @@ pub const NOT_TRUSTED: u32 = 0x08;
 /// `MBEDTLS_X509_BADCERT_FUTURE`.
 pub const FUTURE: u32 = 0x200;
 
+/// What the certificates are trusted by.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Mode {
+    /// The authorities the firmware ships.
+    Authorities,
+    /// The server's own certificate is one of these (SHA-256 of its DER).
+    Certificates(Vec<[u8; 32]>),
+    /// The server's own key is one of these (SHA-256 of its
+    /// SubjectPublicKeyInfo).
+    Keys(Vec<[u8; 32]>),
+}
+
+/// The server's own certificate, as the handshake showed it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Leaf {
+    pub certificate: CertificateHash,
+    pub key: KeyHash,
+    /// Its dates were checked; not, where the device had no time.
+    pub time_checked: bool,
+}
+
 /// What a session checks a server's certificate by.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Checks {
-    /// The certificates trusted, where pinned (the SHA-256 of their DER);
-    /// `None`: the authorities.
-    pins: Option<Vec<[u8; 32]>>,
+    mode: Mode,
     /// The server's own certificate, once the handshake has shown it.
-    leaf: Option<CertificateHash>,
+    leaf: Option<Leaf>,
 }
 
 impl Checks {
     /// The checks `trust` asks for.
     #[must_use]
     pub fn new(trust: &Trust) -> Self {
-        let pins = match trust {
-            Trust::Pinned(pins) => Some(pins.iter().map(|pin| *pin.sha256()).collect()),
-            _ => None,
+        let mode = match trust {
+            Trust::Pinned(pins) => {
+                Mode::Certificates(pins.iter().map(|pin| *pin.sha256()).collect())
+            }
+            Trust::PinnedKeys(keys) => Mode::Keys(keys.iter().map(|key| *key.sha256()).collect()),
+            _ => Mode::Authorities,
         };
-        Self { pins, leaf: None }
+        Self { mode, leaf: None }
     }
 
-    /// Whether certificates are pinned.
+    /// Whether certificates or keys are pinned (not the authorities).
     #[must_use]
     pub fn pinned(&self) -> bool {
-        self.pins.is_some()
+        self.mode != Mode::Authorities
     }
 
     /// The server's own certificate, once it was shown.
     #[must_use]
-    pub fn leaf(&self) -> Option<CertificateHash> {
+    pub fn leaf(&self) -> Option<Leaf> {
         self.leaf
     }
 
-    /// What the flags of the certificate at `depth` become. `hash` makes
-    /// the SHA-256 of its DER, only for the server's own certificate;
-    /// `dates` is what its dates found (`EXPIRED`, `FUTURE` or none:
-    /// [`Checks`] does not know the time); `from_root` says, only when
-    /// asked, whether one of the authorities signed it or is it.
+    /// What the flags of the certificate at `depth` become. `leaf` makes
+    /// the SHA-256 of its DER and of its key, only for the server's own
+    /// certificate; `dates` is what its dates found (`EXPIRED`, `FUTURE`
+    /// or none), `None` where the device has no time: then they go
+    /// unchecked, and [`Leaf::time_checked`] says so; `from_root` says,
+    /// only when asked, whether one of the authorities signed it or is it.
     ///
     /// - Authorities: mbedTLS's findings stay, and the dates are added; a
     ///   certificate it finds untrusted is trusted if `from_root` says so.
-    /// - Pinned: the chain and the name are not asked about; the server's
-    ///   own certificate (depth 0) must be one pinned, and its dates are
-    ///   checked. Whatever else mbedTLS found of it (its key's use, a name)
-    ///   goes: the reader trusts that certificate, not what it says of itself.
+    /// - Pinned (certificates or keys): the chain and the name are not
+    ///   asked about; the server's own certificate (depth 0) must be, or
+    ///   have the key of, one pinned, and its dates are checked. Whatever
+    ///   else mbedTLS found of it (its key's use, a name) goes: the reader
+    ///   trusts that certificate, not what it says of itself.
     pub fn flags(
         &mut self,
         depth: u32,
-        hash: impl FnOnce() -> CertificateHash,
+        leaf: impl FnOnce() -> (CertificateHash, KeyHash),
         found: u32,
-        dates: u32,
+        dates: Option<u32>,
         from_root: impl FnOnce() -> bool,
     ) -> u32 {
-        let hash = (depth == 0).then(hash);
-        if hash.is_some() {
-            self.leaf = hash;
+        let shown = (depth == 0).then(leaf);
+        if let Some((certificate, key)) = shown {
+            self.leaf = Some(Leaf {
+                certificate,
+                key,
+                time_checked: dates.is_some(),
+            });
         }
-        match &self.pins {
-            None => {
+        let dates = dates.unwrap_or(0);
+        let pins = match &self.mode {
+            Mode::Authorities => {
                 let flags = found | dates;
-                if flags & NOT_TRUSTED != 0 && from_root() {
+                return if flags & NOT_TRUSTED != 0 && from_root() {
                     flags & !NOT_TRUSTED
                 } else {
                     flags
-                }
+                };
             }
-            Some(_) if hash.is_none() => 0,
-            Some(pins) => {
-                let pinned = hash.is_some_and(|hash| pins.iter().any(|pin| pin == hash.sha256()));
-                dates | if pinned { 0 } else { NOT_TRUSTED }
+            Mode::Certificates(pins) => (pins, shown.map(|(certificate, _)| *certificate.sha256())),
+            Mode::Keys(pins) => (pins, shown.map(|(_, key)| *key.sha256())),
+        };
+        match pins.1 {
+            // The others of the chain do not matter.
+            None => 0,
+            Some(shown) => {
+                dates
+                    | if pins.0.contains(&shown) {
+                        0
+                    } else {
+                        NOT_TRUSTED
+                    }
             }
         }
     }
@@ -168,8 +206,21 @@ mod tests {
         CertificateHash::new([n; 32])
     }
 
+    fn key(n: u8) -> KeyHash {
+        KeyHash::new([n; 32])
+    }
+
+    /// A leaf of certificate `n` with its key `n + 100`.
+    fn leaf(n: u8) -> impl FnOnce() -> (CertificateHash, KeyHash) {
+        move || (hash(n), key(n + 100))
+    }
+
     fn pinned(pins: &[u8]) -> Checks {
         Checks::new(&Trust::Pinned(pins.iter().map(|&n| hash(n)).collect()))
+    }
+
+    fn pinned_keys(keys: &[u8]) -> Checks {
+        Checks::new(&Trust::PinnedKeys(keys.iter().map(|&n| key(n)).collect()))
     }
 
     #[test]
@@ -177,30 +228,49 @@ mod tests {
         let mut checks = Checks::new(&Trust::Authorities);
         assert!(!checks.pinned());
         // A name that does not fit stays, with the date.
-        let flags = checks.flags(0, || hash(1), CN_MISMATCH, EXPIRED, || false);
+        let flags = checks.flags(0, leaf(1), CN_MISMATCH, Some(EXPIRED), || false);
         assert_eq!(flags, CN_MISMATCH | EXPIRED);
-        assert_eq!(checks.leaf(), Some(hash(1)));
+        assert_eq!(checks.leaf().map(|l| l.certificate), Some(hash(1)));
+        assert_eq!(checks.leaf().map(|l| l.key), Some(key(101)));
     }
 
     #[test]
     fn authorities_trust_what_a_root_signed_and_only_then() {
         let mut checks = Checks::new(&Trust::Authorities);
-        assert_eq!(checks.flags(1, || hash(2), NOT_TRUSTED, 0, || true), 0);
+        assert_eq!(checks.flags(1, leaf(2), NOT_TRUSTED, Some(0), || true), 0);
         assert_eq!(
-            checks.flags(1, || hash(2), NOT_TRUSTED, 0, || false),
+            checks.flags(1, leaf(2), NOT_TRUSTED, Some(0), || false),
             NOT_TRUSTED
         );
         // Nobody asks the roots where mbedTLS found nothing wrong.
-        assert_eq!(checks.flags(0, || hash(3), 0, 0, || panic!("not asked")), 0);
+        assert_eq!(
+            checks.flags(0, leaf(3), 0, Some(0), || panic!("not asked")),
+            0
+        );
     }
 
     #[test]
     fn the_leaf_is_the_one_at_depth_0() {
         let mut checks = Checks::new(&Trust::Authorities);
-        checks.flags(2, || hash(9), 0, 0, || true);
+        checks.flags(2, || panic!("not made"), 0, Some(0), || true);
         assert_eq!(checks.leaf(), None);
-        checks.flags(0, || hash(4), 0, 0, || true);
-        assert_eq!(checks.leaf(), Some(hash(4)));
+        checks.flags(0, leaf(4), 0, Some(0), || true);
+        assert_eq!(checks.leaf().map(|l| l.certificate), Some(hash(4)));
+    }
+
+    #[test]
+    fn without_a_time_the_dates_go_unchecked_and_it_is_said() {
+        let mut checks = Checks::new(&Trust::Authorities);
+        assert_eq!(checks.flags(0, leaf(1), 0, None, || false), 0);
+        assert_eq!(checks.leaf().map(|l| l.time_checked), Some(false));
+        // With a time they are, and are told so.
+        let mut checks = Checks::new(&Trust::Authorities);
+        assert_eq!(checks.flags(0, leaf(1), 0, Some(0), || false), 0);
+        assert_eq!(checks.leaf().map(|l| l.time_checked), Some(true));
+        // A pinned certificate likewise.
+        let mut checks = pinned(&[1]);
+        assert_eq!(checks.flags(0, leaf(1), 0, None, || false), 0);
+        assert_eq!(checks.leaf().map(|l| l.time_checked), Some(false));
     }
 
     #[test]
@@ -209,24 +279,27 @@ mod tests {
         assert!(checks.pinned());
         // Self-signed, another name, no server use: all of it goes.
         let found = NOT_TRUSTED | CN_MISMATCH | 0x1000;
-        assert_eq!(checks.flags(0, || hash(6), found, 0, || false), 0);
+        assert_eq!(checks.flags(0, leaf(6), found, Some(0), || false), 0);
         // Its dates are checked.
         assert_eq!(
-            checks.flags(0, || hash(5), found, EXPIRED, || false),
+            checks.flags(0, leaf(5), found, Some(EXPIRED), || false),
             EXPIRED
         );
-        assert_eq!(checks.flags(0, || hash(5), found, FUTURE, || false), FUTURE);
+        assert_eq!(
+            checks.flags(0, leaf(5), found, Some(FUTURE), || false),
+            FUTURE
+        );
     }
 
     #[test]
     fn a_certificate_that_is_not_pinned_is_not_trusted() {
         let mut checks = pinned(&[5]);
-        assert_eq!(checks.flags(0, || hash(7), 0, 0, || true), NOT_TRUSTED);
+        assert_eq!(checks.flags(0, leaf(7), 0, Some(0), || true), NOT_TRUSTED);
         // And it is the one the reader is shown.
-        assert_eq!(checks.leaf(), Some(hash(7)));
+        assert_eq!(checks.leaf().map(|l| l.certificate), Some(hash(7)));
         // The others of the chain do not matter.
         assert_eq!(
-            checks.flags(1, || hash(8), NOT_TRUSTED | EXPIRED, 0, || false),
+            checks.flags(1, leaf(8), NOT_TRUSTED | EXPIRED, Some(0), || false),
             0
         );
     }
@@ -234,7 +307,25 @@ mod tests {
     #[test]
     fn four_pins_are_all_looked_at() {
         let mut checks = pinned(&[1, 2, 3, 4]);
-        assert_eq!(checks.flags(0, || hash(4), NOT_TRUSTED, 0, || false), 0);
+        assert_eq!(checks.flags(0, leaf(4), NOT_TRUSTED, Some(0), || false), 0);
+    }
+
+    #[test]
+    fn a_pinned_key_outlasts_a_renewed_certificate() {
+        // Certificate 9 is another than before but has the key 105 (of
+        // certificate 5).
+        let mut checks = pinned_keys(&[105, 106]);
+        assert!(checks.pinned());
+        let found = NOT_TRUSTED | CN_MISMATCH;
+        assert_eq!(checks.flags(0, leaf(5), found, Some(0), || false), 0);
+        assert_eq!(checks.flags(0, leaf(6), found, Some(0), || false), 0);
+        // Dates are checked, a key that is not pinned is not trusted.
+        assert_eq!(
+            checks.flags(0, leaf(5), found, Some(EXPIRED), || false),
+            EXPIRED
+        );
+        assert_eq!(checks.flags(0, leaf(7), 0, Some(0), || true), NOT_TRUSTED);
+        assert_eq!(checks.leaf().map(|l| l.key), Some(key(107)));
     }
 
     #[test]

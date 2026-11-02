@@ -29,8 +29,8 @@ use alloc::vec::Vec;
 use core::convert::Infallible;
 use core::ffi::{c_int, c_uchar, c_void};
 
-use paperpaw_sdk::{CertificateHash, Trust};
-use paperpaw_x4::tls_trust::{Checks, Fault};
+use paperpaw_sdk::{CertificateHash, KeyHash, Trust};
+use paperpaw_x4::tls_trust::{Checks, Fault, Leaf};
 
 use crate::tls_slots::Slot;
 
@@ -272,7 +272,12 @@ unsafe extern "C" fn verify(
             u32::try_from(depth).unwrap_or(u32::MAX),
             || {
                 let der = core::slice::from_raw_parts(crt.raw.p, crt.raw.len);
-                CertificateHash::new(paperpaw_digest::sha256::digest(der))
+                // Its SubjectPublicKeyInfo, whole: what browsers pin a key by.
+                let key = core::slice::from_raw_parts(crt.pk_raw.p, crt.pk_raw.len);
+                (
+                    CertificateHash::new(paperpaw_digest::sha256::digest(der)),
+                    KeyHash::new(paperpaw_digest::sha256::digest(key)),
+                )
             },
             *flags,
             dates(crt.valid_from, crt.valid_to),
@@ -282,12 +287,11 @@ unsafe extern "C" fn verify(
     0
 }
 
-/// The flags of a certificate valid from `from` to `to`, now (none while
-/// the time is not known, so its dates go unchecked: see the module).
-fn dates(from: mbedtls_x509_time, to: mbedtls_x509_time) -> u32 {
-    let Some(now) = crate::clock::unix_ms(crate::now()).map(|ms| ms / 1000) else {
-        return 0;
-    };
+/// The flags of a certificate valid from `from` to `to`, now; `None`
+/// while the time is not known, so its dates go unchecked (see the
+/// module).
+fn dates(from: mbedtls_x509_time, to: mbedtls_x509_time) -> Option<u32> {
+    let now = crate::clock::unix_ms(crate::now()).map(|ms| ms / 1000)?;
     let seconds = |t: mbedtls_x509_time| {
         paperpaw_x4::sntp::unix_seconds(
             t.year,
@@ -298,13 +302,13 @@ fn dates(from: mbedtls_x509_time, to: mbedtls_x509_time) -> u32 {
             t.sec as u32,
         )
     };
-    if now < seconds(from) {
+    Some(if now < seconds(from) {
         MBEDTLS_X509_BADCERT_FUTURE
     } else if now > seconds(to) {
         MBEDTLS_X509_BADCERT_EXPIRED
     } else {
         0
-    }
+    })
 }
 
 /// `Ok` for mbedTLS's results that are not errors; `Err` with the code.
@@ -362,7 +366,7 @@ impl Session {
     }
 
     /// The server's own certificate, as far as the handshake showed it.
-    pub fn leaf(&self) -> Option<CertificateHash> {
+    pub fn leaf(&self) -> Option<Leaf> {
         self.checks.leaf()
     }
 
