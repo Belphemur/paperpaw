@@ -155,7 +155,11 @@ file, list and binaries of `tools/plugin-files`, none of its scripts), the
 CHANGELOG and docs (`store_update.py` checks this and the version: above the
 base's for an update, any for a plugin the base does not have). A change
 anywhere else (the kernel, the SDK, another plugin, a script or a workflow)
-stops the run unless its path is named in `accept`: a decision for whoever
+stops the run unless its path is named in `accept` (the workspace's `Cargo.toml`
+may gain only the plugin's member and its `workspace.dependencies` entry, and
+`Cargo.lock` only new packages, so a `[patch]`, a profile or another SDK is
+refused; renamed files count at both ends; a path dependency of the plugin must
+be another crate of the workspace): a decision for whoever
 runs it, who has to know the change cannot differ from what the firmware does.
 A plugin that needs a newer interface than the base's waits for the next
 release.

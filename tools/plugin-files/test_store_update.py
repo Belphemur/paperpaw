@@ -24,12 +24,12 @@ def manifest(version):
 
 class Classify(unittest.TestCase):
     def test_the_plugin_its_tooling_and_the_texts_are_its_own(self):
-        own, reported, refused = store_update.classify(
+        own, workspace, named, refused = store_update.classify(
             ["plugins/notes-vault/src/lib.rs", "tools/plugin-files/plugins.txt",
              "tools/plugin-files/src/bin/notes-vault.rs", "tools/plugin-files/Cargo.toml",
              "tools/plugin-files/Cargo.lock", "CHANGELOG.md", "docs/data-files.md"],
             "notes-vault")
-        self.assertEqual((len(own), reported, refused), (7, [], []))
+        self.assertEqual((len(own), workspace, named, refused), (7, [], [], []))
 
     def test_the_scripts_and_the_workflows_are_never_the_branch_s(self):
         # What runs the checks, the build and the signing is the trusted checkout's.
@@ -39,23 +39,87 @@ class Classify(unittest.TestCase):
                    "tools/plugin-files/rust-toolchain.toml", "tools/plugin-files/keyboards/x.ini",
                    ".github/workflows/store-plugin.yml", ".github/actions/xteink-tools/action.yml",
                    "tools/xtensa-std/build.sh", "tools/ci/build-prerequisites.sh"]
-        own, reported, refused = store_update.classify(scripts, "notes-vault")
-        self.assertEqual((own, reported, refused), ([], [], scripts))
+        own, workspace, named, refused = store_update.classify(scripts, "notes-vault")
+        self.assertEqual((own, workspace, named, refused), ([], [], [], scripts))
 
-    def test_the_workspace_s_lists_are_reported_and_the_rest_is_refused(self):
-        own, reported, refused = store_update.classify(
+    def test_the_workspace_s_lists_are_for_their_own_check_and_the_rest_is_refused(self):
+        own, workspace, named, refused = store_update.classify(
             ["Cargo.toml", "Cargo.lock", "plugins/format-epub/src/html.rs",
              "crates/paperpaw-app/src/lib.rs", "plugins/notes-vault-extra/src/lib.rs"],
             "notes-vault")
-        self.assertEqual(reported, ["Cargo.toml", "Cargo.lock"])
+        self.assertEqual(workspace, ["Cargo.toml", "Cargo.lock"])
         self.assertEqual(len(refused), 3)  # a plugin whose name only begins with the id is another
 
     def test_a_named_path_or_folder_is_accepted_and_reported(self):
-        own, reported, refused = store_update.classify(
+        own, workspace, named, refused = store_update.classify(
             ["plugins/format-epub/src/html.rs", "crates/paperpaw-app/src/lib.rs", "crates/paperpaw-sdk/src/lib.rs"],
-            "notes-vault", ["plugins/format-epub", "crates/paperpaw-app/src/lib.rs", ""])
+            "notes-vault", [" plugins/format-epub/", "crates/paperpaw-app/src/lib.rs", ""])
         self.assertEqual(refused, ["crates/paperpaw-sdk/src/lib.rs"])
-        self.assertEqual(len(reported), 2)
+        self.assertEqual(len(named), 2)  # entries are stripped of spaces and slashes
+
+
+TOML = """[workspace]
+members = ["crates/paperpaw-sdk", "plugins/old"]
+
+[workspace.dependencies]
+paperpaw-sdk = { path = "crates/paperpaw-sdk", version = "1.0.0" }
+paperpaw-plugin-old = { path = "plugins/old", version = "1.0.0" }
+"""
+LOCK = """version = 4
+
+[[package]]
+name = "paperpaw-app"
+version = "1.0.0"
+dependencies = [
+ "paperpaw-plugin-old",
+]
+
+[[package]]
+name = "paperpaw-plugin-old"
+version = "1.0.0"
+
+[[package]]
+name = "serde"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "abc"
+"""
+
+
+class Workspace(unittest.TestCase):
+    def test_only_a_plugin_s_member_and_entry_pass(self):
+        now = (TOML.replace('"plugins/old"]', '"plugins/old", "plugins/new"]')
+               + 'paperpaw-plugin-new = { path = "plugins/new", version = "1.0.0" }\n')
+        self.assertEqual(store_update.manifest_problems("new", TOML, now), [])
+
+    def test_a_patch_a_profile_or_another_sdk_is_refused(self):
+        for extra in ('[patch.crates-io]\nserde = { path = "plugins/new/serde" }\n',
+                      '[profile.release]\npanic = "abort"\n',
+                      'paperpaw-core = { path = "plugins/new/core", version = "1.0.0" }\n'):
+            self.assertTrue(store_update.manifest_problems("new", TOML, TOML + extra), extra)
+        moved = TOML.replace('path = "crates/paperpaw-sdk"', 'path = "plugins/new/sdk"')
+        self.assertTrue(store_update.manifest_problems("new", TOML, moved))
+        outside = TOML.replace('"plugins/old"]', '"plugins/old", "crates/extra"]')
+        self.assertIn("only plugins/new", store_update.manifest_problems("new", TOML, outside)[0])
+
+    def test_a_package_and_a_dependency_on_it_pass_in_the_lock(self):
+        now = (LOCK.replace('"paperpaw-plugin-old",\n', '"paperpaw-plugin-new",\n "paperpaw-plugin-old",\n')
+               + '\n[[package]]\nname = "paperpaw-plugin-new"\nversion = "1.0.0"\n')
+        self.assertEqual(store_update.lock_problems(LOCK, now), [])
+
+    def test_a_changed_package_or_dependency_is_refused_in_the_lock(self):
+        self.assertTrue(store_update.lock_problems(LOCK, LOCK.replace('"1.0.0"\nsource', '"1.0.1"\nsource')))
+        self.assertTrue(store_update.lock_problems(LOCK, LOCK.replace('checksum = "abc"', 'checksum = "xyz"')))
+        self.assertTrue(store_update.lock_problems(
+            LOCK, LOCK.replace('"paperpaw-plugin-old",\n', '"paperpaw-plugin-old",\n "serde",\n')))
+
+    def test_a_copy_of_the_sdk_in_the_plugin_s_folder_is_refused(self):
+        ok = '[dependencies]\npaperpaw-sdk.workspace = true\nother = { path = "../../crates/paperpaw-x" }\n'
+        self.assertEqual(store_update.plugin_problems("new", ok), [])
+        for spec in ('{ path = "sdk" }', '{ path = "../new/sdk" }', '{ path = "../../tools/x" }'):
+            self.assertTrue(store_update.plugin_problems("new", f"[dependencies]\npaperpaw-sdk = {spec}\n"), spec)
+        self.assertTrue(store_update.plugin_problems(
+            "new", '[target.\'cfg(unix)\'.dependencies]\nx = { path = "src/x" }\n'))
 
 
 class Check(unittest.TestCase):
@@ -113,7 +177,7 @@ class Check(unittest.TestCase):
         self.assertTrue(any("crates/core/lib.rs" in p for p in problems), problems)
         version, problems, notes = self.check("new", ["crates/core"])
         self.assertEqual((version, problems), ("1.0.0", []))
-        self.assertTrue(any("crates/core/lib.rs" in n for n in notes), notes)
+        self.assertTrue(any("accepted by name: crates/core" in n and "crates/core/lib.rs" in n for n in notes), notes)
 
     def test_a_branch_with_its_own_signing_script_is_refused(self):
         self.write("plugins/new/Cargo.toml", manifest("1.0.0"))
@@ -121,6 +185,28 @@ class Check(unittest.TestCase):
         self.commit("new and sign.sh")
         _, problems, _ = self.check("new")
         self.assertTrue(any("tools/plugin-files/sign.sh" in p for p in problems), problems)
+
+    def test_a_moved_sdk_file_is_seen_at_both_ends(self):
+        self.write("plugins/new/Cargo.toml", manifest("1.0.0"))
+        self.write("crates/core/lib.rs", "// a long enough base file to be a rename candidate\n" * 20)
+        self.commit("base grows")
+        self.git("tag", "-f", "v0.6.0-beta.1")
+        (self.root / "plugins/new/moved.rs").parent.mkdir(parents=True, exist_ok=True)
+        (self.root / "crates/core/lib.rs").rename(self.root / "plugins/new/moved.rs")
+        self.commit("move")
+        _, problems, _ = self.check("new")
+        self.assertTrue(any("crates/core/lib.rs" in p for p in problems), problems)
+
+    def test_a_patch_in_the_workspace_manifest_is_refused_unless_named(self):
+        self.write("Cargo.toml", WORKSPACE + '[workspace.dependencies]\nserde = "1"\n')
+        self.commit("deps")
+        self.git("tag", "-f", "v0.6.0-beta.1")
+        self.write("plugins/new/Cargo.toml", manifest("1.0.0"))
+        self.write("Cargo.toml", WORKSPACE + '[workspace.dependencies]\nserde = "1"\n[patch.crates-io]\nserde = { path = "plugins/new/serde" }\n')
+        self.commit("patch")
+        _, problems, _ = self.check("new")
+        self.assertTrue(any(p.startswith("Cargo.toml:") for p in problems), problems)
+        self.assertEqual(self.check("new", ["Cargo.toml"])[1], [])
 
     def test_a_source_not_made_from_the_base_is_refused(self):
         self.git("checkout", "-q", "--orphan", "other")

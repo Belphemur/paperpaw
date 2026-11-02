@@ -22,19 +22,28 @@ standard output and fails, saying why on standard error, when
   (the kernel, the SDK, the shells, other plugins, `crates/`, any script
   or workflow) is firmware, or what a firmware shares with a plugin (the
   tables of shared functions), or what runs with the key, and the
-  published firmware is the base's, not this source's. The paths can be accepted by name (`--accept`, a path
-  or a folder), each one a decision of whoever runs the workflow; the
-  root `Cargo.toml` and `Cargo.lock` (the workspace's members and
-  versions) are only reported.
+  published firmware is the base's, not this source's. A path can be
+  accepted by name (`--accept`, a path or a folder, each one reported):
+  a decision of whoever runs the workflow. The root `Cargo.toml` may
+  gain the plugin's member and its entry of workspace.dependencies and
+  nothing else ([patch], [profile.*] or another dependency would build
+  the plugin against another SDK); `Cargo.lock` may gain packages (and a
+  dependency on one of them) and no existing package changes. Git's
+  rename detection is off, so a moved file shows both its paths;
+- the plugin depends by path on anything but another crate of the
+  workspace (a copy of the SDK in its own folder).
 
-The plugin's fingerprint is not checked here: `build.sh --fingerprint`
-fails a file whose fingerprint is not the base firmware's.
+The plugin's fingerprint is not checked here: check_files.sh does, with
+the build's files, before they are signed.
 """
 
 import argparse
 import pathlib
+import copy
+import posixpath
 import subprocess
 import sys
+import tomllib
 
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -47,24 +56,114 @@ import versions  # noqa: E402
 OWN_FOLDERS = ("tools/plugin-files/src/", "docs/")
 OWN_FILES = ("CHANGELOG.md", "README.md", "tools/plugin-files/Cargo.toml", "tools/plugin-files/Cargo.lock",
              "tools/plugin-files/plugins.txt")
-# Reported, not refused: the workspace's list of members and versions.
-REPORTED_FILES = ("Cargo.toml", "Cargo.lock")
+# The workspace's list of members and versions: changed only as far as a
+# new plugin needs (manifest_problems, lock_problems), or by name.
+WORKSPACE_FILES = ("Cargo.toml", "Cargo.lock")
+
+
+def accepted_paths(accepted):
+    """The names in `accept`, stripped, without empty ones and trailing slashes."""
+    return [a.strip().rstrip("/") for a in accepted if a.strip()]
 
 
 def classify(paths, plugin, accepted=()):
-    """The changed `paths` in three lists: (own, reported, refused)."""
-    own, reported, refused = [], [], []
-    accepted = [a.rstrip("/") for a in accepted if a.strip()]
+    """The changed `paths` in four lists: (own, workspace, accepted, refused).
+
+    `workspace` are the root Cargo.toml and Cargo.lock, for the checks of
+    what changed in them (unless accepted by name)."""
+    own, workspace, named, refused = [], [], [], []
+    accepted = accepted_paths(accepted)
     for path in paths:
-        if path.startswith(f"plugins/{plugin}/") or path.startswith(OWN_FOLDERS) or path in OWN_FILES:
+        if any(path == a or path.startswith(a + "/") for a in accepted):
+            named.append(path)
+        elif path.startswith(f"plugins/{plugin}/") or path.startswith(OWN_FOLDERS) or path in OWN_FILES:
             own.append(path)
-        elif path in REPORTED_FILES:
-            reported.append(path)
-        elif any(path == a or path.startswith(a + "/") for a in accepted):
-            reported.append(path)
+        elif path in WORKSPACE_FILES:
+            workspace.append(path)
         else:
             refused.append(path)
-    return own, reported, refused
+    return own, workspace, named, refused
+
+
+def manifest_problems(plugin, then, now):
+    """What the workspace manifest gained beyond the plugin: its member and its entry of workspace.dependencies.
+
+    `then` and `now` are the base's and the source's Cargo.toml, as text."""
+    try:
+        before, after = tomllib.loads(then), tomllib.loads(now)
+    except tomllib.TOMLDecodeError as error:
+        return [f"Cargo.toml: {error}"]
+    rest = copy.deepcopy(after)
+    workspace = rest.get("workspace", {})
+    members = workspace.get("members", [])
+    was = before.get("workspace", {}).get("members", [])
+    added = [m for m in members if m not in was]
+    if any(m != f"plugins/{plugin}" for m in added):
+        return [f"Cargo.toml: workspace.members gains {', '.join(m for m in added if m != f'plugins/{plugin}')}: "
+                f"only plugins/{plugin} may be added"]
+    workspace["members"] = [m for m in members if m in was]
+    dependencies = workspace.get("dependencies", {})
+    old = before.get("workspace", {}).get("dependencies", {})
+    for name in [n for n in dependencies if n not in old]:
+        spec = dependencies[name]
+        path = spec.get("path", "") if isinstance(spec, dict) else ""
+        if path == f"plugins/{plugin}":
+            del dependencies[name]
+    if rest != before:
+        return ["Cargo.toml: changed beyond a new plugin's member and workspace.dependencies entry "
+                "([patch], [profile], another dependency, a version ...)"]
+    return []
+
+
+def lock_problems(then, now):
+    """What Cargo.lock gained beyond new packages: no existing one changes its version, source or checksum.
+
+    An existing package may list a new package among its dependencies (the app, with a new plugin)."""
+    try:
+        before, after = tomllib.loads(then), tomllib.loads(now)
+    except tomllib.TOMLDecodeError as error:
+        return [f"Cargo.lock: {error}"]
+    old = {(p["name"], p["version"], p.get("source")): p for p in before.get("package", [])}
+    new = {(p["name"], p["version"], p.get("source")): p for p in after.get("package", [])}
+    problems = [f"{name} {version}: gone, or its version or source changed" for name, version, source in old
+                if (name, version, source) not in new]
+    added = {key[0] for key in new if key not in old}
+    for key, package in old.items():
+        if key not in new:
+            continue
+        if package.get("checksum") != new[key].get("checksum"):
+            problems.append(f"{key[0]} {key[1]}: checksum changed")
+        gained = set(new[key].get("dependencies", [])) - set(package.get("dependencies", []))
+        # "name" or "name version" or "name version (source)".
+        extra = sorted(d for d in gained if d.split(" ")[0] not in added)
+        lost = set(package.get("dependencies", [])) - set(new[key].get("dependencies", []))
+        if extra or lost:
+            problems.append(f"{key[0]} {key[1]}: dependencies changed ({', '.join(extra + sorted(lost))})")
+    return [f"Cargo.lock: {p}" for p in problems]
+
+
+def plugin_problems(plugin, manifest):
+    """The plugin's own dependencies by path: none inside its folder or outside crates/ and plugins/.
+
+    A copy of paperpaw-sdk in the plugin's folder would be built instead of the workspace's."""
+    try:
+        data = tomllib.loads(manifest)
+    except tomllib.TOMLDecodeError as error:
+        return [f"plugins/{plugin}/Cargo.toml: {error}"]
+    tables = [data.get(k, {}) for k in ("dependencies", "dev-dependencies", "build-dependencies")]
+    for target in data.get("target", {}).values():
+        tables += [target.get(k, {}) for k in ("dependencies", "dev-dependencies", "build-dependencies")]
+    problems = []
+    own = f"plugins/{plugin}"
+    for table in tables:
+        for name, spec in table.items():
+            if not isinstance(spec, dict) or "path" not in spec:
+                continue
+            path = posixpath.normpath(posixpath.join(own, spec["path"]))
+            if path == own or path.startswith(own + "/") or not path.startswith(("crates/", "plugins/")):
+                problems.append(f"plugins/{plugin}/Cargo.toml: {name} depends on the path {spec['path']}, "
+                                "which is not another crate of the workspace")
+    return problems
 
 
 def run(source, *args):
@@ -97,11 +196,19 @@ def check(source, plugin, base, accepted=()):
         then = versions.version_in(then_manifest, run(source, "git", "show", f"{base}:Cargo.toml").stdout)
         if versions.semver(now) <= versions.semver(then):
             problems.append(f"{plugin} is at {now}, the base has {then}: raise it in plugins/{plugin}/Cargo.toml")
-    changed = run(source, "git", "diff", "--name-only", base, "HEAD").stdout.split()
-    own, reported, refused = classify(changed, plugin, accepted)
-    if reported:
-        notes.append("changed outside the plugin, reported (accepted or only the workspace's lists): "
-                     + ", ".join(reported))
+    problems += plugin_problems(plugin, manifest.read_text(encoding="utf-8"))
+    # Renames are paths of both sides (a moved SDK file would show only where it went).
+    changed = run(source, "git", "diff", "--name-only", "--no-renames", "-z", base, "HEAD").stdout.split("\0")
+    own, workspace, named, refused = classify([c for c in changed if c], plugin, accepted)
+    for entry in accepted_paths(accepted):
+        files = [c for c in named if c == entry or c.startswith(entry + "/")]
+        notes.append(f"accepted by name: {entry} ({', '.join(files) if files else 'nothing changed there'})")
+    for path, check_file in (("Cargo.toml", lambda then, now: manifest_problems(plugin, then, now)), ("Cargo.lock", lock_problems)):
+        if path in workspace:
+            then_text = run(source, "git", "show", f"{base}:{path}").stdout
+            now_text = run(source, "git", "show", f"HEAD:{path}").stdout
+            problems += [f"{p} (the workspace's {path} may gain a new plugin only; name {path} in `accept` "
+                         "if it must change otherwise)" for p in check_file(then_text, now_text)]
     if refused:
         problems.append(f"changed outside the plugin since {base}, so not the firmware's source: "
                         + ", ".join(refused)
