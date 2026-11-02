@@ -1,6 +1,6 @@
 //! The helpers that adapt a screen to its size (#88): the readable column,
 //! the columns of a cover grid and the columns of a home grid in
-//! landscape; the choice and the question in that column. On the X4 in
+//! landscape and a grid laid out anew for another one; the choice and the question in that column. On the X4 in
 //! both orientations, on a tablet, and where the interface runs right to
 //! left.
 
@@ -14,8 +14,8 @@ mod support;
 
 use paperpaw_platform::Rotation;
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
-use paperpaw_sdk::widgets::grid::{self, MAX_COLUMNS};
-use paperpaw_sdk::{DeviceInfo, DisplayInfo, InputCaps, MemoryClass, PixelFormat, Point, Rect};
+use paperpaw_sdk::widgets::grid::{self, Cells, Geometry, Item, MAX_COLUMNS, What};
+use paperpaw_sdk::{DeviceInfo, DisplayInfo, Id, InputCaps, MemoryClass, PixelFormat, Point, Rect};
 
 use support::{Device, Harness};
 
@@ -295,4 +295,199 @@ fn a_choice_on_a_wide_screen_is_a_sheet_in_the_column_and_a_tap_beside_it_closes
     let env = x4.env();
     let region = Choice::new(&env, &params).region(&env).expect("a sheet");
     assert_eq!((region.x, region.width), (0, 800));
+}
+
+fn tool(name: &str, at: Option<Cells>) -> Item {
+    let what = What::Tool(Id::parse(name).unwrap());
+    at.map_or_else(
+        || Item::new(what.clone()),
+        |c| Item::placed(what.clone(), c),
+    )
+}
+
+fn widget(name: &str, at: Cells) -> Item {
+    Item::placed(What::Widget(name.to_string()), at)
+}
+
+/// What an item is and where it was put, for comparing.
+fn cells(items: &[Item]) -> Vec<(String, Option<Cells>)> {
+    items
+        .iter()
+        .map(|i| {
+            let name = match &i.what {
+                What::Tool(id) => id.as_str().to_string(),
+                What::Widget(id) => id.clone(),
+                other => panic!("{other:?}"),
+            };
+            (name, i.at)
+        })
+        .collect()
+}
+
+#[test]
+fn a_grid_laid_out_anew_fills_from_the_top_left_in_the_order_given() {
+    let h = harness(X4_SIDE);
+    let env = h.env();
+    let items = [
+        tool("t.a", Some(Cells::new(0, 0, 1, 1))),
+        tool("t.b", Some(Cells::new(3, 0, 1, 1))),
+        tool("t.c", Some(Cells::new(0, 1, 1, 1))),
+        tool("t.z", None),
+    ];
+    let wide = Geometry::of(whole(X4_SIDE), 6, 3, 8);
+    let (placed, left) = grid::refit(&env, &wide, 4, u8::MAX, &items);
+    assert!(left.is_empty());
+    let at = |col, row| Some(Cells::new(col, row, 1, 1));
+    let expect: Vec<_> = [("t.a", 0), ("t.b", 1), ("t.c", 2), ("t.z", 3)]
+        .iter()
+        .map(|(n, i)| ((*n).to_string(), at(*i, 0)))
+        .collect();
+    assert_eq!(cells(&placed), expect);
+}
+
+#[test]
+fn a_widget_keeps_its_share_of_the_width_and_a_tool_its_size() {
+    let h = harness(X4_SIDE);
+    let env = h.env();
+    // On 4 columns: one as wide as the grid, one of half, a tool.
+    let items = [
+        widget("t.full", Cells::new(0, 0, 4, 1)),
+        widget("t.half", Cells::new(0, 1, 2, 1)),
+        tool("t.tool", Some(Cells::new(2, 1, 1, 1))),
+    ];
+    let wide = Geometry::of(whole(X4_SIDE), 6, 4, 8);
+    let (placed, left) = grid::refit(&env, &wide, 4, u8::MAX, &items);
+    assert!(left.is_empty());
+    assert_eq!(
+        placed[0].at,
+        Some(Cells::new(0, 0, 6, 1)),
+        "as wide as the grid"
+    );
+    assert_eq!(placed[1].at, Some(Cells::new(0, 1, 3, 1)), "half of it");
+    assert_eq!(
+        placed[2].at,
+        Some(Cells::new(3, 1, 1, 1)),
+        "a tool is a cell"
+    );
+    // Fewer columns: shares shrink the same way, never below a column.
+    let narrow = Geometry::of(whole(X4), 2, 4, 8);
+    let (placed, _) = grid::refit(&env, &narrow, 4, u8::MAX, &items);
+    assert_eq!(placed[0].at, Some(Cells::new(0, 0, 2, 1)));
+    assert_eq!(placed[1].at, Some(Cells::new(0, 1, 1, 1)));
+}
+
+#[test]
+fn no_widget_is_wider_than_the_most_it_may_take_and_tools_follow_beside_it() {
+    let h = harness(X4_SIDE);
+    let env = h.env();
+    let items = [
+        widget("t.full", Cells::new(0, 0, 4, 1)),
+        widget("t.half", Cells::new(0, 1, 2, 1)),
+        tool("t.a", Some(Cells::new(2, 1, 1, 1))),
+        tool("t.b", None),
+    ];
+    let wide = Geometry::of(whole(X4_SIDE), 6, 3, 8);
+    let (placed, left) = grid::refit(&env, &wide, 4, 3, &items);
+    assert!(left.is_empty());
+    assert_eq!(
+        placed[0].at,
+        Some(Cells::new(0, 0, 3, 1)),
+        "as wide as the most"
+    );
+    // The room beside the first widget is used by what follows: the
+    // second, of half the grid, and under them the tools.
+    assert_eq!(placed[1].at, Some(Cells::new(3, 0, 3, 1)), "half is 3 of 6");
+    assert_eq!(placed[2].at, Some(Cells::new(0, 1, 1, 1)));
+    assert_eq!(placed[3].at, Some(Cells::new(1, 1, 1, 1)));
+    // A most of nothing (a plugin's slip) is still a column.
+    let (placed, _) = grid::refit(&env, &wide, 4, 0, &items[..1]);
+    assert_eq!(placed[0].at, Some(Cells::new(0, 0, 1, 1)));
+}
+
+#[test]
+fn a_grid_without_columns_or_rows_is_one_of_one_and_nothing_panics() {
+    let h = harness(X4_SIDE);
+    let env = h.env();
+    let items = [
+        widget("t.w", Cells::new(0, 0, 4, 3)),
+        tool("t.a", Some(Cells::new(1, 1, 1, 1))),
+        tool("t.b", None),
+    ];
+    for geometry in [Geometry::default(), Geometry::of(whole(X4_SIDE), 0, 0, 8)] {
+        let (placed, left) = grid::refit(&env, &geometry, 4, 2, &items);
+        // Whatever finds room is inside the grid, the rest comes back as it
+        // was, in order.
+        assert_eq!(placed.len() + left.len(), items.len());
+        for item in &placed {
+            let c = item.at.expect("placed");
+            assert!(c.col + c.w <= geometry.columns.max(1) && c.row + c.h <= geometry.rows.max(1));
+        }
+        let back: Vec<_> = left.iter().map(|i| i.what.clone()).collect();
+        let sent: Vec<_> = items
+            .iter()
+            .map(|i| i.what.clone())
+            .filter(|w| back.contains(w))
+            .collect();
+        assert_eq!(back, sent);
+    }
+}
+
+#[test]
+fn what_has_no_room_comes_back_and_nothing_overlaps_or_leaves_the_grid() {
+    let h = harness(X4_SIDE);
+    let env = h.env();
+    // Twelve tools in 4 by 3, and a tool wider than any grid.
+    let mut items: Vec<Item> = (0..12)
+        .map(|i| tool(&format!("t.{i:02}"), Some(Cells::new(i % 4, i / 4, 1, 1))))
+        .collect();
+    items.push(tool("t.wide", Some(Cells::new(0, 5, 9, 1))));
+    let small = Geometry::of(whole(X4_SIDE), 3, 3, 8);
+    let (placed, left) = grid::refit(&env, &small, 4, u8::MAX, &items);
+    // Nine fit; the other four come back as they were.
+    assert_eq!(placed.len(), 9);
+    assert_eq!(left.len(), 4);
+    assert_eq!(left[3].at, Some(Cells::new(0, 5, 9, 1)));
+    let taken: Vec<Cells> = placed.iter().map(|i| i.at.unwrap()).collect();
+    for (i, a) in taken.iter().enumerate() {
+        assert!(a.fits(small.columns, small.rows));
+        assert!(taken[i + 1..].iter().all(|b| !a.overlaps(b)));
+    }
+    assert_eq!(placed.len() + left.len(), items.len());
+}
+
+#[test]
+fn a_span_wider_than_the_new_grid_is_clamped_to_it() {
+    let h = harness(X4);
+    let env = h.env();
+    let items = [tool("t.a", Some(Cells::new(0, 0, 6, 2)))];
+    let narrow = Geometry::of(whole(X4), 2, 4, 8);
+    let (placed, left) = grid::refit(&env, &narrow, 4, u8::MAX, &items);
+    assert!(left.is_empty());
+    assert_eq!(placed[0].at, Some(Cells::new(0, 0, 2, 2)));
+    let tiny = Geometry::of(Rect::new(0, 0, 100, 100), 1, 1, 0);
+    let (placed, _) = grid::refit(&env, &tiny, 4, u8::MAX, &items);
+    assert_eq!(placed[0].at, Some(Cells::new(0, 0, 1, 1)));
+}
+
+#[test]
+fn laying_out_anew_does_not_change_the_grid_it_came_from_and_an_empty_one_is_nothing() {
+    let h = harness(X4_SIDE);
+    let env = h.env();
+    let items: Vec<Item> = (0..9)
+        .map(|i| tool(&format!("t.{i}"), Some(Cells::new(i % 4, i / 4, 1, 1))))
+        .collect();
+    let wide = Geometry::of(whole(X4_SIDE), 6, 3, 8);
+    let (once, _) = grid::refit(&env, &wide, 4, u8::MAX, &items);
+    // Not stored: the portrait layout is as it was, and laid out again
+    // from the same it gives the same.
+    assert_eq!(items[4].at, Some(Cells::new(0, 1, 1, 1)));
+    assert_eq!(
+        cells(&once),
+        cells(&grid::refit(&env, &wide, 4, u8::MAX, &items).0)
+    );
+    let (placed, left) = grid::refit(&env, &Geometry::default(), 4, u8::MAX, &[]);
+    assert!(placed.is_empty() && left.is_empty());
+    // A grid made from none (0 columns) is not a division by zero.
+    let (placed, _) = grid::refit(&env, &wide, 0, u8::MAX, &items);
+    assert_eq!(placed.len(), 9);
 }

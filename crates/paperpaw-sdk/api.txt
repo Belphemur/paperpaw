@@ -5128,6 +5128,7 @@ pub fn paperpaw_sdk::widgets::grid::fit(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::w
 pub fn paperpaw_sdk::widgets::grid::free_place(&paperpaw_sdk::widgets::grid::Geometry, &[paperpaw_sdk::widgets::grid::Cells], u8, u8) -> core::option::Option<paperpaw_sdk::widgets::grid::Cells>
 pub fn paperpaw_sdk::widgets::grid::parse(&str) -> alloc::vec::Vec<paperpaw_sdk::widgets::grid::Item>
 pub fn paperpaw_sdk::widgets::grid::place(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::widgets::grid::Geometry, &[paperpaw_sdk::widgets::grid::Item]) -> alloc::vec::Vec<(paperpaw_sdk::widgets::grid::Item, paperpaw_sdk::widgets::grid::Cells)>
+pub fn paperpaw_sdk::widgets::grid::refit(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::widgets::grid::Geometry, u8, u8, &[paperpaw_sdk::widgets::grid::Item]) -> (alloc::vec::Vec<paperpaw_sdk::widgets::grid::Item>, alloc::vec::Vec<paperpaw_sdk::widgets::grid::Item>)
 pub fn paperpaw_sdk::widgets::grid::tool_name_lines(&paperpaw_sdk::Env<'_>, paperpaw_platform::geometry::Rect, &paperpaw_sdk::Id, bool) -> usize
 pub fn paperpaw_sdk::widgets::grid::write(&[paperpaw_sdk::widgets::grid::Item]) -> alloc::string::String
 pub type paperpaw_sdk::widgets::grid::DropCheck = fn(&paperpaw_sdk::Env<'_>, &[paperpaw_sdk::widgets::grid::Item], &paperpaw_sdk::widgets::grid::Item, paperpaw_sdk::widgets::grid::Cells) -> bool

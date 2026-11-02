@@ -134,8 +134,11 @@ impl Plugin for Home {
             if !grid.contains(&changed.id.as_str()) {
                 return;
             }
-            if let Some(fitted) = pages::reflow(env, &frame(env).1) {
-                out.extend(pages::store_all(&fitted));
+            // Each layout fitted to its own grid, whatever way the screen is.
+            for wide in [false, true] {
+                if let Some(fitted) = pages::reflow(env, &frame(env, wide).1, wide) {
+                    out.extend(pages::store_all(env, &fitted, wide));
+                }
             }
         })?;
         r.add_actions(&FIXED)?;
@@ -201,34 +204,54 @@ struct Dashboard {
     /// Hidden by a book or another screen: the widgets are let go and
     /// stay so (a resize only marks the page stale) until it shows again.
     hidden: bool,
+    /// The layout shown is the one for a screen on its side.
+    wide: bool,
+    /// The item at the top left of the page, to keep the page when the
+    /// screen turns and the pages are others.
+    first: Option<What>,
 }
 
 use widgets::next_minute;
 
-/// Where the parts of the home screen go: the status line, the grid, the
+/// Whether the screen is on its side: wider than high.
+fn landscape(env: &Env<'_>) -> bool {
+    let display = env.device().display;
+    display.width > display.height
+}
+
+/// The screen's width and height as they are for a screen on its side
+/// (`wide`) or one upright, whichever it is now.
+fn extent(env: &Env<'_>, wide: bool) -> (u16, u16) {
+    let display = env.device().display;
+    if (display.width > display.height) == wide {
+        (display.width, display.height)
+    } else {
+        (display.height, display.width)
+    }
+}
+
+/// Where the parts of the home screen go on a screen on its side (`wide`)
+/// or one upright, whichever the screen is now: the status line, the grid
+/// (on its side with the columns that keep the cells as wide as they are
+/// upright, [`grid::columns_for`], and the rows its height gives), the
 /// footer.
-fn frame(env: &Env<'_>) -> (Option<Rect>, Geometry, Rect) {
+fn frame(env: &Env<'_>, wide: bool) -> (Option<Rect>, Geometry, Rect) {
     let style = UiStyle::new(env);
     let footer_height = style.row();
-    let display = env.device().display;
+    let (width, height) = extent(env, wide);
     let margin = style.margin();
     let gap = style.gap();
     let footer = Rect::new(
         0,
-        display.height.saturating_sub(footer_height),
-        display.width,
+        height.saturating_sub(footer_height),
+        width,
         footer_height,
     );
     let mut top = gap / 2;
     let status = env.settings().read(&pages::STATUS_BAR).then(|| {
-        let height = blocks::status_height(env, display.width);
-        let r = Rect::new(
-            margin,
-            top,
-            display.width.saturating_sub(2 * margin),
-            height,
-        );
-        top += height;
+        let high = blocks::status_height(env, width);
+        let r = Rect::new(margin, top, width.saturating_sub(2 * margin), high);
+        top += high;
         r
     });
     // Half a gap wider than the margins on either side, as the grid
@@ -238,18 +261,33 @@ fn frame(env: &Env<'_>) -> (Option<Rect>, Geometry, Rect) {
     let area = Rect::new(
         outer - gap / 2,
         top,
-        display.width.saturating_sub(2 * outer) + gap,
+        width.saturating_sub(2 * outer) + gap,
         footer.y.saturating_sub(top),
     );
-    let columns = env
-        .settings()
-        .read(&pages::COLUMNS)
-        .clamp(2, i64::from(grid::MAX_COLUMNS)) as u8;
-    let rows = env
-        .settings()
-        .read(&pages::ROWS)
-        .clamp(0, i64::from(grid::MAX_ROWS)) as u8;
+    let columns = pages::columns_upright(env);
+    let (columns, rows) = if wide {
+        (grid::columns_for(area, columns), 0)
+    } else {
+        let rows = env
+            .settings()
+            .read(&pages::ROWS)
+            .clamp(0, i64::from(grid::MAX_ROWS)) as u8;
+        (columns, rows)
+    };
     (status, Geometry::new(env, area, columns, rows), footer)
+}
+
+/// What the home screen shows now: whether the screen is on its side, the
+/// grid of its layout, and the pages of that layout.
+fn shown(env: &Env<'_>) -> (bool, Geometry, Vec<pages::Page>) {
+    let wide = landscape(env);
+    let geometry = frame(env, wide).1;
+    let pages = if wide {
+        pages::pages_wide(env, &geometry)
+    } else {
+        pages::pages(env)
+    };
+    (wide, geometry, pages)
 }
 
 impl Dashboard {
@@ -258,7 +296,8 @@ impl Dashboard {
         // Opened to edit a page (from its setting): that page, where it
         // shows.
         let page_set = params.get(params::ID).and_then(pages::slot_of).map(|slot| {
-            pages::pages(env)
+            shown(env)
+                .2
                 .iter()
                 .position(|p| p.slot == slot)
                 .unwrap_or(0)
@@ -268,7 +307,8 @@ impl Dashboard {
         let mut grid = GridView::asking(env, CHOSEN);
         grid.set_host(SCREEN);
         grid.set_editing(editing.is_some());
-        let (status, _, footer) = frame(env);
+        let wide = landscape(env);
+        let (status, _, footer) = frame(env, wide);
         Self {
             style: UiStyle::new(env),
             page: editing.unwrap_or(0),
@@ -284,6 +324,8 @@ impl Dashboard {
             shown: Vec::new(),
             stale: true,
             hidden: false,
+            wide,
+            first: None,
         }
     }
 
@@ -291,9 +333,23 @@ impl Dashboard {
     fn layout(&mut self, env: &Env<'_>) {
         let style = UiStyle::new(env);
         let display = env.device().display;
-        let (status, geometry, footer) = frame(env);
-        let pages = pages::pages(env);
+        let (wide, geometry, pages) = shown(env);
+        let (status, _, footer) = frame(env, wide);
         self.pages = pages.len();
+        // The screen was turned: the page that shows the item that was at the
+        // top left of the one shown, where there is one.
+        if wide != self.wide {
+            if let Some(at) = self.first.as_ref().and_then(|first| {
+                pages.iter().position(|p| {
+                    pages::expand(env, &p.items)
+                        .iter()
+                        .any(|item| item.what == *first)
+                })
+            }) {
+                self.page = at;
+            }
+            self.wide = wide;
+        }
         self.page = self.page.min(self.pages - 1);
         let items = pages::expand(env, &pages[self.page].items);
         self.shown = items
@@ -343,6 +399,12 @@ impl Dashboard {
         self.grid
             .set_tool_labels(env.settings().read(&blocks::TOOL_LABELS));
         self.grid.layout(env, geometry, &items, &buttons);
+        self.first = self
+            .grid
+            .items()
+            .into_iter()
+            .min_by_key(|item| item.at.map_or((u8::MAX, u8::MAX), |c| (c.row, c.col)))
+            .map(|item| item.what);
         self.books = blocks::books_shown(env, &items);
         self.status = status;
         self.footer = footer;
@@ -407,8 +469,12 @@ impl Dashboard {
     /// Keeps the page as `items`.
     fn store(&self, items: &[Item], cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        if let Some(page) = pages::pages(&env).get(self.page) {
-            cx.command(pages::store(&env, page.slot, items));
+        let (wide, geometry, pages) = shown(&env);
+        if let Some(page) = pages.get(self.page) {
+            let geometry = wide.then_some(&geometry);
+            for command in pages::store(&env, page.slot, items, geometry) {
+                cx.command(command);
+            }
         }
     }
 

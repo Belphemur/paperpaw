@@ -3,3 +3,5 @@ Die Startseite besteht aus Seiten, jede ein Raster aus Widgets und Werkzeugen wi
 Tippe ein Element an, um es zu öffnen, und wische oder nimm die Blättertasten, um die Seite zu wechseln. Nur mit Tasten gehen die Pfeiltasten von einem Element zum nächsten, und Wählen öffnet es.
 
 Zum Umbauen drückst du die Startseite lange, tippst den Stift unter der Seite an oder wählst im Menü Startseite bearbeiten. Elemente ziehst du an ihren Platz oder tippst eines für seine Optionen an, auch mit Tasten; dort gibt es auch Widget hinzufügen. Spalten und Zeilen stehen in den Einstellungen unter Darstellung im Abschnitt Startseite.
+
+Auf einem gedrehten Bildschirm zeigt die Startseite dieselben Elemente mit mehr Spalten, jede Seite voll, bevor die nächste beginnt, und Karten nicht breiter als etwa 110 mm; was du aufrecht angeordnet hast, bleibt unverändert. Ordnest du sie im Querformat an, wird dieses Layout für diese Ausrichtung eigens behalten: neue Widgets kommen in beide. Querformat zurücksetzen unter Hinzufügen (beim Bearbeiten) geht zurück zum abgeleiteten Layout. Ein entferntes Widget oder Werkzeug verschwindet nur in der Ausrichtung, in der du es entfernst.

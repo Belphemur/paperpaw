@@ -420,6 +420,71 @@ pub fn columns_for(area: Rect, portrait_columns: u8) -> u8 {
     wide.clamp(u32::from(portrait), u32::from(MAX_COLUMNS)) as u8
 }
 
+/// `items` laid out anew in `geometry` for a grid made from one of
+/// `from_columns` columns (a landscape home from the portrait one) rather
+/// than [`fit`], which keeps each item where it was.
+///
+/// The items are placed in the order given and not sorted: the caller
+/// passes them in reading order, and what it wants to find room first (the
+/// overflow of the page before) it puts first. Each goes in the first free
+/// cells for its size. A widget keeps its share of the width (as many
+/// columns of the new grid as it took of the old: one that was as wide as
+/// the grid is again, one of half is half), at least one column and at
+/// most `widest` columns of the new grid (a wide screen does not stretch a
+/// card across it; 0 counts as 1). A tool is one cell, an item without a
+/// place gets the size [`Geometry::size_of`] says (a widget at most
+/// `widest` wide). Heights are kept, and no more than the grid has. Where a
+/// size has no room, it is narrower, then lower (down to what a widget can
+/// do with). Returns the items placed, and second those with no room,
+/// unchanged and in the order given (for the next page). A grid without
+/// columns or rows is one of one. Nothing is stored.
+pub fn refit(
+    env: &Env<'_>,
+    geometry: &Geometry,
+    from_columns: u8,
+    widest: u8,
+    items: &[Item],
+) -> (Vec<Item>, Vec<Item>) {
+    let (to, from) = (
+        u32::from(geometry.columns).max(1),
+        u32::from(from_columns.max(1)),
+    );
+    let (mut taken, mut placed, mut left) = (Vec::new(), Vec::new(), Vec::new());
+    for item in items {
+        let found = match item.at {
+            Some(c) => {
+                let w = match item.what {
+                    What::Widget(_) => {
+                        ((u32::from(c.w) * to + from / 2) / from).clamp(1, u32::from(widest).max(1))
+                    }
+                    What::Tool(_) => u32::from(c.w),
+                };
+                let (w, h) = (w.clamp(1, to) as u8, c.h.clamp(1, geometry.rows.max(1)));
+                free_place(geometry, &taken, w, h).or_else(|| {
+                    let (_, _, least) = geometry.sizes_of(env, &item.what);
+                    room_of(geometry, &taken, w, h, least)
+                })
+            }
+            None => {
+                let (w, h, least) = geometry.sizes_of(env, &item.what);
+                let w = match item.what {
+                    What::Widget(_) => w.min(widest.max(1)),
+                    What::Tool(_) => w,
+                };
+                room_of(geometry, &taken, w, h, least)
+            }
+        };
+        match found {
+            Some(cells) => {
+                taken.push(cells);
+                placed.push(Item::placed(item.what.clone(), cells));
+            }
+            None => left.push(item.clone()),
+        }
+    }
+    (placed, left)
+}
+
 /// [`place`], each item by its index in `items` (equal items apart).
 fn places(env: &Env<'_>, geometry: &Geometry, items: &[Item]) -> Vec<(usize, Cells)> {
     let mut placed: Vec<(usize, Cells)> = Vec::new();
