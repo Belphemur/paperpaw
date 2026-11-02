@@ -681,3 +681,45 @@ fn files_are_written_whole_or_not_at_all() {
     assert_eq!(storage.size("a/b.txt").unwrap(), 6);
     assert!(!storage.exists("a/b.txt.part"), "no half-way file is left");
 }
+
+#[test]
+fn a_session_says_when_a_message_streams_into_a_file() {
+    let mut script = Script {
+        chunk: 700,
+        ..Script::default()
+    };
+    script.messages = vec![(
+        10,
+        String::new(),
+        "Subject: x\r\n\r\n".to_string() + &"y".repeat(60_000),
+    )];
+    let mut fake = Fake::new(Proto::Imap, script);
+    let tasks = vec![Task::Body {
+        folder: "INBOX".into(),
+        uid: 10,
+        out: store::raw_file(1, "INBOX", 10),
+    }];
+    let mut session = Imap::new(endpoint(Security::Implicit), tasks);
+    let mut events = session.start(&mut fake);
+    let mut streamed = false;
+    for _ in 0..200_000 {
+        if events
+            .iter()
+            .any(|e| matches!(e, Event::Done | Event::Failed(_)))
+        {
+            break;
+        }
+        let Some(input) = fake.next_input() else {
+            break;
+        };
+        if matches!(input, Input::Secured { .. }) {
+            fake.switched();
+        }
+        let storage = fake.storage.clone();
+        events.extend(session.step(input, &mut fake, &*storage));
+        streamed |= session.receiving();
+    }
+    assert!(done(&events), "{events:?}");
+    assert!(streamed, "the file read was seen");
+    assert!(!session.receiving());
+}

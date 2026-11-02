@@ -217,8 +217,26 @@ pub fn read_index(storage: &dyn Storage, file: &str) -> Vec<Row> {
     text.lines().filter_map(Row::parse).collect()
 }
 
+/// Which write of the index file it is, counted by every write, so that
+/// those who keep what they read from it know when it changed (a file's
+/// time and size may stay as they were where the device has no clock).
+pub fn index_serial(storage: &dyn Storage, file: &str) -> u64 {
+    let mut head = [0u8; 40];
+    let Ok(n) = storage.read_at(file, 0, &mut head) else {
+        return 0;
+    };
+    core::str::from_utf8(&head[..n])
+        .ok()
+        .and_then(|t| t.lines().next())
+        .and_then(|l| l.strip_prefix(SERIAL_MARK))
+        .and_then(|n| n.trim().parse().ok())
+        .unwrap_or(0)
+}
+
+const SERIAL_MARK: &str = "#serial ";
+
 pub fn write_index(storage: &dyn Storage, file: &str, rows: &[Row]) -> Result<(), StorageError> {
-    let mut text = String::new();
+    let mut text = format!("{SERIAL_MARK}{}\n", index_serial(storage, file) + 1);
     for row in rows.iter().take(MAX_MESSAGES as usize) {
         text.push_str(&row.line());
     }

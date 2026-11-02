@@ -270,9 +270,9 @@ impl MailWidget {
     }
 }
 
-/// The files the mails shown were read from, as they were (path, time
-/// changed, size), and how many were kept.
-type Stamp = (Vec<(String, Option<i64>, u64)>, usize);
+/// The files the mails shown were read from, as they were (path, which write
+/// of the index it was, size), and how many were kept.
+type Stamp = (Vec<(String, u64, u64)>, usize);
 
 /// The newest mails of a widget, and what they were read from.
 #[derive(Default)]
@@ -310,12 +310,15 @@ fn newest(
     wanted: fn(&store::Row) -> bool,
     cache: &mut Cache,
 ) -> Vec<(u8, store::Row)> {
-    let files: Vec<(String, Option<i64>, u64)> = accounts
+    let files: Vec<(String, u64, u64)> = accounts
         .iter()
         .map(|&a| {
             let file = store::index_file(a, folder);
-            let (changed, size) = (storage.modified(&file), storage.size(&file).unwrap_or(0));
-            (file, changed, size)
+            let (serial, size) = (
+                store::index_serial(storage, &file),
+                storage.size(&file).unwrap_or(0),
+            );
+            (file, serial, size)
         })
         .collect();
     let stamp = (files, keep);
@@ -697,6 +700,15 @@ mod cache_tests {
         assert_eq!(
             flagged.iter().map(|(_, r)| r.uid).collect::<Vec<_>>(),
             [5, 4, 3]
+        );
+        // Written again at the same size (and time, as without a clock):
+        // the card is read again all the same.
+        let other: Vec<store::Row> = (1..=5).map(|n| row(n + 10, i64::from(n), "F")).collect();
+        store::write_index(&storage, &store::index_file(1, "INBOX"), &other).unwrap();
+        let again = newest(&storage, &[1], "INBOX", 3, store::Row::flagged, &mut cache);
+        assert_eq!(
+            again.iter().map(|(_, r)| r.uid).collect::<Vec<_>>(),
+            [15, 14, 13]
         );
         let _ = storage.remove(&store::index_file(1, "INBOX"));
     }

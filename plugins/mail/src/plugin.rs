@@ -31,6 +31,10 @@ static ACTIONS: [FixedAction; 2] = [
 static ENTRIES: [MenuEntry; 1] = [MenuEntry::new(menus::TOOLS, OPEN).order(47)];
 static ICONS: [(paperpaw_sdk::Id, &str); 2] = [(OPEN, "inbox"), (WRITE, "pencil")];
 
+// The lists and the readers may be open more than once (a list is opened for
+// a folder, a mail for its uid), but they share their socket: a screen lets
+// go of its connection before it opens another above (see `Browser::pause`,
+// `Reader::reply`), so the one below has none running while the one above does.
 static SCREENS: [FixedScreen; 4] = [
     FixedScreen::new(BOXES, "mail.title", |env, params| {
         Box::new(Browser::new(env, params))

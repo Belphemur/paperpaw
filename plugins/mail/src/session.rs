@@ -419,6 +419,12 @@ impl Imap {
         events
     }
 
+    /// Whether a message is being read into a file: the socket is busy and
+    /// no notice comes until it is saved.
+    pub fn receiving(&self) -> bool {
+        matches!(self.literal, Some(Literal::File { .. }))
+    }
+
     /// The socket ended: expected after LOGOUT, else a loss.
     fn lost(&mut self, io: &mut dyn Io) -> Vec<Event> {
         let after_logout = self.command == Some(Command::Logout);

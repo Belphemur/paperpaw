@@ -102,8 +102,20 @@ pub enum Offer {
 /// What may be offered to the reader for the account's IMAP (`smtp` false)
 /// or SMTP server that was not trusted.
 pub fn offer(values: &dyn Values, number: u8, smtp: bool) -> Offer {
-    let provider = values.text(&key(number, field::PROVIDER));
-    if !provider.is_empty() && provider != OWN {
+    // A provider's server, as the preset names it: a host the reader
+    // changed to their own is theirs to trust.
+    let host = values.text(&key(
+        number,
+        if smtp {
+            field::SMTP_HOST
+        } else {
+            field::IMAP_HOST
+        },
+    ));
+    let preset = preset_of(&values.text(&key(number, field::PROVIDER)));
+    if let Some(p) = preset
+        && host == if smtp { p.smtp.0 } else { p.imap.0 }
+    {
         return Offer::Attack;
     }
     let pin = values.text(&key(

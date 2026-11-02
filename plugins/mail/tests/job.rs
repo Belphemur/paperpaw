@@ -173,12 +173,13 @@ fn every_kind_of_screen_has_a_socket_and_events_of_its_own() {
 #[test]
 fn a_provider_server_or_a_changed_key_is_never_offered_a_pin() {
     use paperpaw_plugin_mail::account::{Offer, Values, offer};
-    struct V(&'static str, &'static str);
+    struct V(&'static str, &'static str, &'static str);
     impl Values for V {
         fn text(&self, id: &str) -> String {
             match id {
                 "mail.1.provider" => self.0.into(),
                 "mail.1.imap-pin" => self.1.into(),
+                "mail.1.imap-server" | "mail.1.smtp-server" => self.2.into(),
                 _ => String::new(),
             }
         }
@@ -190,20 +191,38 @@ fn a_provider_server_or_a_changed_key_is_never_offered_a_pin() {
         }
     }
     // An own server nobody trusted yet: asked once.
-    assert_eq!(offer(&V("mail.provider.own", ""), 1, false), Offer::Ask);
+    assert_eq!(offer(&V("mail.provider.own", "", ""), 1, false), Offer::Ask);
     // Its key was trusted and is another now.
     assert_eq!(
-        offer(&V("mail.provider.own", "abcd"), 1, false),
+        offer(&V("mail.provider.own", "abcd", ""), 1, false),
         Offer::Changed
     );
-    // A provider's server: whoever answers instead is an attacker.
+    // A provider's server: whoever answers instead is an attacker, with a
+    // pin or without.
     assert_eq!(
-        offer(&V("mail.provider.fastmail", ""), 1, false),
+        offer(
+            &V("mail.provider.fastmail", "", "imap.fastmail.com"),
+            1,
+            false
+        ),
         Offer::Attack
     );
     assert_eq!(
-        offer(&V("mail.provider.fastmail", "abcd"), 1, true),
+        offer(
+            &V("mail.provider.fastmail", "abcd", "smtp.fastmail.com"),
+            1,
+            true
+        ),
         Offer::Attack
+    );
+    // A host the reader changed to their own is theirs to trust.
+    assert_eq!(
+        offer(
+            &V("mail.provider.fastmail", "", "mail.home.example"),
+            1,
+            false
+        ),
+        Offer::Ask
     );
 }
 

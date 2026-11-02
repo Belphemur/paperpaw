@@ -47,6 +47,9 @@ enum Session {
 /// that does not answer on a plain socket (before STARTTLS) is not timed
 /// out by the kernel.
 pub const SILENT_MS: u64 = 45_000;
+/// Longer while a message streams into a file (up to 256 KiB, and the
+/// socket says nothing until it is saved): at 4 KiB a second.
+pub const RECEIVING_MS: u64 = 70_000;
 
 /// A connection, in the making or over.
 #[derive(Debug)]
@@ -77,10 +80,16 @@ impl Job {
         self.last = now.millis();
     }
 
+    /// How long the job may say nothing now.
+    fn allowed(&self) -> u64 {
+        let receiving = matches!(&self.session, Session::Imap(s) if s.receiving());
+        SILENT_MS + if receiving { RECEIVING_MS } else { 0 }
+    }
+
     /// When a working job is to be looked at for silence.
     pub fn deadline(&self) -> Option<Instant> {
         self.working()
-            .then(|| Instant(self.last.saturating_add(SILENT_MS)))
+            .then(|| Instant(self.last.saturating_add(self.allowed())))
     }
 
     /// Notes the activity now and asks to be woken when the job would be
@@ -111,7 +120,7 @@ impl Job {
     /// Gives up a job silent for [`SILENT_MS`]: it failed with a timeout and
     /// the socket closes.
     pub fn silent(&mut self, now: Instant) -> Vec<Command> {
-        if !self.working() || now.millis() < self.last.saturating_add(SILENT_MS) {
+        if !self.working() || now.millis() < self.last.saturating_add(self.allowed()) {
             return Vec::new();
         }
         self.session = Session::None;
