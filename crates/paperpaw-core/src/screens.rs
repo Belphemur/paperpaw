@@ -542,16 +542,20 @@ impl Kernel {
     pub(crate) fn remake_screens(&mut self) {
         // The bars are made anew for the new size too.
         self.close_chromes();
+        let mut kept = Vec::with_capacity(self.stack.len());
         for i in 0..self.stack.len() {
             let area = self.area_of(i);
-            self.remake_screen(i, area);
+            kept.push(self.remake_screen(i, area));
         }
         self.sync_stack();
-        // Made anew, those below the screen shown are hidden again.
+        // Made anew, those below the screen shown are hidden again; those
+        // kept were hidden already.
         let base = self.shown_base();
-        for active in self.stack.iter_mut().take(base) {
-            let _running = self.shared.meter.enter(active.id.namespace());
-            active.screen.on_hide();
+        for (active, kept) in self.stack.iter_mut().zip(kept).take(base) {
+            if !kept {
+                let _running = self.shared.meter.enter(active.id.namespace());
+                active.screen.on_hide();
+            }
         }
         self.hint.shown.clear();
         self.end_notice();
@@ -569,15 +573,15 @@ impl Kernel {
     /// when it closes, so it keeps what it would lose (a reading
     /// position, text typed), and dropped before the new one is made, so
     /// the two never take memory at once. What it asks for then is not
-    /// done: the screen stays open, made anew.
-    pub(crate) fn remake_screen(&mut self, index: usize, area: Rect) {
+    /// done: the screen stays open, made anew. Whether it was kept.
+    pub(crate) fn remake_screen(&mut self, index: usize, area: Rect) -> bool {
         if !self
             .shared
             .registry
             .screens
             .contains_key(&self.stack[index].id)
         {
-            return;
+            return false;
         }
         let asked = self.output.commands.len();
         let before = mem::replace(&mut self.stack[index].area, area);
@@ -586,7 +590,7 @@ impl Kernel {
         });
         if resized == Handled::Yes {
             self.apply_area(area);
-            return;
+            return true;
         }
         self.output.commands.truncate(asked);
         self.stack[index].area = before;
@@ -600,12 +604,13 @@ impl Kernel {
         let active = &mut self.stack[index];
         active.area = area;
         let Some(spec) = self.shared.registry.screens.get(&active.id) else {
-            return;
+            return false;
         };
         let _running = self.shared.meter.enter(active.id.namespace());
         // `Gone` has no size: nothing is allocated for it.
         active.screen = Box::new(Gone);
         active.screen = spec.make(&env, &active.params);
+        false
     }
 
     /// Runs `f` with the screen at `index` and a context for it.

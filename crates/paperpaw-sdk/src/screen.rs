@@ -423,16 +423,37 @@ pub enum Handled {
 pub const SCREEN_REVISION: u16 = 2;
 
 /// How a screen shows where the screen is wide ([`Screen::pane`]).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-#[non_exhaustive]
-pub enum Pane {
-    /// On all of its part of the screen, as any screen.
-    #[default]
-    Full,
+/// Constants of one type, so more can come without a new plugin
+/// interface: the kernel takes a value it does not know as
+/// [`Pane::FULL`] ([`Pane::known`]), so a screen built with a later SDK
+/// never hands it one it cannot place.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Pane(u8);
+
+impl Pane {
+    /// On all of its part of the screen, as any screen (the default).
+    pub const FULL: Self = Self(0);
     /// One thing of the list the screen below it shows (a book's details,
     /// a message, a note): where the screen is wide enough, beside that
-    /// list; elsewhere as [`Pane::Full`].
-    Detail,
+    /// list; elsewhere as [`Pane::FULL`].
+    pub const DETAIL: Self = Self(1);
+
+    /// This one where this SDK knows it, else [`Pane::FULL`]: what the
+    /// kernel places by, comparing with the constants, never matching on
+    /// the number.
+    pub fn known(self) -> Self {
+        if self == Self::DETAIL {
+            self
+        } else {
+            Self::FULL
+        }
+    }
+}
+
+impl Default for Pane {
+    fn default() -> Self {
+        Self::FULL
+    }
 }
 
 /// `call` with `screen` where it has the items of `revision`
@@ -469,7 +490,9 @@ pub fn revision_holding(held: &dyn Screen) -> u16 {
 ///
 /// The trait grows at its end (ADR 0026): each item added later comes
 /// with a higher [`SCREEN_REVISION`], and is called only on screens of
-/// that revision or later ([`call_since`]).
+/// that revision or later ([`call_since`]). Every item added after
+/// revision 1 goes into `NEWER_SCREEN_ITEMS` of the SDK's interface test,
+/// which fails on a call of it past `call_since`.
 pub trait Screen {
     /// The revision of the items this screen has: [`SCREEN_REVISION`] of
     /// the SDK it was built with, which the kernel checks before it calls
@@ -783,10 +806,10 @@ pub trait Screen {
         Handled::No
     }
 
-    /// How it shows where the screen is wide: [`Pane::Detail`] for a
+    /// How it shows where the screen is wide: [`Pane::DETAIL`] for a
     /// screen that shows one thing of the list below it. Revision 2.
     fn pane(&self) -> Pane {
-        Pane::Full
+        Pane::FULL
     }
 }
 
@@ -987,17 +1010,17 @@ mod tests {
         }
 
         fn pane(&self) -> Pane {
-            Pane::Detail
+            Pane::DETAIL
         }
     }
 
     #[test]
     fn newer_items_are_called_only_on_screens_that_have_them() {
         let ask =
-            |screen: &mut dyn Screen| call_since(screen, 2, Pane::Full, |screen| screen.pane());
-        assert_eq!(ask(&mut Built(1)), Pane::Full, "built before: never asked");
-        assert_eq!(ask(&mut Built(2)), Pane::Detail);
-        assert_eq!(ask(&mut Built(3)), Pane::Detail);
+            |screen: &mut dyn Screen| call_since(screen, 2, Pane::FULL, |screen| screen.pane());
+        assert_eq!(ask(&mut Built(1)), Pane::FULL, "built before: never asked");
+        assert_eq!(ask(&mut Built(2)), Pane::DETAIL);
+        assert_eq!(ask(&mut Built(3)), Pane::DETAIL);
     }
 
     #[test]
@@ -1021,6 +1044,14 @@ mod tests {
             }
         }
         assert_eq!(Plain.revision(), SCREEN_REVISION);
-        assert_eq!(Plain.pane(), Pane::Full);
+        assert_eq!(Plain.pane(), Pane::FULL);
+    }
+
+    #[test]
+    fn a_pane_this_sdk_does_not_know_is_placed_as_full() {
+        assert_eq!(Pane(7).known(), Pane::FULL);
+        assert_eq!(Pane::DETAIL.known(), Pane::DETAIL);
+        assert_eq!(Pane::FULL.known(), Pane::FULL);
+        assert_eq!(Pane::default(), Pane::FULL);
     }
 }

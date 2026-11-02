@@ -5851,9 +5851,6 @@ pub paperpaw_sdk::MenuPlace::Other(&'static str)
 pub paperpaw_sdk::Outside::Close
 pub paperpaw_sdk::Outside::Ignore
 pub paperpaw_sdk::Outside::PassThrough
-#[non_exhaustive] pub enum paperpaw_sdk::Pane
-pub paperpaw_sdk::Pane::Detail
-pub paperpaw_sdk::Pane::Full
 #[non_exhaustive] pub enum paperpaw_sdk::PluginKind
 pub paperpaw_sdk::PluginKind::BuiltIn
 pub paperpaw_sdk::PluginKind::Code
@@ -6708,6 +6705,13 @@ pub paperpaw_sdk::Output::refresh_set: core::option::Option<paperpaw_platform::d
 pub paperpaw_sdk::Output::wake_at: core::option::Option<paperpaw_platform::input::Instant>
 impl paperpaw_sdk::Output
 pub fn paperpaw_sdk::Output::request_refresh(&mut self, paperpaw_platform::display::RefreshMode)
+pub struct paperpaw_sdk::Pane(_)
+impl paperpaw_sdk::Pane
+pub const paperpaw_sdk::Pane::DETAIL: Self
+pub const paperpaw_sdk::Pane::FULL: Self
+pub fn paperpaw_sdk::Pane::known(self) -> Self
+impl core::default::Default for paperpaw_sdk::Pane
+pub fn paperpaw_sdk::Pane::default() -> Self
 pub struct paperpaw_sdk::Params
 impl paperpaw_sdk::Params
 pub fn paperpaw_sdk::Params::carried<T: core::any::Any>(&self) -> core::option::Option<&T>

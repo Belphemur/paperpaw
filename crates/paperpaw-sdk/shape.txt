@@ -544,6 +544,8 @@ const paperpaw_sdk::render::HookStage::BEFORE_CHROME: Self = Self(64)
 const paperpaw_sdk::screen::Instances::MANY: Self = Self(2)
 const paperpaw_sdk::screen::Instances::PER_PARAMS: Self = Self(0)
 const paperpaw_sdk::screen::Instances::SINGLE: Self = Self(1)
+const paperpaw_sdk::screen::Pane::DETAIL: Self = Self(1)
+const paperpaw_sdk::screen::Pane::FULL: Self = Self(0)
 const paperpaw_sdk::screen::SCREEN_REVISION: u16 = 2u16
 const paperpaw_sdk::secrets::FILE: &str = ".paperpaw/secrets.txt"
 const paperpaw_sdk::served::CABLE_PORT: u16 = 0u16
@@ -743,7 +745,6 @@ enum paperpaw_sdk::screen::Handled { Yes, No }
 enum paperpaw_sdk::screen::Hint { Default, Text(0: alloc::string::String), Icon(0: &'static str), Hidden, Other(0: &'static str) }
 enum paperpaw_sdk::screen::HintVisibility { Shown, OnPress, Hidden }
 enum paperpaw_sdk::screen::Outside { Close, Ignore, PassThrough }
-enum paperpaw_sdk::screen::Pane { Full, Detail }
 enum paperpaw_sdk::screen::ShowsThrough { Nothing, All, FullScreen }
 enum paperpaw_sdk::served::Access { Granted, Denied, Locked }
 enum paperpaw_sdk::setting::Text {  }
@@ -1034,6 +1035,7 @@ struct paperpaw_sdk::screen::Cx<'a, 'e> { env: &'a paperpaw_sdk::env::Env<'e>, o
 struct paperpaw_sdk::screen::FixedScreen { id: paperpaw_sdk::id::Id, title: &'static str, factory: paperpaw_sdk::screen::FixedFactory, refresh_on_open: core::option::Option<paperpaw_platform::display::RefreshMode>, instances: paperpaw_sdk::screen::Instances, spare: u32 }
 struct paperpaw_sdk::screen::Instances(0: u8)
 struct paperpaw_sdk::screen::Output { commands: alloc::vec::Vec<paperpaw_sdk::command::Command>, refresh: core::option::Option<paperpaw_platform::display::RefreshMode>, refresh_set: core::option::Option<paperpaw_platform::display::RefreshMode>, refresh_cause: core::option::Option<paperpaw_sdk::filters::RefreshCause>, redraw: bool, redraw_area: core::option::Option<paperpaw_platform::geometry::Rect>, wake_at: core::option::Option<paperpaw_platform::input::Instant> }
+struct paperpaw_sdk::screen::Pane(0: u8)
 struct paperpaw_sdk::screen::ScreenKey(0: u32)
 struct paperpaw_sdk::screen::ScreenList<'a> { added: &'a [(paperpaw_sdk::id::Id, alloc::borrow::Cow<'static, str>)], fixed: &'a [&'static paperpaw_sdk::screen::FixedScreen] }
 struct paperpaw_sdk::screen::ScreenSpec { id: paperpaw_sdk::id::Id, title: alloc::borrow::Cow<'static, str>, factory: paperpaw_sdk::screen::ScreenFactory, refresh_on_open: core::option::Option<paperpaw_platform::display::RefreshMode>, instances: paperpaw_sdk::screen::Instances, spare: u32 }

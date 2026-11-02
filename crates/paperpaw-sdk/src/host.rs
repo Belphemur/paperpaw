@@ -123,8 +123,10 @@ impl ScreenHost {
             let before = hosted.area;
             let resized = (before.width, before.height) != (area.width, area.height);
             hosted.area = area;
+            // What it asks for is passed on only where it stays: made
+            // anew, it was not asked anything (as the kernel does).
             let kept = !resized
-                || self.pass(cx, |held, cx| {
+                || self.pass_if(cx, true, |held, cx| {
                     call_since(held, 2, Handled::No, |held| held.on_resize(cx))
                 }) == Handled::Yes;
             if kept {
@@ -172,6 +174,17 @@ impl ScreenHost {
         cx: &mut Cx<'_, '_>,
         f: impl FnOnce(&mut dyn Screen, &mut Cx<'_, '_>) -> Handled,
     ) -> Handled {
+        self.pass_if(cx, false, f)
+    }
+
+    /// [`pass`](Self::pass); with `only_taken`, what it asks for is
+    /// passed on only where `f` answers `Handled::Yes`.
+    fn pass_if(
+        &mut self,
+        cx: &mut Cx<'_, '_>,
+        only_taken: bool,
+        f: impl FnOnce(&mut dyn Screen, &mut Cx<'_, '_>) -> Handled,
+    ) -> Handled {
         let Some(hosted) = &mut self.hosted else {
             return Handled::No;
         };
@@ -181,6 +194,9 @@ impl ScreenHost {
         let own = env.within(&device, place);
         let mut output = Output::default();
         let handled = f(hosted.screen.as_mut(), &mut Cx::new(&own, &mut output));
+        if only_taken && handled == Handled::No {
+            return handled;
+        }
         for command in output.commands {
             cx.command(command);
         }

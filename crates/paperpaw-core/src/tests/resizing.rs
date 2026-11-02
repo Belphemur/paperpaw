@@ -51,13 +51,15 @@ impl Screen for Fitting {
         if self.build.takes {
             Handled::Yes
         } else {
+            // Made anew instead: what it asks for here is never done.
+            cx.command(Command::Notify(String::from("not kept")));
             Handled::No
         }
     }
 
     fn pane(&self) -> Pane {
         self.log.borrow_mut().push(String::from("pane"));
-        Pane::Detail
+        Pane::DETAIL
     }
 }
 
@@ -155,7 +157,11 @@ fn fit_kernel(log: &Log, revision: u16, takes: bool, home: Id) -> Kernel {
         build,
         home,
     };
-    let mut kernel = Kernel::builder(DEVICE).plugin(plugin).build().unwrap();
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(NoticePlugin { log: super::log() })
+        .plugin(plugin)
+        .build()
+        .unwrap();
     kernel.start(Instant(0));
     log.borrow_mut().clear();
     kernel
@@ -191,11 +197,12 @@ fn a_screen_made_anew_goes_before_the_new_one_is_made() {
         *log.borrow(),
         ["resize 120x60", "close", "drop", "made 120x60"]
     );
+    assert!(kernel.notice.is_none(), "what it asked for was not done");
 }
 
 /// A screen of revision 1 (built before `on_resize` and `pane`) is never
-/// asked them: made anew as screens always were, and `call_since` answers for
-/// it what such a screen does.
+/// asked them: made anew as screens always were, and `call_since` answers
+/// for it what such a screen does.
 #[test]
 fn items_newer_than_a_screens_revision_are_never_called() {
     let log = log();
@@ -204,14 +211,14 @@ fn items_newer_than_a_screens_revision_are_never_called() {
     assert_eq!(*log.borrow(), ["close", "drop", "made 120x60"]);
     log.borrow_mut().clear();
     let screen = kernel.stack[0].screen.as_mut();
-    let pane = paperpaw_sdk::call_since(screen, 2, Pane::Full, |screen| screen.pane());
-    assert_eq!(pane, Pane::Full);
+    let pane = paperpaw_sdk::call_since(screen, 2, Pane::FULL, |screen| screen.pane());
+    assert_eq!(pane, Pane::FULL);
     assert!(log.borrow().is_empty(), "{:?}", log.borrow());
     // Of revision 2, it is asked.
     let mut kernel = fit_kernel(&log, 2, true, FIT);
     let screen = kernel.stack[0].screen.as_mut();
-    let pane = paperpaw_sdk::call_since(screen, 2, Pane::Full, |screen| screen.pane());
-    assert_eq!(pane, Pane::Detail);
+    let pane = paperpaw_sdk::call_since(screen, 2, Pane::FULL, |screen| screen.pane());
+    assert_eq!(pane, Pane::DETAIL);
     assert_eq!(*log.borrow(), ["pane"]);
 }
 
@@ -236,4 +243,19 @@ fn a_host_passes_on_only_what_the_screen_it_holds_has() {
     );
     // The host made anew holds a new one of the new size.
     assert_eq!(log.borrow().last().map(String::as_str), Some("made 120x60"));
+}
+
+/// A held screen that does not lay itself out anew is made anew by its
+/// host, and what it asked for meanwhile does not reach the kernel, as
+/// with a screen of the kernel's own.
+#[test]
+fn a_host_passes_on_nothing_of_a_screen_it_makes_anew() {
+    let log = log();
+    let mut kernel = fit_kernel(&log, SCREEN_REVISION, false, HOST);
+    kernel.resize(Instant(100), 120, 60);
+    assert_eq!(
+        *log.borrow(),
+        ["resize 120x60", "close", "drop", "made 120x60"]
+    );
+    assert!(kernel.notice.is_none(), "what it asked for was not done");
 }

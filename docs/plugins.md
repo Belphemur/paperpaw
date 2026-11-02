@@ -166,7 +166,7 @@ would lose. A screen that has much to keep (a book open, a long list
 scrolled, a connection) lays itself out anew in `on_resize` instead,
 from `cx.env().content()`, and answers `Handled::Yes`: it stays as it
 is. A screen that shows one thing of the list below it (a book's
-details, a message) says `Pane::Detail` in `pane`; where the screen is
+details, a message) says `Pane::DETAIL` in `pane`; where the screen is
 wide that will show it beside the list. `Screen::revision` is never
 implemented: the kernel calls items added later only on screens built
 with them. A screen that shows another inside it (`host::ScreenHost`)

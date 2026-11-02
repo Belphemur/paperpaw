@@ -454,14 +454,19 @@ impl SleepScreen {
     }
 }
 
+/// The revision of the sleep screen ([`Screen::revision`]) where it shows
+/// `shown` in its place: no higher than that one's, so that it is asked
+/// only what it can pass on; this SDK's where it shows its own.
+fn revision_of(shown: Option<&dyn Screen>) -> u16 {
+    shown.map_or(
+        paperpaw_sdk::SCREEN_REVISION,
+        paperpaw_sdk::revision_holding,
+    )
+}
+
 impl Screen for SleepScreen {
-    /// No higher than that of the screen shown in its place: only what
-    /// that one has is passed on to it.
     fn revision(&self) -> u16 {
-        self.shown.as_deref().map_or(
-            paperpaw_sdk::SCREEN_REVISION,
-            paperpaw_sdk::revision_holding,
-        )
+        revision_of(self.shown.as_deref())
     }
 
     fn region(&self, env: &Env<'_>) -> Option<Rect> {
@@ -645,6 +650,33 @@ mod tests {
         let de = Catalog::parse(include_str!("../i18n/de.ini")).unwrap();
         let issues = check::compare(&en, &de);
         assert!(issues.is_empty(), "{issues:?}");
+    }
+
+    /// A screen of revision 1, as one built before revision 2's items.
+    struct Old;
+
+    impl paperpaw_sdk::Screen for Old {
+        fn revision(&self) -> u16 {
+            1
+        }
+
+        fn draw(&mut self, _: &mut paperpaw_sdk::Canvas<'_>, _: &paperpaw_sdk::Env<'_>) {}
+
+        fn on_action(
+            &mut self,
+            _: &paperpaw_sdk::Id,
+            _: &mut paperpaw_sdk::Cx<'_, '_>,
+        ) -> paperpaw_sdk::Handled {
+            paperpaw_sdk::Handled::No
+        }
+    }
+
+    /// Showing another plugin's screen in its place, it is no newer than
+    /// that one; showing its own, of this SDK.
+    #[test]
+    fn the_sleep_screen_is_no_newer_than_the_screen_it_shows() {
+        assert_eq!(super::revision_of(Some(&Old)), 1);
+        assert_eq!(super::revision_of(None), paperpaw_sdk::SCREEN_REVISION);
     }
 
     /// What version 1 wrote stays readable (see `docs/data-files.md`).
