@@ -182,12 +182,13 @@ impl Network {
         for report in self.bluetooth.poll() {
             effects.push(kernel.bluetooth_event(now, report));
         }
-        self.serve(kernel, now, &mut effects);
+        // Secure requests and sockets wait for the clock (their
+        // certificates' dates are checked against it), unless it cannot be
+        // had.
+        let clock_ready = clock::unix_ms(now).is_some() || self.sync_failed;
+        self.serve(kernel, now, clock_ready, &mut effects);
         self.sync_clock(now);
         if self.calls.busy() {
-            // Secure requests wait for the clock (their certificates' dates
-            // are checked against it), unless it cannot be had.
-            let clock_ready = clock::unix_ms(now).is_some() || self.sync_failed;
             for answer in self
                 .calls
                 .poll(self.radio.net(), kernel.storage(), clock_ready)
@@ -252,7 +253,13 @@ impl Network {
 
     /// Plugins' servers and sockets: what the kernel asked, then a step
     /// for each. Without a network they fail (what was open is let go).
-    fn serve(&mut self, kernel: &mut Kernel, now: Instant, effects: &mut Vec<Effects>) {
+    fn serve(
+        &mut self,
+        kernel: &mut Kernel,
+        now: Instant,
+        clock_ready: bool,
+        effects: &mut Vec<Effects>,
+    ) {
         let Some(net) = self.radio.online() else {
             let mut net = self.radio.net();
             effects.extend(self.servers.lost(net.as_deref_mut(), kernel, now));
@@ -291,7 +298,7 @@ impl Network {
             }
         }
         effects.extend(self.servers.poll(net, kernel, now));
-        effects.extend(self.sockets.poll(net, kernel, now));
+        effects.extend(self.sockets.poll(net, kernel, now, clock_ready));
     }
 
     /// Sets the clock over the network when it is not known or old, once
