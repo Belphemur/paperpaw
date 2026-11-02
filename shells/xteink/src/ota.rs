@@ -93,6 +93,8 @@ pub struct Ota {
     marked: bool,
     /// The start found an update that failed its trial (`Ota::plans_to_go_back`).
     going_back: bool,
+    /// The start is done (`Ota::settle`).
+    settled: bool,
     /// The flash, to look at the bootloader again.
     shared: Flash,
 }
@@ -130,13 +132,21 @@ impl Ota {
             .plugins(Plugins::read_static(&PLUGINS).unwrap_or_default());
         let (updates, plan) =
             Updates::open(Chip(shared.clone()), &slots, running, this, BOARD_TAG).ok()?;
-        Some(Self {
+        let mut this = Self {
             updates,
             failed: None,
             marked: false,
             going_back: matches!(plan, Start::Failed { .. }),
+            settled: false,
             shared,
-        })
+        };
+        // An update this firmware installed, or one that failed its trial,
+        // was marked at once (`Updates::open`): before the card, since a
+        // hang in the board's start would leave it unmarked for good.
+        if plan != Start::Kept && !this.updates.start_pending() {
+            this.settle(None);
+        }
+        Some(this)
     }
 
     /// Whether the start found an update that failed its trial: unless the
@@ -144,6 +154,11 @@ impl Ota {
     /// it ([`Ota::settle`], [`Ota::failed_trial`]).
     pub fn plans_to_go_back(&self) -> bool {
         self.going_back
+    }
+
+    /// Whether the start is done: marked at once, or settled.
+    pub fn settled(&self) -> bool {
+        self.settled
     }
 
     /// Whether the start found something to write to the OTA data (an
@@ -164,6 +179,7 @@ impl Ota {
     /// bad, only where it is not (see `Updates::settle`).
     pub fn settle(&mut self, source: Option<paperpaw_x4::dual_boot::Source>) {
         let running = self.updates.running();
+        self.settled = true;
         let start = self.updates.settle(source);
         if source.is_some() {
             warn!("OTA: a declared dual-boot setup: the OTA data is left as it is");

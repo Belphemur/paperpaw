@@ -55,6 +55,10 @@ pub fn settle(ota: &mut Option<Ota>, storage: &dyn Storage) -> bool {
     let Some(ota) = ota else {
         return false;
     };
+    // Done at once (an update this firmware installed): nothing to decide.
+    if ota.settled() {
+        return false;
+    }
     if !ota.start_pending() && !noted(storage) {
         ota.settle(None);
         return false;

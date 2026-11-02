@@ -172,6 +172,8 @@ pub struct Updates<F> {
     /// This is a declared dual-boot setup (`dual_boot`): the other app
     /// partition is another firmware's, nothing is installed there.
     dual: Option<Source>,
+    /// What the start did at once (`open`), for [`Updates::settle`] to say.
+    early: Option<Option<Start>>,
     /// The OTA data as the start found it, where the start would write it:
     /// held until [`Updates::settle`] knows whether it may.
     pending: Option<OtaData>,
@@ -229,7 +231,8 @@ impl<F: Flash> Updates<F> {
             offset: slots.data,
         })?;
         let plan = ota_data.plan(running);
-        let updates = Self {
+        let early = ota_data.acts_early(running);
+        let mut updates = Self {
             flash,
             data: slots.data,
             apps: slots.apps,
@@ -241,7 +244,14 @@ impl<F: Flash> Updates<F> {
             install: None,
             dual: None,
             pending: (plan != Start::Kept).then_some(ota_data),
+            early: None,
         };
+        // What an update this firmware installed needs, or one that failed,
+        // is done now (a hang before the card would leave it undone for
+        // good); the rest waits for [`Updates::settle`].
+        if early {
+            updates.early = Some(updates.apply());
+        }
         Ok((updates, plan))
     }
 
@@ -255,12 +265,19 @@ impl<F: Flash> Updates<F> {
     #[inline(never)]
     pub fn settle(&mut self, declared: Option<Source>) -> Option<Start> {
         self.dual = declared;
-        let Some(mut ota_data) = self.pending.take() else {
-            return Some(Start::Kept);
-        };
-        if declared.is_some() {
+        if let Some(done) = self.early.take() {
+            return done;
+        }
+        if self.pending.is_none() || declared.is_some() {
+            self.pending = None;
             return Some(Start::Kept);
         }
+        self.apply()
+    }
+
+    /// What the start needs, written (the OTA data held in `pending`).
+    fn apply(&mut self) -> Option<Start> {
+        let mut ota_data = self.pending.take()?;
         let partition = &mut Partition {
             flash: &mut self.flash,
             offset: self.data,

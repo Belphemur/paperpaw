@@ -73,6 +73,15 @@ fn disagreeing(chip: &mut Chip, slots: &Slots, chosen: u32, state: State) {
     ota.choose(&mut part, chosen, state, 0).unwrap();
 }
 
+/// What a tool leaves where it chose a slot as `New` or `Undefined`: the
+/// entries without the word this firmware puts in its own.
+fn as_tool(chip: &mut Chip, slots: &Slots) {
+    for entry in [0, 0x1000] {
+        let at = slots.data as usize + entry + 16;
+        chip.0[at..at + 4].fill(0xFF);
+    }
+}
+
 /// The OTA data's partition, as `Updates` hands it to `OtaData`.
 struct Part<'a>(&'a mut Chip, u32);
 
@@ -101,10 +110,16 @@ fn start(
 ) -> (Updates<Chip>, Start, Option<Start>) {
     let before = chip.0.clone();
     let (mut updates, plan) = Updates::open(chip, slots, running, this(), "x4").unwrap();
-    // Until the setup is known, not one byte is written.
-    assert!(updates.flash().0 == before, "open wrote");
-    // Something to write exactly where the plan is not a plain start.
-    assert_eq!(updates.start_pending(), plan != Start::Kept);
+    // Until the setup is known, not one byte is written, except for what
+    // must not wait: an update this firmware installed, or one that failed
+    // (`OtaData::acts_early`, tested below).
+    if updates.start_pending() || plan == Start::Kept {
+        assert!(updates.flash().0 == before, "open wrote");
+    }
+    assert_eq!(
+        updates.start_pending(),
+        plan != Start::Kept && updates.flash().0 == before
+    );
     let started = updates.settle(declared);
     assert!(!updates.start_pending());
     (updates, plan, started)
@@ -166,6 +181,7 @@ fn no_trial_begins_in_a_declared_setup() {
         for declared in [Source::Ini, Source::Marker] {
             let (mut chip, slots) = flash(csv);
             disagreeing(&mut chip, &slots, 0, State::New);
+            as_tool(&mut chip, &slots);
             let before = chip.0.clone();
             let (mut updates, plan, started) = start(chip, &slots, 0, Some(declared));
             assert_eq!(plan, Start::Trial { ran: 0 }, "{name}");
@@ -181,20 +197,47 @@ fn no_trial_begins_in_a_declared_setup() {
 }
 
 #[test]
-fn an_update_that_failed_its_trial_is_left_alone_in_a_declared_setup() {
-    // Marked pending by this firmware at an earlier start: where it is not
-    // declared the next start finds the trial failed, marks it bad and goes
-    // back; where it is declared nothing is written, nobody goes back.
+fn an_update_this_firmware_installed_is_marked_at_once_and_goes_back_if_it_dies() {
+    // Its own entry (`New`, with its word): marked before the card is read,
+    // so that a hang or a panic in the board's start does not leave it
+    // unmarked for good. The start that dies before the setup is settled
+    // finds the trial failed the next time and goes back.
     for (name, csv) in layouts() {
         let (mut chip, slots) = flash(csv);
         disagreeing(&mut chip, &slots, 0, State::New);
-        let (updates, _, started) = start(chip, &slots, 0, None);
-        assert_eq!(started, Some(Start::Trial { ran: 0 }), "{name}");
+        let before = data(&chip, &slots);
+        let (updates, plan) = Updates::open(chip, &slots, 0, this(), "x4").unwrap();
+        assert_eq!(plan, Start::Trial { ran: 0 }, "{name}");
+        assert!(!updates.start_pending(), "{name}: done at once");
+        assert!(updates.on_trial(), "{name}");
         let chip = updates.into_flash();
-        let before = chip.0.clone();
-        let (updates, plan, started) = start(chip, &slots, 0, Some(Source::Ini));
+        assert_ne!(data(&chip, &slots), before, "{name}: marked");
+        // It died here. The next start:
+        let (updates, plan) = Updates::open(chip, &slots, 0, this(), "x4").unwrap();
         assert!(matches!(plan, Start::Failed { .. }), "{name}: {plan:?}");
-        assert_eq!(started, Some(Start::Kept), "{name}");
+        assert!(!updates.start_pending(), "{name}: marked bad at once");
+        let chip = updates.into_flash();
+        let mut part = Part(&mut { chip }, slots.data);
+        let ota = OtaData::read(&mut part).unwrap();
+        assert_eq!(
+            ota.state_of(0).map(|(state, _)| state),
+            Some(State::Invalid)
+        );
+    }
+}
+
+#[test]
+fn what_a_tool_chose_waits_for_the_setup_and_a_hang_leaves_it_as_it_was() {
+    for (name, csv) in layouts() {
+        let (mut chip, slots) = flash(csv);
+        disagreeing(&mut chip, &slots, 0, State::New);
+        as_tool(&mut chip, &slots);
+        let before = chip.0.clone();
+        let (updates, plan) = Updates::open(chip, &slots, 0, this(), "x4").unwrap();
+        assert_eq!(plan, Start::Trial { ran: 0 }, "{name}");
+        assert!(updates.start_pending(), "{name}");
+        // Dying before the ini is read writes nothing: the next start is as
+        // this one (the cost: no rollback of a tool's own install).
         assert!(updates.into_flash().0 == before, "{name}");
     }
 }

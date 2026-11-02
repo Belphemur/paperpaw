@@ -90,8 +90,8 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   (`paperpaw-dualboot:1`, see `docs/dual-boot.md`). It then never writes the other partition or the OTA data: no
   updates, no trial, no way back to another firmware; the *Updates* page says why. Not declared, nothing changes. A
   `[firmware]` section no longer warns as an unknown plugin, and `firmware` can no longer be a plugin's id (as
-  `plugins`, `fonts`, `menus` and `slots` cannot). The start now reads the card and `paperpaw.ini` before it marks
-  an update as on trial, undone or failed (a hang before that is not rolled back). The bootloader's 32 KB and the ini are read only where a start would write the OTA data, after a declared start, or before an install; a normal start reads neither. No change for plugins.
+  `plugins`, `fonts`, `menus` and `slots` cannot). An update PaperPaw installed itself is still marked as on trial at once, as before; what a tool put in the other
+  slot, and the undoing of an update, wait until the card and `paperpaw.ini` are read. The bootloader's 32 KB and the ini are read only where a start would write the OTA data, after a declared start, or before an install; a normal start reads neither. No change for plugins.
 - UI: `UiStyle::flip` and `UiStyle::flip_x` are public (#33): a screen lays a row or a grid out once from the left
   and mirrors each part where the interface runs right to left, as the SDK's own parts do. New functions, no
   change of what plugins built before see; their api.txt lines are part of this release's interface 6. The library's rows and

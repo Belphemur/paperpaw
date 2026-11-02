@@ -56,9 +56,14 @@ of a release) raw, nothing else; keep both slots at least 6,553,600 bytes
   going back. A start looks at the OTA data first and writes nothing; the
   card, `paperpaw.ini` and the bootloader are read next (before the screen,
   the kernel and the plugins), and only then, if the setup is not declared,
-  does the start do what it needs. (A start that hangs before the card is
-  read is therefore not undone, as it would be if the OTA data were marked
-  earlier; the bootloader's own rollback, where it has one, still is.)
+  does the start do what it needs. Two things are marked at once, before the
+  card: an update PaperPaw installed itself (its OTA entry carries PaperPaw's
+  own word, which a tool's does not), and an update it had put on trial that
+  failed. So a hang in the board's start still ends in the way back for a
+  PaperPaw that is not told it shares the device. What a tool chose (`New` or
+  `Undefined`, no word of PaperPaw's) waits: a hang before the card is read
+  leaves it as it was (the bootloader's own rollback, where it has one, still
+  applies).
   Where the card cannot be read at all, `paperpaw.ini` cannot be, and the
   start goes on as for a setup not declared by the reader.
 - Never reads the other partition for the web flasher's bundle of plugins.

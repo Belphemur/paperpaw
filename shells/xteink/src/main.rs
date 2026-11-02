@@ -474,10 +474,11 @@ fn prepare() -> Ready {
     };
     // The reader's choice and the bootloader say whether this is a dual-boot
     // setup, nothing in the other firmware's partition or the OTA data
-    // changed: only then the start does what it needs (an update marked as
-    // on trial, one undone, one that failed marked bad). Before anything
-    // that goes back to the firmware before, and before anything else is
-    // written to the card.
+    // changed: only then the start does what it needs (a tool's update
+    // marked as on trial, one undone), as before anything else is written
+    // to the card. An update this firmware installed, or one that failed its
+    // trial, was marked before the board's start (`Ota::start`), so that a
+    // hang there still ends in the way back.
     let mut ota = ota;
     let dual = dual::settle(&mut ota, storage.as_ref());
     // A failed trial that the setup left alone: the message is no longer
