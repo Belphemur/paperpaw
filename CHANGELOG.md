@@ -65,6 +65,10 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
 
 ### Added
 
+- Devices (#96): a developer setting *Stay awake on USB* (X4, X4 Pro, X4 Classic, X3; off by default). While the cable is in,
+  the sleep after *Sleep after* does not come, and *Sleep* shows the sleep picture but does not sleep, so the computer
+  keeps the link for remote tests; the next press or command wakes it, and a cable pulled meanwhile puts the device
+  to sleep. No change for plugins.
 - UI: `UiStyle::flip` and `UiStyle::flip_x` are public (#33): a screen lays a row or a grid out once from the left
   and mirrors each part where the interface runs right to left, as the SDK's own parts do. New functions, no
   change of what plugins built before see; their api.txt lines come with the next bless. The library's rows and
