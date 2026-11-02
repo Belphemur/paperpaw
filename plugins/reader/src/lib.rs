@@ -111,7 +111,7 @@ pub mod settings {
     pub use paperpaw_sdk::builtin::settings::{
         FONT_SIZE, FONT_WEIGHT, FOOTNOTES, FOOTNOTES_JUMP, FOOTNOTES_POPUP, HYPHENATE, INDENT,
         JUSTIFY, LINE_SPACING, MARGIN, MARGIN_ENDS, PARAGRAPH_SPACING, PUBLISHER_STYLES,
-        SMOOTH_TEXT, TEXT_CONTRAST, WORD_SPACING,
+        SMOOTH_TEXT, TEXT_CONTRAST, TEXT_SHARPNESS, WORD_SPACING,
     };
     /// Reopen the last book at start-up.
     pub const OPEN_LAST: Setting<bool> = Setting::new("reader.open-last");

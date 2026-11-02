@@ -1,10 +1,11 @@
-//! How book text is inked: smooth or black and white, and how dark. Part
+//! How book text is inked: smooth or black and white, how dark and how
+//! crisp. Part
 //! of the standard type of book pages; each book may have its own.
 
 use paperpaw_sdk::SettingSpec;
 use paperpaw_sdk::builtin::{groups, settings};
 
-pub(super) static SETTINGS: [SettingSpec; 3] = [
+pub(super) static SETTINGS: [SettingSpec; 4] = [
     // Off unless the panel shows grays itself (see
     // `smooth_text_default`): on a panel of black and white every page
     // with it is a refresh of the whole screen in grays.
@@ -25,6 +26,17 @@ pub(super) static SETTINGS: [SettingSpec; 3] = [
     )
     .scoped()
     .description("core.setting.text-contrast.help"),
+    // How crisp: the contrast a step lighter or darker, sharp without
+    // grays; normal is as without it.
+    SettingSpec::choice(
+        settings::TEXT_SHARPNESS.static_str(),
+        "core.setting.text-sharpness",
+        settings::TEXT_SHARPNESS_LEVELS,
+        settings::TEXT_SHARPNESS_LEVELS[1],
+        groups::READING_DISPLAY,
+    )
+    .scoped()
+    .description("core.setting.text-sharpness.help"),
     // A curve of one's own, for themes and for people who want more: in
     // place of the contrast when set.
     SettingSpec::text(
