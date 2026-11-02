@@ -306,6 +306,7 @@ impl Kernel {
             }
             self.from_guard = false;
             self.from_guard_own = false;
+            self.works.runs.round_done();
         }
         if !self.output.commands.is_empty() {
             self.output.commands.clear();

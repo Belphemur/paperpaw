@@ -14,6 +14,8 @@ use crate::io::SocketCall;
 const JOB: Id = Id::new_static("ws.job");
 const FETCH: Id = Id::new_static("ws.fetch");
 const GO: Id = Id::new_static("ws.go");
+/// A job that connects only once woken (its second step).
+const LATE: Id = Id::new_static("ws.late");
 
 struct Blank;
 
@@ -70,6 +72,18 @@ impl Plugin for SocketWork {
                 Step::Failed(String::from("no answer"))
             } else {
                 Step::Done
+            }
+        }))?;
+        let late = Rc::new(Cell::new(0u32));
+        r.add_work(WorkSpec::new(LATE, "late", move |_, _, out| {
+            late.set(late.get() + 1);
+            match late.get() {
+                1 => Step::WaitFor(GO),
+                2 => {
+                    out.push(connect("ws.late"));
+                    Step::WaitFor(GO)
+                }
+                _ => Step::Done,
             }
         }))?;
         Ok(())
@@ -184,6 +198,9 @@ fn an_events_socket_closes_when_the_work_runs_again_and_none_is_left_over() {
         let mut got = calls(&mut kernel);
         got.sort();
         assert_eq!(got, expected, "run {n}");
+        // The same socket, connected anew, is the new run's: the end of
+        // the one before leaves it open.
+        assert!(kernel.sockets_open(), "run {n}");
         assert!(kernel.works.runs.count() <= 1, "run {n}");
     }
     // Taken back (it is not declared any more): its last socket closes.
@@ -222,5 +239,26 @@ fn a_socket_for_the_reader_is_the_screens_and_no_work_closes_it() {
     assert_eq!(calls(&mut kernel), ["connect 2", "close 2"]);
     // Its screen closed: it closes, as before.
     kernel.run_action(Instant(150), actions::BACK);
+    assert_eq!(calls(&mut kernel), ["close 1"]);
+}
+
+#[test]
+fn a_socket_a_job_connects_once_woken_is_the_runs() {
+    let mut kernel = kernel(false);
+    run(&mut kernel, 100, Work::at(LATE, Instant(100)));
+    assert!(calls(&mut kernel).is_empty());
+    kernel.apply(Command::OpenScreen(
+        Id::new_static("ws.page"),
+        Params::new(),
+    ));
+    kernel.finish();
+    // Woken by the event it waits for: its step connects.
+    kernel.send_event(Instant(130), GO, Params::new());
+    kernel.tick(Instant(140));
+    assert_eq!(calls(&mut kernel), ["connect 1"]);
+    kernel.run_action(Instant(150), actions::BACK);
+    assert!(calls(&mut kernel).is_empty(), "the job's socket stays");
+    kernel.send_event(Instant(160), GO, Params::new());
+    kernel.tick(Instant(170));
     assert_eq!(calls(&mut kernel), ["close 1"]);
 }

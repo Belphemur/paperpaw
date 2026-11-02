@@ -1,11 +1,15 @@
-//! The runs of background work, and the sockets they open. A socket the
-//! commands of a work's event handlers or of a job's step connect is of
-//! that run, not of the screens open (a run is no screen's): it stays
-//! open while screens open and close, and closes when the run ends.
+//! The runs of background work, and the sockets they open. A socket of
+//! the work's plugin that the commands of the work's event handlers or of
+//! a job's step connect is of that run, not of the screens open (a run is
+//! no screen's): it stays open while screens open and close, and closes
+//! when the run ends. Sockets connected later (from a socket's event, say)
+//! are the screens'.
 //!
 //! A job's run ends when it is done or failed; an event's when the same
 //! work (its id and key) runs again. Either ends when the work is taken
-//! back or refused, or its plugin goes.
+//! back or refused, or its plugin goes. A run's secure sockets end when
+//! idle (`idle_ms` 0 is refused for them): one left open by a rare work
+//! would hold a connection, on the X4 its one TLS session, for good.
 
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -30,8 +34,8 @@ struct Run {
 pub(crate) struct Runs {
     runs: Vec<Run>,
     next: u32,
-    /// The sockets a run's commands connect, until the commands are
-    /// carried out.
+    /// The sockets a run's commands connect, until the round of commands
+    /// they are in is carried out.
     claims: Vec<(Id, u32)>,
     /// Runs ended since their sockets were last closed.
     ended: Vec<u32>,
@@ -80,13 +84,26 @@ impl Runs {
         });
     }
 
-    /// The commands of the run `run`: the sockets they connect are its.
+    /// The commands of the run `run`: the sockets of its plugin they
+    /// connect are its (not those of another plugin hearing its event).
     pub(crate) fn claim(&mut self, run: u32, commands: &[Command]) {
+        let Some(owner) = self.runs.iter().find(|r| r.number == run) else {
+            return;
+        };
         for command in commands {
-            if let Command::Connect { socket, .. } = command {
+            if let Command::Connect { socket, .. } = command
+                && socket.namespace() == owner.owner
+            {
                 self.claims.push((socket.clone(), run));
             }
         }
+    }
+
+    /// A round of commands was carried out: claims left (a connection
+    /// refused before it was made) go, so that none takes a socket a
+    /// later command connects.
+    pub(crate) fn round_done(&mut self) {
+        self.claims.clear();
     }
 
     /// The run the socket `socket` being connected is of, where a run's
@@ -96,8 +113,7 @@ impl Runs {
         Some(self.claims.swap_remove(at).1)
     }
 
-    /// The run's commands were carried out: claims left (a connection
-    /// refused before it was made) go; and runs go that have no socket
+    /// The runs' commands were carried out: runs go that have no socket
     /// open (`open`) and no job going on (`going`).
     pub(crate) fn settle(&mut self, open: impl Fn(u32) -> bool, going: impl Fn(&Id, &str) -> bool) {
         self.claims.clear();
@@ -181,9 +197,17 @@ mod tests {
     fn a_claim_not_carried_out_goes_with_the_runs_commands() {
         let mut runs = Runs::default();
         let run = runs.start(&Id::new_static("a.fetch"), "", "a");
-        runs.claim(run, &[connect("a.one"), connect("a.two")]);
+        runs.claim(
+            run,
+            &[connect("a.one"), connect("a.two"), connect("b.other")],
+        );
         assert_eq!(runs.owner_of(&Id::new_static("a.one")), Some(run));
-        // The other was refused before it connected: no run claims it later.
+        // Another plugin's (hearing the event too) is not the run's.
+        assert_eq!(runs.owner_of(&Id::new_static("b.other")), None);
+        // The other was refused before it connected: no later round's
+        // command connecting it is the run's.
+        runs.round_done();
+        assert_eq!(runs.owner_of(&Id::new_static("a.two")), None);
         runs.settle(|_| false, |_, _| false);
         assert_eq!(runs.owner_of(&Id::new_static("a.two")), None);
         assert_eq!(runs.count(), 0, "no socket open, no job going on");

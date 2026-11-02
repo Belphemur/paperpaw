@@ -50,7 +50,8 @@ what the user is doing.
   2026-11 (#81, owner decision 52):* a socket that background work opens
   (a work's event handlers, a job's step; ADR 0025) is that run's
   instead and closes when the run ends: the job done or failed, the work
-  run again, taken back or refused, or its plugin gone.
+  run again, taken back or refused, or its plugin gone. Its secure
+  sockets end when idle (`idle_ms(0)` refused, at most 30 minutes).
 - **Shells with the standard library** (the emulator, Android) do it in
   `paperpaw-serve`: a thread per connection for reading, one for writing,
   bounded channels between them and the shell, so a fast network waits

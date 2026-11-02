@@ -28,8 +28,9 @@ pub const MAX_PINS: usize = 4;
 pub const MAX_TLS_TIMEOUT_MS: u32 = 60_000;
 
 /// The longest a TLS socket may wait for something to send or read
-/// ([`Tls::idle_ms`]).
-pub const MAX_TLS_IDLE_MS: u32 = 600_000;
+/// ([`Tls::idle_ms`]): 30 minutes, as long as a mail server waits for a
+/// client waiting for new mail (IMAP IDLE, which asks again within 29).
+pub const MAX_TLS_IDLE_MS: u32 = 1_800_000;
 
 /// How a socket's TLS is set up ([`Command::connect_tls`],
 /// [`Command::start_tls`]). Made with [`Tls::new`] (the authorities
@@ -56,7 +57,9 @@ pub struct Tls {
     pub timeout_ms: u32,
     /// Nothing sent or read for this long, in milliseconds, ends the
     /// socket ([`SocketError::Timeout`], `reason` `idle`), at most
-    /// [`MAX_TLS_IDLE_MS`]; 0: never. 60 s unless set: an open connection
+    /// [`MAX_TLS_IDLE_MS`]; 0: never, not for a socket of background work
+    /// (it is the run's, which no screen closes: refused,
+    /// [`SocketError::Options`]). 60 s unless set: an open connection
     /// holds memory and keeps the radio awake. Where the device holds few
     /// connections ([`Capabilities::tls_sessions`](crate::Capabilities)) and
     /// another request or socket waits for one, a socket idle for a few
@@ -116,7 +119,8 @@ impl Tls {
         self
     }
 
-    /// Closing after `ms` with nothing sent or read (0: never).
+    /// Closing after `ms` with nothing sent or read (0: never, not for
+    /// background work's sockets).
     #[must_use]
     pub fn idle_ms(mut self, ms: u32) -> Self {
         self.idle_ms = ms;

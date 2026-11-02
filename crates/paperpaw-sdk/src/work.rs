@@ -45,12 +45,20 @@
 //! reader's. Its requests keep the radio on until they are answered.
 //!
 //! **Sockets of background work are the run's**, not the screens': a
-//! socket (plain or TLS) its event's handlers or a job's step connect
-//! stays while screens open and close, and closes when the run ends: a
-//! job done or failed, the work run again (an event's run ends with the
-//! next), taken back or refused, or its plugin gone. A conversation of
-//! several steps (fetching mail) is best a job that waits for the
-//! socket's events ([`Step::WaitFor`]).
+//! socket (plain or TLS) of the work's plugin that its event's handlers
+//! or a job's step connect stays while screens open and close, and closes
+//! when the run ends: a job done or failed, the work run again or taken
+//! back or refused, its plugin gone. Only those count: a socket connected from a socket's
+//! event (a second connection after the first answered, a reconnection)
+//! is the screens', and closes with the screen shown. A conversation of
+//! several steps or connections (fetching mail, then sending it) is a
+//! job: its steps connect, and it waits for the sockets' events
+//! ([`Step::WaitFor`]). A run's secure socket ends when idle: one that
+//! would never ([`Tls::idle_ms`](crate::sockets::Tls::idle_ms) 0) is
+//! refused ([`SocketError::Options`](crate::SocketError::Options)), up
+//! to [`MAX_TLS_IDLE_MS`](crate::MAX_TLS_IDLE_MS) (30 minutes) may be
+//! set; waiting for new mail (IMAP IDLE, asked again within 29 minutes)
+//! keeps it open.
 //!
 //! **Jobs** are work in steps: long work (an install, a catalog synced or
 //! walked, a book's pages counted) registers a step function for its id

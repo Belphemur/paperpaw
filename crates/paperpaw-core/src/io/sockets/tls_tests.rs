@@ -399,3 +399,36 @@ fn why_the_shell_failed_reaches_the_plugin() {
     assert_eq!(last(&out, p::ERROR).as_deref(), Some("no-network"));
     assert!(!sockets.any());
 }
+
+#[test]
+fn a_secure_socket_of_background_work_ends_when_idle() {
+    let storage = MemoryStorage::new();
+    let mut out = Vec::new();
+    let mut sockets = Sockets::new(1);
+    let never = || Tls::new().idle_ms(0);
+    // The reader's may stay open for good.
+    let connect = Command::connect_tls(SOCKET, HOST, 993, EVENTS, never());
+    sockets.command(connect, true, Owner::Screens(1), &storage, &mut out);
+    assert!(sockets.any() && out.is_empty());
+    // A run's, which no screen closes, is refused...
+    let connect = Command::connect_tls(SOCKET, HOST, 993, EVENTS, never());
+    sockets.command(connect, true, Owner::Run(1), &storage, &mut out);
+    assert_eq!(last(&out, p::ERROR).as_deref(), Some("options"));
+    assert!(!sockets.any());
+    // ... one waiting half an hour for new mail (IMAP IDLE) is not.
+    let idle = Tls::new().idle_ms(paperpaw_sdk::MAX_TLS_IDLE_MS);
+    let connect = Command::connect_tls(SOCKET, HOST, 993, EVENTS, idle);
+    sockets.command(connect, true, Owner::Run(1), &storage, &mut out);
+    assert!(sockets.any());
+    assert_eq!(paperpaw_sdk::MAX_TLS_IDLE_MS, 30 * 60 * 1000);
+    // Switched to TLS that never ends (STARTTLS): refused, and closed.
+    let mut sockets = Sockets::new(1);
+    let connect = Command::connect(SOCKET, HOST, 587, EVENTS);
+    sockets.command(connect, true, Owner::Run(1), &storage, &mut out);
+    sockets.event(SocketEvent::Connected { socket: 1 }, &storage, &mut out);
+    sockets.calls.clear();
+    let switch = Command::start_tls(SOCKET, never());
+    sockets.command(switch, true, Owner::Run(1), &storage, &mut out);
+    assert_eq!(last(&out, p::ERROR).as_deref(), Some("options"));
+    assert_eq!(sockets.take(), [SocketCall::Close { socket: 1 }]);
+}

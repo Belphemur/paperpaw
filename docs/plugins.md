@@ -1759,6 +1759,10 @@ that was open as it opened closes. One that background work opens (its
 event's handlers, a job's step) is the run's instead: it closes when the
 run ends (the job done or failed, the work run again, taken back or
 refused, or its plugin gone), whatever screens open and close meanwhile.
+One connected from a socket's event is the screens': several connections
+in the background are a job's steps. A secure one of background work
+ends when idle: `idle_ms(0)` is refused for it (`SocketError::Options`),
+at most 30 minutes (`MAX_TLS_IDLE_MS`, as long as IMAP IDLE waits).
 
 A socket may be secure (TLS): `Command::connect_tls(socket, host, 993,
 events, Tls::new())` connects and says `SocketNotice::Secured` once the

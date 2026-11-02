@@ -380,7 +380,7 @@ impl Sockets {
         let refused = if !network {
             Some((SocketError::NoNetwork, "no network"))
         } else {
-            tls.as_deref().and_then(|tls| self.tls_refused(tls))
+            tls.as_deref().and_then(|tls| self.tls_refused(tls, owner))
         };
         if let Some((error, reason)) = refused {
             let reason = String::from(reason);
@@ -437,12 +437,22 @@ impl Sockets {
         true
     }
 
-    /// Why TLS as `tls` sets it up is refused here, if it is.
-    fn tls_refused(&self, tls: &Tls) -> Option<(SocketError, &'static str)> {
+    /// Why TLS as `tls` sets it up is refused here for a socket of
+    /// `owner`, if it is. A run of background work's socket ends when
+    /// idle: one never ending (`idle_ms` 0) would hold a connection (on
+    /// the X4 its one TLS session) for good, the run being no screen that
+    /// closes.
+    fn tls_refused(&self, tls: &Tls, owner: Owner) -> Option<(SocketError, &'static str)> {
         if self.tls_sessions == 0 {
             return Some((
                 SocketError::Unsupported,
                 "secure connections are not supported here",
+            ));
+        }
+        if matches!(owner, Owner::Run(_)) && tls.idle_ms == 0 {
+            return Some((
+                SocketError::Options,
+                "background work's secure connections end when idle (idle_ms 0)",
             ));
         }
         tls.check()
@@ -509,7 +519,7 @@ impl Sockets {
     /// would send in the clear what the plugin means to send secured.
     fn start_tls(&mut self, at: usize, tls: Tls, out: &mut Vec<Command>) {
         let s = &self.sockets[at];
-        let refused = self.tls_refused(&tls).or_else(|| {
+        let refused = self.tls_refused(&tls, s.owner).or_else(|| {
             let ready = s.phase == Phase::Open && s.reading.is_none() && s.partial.is_empty();
             (!ready).then_some((
                 SocketError::NotReady,
