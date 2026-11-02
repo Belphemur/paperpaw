@@ -260,6 +260,45 @@ pub fn split_list(list: &str) -> Vec<String> {
     out
 }
 
+/// The draft that answers `letter` from the address `own`: to whom it was
+/// from (or its `Reply-To`), with everyone else who got it in Cc for
+/// `all`; `Re: ` before the subject unless it has one; the original
+/// quoted after `intro`.
+pub fn reply_to(letter: &crate::store::Letter, own: &str, all: bool, intro: &str) -> Draft {
+    let own_address = |field: &str| header::addresses(field).first().is_some_and(|a| a.address.eq_ignore_ascii_case(own));
+    let to = if letter.reply_to.trim().is_empty() { &letter.from } else { &letter.reply_to };
+    let to = String::from(to.trim());
+    let mut cc: Vec<String> = Vec::new();
+    if all {
+        for field in split_list(&letter.to).into_iter().chain(split_list(&letter.cc)) {
+            let known = |list: &str| {
+                let found = header::addresses(&field).into_iter().next();
+                found.is_some_and(|f| header::addresses(list).iter().any(|a| a.address.eq_ignore_ascii_case(&f.address)))
+            };
+            if !own_address(&field) && !known(&to) && !cc.iter().any(|c| known(c)) {
+                cc.push(field);
+            }
+        }
+    }
+    let subject = letter.subject.trim();
+    let has_re = subject.len() >= 3 && subject.is_char_boundary(3) && subject[..3].eq_ignore_ascii_case("re:");
+    let mut references = String::from(letter.references.trim());
+    if !references.is_empty() {
+        references.push(' ');
+    }
+    references.push_str(letter.message_id.trim());
+    Draft {
+        from: String::from(own),
+        to,
+        cc: cc.join(", "),
+        subject: if has_re { String::from(subject) } else { format!("Re: {subject}") },
+        body: format!("\n\n{}", quote(&letter.text, intro, 40)),
+        in_reply_to: String::from(letter.message_id.trim()),
+        references: String::from(references.trim()),
+        ..Draft::default()
+    }
+}
+
 /// Date header value for `seconds` since 1970 (UTC).
 pub fn date_header(seconds: i64) -> String {
     const DAYS: [&str; 7] = ["Thu", "Fri", "Sat", "Sun", "Mon", "Tue", "Wed"];
@@ -308,6 +347,34 @@ mod tests {
             in_reply_to: "<1@x>".into(),
             references: "<0@x>".into(),
         }
+    }
+
+    #[test]
+    fn a_reply_goes_to_the_sender_and_all_to_the_others() {
+        let letter = crate::store::Letter {
+            from: "Jane Doe <jane@example.org>".into(),
+            to: "Ada <ada@example.org>, bob@example.org".into(),
+            cc: "Jane Doe <JANE@example.org>, carol@example.org".into(),
+            subject: "Lunch".into(),
+            message_id: "<m1@x>".into(),
+            references: "<m0@x>".into(),
+            text: "Noon?\n".into(),
+            ..Default::default()
+        };
+        let one = reply_to(&letter, "ada@example.org", false, "Jane wrote:");
+        assert_eq!((one.to.as_str(), one.cc.as_str()), ("Jane Doe <jane@example.org>", ""));
+        assert_eq!(one.subject, "Re: Lunch");
+        assert_eq!((one.in_reply_to.as_str(), one.references.as_str()), ("<m1@x>", "<m0@x> <m1@x>"));
+        assert_eq!(one.body, "\n\nJane wrote:\n> Noon?\n");
+        let all = reply_to(&letter, "ada@example.org", true, "");
+        assert_eq!(all.cc, "bob@example.org, carol@example.org");
+        // Reply-To wins, and Re: is not stacked.
+        let mut again = letter.clone();
+        again.reply_to = "list@example.org".into();
+        again.subject = "RE: Lunch".into();
+        let d = reply_to(&again, "ada@example.org", false, "");
+        assert_eq!((d.to.as_str(), d.subject.as_str()), ("list@example.org", "RE: Lunch"));
+        assert_eq!(reply_to(&Default::default(), "a@b.c", true, "").subject, "Re: ");
     }
 
     #[test]

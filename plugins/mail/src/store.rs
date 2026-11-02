@@ -285,7 +285,7 @@ pub fn sort_folders(folders: &mut [Folder]) {
 
 /// The parent folder of `file` exists (a storage that makes none makes
 /// the file's own).
-fn ensure_parent(storage: &dyn Storage, file: &str) -> Result<(), StorageError> {
+pub fn ensure_parent(storage: &dyn Storage, file: &str) -> Result<(), StorageError> {
     if let Some((parent, _)) = file.rsplit_once('/') {
         let mut path = String::new();
         for part in parent.split('/') {

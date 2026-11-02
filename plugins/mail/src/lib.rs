@@ -22,13 +22,15 @@ pub mod settings;
 pub mod smtp;
 pub mod store;
 pub mod texts;
+pub mod widgets;
+pub(crate) mod writer;
 
 #[cfg(test)]
 mod tests;
 
 use paperpaw_sdk::Id;
 use paperpaw_sdk::event::Event;
-use paperpaw_sdk::replies::{Confirmed, SocketNotice};
+use paperpaw_sdk::replies::{Confirmed, SocketNotice, Typed};
 
 pub const PLUGIN: Id = Id::new_static("mail");
 /// Opens the folders.
@@ -44,3 +46,5 @@ pub const SOCKET: Id = Id::new_static("mail.socket");
 pub const EVENTS: Event<SocketNotice> = Event::new("mail.events");
 /// The answer to *Trust this server?*.
 pub const PIN_ANSWER: Event<Confirmed> = Event::new("mail.pin-answer");
+/// Text typed for a part of a mail being written.
+pub const TYPED: Event<Typed> = Event::new("mail.typed");
