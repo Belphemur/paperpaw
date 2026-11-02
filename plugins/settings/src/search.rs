@@ -155,6 +155,18 @@ impl SearchScreen {
 }
 
 impl Screen for SearchScreen {
+    /// Turned or resized: laid out anew, the focus on its hit.
+    fn on_resize(&mut self, cx: &mut Cx<'_, '_>) -> Handled {
+        let env = *cx.env();
+        let focus = self.list.focus();
+        let (style, header, area) = page(&env);
+        self.list = ListView::new(area, style.noted_row()).focus_on_keys(&env);
+        self.list.set_focus(focus);
+        (self.style, self.header) = (style, header);
+        cx.request_redraw();
+        Handled::Yes
+    }
+
     fn draw(&mut self, canvas: &mut paperpaw_sdk::Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let mut ui = ui::Ui::new(canvas, env, &style);
