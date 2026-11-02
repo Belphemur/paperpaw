@@ -814,6 +814,14 @@ impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::Skimmed
 pub fn paperpaw_sdk::builtin::events::Skimmed::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::Skimmed::into_params(self) -> paperpaw_sdk::Params
 pub fn paperpaw_sdk::builtin::events::Skimmed::to_params(&self) -> paperpaw_sdk::Params
+#[non_exhaustive] pub struct paperpaw_sdk::builtin::events::SortedWanted
+pub paperpaw_sdk::builtin::events::SortedWanted::archive: alloc::string::String
+impl paperpaw_sdk::builtin::events::SortedWanted
+pub fn paperpaw_sdk::builtin::events::SortedWanted::new(alloc::string::String) -> Self
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::SortedWanted
+pub fn paperpaw_sdk::builtin::events::SortedWanted::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::builtin::events::SortedWanted::into_params(self) -> paperpaw_sdk::Params
+pub fn paperpaw_sdk::builtin::events::SortedWanted::to_params(&self) -> paperpaw_sdk::Params
 #[non_exhaustive] pub struct paperpaw_sdk::builtin::events::TextChosen
 pub paperpaw_sdk::builtin::events::TextChosen::action: paperpaw_sdk::Id
 pub paperpaw_sdk::builtin::events::TextChosen::end_offset: u32
@@ -915,6 +923,7 @@ pub const paperpaw_sdk::builtin::events::SETTING_CHANGED: paperpaw_sdk::event::E
 pub const paperpaw_sdk::builtin::events::SETTING_TYPED: paperpaw_sdk::event::Event<paperpaw_sdk::replies::Typed>
 pub const paperpaw_sdk::builtin::events::SKIM: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::Skim>
 pub const paperpaw_sdk::builtin::events::SKIMMED: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::Skimmed>
+pub const paperpaw_sdk::builtin::events::SORTED_WANTED: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::SortedWanted>
 pub const paperpaw_sdk::builtin::events::STARTED: paperpaw_sdk::event::Event<()>
 pub const paperpaw_sdk::builtin::events::STATUS_CHANGED: paperpaw_sdk::event::Event<()>
 pub const paperpaw_sdk::builtin::events::STOPPING: paperpaw_sdk::event::Event<()>
@@ -1732,6 +1741,10 @@ impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::Skimmed
 pub fn paperpaw_sdk::builtin::events::Skimmed::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::Skimmed::into_params(self) -> paperpaw_sdk::Params
 pub fn paperpaw_sdk::builtin::events::Skimmed::to_params(&self) -> paperpaw_sdk::Params
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::SortedWanted
+pub fn paperpaw_sdk::builtin::events::SortedWanted::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::builtin::events::SortedWanted::into_params(self) -> paperpaw_sdk::Params
+pub fn paperpaw_sdk::builtin::events::SortedWanted::to_params(&self) -> paperpaw_sdk::Params
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::TextChosen
 pub fn paperpaw_sdk::builtin::events::TextChosen::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::TextChosen::into_params(self) -> paperpaw_sdk::Params
@@ -2637,6 +2650,31 @@ pub fn paperpaw_sdk::library::service::badges(&paperpaw_sdk::Env<'_>, &paperpaw_
 pub fn paperpaw_sdk::library::service::is_book_path(&paperpaw_sdk::Env<'_>, &str) -> bool
 pub fn paperpaw_sdk::library::service::service<'e>(&paperpaw_sdk::Env<'e>) -> &'e dyn paperpaw_sdk::library::service::Library
 pub type paperpaw_sdk::library::service::BadgeFn = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::library::catalog::Record) -> core::option::Option<paperpaw_sdk::library::service::Badge>>
+pub mod paperpaw_sdk::library::sorted
+#[non_exhaustive] pub struct paperpaw_sdk::library::sorted::Entry
+pub paperpaw_sdk::library::sorted::Entry::item: paperpaw_sdk::library::index::Item
+pub paperpaw_sdk::library::sorted::Entry::stack: u16
+pub struct paperpaw_sdk::library::sorted::Sorted
+impl paperpaw_sdk::library::sorted::Sorted
+pub fn paperpaw_sdk::library::sorted::Sorted::archived(&self) -> usize
+pub fn paperpaw_sdk::library::sorted::Sorted::has_books(&self) -> bool
+pub fn paperpaw_sdk::library::sorted::Sorted::hide(&mut self, &dyn paperpaw_platform::storage::Storage, u32)
+pub fn paperpaw_sdk::library::sorted::Sorted::is_current(&self, &paperpaw_sdk::Env<'_>) -> bool
+pub fn paperpaw_sdk::library::sorted::Sorted::open(&paperpaw_sdk::Env<'_>, &str) -> core::option::Option<paperpaw_sdk::library::sorted::Sorted>
+pub fn paperpaw_sdk::library::sorted::Sorted::refresh(&mut self, &dyn paperpaw_platform::storage::Storage)
+pub fn paperpaw_sdk::library::sorted::Sorted::total(&self) -> usize
+impl paperpaw_sdk::library::sorted::Sorted
+pub fn paperpaw_sdk::library::sorted::Sorted::find(&self, &dyn paperpaw_platform::storage::Storage, paperpaw_sdk::library::sorted::View, u32) -> core::option::Option<usize>
+pub fn paperpaw_sdk::library::sorted::Sorted::len(&self, paperpaw_sdk::library::sorted::View) -> usize
+pub fn paperpaw_sdk::library::sorted::Sorted::next_in_series(&self, &dyn paperpaw_platform::storage::Storage, bool) -> alloc::vec::Vec<paperpaw_sdk::library::sorted::Entry>
+pub fn paperpaw_sdk::library::sorted::Sorted::page(&self, &dyn paperpaw_platform::storage::Storage, paperpaw_sdk::library::sorted::View, usize, usize) -> alloc::vec::Vec<paperpaw_sdk::library::sorted::Entry>
+#[non_exhaustive] pub struct paperpaw_sdk::library::sorted::View
+pub paperpaw_sdk::library::sorted::View::by_recent: bool
+pub paperpaw_sdk::library::sorted::View::show: paperpaw_sdk::library::catalog::Show
+pub paperpaw_sdk::library::sorted::View::stacked: bool
+impl paperpaw_sdk::library::sorted::View
+pub fn paperpaw_sdk::library::sorted::View::new(paperpaw_sdk::library::catalog::Show, bool, bool) -> paperpaw_sdk::library::sorted::View
+pub fn paperpaw_sdk::library::sorted::request(&str) -> paperpaw_sdk::Command
 pub mod paperpaw_sdk::library::what
 pub const paperpaw_sdk::library::what::COVER: u32
 pub const paperpaw_sdk::library::what::DETAILS: u32
@@ -7210,6 +7248,10 @@ impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::Skimmed
 pub fn paperpaw_sdk::builtin::events::Skimmed::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::Skimmed::into_params(self) -> paperpaw_sdk::Params
 pub fn paperpaw_sdk::builtin::events::Skimmed::to_params(&self) -> paperpaw_sdk::Params
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::SortedWanted
+pub fn paperpaw_sdk::builtin::events::SortedWanted::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::builtin::events::SortedWanted::into_params(self) -> paperpaw_sdk::Params
+pub fn paperpaw_sdk::builtin::events::SortedWanted::to_params(&self) -> paperpaw_sdk::Params
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::TextChosen
 pub fn paperpaw_sdk::builtin::events::TextChosen::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::TextChosen::into_params(self) -> paperpaw_sdk::Params

@@ -20,6 +20,14 @@ before it are thrown away.
 
 ### Added
 
+- **Plugin interface (next raise):** `library::sorted` (#79): every book of the library sorted by title on the
+  card (`.paperpaw/library/sorted.idx`), paged by a view in a few kilobytes, so the X4 lists every book instead
+  of 2,000 at most. `Sorted::open` (`None` for a file of another library version or archive, cut short or
+  damaged: a view asks for it with `sorted::request` and says the library is being prepared), `len`/`page`/`find`
+  for a `View` (a filter, the books read last first or by title, series stacked; as `Index::order` and
+  `Index::stacked` list them), `next_in_series`, `refresh`, `hide`; the event `SORTED_WANTED`. The kernel makes
+  the file (kernel feature: `sorted::Build`, a bounded merge sort of runs of 512 books, written beside it and put
+  in place whole; `sorted::wanted`, `clean_up`).
 - **Plugin interface (next raise):** `Storage::list_from` lists a folder a piece at a time, each piece going on
   where the last one stopped (#79): a folder of thousands of entries is read about twice in all, not once a
   piece. Storages that cannot go on from a place count, as `paperpaw_platform::list_counted` does (the item's

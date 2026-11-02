@@ -221,6 +221,13 @@ impl core::fmt::Debug for LibraryService {
 /// The version of [`Library`] that [`LibraryService`] carries.
 pub const VERSION: crate::Version = crate::Version::new(1, 0, 0);
 
+/// Whether the library to ask is the kernel's (no plugin provided one).
+pub(crate) fn is_kept(env: &Env<'_>) -> bool {
+    env.services()
+        .get::<LibraryService>(SERVICE, VERSION)
+        .is_none()
+}
+
 /// The library to ask: one a plugin provided as [`SERVICE`], else the
 /// kernel's.
 pub fn service<'e>(env: &Env<'e>) -> &'e dyn Library {

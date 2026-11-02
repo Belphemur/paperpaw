@@ -97,6 +97,7 @@ const paperpaw_sdk::builtin::events::SETTING_CHANGED: paperpaw_sdk::event::Event
 const paperpaw_sdk::builtin::events::SETTING_TYPED: paperpaw_sdk::event::Event<paperpaw_sdk::replies::Typed> = Event::new("core.setting-typed")
 const paperpaw_sdk::builtin::events::SKIM: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::Skim> = Event::new("core.skim")
 const paperpaw_sdk::builtin::events::SKIMMED: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::Skimmed> = Event::new("core.skimmed")
+const paperpaw_sdk::builtin::events::SORTED_WANTED: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::SortedWanted> = Event::new("core.sorted-wanted")
 const paperpaw_sdk::builtin::events::STARTED: paperpaw_sdk::event::Event<()> = Event::new("core.started")
 const paperpaw_sdk::builtin::events::STATUS_CHANGED: paperpaw_sdk::event::Event<()> = Event::new("core.status-changed")
 const paperpaw_sdk::builtin::events::STOPPING: paperpaw_sdk::event::Event<()> = Event::new("core.stopping")
@@ -851,6 +852,7 @@ struct paperpaw_sdk::builtin::events::ScreenShown { screen: paperpaw_sdk::id::Id
 struct paperpaw_sdk::builtin::events::SettingChanged { id: paperpaw_sdk::id::Id, old: core::option::Option<alloc::string::String> }
 struct paperpaw_sdk::builtin::events::Skim { path: alloc::string::String, to: alloc::string::String }
 struct paperpaw_sdk::builtin::events::Skimmed { path: alloc::string::String, page: alloc::string::String, chapter: alloc::string::String, permille: u32, marks: core::option::Option<alloc::string::String> }
+struct paperpaw_sdk::builtin::events::SortedWanted { archive: alloc::string::String }
 struct paperpaw_sdk::builtin::events::TextChosen { action: paperpaw_sdk::id::Id, text: alloc::string::String, language: alloc::string::String, path: alloc::string::String, section: u32, offset: u32, end_section: u32, end_offset: u32 }
 struct paperpaw_sdk::builtin::events::TypeText { text: alloc::string::String, done: core::option::Option<bool> }
 struct paperpaw_sdk::builtin::events::WidgetChanged { id: paperpaw_sdk::id::Id }
@@ -943,6 +945,11 @@ struct paperpaw_sdk::library::service::BookField { id: paperpaw_sdk::id::Id, tit
 struct paperpaw_sdk::library::service::Deleted { commands: alloc::vec::Vec<paperpaw_sdk::command::Command>, failed: alloc::vec::Vec<(alloc::string::String, paperpaw_platform::storage::StorageError)>, refused: alloc::vec::Vec<alloc::string::String> }
 struct paperpaw_sdk::library::service::Kept
 struct paperpaw_sdk::library::service::LibraryService(0: alloc::boxed::Box<dyn paperpaw_sdk::library::service::Library>)
+struct paperpaw_sdk::library::sorted::Counts { shown: [u16; 5], stacked: [u16; 2] }
+struct paperpaw_sdk::library::sorted::Entry { item: paperpaw_sdk::library::index::Item, stack: u16 }
+struct paperpaw_sdk::library::sorted::Recent { pos: u32, item: paperpaw_sdk::library::index::Item, series: u32, members: u16 }
+struct paperpaw_sdk::library::sorted::Sorted { version: u64, count: usize, archived: usize, blocks: alloc::vec::Vec<paperpaw_sdk::library::sorted::Counts>, recent: alloc::vec::Vec<paperpaw_sdk::library::sorted::Recent>, apart: alloc::vec::Vec<(u32, u32)>, heads: alloc::vec::Vec<(u32, u8)>, changes: paperpaw_sdk::library::catalog::Changes, opened: alloc::vec::Vec<u32>, hidden: alloc::vec::Vec<u32> }
+struct paperpaw_sdk::library::sorted::View { show: paperpaw_sdk::library::catalog::Show, by_recent: bool, stacked: bool }
 struct paperpaw_sdk::lookup::Asked { entries: alloc::vec::Vec<paperpaw_sdk::lookup::LookupEntry>, pending: alloc::vec::Vec<paperpaw_sdk::id::Id>, commands: alloc::vec::Vec<paperpaw_sdk::command::Command> }
 struct paperpaw_sdk::lookup::LookupEntry { source: alloc::string::String, text: alloc::string::String, more: core::option::Option<paperpaw_sdk::id::Id> }
 struct paperpaw_sdk::lookup::LookupProviderSpec { id: paperpaw_sdk::id::Id, title: alloc::borrow::Cow<'static, str>, languages: alloc::vec::Vec<alloc::borrow::Cow<'static, str>>, online: bool, lookup: paperpaw_sdk::lookup::LookupFn }

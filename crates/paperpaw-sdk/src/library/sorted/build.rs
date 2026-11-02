@@ -1,0 +1,428 @@
+//! Making the sorted file, as the kernel does: a few steps of reading
+//! the library's books into runs sorted in memory, then a few steps of
+//! merging the runs into the file, written beside it and put in place
+//! whole. It holds a run and the series counted (some 24 KB on a device
+//! of little memory) whatever the library's size; paused, it writes the
+//! run it holds (a shorter one) or lets go of what it read ahead of the
+//! runs, and keeps the series counted.
+
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
+
+use super::{
+    BUILDING, CHECK_START, RECORD, RUNS, Rec, SORTED_FILE, TRAILER, Trailer, archive_of, checked,
+    series_hash, trailer_of,
+};
+use crate::library::catalog::{self, Record};
+use crate::library::index::{self, FAVOURITE, NONE, OPENED};
+use crate::{Env, MemoryClass, Storage, StorageError, files};
+
+/// Books sorted in memory at once (a run).
+const RUN: usize = 512;
+/// Lines of the catalog read in one step.
+const STEP_LINES: usize = 64;
+/// Books written in one step of the merge.
+const STEP_BOOKS: usize = 256;
+/// Books read ahead of all the runs together, while merging.
+const AHEAD: usize = 256;
+/// Series counted at most on a device of little memory, and on others;
+/// the books of others are not stacked.
+const SMALL_SERIES: usize = 1024;
+const LARGE_SERIES: usize = 16_384;
+
+/// Removes what a making cut short left (the runs, the file being
+/// written); the file made stays.
+#[expect(
+    clippy::let_underscore_must_use,
+    reason = "files that are not there are removed already"
+)]
+pub fn clean_up(storage: &dyn Storage) {
+    for path in [RUNS, BUILDING] {
+        if storage.exists(path) {
+            let _ = storage.remove(path);
+        }
+    }
+}
+
+/// The archive folder the file there is left out, where there is one
+/// whole: the kernel makes it anew for the same view after the catalog
+/// changed.
+pub fn kept_archive(storage: &dyn Storage) -> Option<String> {
+    let trailer = trailer_of(storage, SORTED_FILE)?;
+    archive_of(storage, SORTED_FILE, &trailer).filter(|a| index::hash(a) == trailer.archive)
+}
+
+/// Whether the file is to be made (anew) for a view leaving `archive`
+/// out: there is none whole, or it is of another library, version or
+/// archive. Not where there are no books to ask for.
+pub fn wanted(env: &Env<'_>, archive: &str) -> bool {
+    let Some(version) = crate::library::service(env).version(env) else {
+        return false;
+    };
+    match trailer_of(env.storage(), SORTED_FILE) {
+        Some(t) => t.version != version || t.archive != index::hash(archive),
+        None => true,
+    }
+}
+
+/// One of the runs, as the merge reads it: where its next book is in
+/// the runs file, where it ends, and the books read ahead.
+#[derive(Debug, Default)]
+struct Cursor {
+    next: u32,
+    end: u32,
+    ahead: Vec<Rec>,
+}
+
+/// What is being done.
+#[derive(Debug)]
+enum Phase {
+    /// Reading the books into runs; the catalog from this place on (the
+    /// kernel's library), or all in one step (another).
+    Reading(u64),
+    Merging,
+    Done,
+}
+
+/// The making of the sorted file (see the [module](self)).
+#[derive(Debug)]
+pub struct Build {
+    archive: String,
+    version: u64,
+    phase: Phase,
+    run: Vec<Rec>,
+    /// How many books each run written has.
+    runs: Vec<u32>,
+    /// Each series' hash, how many books it has, and how many were
+    /// written (sorted by hash).
+    series: Vec<(u32, u16, u16)>,
+    max_series: usize,
+    count: u32,
+    archived: u32,
+    cursors: Vec<Cursor>,
+    /// The check of the books written.
+    sum: u32,
+    /// Where the books of the run being read begin in the catalog, and
+    /// the books counted and archived before them: where a pause goes
+    /// back to.
+    mark: Option<(u64, u32, u32)>,
+}
+
+impl Build {
+    /// Begins making the file of the library there is now for a view
+    /// leaving `archive` out; what an earlier one cut short left goes.
+    pub fn start(env: &Env<'_>, archive: &str) -> Result<Build, StorageError> {
+        let storage = env.storage();
+        clean_up(storage);
+        let version = crate::library::service(env)
+            .version(env)
+            .ok_or(StorageError::NotFound)?;
+        storage.write(RUNS, b"")?;
+        let max_series = if env.device().memory == MemoryClass::Small {
+            SMALL_SERIES
+        } else {
+            LARGE_SERIES
+        };
+        Ok(Build {
+            archive: archive.trim_matches('/').to_string(),
+            version,
+            phase: Phase::Reading(0),
+            run: Vec::new(),
+            runs: Vec::new(),
+            series: Vec::new(),
+            max_series,
+            count: 0,
+            archived: 0,
+            cursors: Vec::new(),
+            sum: CHECK_START,
+            mark: None,
+        })
+    }
+
+    /// Writes the run being read (a shorter one; where that fails, it is
+    /// read again from its first book), or lets go of the books read ahead
+    /// of the runs; the series counted stay.
+    pub fn pause(&mut self, storage: &dyn Storage) {
+        if matches!(self.phase, Phase::Reading(_)) && self.write_run(storage).is_ok() {
+            self.run = Vec::new();
+        }
+        if let (Phase::Reading(_), Some((at, count, archived))) = (&self.phase, self.mark.take()) {
+            for rec in &self.run {
+                if let Ok(i) = self
+                    .series
+                    .binary_search_by_key(&rec.series, |&(s, _, _)| s)
+                {
+                    self.series[i].1 = self.series[i].1.saturating_sub(1);
+                }
+            }
+            (self.count, self.archived) = (count, archived);
+            self.phase = Phase::Reading(at);
+        }
+        self.run = Vec::new();
+        for cursor in &mut self.cursors {
+            cursor.next -= cursor.ahead.len() as u32;
+            cursor.ahead = Vec::new();
+        }
+    }
+
+    /// Gives up: the file there was stays.
+    pub fn abort(self, storage: &dyn Storage) {
+        clean_up(storage);
+    }
+
+    /// One step; `true` once the file is in place. On an error what was
+    /// written goes, and the file there was stays.
+    pub fn step(&mut self, env: &Env<'_>) -> Result<bool, StorageError> {
+        let result = self.go_on(env);
+        if result.is_err() {
+            clean_up(env.storage());
+        }
+        result
+    }
+
+    fn go_on(&mut self, env: &Env<'_>) -> Result<bool, StorageError> {
+        let storage = env.storage();
+        match self.phase {
+            Phase::Reading(at) => self.read_books(env, at)?,
+            Phase::Merging => self.merge_step(storage)?,
+            Phase::Done => return Ok(true),
+        }
+        Ok(matches!(self.phase, Phase::Done))
+    }
+
+    /// Reads a few lines of the catalog from `at` (all books of a library
+    /// of a plugin's own at once) into the runs.
+    fn read_books(&mut self, env: &Env<'_>, at: u64) -> Result<(), StorageError> {
+        let storage = env.storage();
+        let mut failed = None;
+        if !crate::library::service::is_kept(env) {
+            crate::library::service(env).each(env, &mut |key, record| {
+                if failed.is_none()
+                    && let Err(e) = self.take_book(storage, key, &record)
+                {
+                    failed = Some(e);
+                }
+            });
+            if let Some(e) = failed {
+                return Err(e);
+            }
+            return self.end_reading(storage);
+        }
+        let mut lines = 0;
+        let next = catalog::lines_from(
+            storage,
+            &catalog::catalog_path(),
+            at,
+            &mut |offset, line| {
+                lines += 1;
+                if self.mark.is_none() {
+                    self.mark = Some((offset, self.count, self.archived));
+                }
+                if let Some(record) = Record::parse(line)
+                    && let Err(e) = self.take_book(storage, offset, &record)
+                {
+                    failed = Some(e);
+                    return false;
+                }
+                lines < STEP_LINES
+            },
+        )?;
+        if let Some(e) = failed {
+            return Err(e);
+        }
+        if lines < STEP_LINES {
+            return self.end_reading(storage);
+        }
+        self.phase = Phase::Reading(next);
+        Ok(())
+    }
+
+    /// Takes the book of `record`, whose key is `key`.
+    fn take_book(
+        &mut self,
+        storage: &dyn Storage,
+        key: u64,
+        record: &Record,
+    ) -> Result<(), StorageError> {
+        let archived = !self.archive.is_empty()
+            && record
+                .path
+                .strip_prefix(self.archive.as_str())
+                .is_some_and(|rest| rest.starts_with('/'));
+        if archived {
+            self.archived = self.archived.saturating_add(1);
+            return Ok(());
+        }
+        let Ok(offset) = u32::try_from(key) else {
+            return Ok(());
+        };
+        let series = series_hash(&record.series);
+        if series != 0 {
+            match self.series.binary_search_by_key(&series, |&(s, _, _)| s) {
+                Ok(at) => self.series[at].1 = self.series[at].1.saturating_add(1),
+                Err(at) if self.series.len() < self.max_series => {
+                    self.series.insert(at, (series, 1, 0));
+                }
+                Err(_) => {}
+            }
+        }
+        let status = record.status;
+        if self.run.capacity() == 0 {
+            self.run
+                .try_reserve_exact(RUN)
+                .map_err(|_| StorageError::TooLarge)?;
+        }
+        self.run.push(Rec {
+            offset,
+            hash: index::hash(&record.path),
+            key: index::sort_key(&record.title),
+            series,
+            number: index::number(&record.number),
+            rank: 0,
+            members: 0,
+            progress: status.progress.unwrap_or(NONE),
+            flags: (u8::from(status.favourite) * FAVOURITE) | (u8::from(status.opened) * OPENED),
+        });
+        self.count = self.count.saturating_add(1);
+        if self.run.len() >= RUN {
+            self.write_run(storage)?;
+        }
+        Ok(())
+    }
+
+    /// Sorts the run and writes it to the runs file.
+    fn write_run(&mut self, storage: &dyn Storage) -> Result<(), StorageError> {
+        if self.run.is_empty() {
+            return Ok(());
+        }
+        self.run.sort_unstable_by_key(Rec::order);
+        let mut bytes = Vec::with_capacity(self.run.len() * RECORD);
+        for rec in &self.run {
+            rec.encoded(&mut bytes);
+        }
+        storage.append(RUNS, &bytes)?;
+        self.runs.push(self.run.len() as u32);
+        self.run.clear();
+        self.mark = None;
+        Ok(())
+    }
+
+    /// All books read: the last run written, the merge begun.
+    fn end_reading(&mut self, storage: &dyn Storage) -> Result<(), StorageError> {
+        self.write_run(storage)?;
+        self.run = Vec::new();
+        let mut start = 0u32;
+        self.cursors = self
+            .runs
+            .iter()
+            .map(|&n| {
+                let cursor = Cursor {
+                    next: start,
+                    end: start + n,
+                    ahead: Vec::new(),
+                };
+                start += n;
+                cursor
+            })
+            .collect();
+        storage.write(BUILDING, b"")?;
+        self.phase = Phase::Merging;
+        Ok(())
+    }
+
+    /// Reads ahead the books of each run that has none read.
+    fn read_ahead(&mut self, storage: &dyn Storage) -> Result<(), StorageError> {
+        let each = (AHEAD / self.cursors.len().max(1)).max(1);
+        let mut bytes = alloc::vec![0u8; each * RECORD];
+        for cursor in &mut self.cursors {
+            if !cursor.ahead.is_empty() || cursor.next >= cursor.end {
+                continue;
+            }
+            let n = (cursor.end - cursor.next).min(each as u32) as usize;
+            let want = &mut bytes[..n * RECORD];
+            let at = u64::from(cursor.next) * RECORD as u64;
+            if storage.read_at(RUNS, at, want)? != want.len() {
+                return Err(StorageError::InvalidData);
+            }
+            // Read backwards, taken from the end.
+            for chunk in want.as_chunks::<RECORD>().0.iter().rev() {
+                cursor.ahead.push(Rec::decoded(chunk));
+            }
+            cursor.next += n as u32;
+        }
+        Ok(())
+    }
+
+    /// A few books merged into the file; the file put in place after the
+    /// last.
+    fn merge_step(&mut self, storage: &dyn Storage) -> Result<(), StorageError> {
+        let mut bytes = Vec::with_capacity(STEP_BOOKS * RECORD);
+        for _ in 0..STEP_BOOKS {
+            self.read_ahead(storage)?;
+            let first = self
+                .cursors
+                .iter()
+                .enumerate()
+                .filter_map(|(i, c)| c.ahead.last().map(|r| (r.order(), i)))
+                .min();
+            let Some((_, i)) = first else {
+                break;
+            };
+            let Some(mut rec) = self.cursors[i].ahead.pop() else {
+                break;
+            };
+            if let Ok(at) = self
+                .series
+                .binary_search_by_key(&rec.series, |&(s, _, _)| s)
+            {
+                let (_, members, written) = &mut self.series[at];
+                rec.members = *members;
+                rec.rank = *written;
+                *written = written.saturating_add(1);
+            }
+            rec.encoded(&mut bytes);
+        }
+        self.sum = checked(self.sum, &bytes);
+        storage.append(BUILDING, &bytes)?;
+        if self
+            .cursors
+            .iter()
+            .any(|c| !c.ahead.is_empty() || c.next < c.end)
+        {
+            return Ok(());
+        }
+        self.put_in_place(storage)
+    }
+
+    /// The archive and the trailer written, the file put in place.
+    fn put_in_place(&mut self, storage: &dyn Storage) -> Result<(), StorageError> {
+        let archive = self.archive.as_bytes();
+        let archive = &archive[..archive.len().min(usize::from(u16::MAX))];
+        let length = u64::from(self.count) * RECORD as u64 + archive.len() as u64 + TRAILER as u64;
+        let trailer = Trailer {
+            version: self.version,
+            archive: index::hash(&self.archive),
+            count: self.count,
+            archived: self.archived,
+            archive_len: archive.len() as u16,
+            length,
+            records: self.sum,
+        };
+        let mut end = archive.to_vec();
+        end.extend_from_slice(&trailer.encoded());
+        storage.append(BUILDING, &end)?;
+        if storage.size(BUILDING)? != length {
+            return Err(StorageError::InvalidData);
+        }
+        files::move_to(storage, BUILDING, SORTED_FILE)?;
+        #[expect(
+            clippy::let_underscore_must_use,
+            reason = "runs left over are removed by the next making"
+        )]
+        let _ = storage.remove(RUNS);
+        self.cursors = Vec::new();
+        self.series = Vec::new();
+        self.phase = Phase::Done;
+        Ok(())
+    }
+}

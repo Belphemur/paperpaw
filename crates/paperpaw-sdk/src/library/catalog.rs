@@ -45,7 +45,7 @@ pub(super) const HEADER: &str = "\tcatalog\t2";
 /// with it, 16 bytes a book.
 pub const MAX_LOG: usize = 256;
 
-pub(super) fn catalog_path() -> String {
+pub(crate) fn catalog_path() -> String {
     format!("{DIR}/catalog.txt")
 }
 
@@ -191,7 +191,7 @@ impl Record {
         }
     }
 
-    fn parse(text: &str) -> Option<Record> {
+    pub(crate) fn parse(text: &str) -> Option<Record> {
         let mut fields = text.split('\t');
         let path = fields.next().filter(|p| !p.is_empty())?.to_string();
         let mut next = || fields.next().unwrap_or("").to_string();
@@ -407,7 +407,7 @@ fn parse_change(line: &str) -> Option<(u64, Option<Status>)> {
 /// where it starts, reading it in pieces, until `f` says `false`; where
 /// the next line starts. A file that is not there has no lines; any other
 /// error ends it with the error.
-fn lines_from(
+pub(crate) fn lines_from(
     storage: &dyn Storage,
     path: &str,
     from: u64,
