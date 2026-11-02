@@ -191,17 +191,13 @@ impl BarScreen {
         let top = info.y + info.height + gap;
         // The first entry at the start side: the right where the UI runs
         // right to left.
-        let rtl = style.is_rtl();
+        let across = Rect::new(0, top, display.width, cell_height);
         let cells: Vec<Rect> = (0..entries.len())
             .map(|i| {
                 let (row, column) = (i / columns, i % columns);
                 let (x, width) = (lefts[column] as u16, column_width[column] as u16);
-                let x = if rtl {
-                    display.width.saturating_sub(x + width)
-                } else {
-                    x
-                };
-                Rect::new(x, top + row as u16 * cell_height, width, cell_height)
+                let cell = Rect::new(x, top + row as u16 * cell_height, width, cell_height);
+                style.flip(across, cell)
             })
             .collect();
         // Taps count up to halfway to the next entry.
@@ -329,13 +325,8 @@ impl BarScreen {
         let text = Rect::new(0, self.info.y + line, r.width, self.info.height - line);
         // Where the interface runs right to left the title and the
         // chapter start at the right, the page at the left.
-        let rtl = style.is_rtl();
-        let right = f32::from(r.width) - margin;
-        let title_x = if rtl {
-            right - font.measure(style.text(), &self.title)
-        } else {
-            margin
-        };
+        let across = Rect::new(0, self.info.y, r.width, self.info.height);
+        let title_x = style.flip_x(across, margin, font.measure(style.text(), &self.title));
         ui::Label::new(&self.title)
             .px(style.text())
             .font(font)
@@ -345,17 +336,16 @@ impl BarScreen {
         let (chapter, page, page_width) =
             ui::fit_pair(&font, style.small(), &self.text, &self.page, width, margin);
         let gray = style.faint(ui::Ink::DETAIL);
-        let chapter_x = if rtl {
-            right - font.measure(style.small(), &chapter)
-        } else {
-            margin
-        };
+        let chapter_x = style.flip_x(across, margin, font.measure(style.small(), &chapter));
         ui::Label::new(&chapter)
             .px(style.small())
             .font(font)
             .color(gray)
             .draw_from(ui, chapter_x, text);
-        let x = if rtl { margin } else { right - page_width };
+        // The page at the end side: from the margin, mirrored the other
+        // way.
+        let end_side = style.with_rtl(!style.is_rtl());
+        let x = end_side.flip_x(across, margin, page_width);
         ui::Label::new(&page)
             .px(style.small())
             .font(font)

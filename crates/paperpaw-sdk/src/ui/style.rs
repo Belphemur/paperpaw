@@ -208,8 +208,22 @@ impl UiStyle {
     /// Where a span `width` wide, laid out left to right from `x` in
     /// `outer`, stands where the UI runs right to left: as far from the
     /// right edge of `outer` as it was from its left one. Not moved
-    /// otherwise.
-    pub(crate) fn flip_x(&self, outer: Rect, x: f32, width: f32) -> f32 {
+    /// otherwise. For text and other parts placed in fractions of a pixel
+    /// (a label's start, its measured width); [`UiStyle::flip`] for
+    /// rectangles.
+    ///
+    /// A screen lays itself out once, from the left, and mirrors each part
+    /// with these where the interface runs right to left, so that both
+    /// directions come from one layout:
+    ///
+    /// ```ignore
+    /// let cover = style.flip(row, Rect::new(row.x + margin, row.y, side, side));
+    /// let title_x = style.flip_x(row, text_x, font.measure(style.text(), title));
+    /// ```
+    ///
+    /// A part wider than `outer` can start left of it (a negative or
+    /// smaller `x`).
+    pub fn flip_x(&self, outer: Rect, x: f32, width: f32) -> f32 {
         if self.is_rtl() {
             2.0 * f32::from(outer.x) + f32::from(outer.width) - x - width
         } else {
@@ -218,8 +232,12 @@ impl UiStyle {
     }
 
     /// `rect`, laid out left to right in `outer`, as it stands where the
-    /// UI runs right to left (see [`UiStyle::flip_x`]).
-    pub(crate) fn flip(&self, outer: Rect, rect: Rect) -> Rect {
+    /// UI runs right to left (see [`UiStyle::flip_x`]): its top and size
+    /// the same, its left edge as far from `outer`'s right edge as its
+    /// left edge was from `outer`'s left one, never left of 0. Not moved
+    /// otherwise. Mirrored twice, a rectangle inside `outer` is where it
+    /// was; a point mirrors as a rectangle 1 pixel wide.
+    pub fn flip(&self, outer: Rect, rect: Rect) -> Rect {
         if !self.is_rtl() {
             return rect;
         }
