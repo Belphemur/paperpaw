@@ -56,7 +56,7 @@ pub use paperpaw_native::{Chip, HEADER_LEN, Header, Problem, Signature};
 /// against (see the [module documentation](self)). Raised by hand, and
 /// only when what plugins see changes; `crates/paperpaw-sdk/interface.txt`
 /// keeps what it was, and CI fails while they differ (ADR 0026).
-pub const INTERFACE: u16 = 5;
+pub const INTERFACE: u16 = 6;
 
 /// The crates whose types cross between a plugin and PaperPaw, by the
 /// names their paths begin with: the SDK and every crate of PaperPaw it

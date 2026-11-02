@@ -6,11 +6,11 @@ change the plugin SDK.
 
 ## [Unreleased]
 
-**Plugins of this release must be built from `e5f4a41a` or later** (the interface 5 amendment, #259). The plugin
-fingerprint changed with its bless, so plugins built at `60752ff6` are refused; shared UI and text bodies changed
-after the bless without changing the fingerprint (the right-to-left mirroring, digits, Hangul composition), and the
-fingerprint changed once more with the pen and TLS reservations (`e5f4a41a`, #81), so plugins built before it are
-refused too. Store, test-card and Workshop builds from commits before `e5f4a41a` are thrown away.
+**Plugins of this release must be built from `BLESS6` or later** (plugin interface 6, #363). 0.6.0-beta.1 takes
+the interface-6 round too (TLS sockets, screens that fit another size, libraries of any size), so plugins change
+once: from interface 4 of 0.5.0-beta.12 to interface 6. Interface 5 was never released; plugins built for it (the
+earlier release candidate's store files, test cards and Workshop builds) are refused as built for an older
+interface, and are thrown away.
 
 **Plugins that read the library must also be built from the split of the library's folders (#280) or later**:
 calibre, end-of-book, file-manager, files, the format plugins, home, notes-overview, opds, sleep, stats, transfer,
@@ -59,7 +59,7 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   Anki decks, your own fonts, hanging punctuation, drop capitals, lists that hang under their marker, line breaking for
   Korean, Chinese and Japanese. Book text in Arabic and Hebrew is set right to left.
 - **Updating:** books, reading positions and settings are kept. Every book is laid out again once, the first time it
-  is opened. Plugins with code need a build for plugin interface 5; the store offers PaperPaw's own.
+  is opened. Plugins with code need a build for plugin interface 6; the store offers PaperPaw's own.
 - **Not in this release:** exFAT cards. The X4 Pro, X4 Classic and X3 are built and checked by the tests on a
   computer; the owner tests the X4 and X4 Pro by hand.
 

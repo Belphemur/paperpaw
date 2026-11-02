@@ -1,7 +1,7 @@
 # The shape of this crate's types and the values of its constants, as
 # tools/interface.py writes them: fields, variants and trait items in
 # the source's order, private fields and the private types they reach
-# too, every feature on (ADR 0026).
+# too, every feature on but the kernel's (ADR 0026).
 const paperpaw_native::bundle::BUNDLE_FORMAT: u16 = 1u16
 const paperpaw_native::bundle::BUNDLE_MAGIC: [u8; 4] = *b"PPNB"
 const paperpaw_native::compiler::MARK: &str = "rustc version "

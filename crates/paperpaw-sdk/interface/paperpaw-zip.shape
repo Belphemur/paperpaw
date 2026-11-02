@@ -1,7 +1,7 @@
 # The shape of this crate's types and the values of its constants, as
 # tools/interface.py writes them: fields, variants and trait items in
 # the source's order, private fields and the private types they reach
-# too, every feature on (ADR 0026).
+# too, every feature on but the kernel's (ADR 0026).
 enum paperpaw_zip::Method { Stored, Deflate }
 enum paperpaw_zip::ZipError { Storage(0: paperpaw_platform::storage::StorageError), Invalid(0: &'static str), Unsupported(0: &'static str), TooLarge, OutOfMemory, Other(0: u16) }
 struct paperpaw_zip::Entry { name: alloc::string::String, method: paperpaw_zip::Method, compressed_size: u32, size: u32, crc: u32, header_offset: u32, record: u32 }
