@@ -353,7 +353,9 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   cleans up both, and with the move takes away once what folders of caches hold in the folder itself (made again
   from the book when needed: each book's first opening after the update takes a little longer). On FAT
   (the X4's card), a folder of 256 entries or more read whole is looked through from where the last name was
-  found (for up to 8 such folders at a time), so names taken out of it in its order take a few blocks each;
+  found (for up to 8 such folders at a time), so names taken out of it in its order take a few blocks each, deep
+  in a folder of thousands too (where it was in the folder's chain of clusters is kept: the FAT is not read along
+  the chain from its start again for each name);
   rust-fatfs, as patched, moves and removes an entry found without looking for it again. EPUB books look for one's
   own stylesheets (`styles.css`, `<book>.css`) only when a chapter is first needed, not when opened: the catalog,
   which opens every book for its details, no longer searches each book's folder for files mostly not there. With
