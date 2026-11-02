@@ -82,6 +82,7 @@
 
 extern crate alloc;
 
+mod damaged;
 mod disk;
 mod found;
 mod free;
@@ -720,7 +721,9 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
             )]
             let _ = Storage::list(self, &dir, &mut |entry| {
                 let path = format!("{dir}/{}", entry.name);
-                if entry.is_dir {
+                if damaged::is_damaged_name(entry.name) {
+                    // Its clusters stay taken (see `damaged`).
+                } else if entry.is_dir {
                     dirs.push(path);
                 } else {
                     taken += self.free.borrow().clusters(entry.size) * self.cluster();
@@ -1094,7 +1097,8 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
             Err(StorageError::NotFound) => return Ok(()),
             Err(e) => return Err(e),
         };
-        let mut names: alloc::vec::Vec<(String, bool)> = alloc::vec::Vec::new();
+        // Each with whether it is a folder, and whether it is damaged.
+        let mut names: alloc::vec::Vec<(String, bool, bool)> = alloc::vec::Vec::new();
         // Names of new content left by cuts (see `settled`).
         let mut ready = alloc::vec::Vec::new();
         for entry in entries(&dir) {
@@ -1104,37 +1108,56 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
                 if entry.is_file() && name.len() == 12 && name.starts_with('~') {
                     ready.push(name.to_ascii_uppercase());
                 }
-                names.push((name, entry.is_dir()));
+                let damaged = damaged::is_damaged(self.fs, &entry, &name);
+                names.push((name, entry.is_dir(), damaged));
             }
         }
         // A file and its new content may be the same file: settled first,
         // its clusters are not freed twice.
-        for (name, _) in names
+        for (name, ..) in names
             .iter()
-            .filter(|(_, is_dir)| !is_dir && !ready.is_empty())
+            .filter(|(_, is_dir, damaged)| !is_dir && !damaged && !ready.is_empty())
         {
             let temps = Temps::of(name);
             if ready.iter().any(|n| n == temps.ready()) {
                 dir.replace(temps.ready(), name).map_err(error)?;
             }
         }
-        for (name, is_dir) in names {
+        for (name, is_dir, damaged) in names {
             let child = format!("{path}/{name}");
-            if is_temp_name(&name) {
+            if damaged {
+                // Not to be named: swept below.
+            } else if is_temp_name(&name) {
                 // Not taken by name (see `check`). A folder's new name in a
                 // move cut off holds that folder's clusters: left to it.
                 match is_dir {
                     true => dir.unlink(&name).map_err(error)?,
                     false => remove_in(&dir, &name)?,
                 }
+            } else if check(&child).is_err() {
+                // Made elsewhere (`nul.txt`): swept below.
             } else if is_dir {
                 self.remove_tree(&child)?;
             } else {
                 self.remove_entry(&child, false)?;
             }
         }
+        let damaged = self.sweep(&dir)?;
         self.forget(path);
-        remove_in(&self.dir(parent(path))?, name(path))
+        let parent = self.dir(parent(path))?;
+        if !damaged {
+            return remove_in(&parent, name(path));
+        }
+        // Its clusters held another's data: left to it (see `damaged`).
+        match lookup(&parent, name(path), true)? {
+            Lookup {
+                entry: Some(entry),
+                others: false,
+                ..
+            } => parent.unlink_found(&entry).map_err(error),
+            Lookup { entry: None, .. } => Ok(()),
+            Lookup { .. } => Err(StorageError::InvalidPath),
+        }
     }
 }
 

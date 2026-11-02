@@ -6,6 +6,13 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+### Fixed
+
+- A damaged folder on the memory card (entries with names no file system gives, as a reset can leave) can be removed
+  again, and the folders above it (#388): such entries are taken out where they are found, the data they point at is
+  left alone (it may be another file's; the space comes back when the card is checked on a computer). Before, removing
+  the folder, or a book's cache in it, failed with "invalid path".
+
 ## [0.6.0-beta.1] - 2026-11-02
 
 **Plugins of this release must be built from `6c4a19dc` or later** (plugin interface 6, #363). 0.6.0-beta.1 takes

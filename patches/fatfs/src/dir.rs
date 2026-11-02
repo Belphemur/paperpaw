@@ -536,6 +536,24 @@ impl<'a, IO: ReadWriteSeek, TP: TimeProvider, OCC: OemCpConverter> Dir<'a, IO, T
         self.remove_entries(&e)
     }
 
+    // Modified for PaperPaw: added.
+
+    /// Removes the entries of `e`, found by `iter` (or `iter_from`) and nothing changed in the
+    /// directory since, leaving its data: for an entry that cannot be named (one of a damaged
+    /// directory), whose data may be another's. A directory's entries are left as they are.
+    /// Make sure there is no reference to it (no File instance) or filesystem corruption can
+    /// happen.
+    ///
+    /// # Errors
+    ///
+    /// * `Error::Io` will be returned if the underlying storage object returned an I/O error.
+    pub fn unlink_found(&self, e: &DirEntry<'a, IO, TP, OCC>) -> Result<(), Error<IO::Error>> {
+        if let Some(n) = e.first_cluster().filter(|_| e.is_dir()) {
+            self.fs.drop_dir_note(n);
+        }
+        self.remove_entries(e)
+    }
+
     /// Puts file `src_name` in the place of file `dst_name`, both in this directory, removing the
     /// file that was there.
     ///
