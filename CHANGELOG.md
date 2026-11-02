@@ -43,9 +43,6 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   library, the reader's menu, the sliders and the taps and swipes at the sides. The translation comes as the data
   plugin `language-ar` from the store. Nobody on the team reads Arabic: the rules are tested and the pictures
   checked, how it looks to a reader and how it feels on a device are not. Tell us what is wrong.
-- **Text of several lines** (#81). The keyboard can ask for a message of several lines (`ask::text(…).multiline()`):
-  it has an *Enter* key, the field shows the end of the text on as many wrapped lines as fit above the keys, and a
-  text from a phone or the clipboard keeps its line breaks. (A plain question still gets one line.)
 - **A wider keyboard** (#91). The keys reach nearer to the sides of the screen; on small screens they get nearly the
   whole width.
 - **The landscape home screen** (#88). Turned on its side, the home screen keeps the start card beside the clock.
@@ -72,8 +69,8 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
 - Text: `TextInk::RIGHT_TO_LEFT`, a flag of the reserved ones: the lines a handle draws run right to left
   (`TextInk::is_right_to_left`). The kernel sets it for the interface's font where its language runs right to left.
 - **Text of several lines** (#81). The keyboard can ask for a message of several lines (`ask::text(…).multiline()`):
-  it has a key for the line break, the field shows the end of the text on as many wrapped lines as fit above the
-  keys, and a text from a phone or the clipboard keeps its line breaks. (A plain question still gets one line.)
+  it has an *Enter* key, the field shows the end of the text on as many wrapped lines as fit above the keys, and a
+  text from a phone or the clipboard keeps its line breaks. (A plain question still gets one line.)
 - **Mail (#81):** a plugin that reads and sends e-mail over IMAP and SMTP with a password or an app password, no
   browser login. Up to three accounts under Settings, Mail, with presets for ten providers that fill in the
   servers; the folders with how many mails wait, a folder's latest mails, a mail (text, or the text of a simple

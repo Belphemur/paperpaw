@@ -37,7 +37,7 @@
 //!
 //! A host passes on only items the screen it holds has: its own
 //! [`Screen::revision`] is [`ScreenHost::revision`], and items newer than
-//! revision 1 go through [`call_since`](crate::call_since).
+//! revision 1 go through [`call_since`].
 
 use alloc::boxed::Box;
 
