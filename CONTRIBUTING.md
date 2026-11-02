@@ -3,7 +3,7 @@
 Thank you for helping! This guide explains how to get started and what we
 expect from contributions.
 
-PaperPaw is in beta (0.5.0-beta.12). The plugin SDK may still change
+PaperPaw is in beta (0.6.0-beta.1). The plugin SDK may still change
 before 1.0.
 
 ## Ground rules

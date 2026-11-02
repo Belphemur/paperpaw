@@ -254,7 +254,7 @@ g_architecture() {
     run "architecture: CI tool setup tests" "python3 -m unittest discover -s tools -p test_ci_tools.py"
     run "architecture: Android version codes" '
         for pair in "0.4.0-dev 40050" "0.5.0-beta.1 50001" "0.5.0-beta.2 50002" \
-          "0.5.0-beta.10 50010" "0.5.0-dev 50050" "0.5.0-rc.1 50051" "0.5.0 50099" \
+          "0.5.0-beta.10 50010" "0.6.0-beta.1 60001" "0.5.0-dev 50050" "0.5.0-rc.1 50051" "0.5.0 50099" \
           "0.5.1-beta.1 50101"; do
           set -- $pair
           got="$(shells/android/version-code.sh "$1")"

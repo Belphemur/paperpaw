@@ -6,6 +6,8 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+## [0.6.0-beta.1] - 2026-11-02
+
 **Plugins of this release must be built from `e5f4a41a` or later** (the interface 5 amendment, #259). The plugin
 fingerprint changed with its bless, so plugins built at `60752ff6` are refused; shared UI and text bodies changed
 after the bless without changing the fingerprint (the right-to-left mirroring, digits, Hangul composition), and the
