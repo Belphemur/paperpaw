@@ -255,3 +255,162 @@ fn a_code_plugins_folder_names_its_codes_version() {
         report.text(Level::Info)
     );
 }
+
+/// A data plugin folder in a folder of its own: `plugin.ini` and the
+/// other files (`path`, content).
+fn folder_of(name: &str, ini: &str, files: &[(&str, &[u8])]) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!(
+        "paperpaw-dev-package-folder-{name}-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("plugin.ini"), ini).unwrap();
+    for (path, bytes) in files {
+        let file = dir.join(path);
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(file, bytes).unwrap();
+    }
+    dir
+}
+
+/// Findings of `check` on a folder of `ini` and `files`, as (place, level).
+fn found(name: &str, check: &str, ini: &str, files: &[(&str, &[u8])]) -> Vec<(String, Level)> {
+    let dir = folder_of(name, ini, files);
+    let report = run(&context(name, std::slice::from_ref(&dir)));
+    let _ = std::fs::remove_dir_all(&dir);
+    report
+        .findings
+        .iter()
+        .filter(|f| f.check == check)
+        .map(|f| (f.place.clone(), f.level))
+        .collect()
+}
+
+#[test]
+fn the_files_of_later_formats_need_the_formats_that_read_them() {
+    let layouts: &[(&str, &[u8])] = &[("points/keyboard.layouts.txt", b"keyboard.layout.xx\n")];
+    let ini = |formats: &str| format!("[plugin]\nid = cosy\nversion = 1.0.0\n{formats}");
+    // Keyboards a plugin brings are read from formats 3 on; for formats 1
+    // PaperPaw leaves them out.
+    let none = found("points-1", "package.formats", &ini(""), layouts);
+    assert!(
+        none.contains(&("points/keyboard.layouts.txt".to_string(), Level::Error)),
+        "{none:?}"
+    );
+    let three = found(
+        "points-3",
+        "package.formats",
+        &ini("formats = 3\n"),
+        layouts,
+    );
+    assert!(three.is_empty(), "{three:?}");
+    // A compiled translation is read from formats 4 on.
+    let catalog: &[(&str, &[u8])] = &[("i18n/ar.ppcat", b"PPCT")];
+    let three = found("ppcat-3", "package.formats", &ini("formats = 3\n"), catalog);
+    assert!(
+        three.contains(&("i18n/ar.ppcat".to_string(), Level::Error)),
+        "{three:?}"
+    );
+    let four = found("ppcat-4", "package.formats", &ini("formats = 4\n"), catalog);
+    assert!(four.is_empty(), "{four:?}");
+    let read = found(
+        "ppcat-read",
+        "package.files",
+        &ini("formats = 4\n"),
+        catalog,
+    );
+    assert!(read.is_empty(), "{read:?}");
+    // [fonts] binds a role to a font, from formats 3 on too.
+    let fonts = "\n[fonts]\ncore.font-reading-bold = cosy.bold\n";
+    let old = found("fonts-1", "package.formats", &ini(&fonts[..]), &[]);
+    assert!(
+        old.contains(&("plugin.ini:6".to_string(), Level::Error)),
+        "{old:?}"
+    );
+    let new = found(
+        "fonts-3",
+        "package.formats",
+        &ini(&format!("formats = 3\n{fonts}")),
+        &[],
+    );
+    assert!(new.is_empty(), "{new:?}");
+}
+
+#[test]
+fn a_family_may_bring_faces_without_the_regular_one() {
+    let pack: &[(&str, &[u8])] = &[("fonts/bold.ppfp", b"PPFP")];
+    let ini = |extra: &str| {
+        format!(
+            "[plugin]\nid = cosy\nversion = 1.0.0\nformats = 3\n\n[family]\nname = Cosy\nbold = bold.ppfp\n{extra}"
+        )
+    };
+    // Bound to a role with [fonts]: nothing to say.
+    let bound = found(
+        "family-bound",
+        "package.fonts",
+        &ini("\n[fonts]\ncore.font-reading-bold = cosy.bold\n"),
+        pack,
+    );
+    assert!(!bound.iter().any(|(p, _)| p == "plugin.ini"), "{bound:?}");
+    // Not bound: the faces are there and nothing uses them.
+    let loose = found("family-loose", "package.fonts", &ini(""), pack);
+    assert!(
+        loose.contains(&("plugin.ini".to_string(), Level::Warning)),
+        "{loose:?}"
+    );
+    assert!(
+        !loose.contains(&("plugin.ini".to_string(), Level::Error)),
+        "{loose:?}"
+    );
+}
+
+#[test]
+fn a_font_of_a_plugin_checked_with_it_is_a_font_to_extend() {
+    let styles = folder_of(
+        "styles",
+        "[plugin]\nid = styles\nversion = 1.0.0\nformats = 3\n\n[family]\nname = Cosy\nbold = bold.ppfp\n",
+        &[("fonts/bold.ppfp", b"PPFP")],
+    );
+    let pack = |font: &str| {
+        folder_of(
+            "extender",
+            &format!("[plugin]\nid = extender\nversion = 1.0.0\n\n[extends]\nx.ppfp = {font}\n"),
+            &[("fonts/x.ppfp", b"PPFP")],
+        )
+    };
+    let fonts = |font: &str, together: bool| -> Vec<(String, Level)> {
+        let extender = pack(font);
+        let mut paths = vec![extender.clone()];
+        if together {
+            paths.push(styles.clone());
+        }
+        let report = run(&context("extends", &paths));
+        let _ = std::fs::remove_dir_all(&extender);
+        report
+            .findings
+            .iter()
+            .filter(|f| f.check == "package.fonts" && f.place == "plugin.ini:6")
+            .map(|f| (f.place.clone(), f.level))
+            .collect()
+    };
+    // Together with the plugin that brings the font: found.
+    assert!(fonts("styles.bold", true).is_empty());
+    // Alone, a font of a plugin that is no part of the app: a note, not
+    // an error (the plugin is installed beside it).
+    assert_eq!(
+        fonts("styles.bold", false),
+        [("plugin.ini:6".to_string(), Level::Warning)]
+    );
+    // A face the plugin does not bring, or one of the app's own plugins
+    // that is not there: the pack extends nothing.
+    assert_eq!(
+        fonts("styles.italic", true),
+        [("plugin.ini:6".to_string(), Level::Warning)]
+    );
+    assert_eq!(
+        fonts("fonts-default.nothing", false),
+        [("plugin.ini:6".to_string(), Level::Error)]
+    );
+    let _ = std::fs::remove_dir_all(&styles);
+}
