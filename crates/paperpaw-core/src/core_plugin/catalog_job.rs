@@ -89,8 +89,8 @@ pub(super) fn register_sorted(
     // for books copied while it slept (the card in a computer). By the
     // first view of the library to show; at once where one is open (it
     // does not ask again; under a book the walk waits until it closes).
-    // A walk under way at the sleep starts again: it may have passed the
-    // folder a book came into.
+    // A walk under way at the sleep starts again (it may have passed the
+    // folder a book came into); nothing else under way is started again.
     let woken = alloc::rc::Rc::clone(catalog);
     r.on(events::RESUME, move |env, _, out| {
         woken.walked.set(false);
@@ -99,8 +99,12 @@ pub(super) fn register_sorted(
             .stack()
             .iter()
             .any(|entry| entry.slot.as_ref() == Some(&paperpaw_sdk::builtin::slots::LIBRARY));
-        if walking || (open && !env.formats().is_empty()) {
+        if walking {
             woken.want_walk(true, true, out);
+        } else if open && !env.formats().is_empty() {
+            // Other work under way (sorting, catching up) ends first.
+            woken.walk.set(true);
+            woken.declare(true, out);
         }
     })?;
     let catalog = alloc::rc::Rc::clone(catalog);
