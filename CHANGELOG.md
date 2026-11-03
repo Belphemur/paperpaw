@@ -483,6 +483,7 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
 
 ### Changed
 
+- The Android app icon takes the website's colours: a dark green sheet with a paper-coloured paw.
 - **Greek, Cyrillic and Korean titles in the library's list** (#387): the screens' texts are drawn in Source Sans 3,
   which has none of these scripts' letters on the X4, and the Hebrew and Arabic packs brought a face for it while
   these three did not, so a book's title showed as boxes in the list. `script-greek` and `script-cyrillic` 1.0.1
