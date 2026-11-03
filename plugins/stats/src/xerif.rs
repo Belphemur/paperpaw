@@ -27,6 +27,9 @@ use crate::xcpt::{self, Kind};
 const DIR: &str = ".crosspoint";
 /// What was brought over already, kept in the plugin's folder.
 const MARKER: &str = "xerif.ini";
+/// The most the marks can be: a line for every book an index of
+/// CrossPoint's own size can hold, with room to spare.
+const MARKER_MAX: u64 = 256 * 1024;
 /// How deep into folders the card is walked for books: the card itself
 /// and five levels of folders below it, as CrossPoint walked it for its
 /// library.
@@ -338,9 +341,10 @@ fn marker(storage: &dyn Storage) -> Result<BTreeMap<String, String>, ()> {
         MARKER
     );
     let data = match storage.size(&path) {
-        Ok(size) if size > 64 * 1024 => return Err(()),
+        Ok(size) if size > MARKER_MAX => return Err(()),
         Ok(_) => {
-            let data = paperpaw_sdk::read_file(storage, &path, 64 * 1024).map_err(|_| ())?;
+            let data =
+                paperpaw_sdk::read_file(storage, &path, MARKER_MAX as usize).map_err(|_| ())?;
             if data.is_empty() {
                 return Err(());
             }
