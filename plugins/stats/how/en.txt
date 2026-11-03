@@ -2,4 +2,4 @@ Reading statistics records how long you read each page. You see it as an overvie
 
 Open it from Tools, or from More in the reader. In the settings, under Reading statistics, you can switch Record reading off, set a Daily goal, and set the Shortest page and Longest page that count, so leafing through or a book left open does not skew the numbers.
 
-Sync with KOReader shares the statistics with KOReader through a WebDAV folder. It also takes in the statistics of KOReader on the same device. Recording needs the clock to be set: where it is not, connect to Wi-Fi once.
+Sync with KOReader shares the statistics with KOReader through a WebDAV folder. It also takes in the statistics of KOReader on the same device, and those a CrossPoint reader wrote to the card (its minutes read per day, its books with where you left off in them), when there are any. Recording needs the clock to be set: where it is not, connect to Wi-Fi once.
