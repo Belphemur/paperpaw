@@ -10,6 +10,7 @@
 use alloc::collections::BTreeMap;
 use alloc::format;
 use alloc::string::{String, ToString};
+use alloc::vec;
 use alloc::vec::Vec;
 
 use paperpaw_sdk::digest::{fnv1a64, md5};
@@ -127,90 +128,153 @@ fn recents(storage: &dyn Storage) -> Vec<(String, String, String)> {
 /// The books of CrossPoint's library index (`library.idx`), whole paths
 /// with their titles and authors. Its own format, told by the size: a
 /// header, its folders, a record a book, and, at the end, the names.
+/// Read in place, a little at a time, for an index of a full card is
+/// more than a device holds at once.
 fn library_index(storage: &dyn Storage) -> Vec<(String, String, String)> {
     const MAGIC: &[u8; 4] = b"CLX1";
     const VERSION: u8 = 2;
-    const RECORD: usize = 128;
-    const MOST_BOOKS: usize = 4096;
-    let Some(data) = read(storage, &at("library.idx"), 8 << 20) else {
-        return Vec::new();
+    const RECORD_LEN: u64 = 128;
+    const MOST_BOOKS: u64 = 4096;
+    const FOLDERS_ROOM: usize = 32 * 1024;
+    let path = at("library.idx");
+    let size = match storage.size(&path) {
+        Ok(size) => size,
+        Err(_) => return Vec::new(),
     };
-    if data.len() < 64 || &data[0..4] != MAGIC || data[4] != VERSION {
+    let mut head = [0u8; 64];
+    if storage.read_at(&path, 0, &mut head).ok() != Some(64) {
         return Vec::new();
     }
-    let u16_at = |at: usize| u16::from_le_bytes([data[at], data[at + 1]]);
-    let u32_at =
-        |at: usize| u32::from_le_bytes([data[at], data[at + 1], data[at + 2], data[at + 3]]);
-    let books = usize::from(u16_at(8));
+    if head[0..4] != *MAGIC || head[4] != VERSION {
+        return Vec::new();
+    }
+    let u16_at = |b: &[u8], at: usize| u16::from_le_bytes([b[at], b[at + 1]]);
+    let u32_at = |b: &[u8], at: usize| u32::from_le_bytes([b[at], b[at + 1], b[at + 2], b[at + 3]]);
+    let books = u64::from(u16_at(&head, 8));
     // The size the header says the file has: a build cut short does not
-    // pass.
-    if books > MOST_BOOKS || u32_at(40) != data.len() as u32 {
+    // pass, and nor does a count of books the format cannot hold.
+    if books > MOST_BOOKS || u32_at(&head, 40) != size as u32 {
         return Vec::new();
     }
     let (folder_start, record_start, name_start) = (
-        u32_at(16) as usize,
-        u32_at(24) as usize,
-        u32_at(32) as usize,
+        u64::from(u32_at(&head, 16)),
+        u64::from(u32_at(&head, 24)),
+        u64::from(u32_at(&head, 32)),
     );
-    // The folders, in the order of their ids: a path a folder.
+    // The sections in their places, each within the file: anything else
+    // is no index this reads.
+    let Some(perm_end) = perm_end(record_start, books, RECORD_LEN) else {
+        return Vec::new();
+    };
+    if !(512..size).contains(&folder_start)
+        || record_start <= folder_start
+        || record_start > size
+        || name_start < perm_end
+        || name_start > size
+    {
+        return Vec::new();
+    }
+    // The folders, in the order of their ids: a path a folder. Only so
+    // much of them is read as fits a bound; more folders than that and
+    // the paths come from the card alone.
     let mut folders: Vec<String> = Vec::new();
+    let mut piece = [0u8; 256];
     let mut at = folder_start;
-    while at < record_start.min(data.len()) {
-        let len = usize::from(data[at]);
-        if len == 0 || at + 1 + len > record_start {
+    let room = name_start.min(folder_start + FOLDERS_ROOM as u64);
+    while at < room {
+        if storage.read_at(&path, at, &mut piece[..1]).ok() != Some(1) {
             break;
         }
-        folders.push(String::from_utf8_lossy(&data[at + 1..at + 1 + len]).into_owned());
-        at += 1 + len;
+        let len = usize::from(piece[0]);
+        if len == 0 || at + 1 + len as u64 > room {
+            break;
+        }
+        if storage.read_at(&path, at + 1, &mut piece[..len]).ok() != Some(len) {
+            break;
+        }
+        folders.push(String::from_utf8_lossy(&piece[..len]).into_owned());
+        at += 1 + len as u64;
     }
-    if folders.len() != usize::from(u16_at(10)) {
+    if folders.is_empty() {
         return Vec::new();
     }
     let mut out = Vec::new();
+    let mut record = [0u8; RECORD_LEN as usize];
     for book in 0..books {
-        let at = record_start + book * RECORD;
-        if at + RECORD > data.len() {
+        let at = record_start + book * RECORD_LEN;
+        if storage.read_at(&path, at, &mut record).ok() != Some(record.len()) {
             break;
         }
-        let (name_at, folder) = (u32_at(at) as usize, usize::from(u16_at(at + 10)));
-        let name_len = usize::from(data[at + 12]);
-        // The names sit where the record says, the hash of the whole path
-        // before the file's name.
-        let Some(name_at) = name_start.checked_add(name_at + 8) else {
+        let (name_at, folder) = (
+            u64::from(u32_at(&record, 0)),
+            usize::from(u16_at(&record, 10)),
+        );
+        let name_len = usize::from(record[12]);
+        // The names sit where the record says, the hash of the whole
+        // path before the file's name; past the file is no name.
+        let Some(name_at) = name_start
+            .checked_add(name_at)
+            .and_then(|at| at.checked_add(8))
+        else {
             continue;
         };
-        let name = data
-            .get(name_at..name_at + name_len)
-            .map_or(String::new(), |n| String::from_utf8_lossy(n).into_owned());
+        if name_at + name_len as u64 > size {
+            continue;
+        }
+        let mut name = vec![0u8; name_len];
+        if storage.read_at(&path, name_at, &mut name).ok() != Some(name_len) {
+            continue;
+        }
         // And after it the author, the title and the author as the book
-        // itself spells it, each as their length (a byte) and the text.
-        let mut at = name_at + name_len;
-        let read_text = |at: &mut usize| -> String {
-            let len = usize::from(data.get(*at).copied().unwrap_or(0));
-            *at += 1;
-            let text = data
-                .get(*at..(*at + len).min(data.len()))
-                .unwrap_or_default();
-            *at += len;
-            String::from_utf8_lossy(text).into_owned()
+        // itself spells it, each as their length (a byte) and the text;
+        // read where they fit, and left out where they do not.
+        let mut at = name_at + name_len as u64;
+        let read_text = |storage: &dyn Storage, at: &mut u64| -> String {
+            let mut len = [0u8; 1];
+            if storage.read_at(&path, *at, &mut len).ok() != Some(1) {
+                *at = size;
+                return String::new();
+            }
+            let len = usize::from(len[0]);
+            let text = if len == 0 || *at + 1 + len as u64 > size {
+                Vec::new()
+            } else {
+                let mut text = vec![0u8; len];
+                let read = storage.read_at(&path, *at + 1, &mut text).ok();
+                if read != Some(len) {
+                    *at = size;
+                    return String::new();
+                }
+                text
+            };
+            *at += 1 + len as u64;
+            String::from_utf8_lossy(&text).into_owned()
         };
-        let author = read_text(&mut at);
-        let title = read_text(&mut at);
+        let author = read_text(storage, &mut at);
+        let title = read_text(storage, &mut at);
         let Some(folder) = folders.get(folder) else {
             continue;
         };
         let path = if name.is_empty() {
             String::new()
         } else if folder.ends_with('/') {
-            alloc::format!("{folder}{name}")
+            alloc::format!("{folder}{}", String::from_utf8_lossy(&name))
         } else {
-            alloc::format!("{folder}/{name}")
+            alloc::format!("{folder}/{}", String::from_utf8_lossy(&name))
         };
         if !path.is_empty() {
             out.push((path, title, author));
         }
     }
     out
+}
+
+/// Where the names begin, after the records and the two orders of them
+/// (an order of a number a book, two bytes each).
+fn perm_end(record_start: u64, books: u64, record_len: u64) -> Option<u64> {
+    record_start
+        .checked_add(books.checked_mul(record_len)?)
+        .and_then(|at| at.checked_add(books.checked_mul(4)?))
 }
 
 /// Walks the card for books, at most `depth` folders deep, leaving
@@ -250,23 +314,35 @@ fn fingerprint(data: &[u8]) -> String {
     alloc::format!("{}:{:016x}", data.len(), fnv1a64(data))
 }
 
-/// What was brought over, by name.
-fn marker(storage: &dyn Storage) -> BTreeMap<String, String> {
+/// What was brought over, by name. `Err` where the marks are there but
+/// cannot be read: they are not to be written over blind, for they say
+/// what was done already.
+fn marker(storage: &dyn Storage) -> Result<BTreeMap<String, String>, ()> {
     let path = alloc::format!(
         "{}/{}",
         paperpaw_sdk::Env::plugin_dir(crate::PLUGIN.as_str()),
         MARKER
     );
-    let mut out = BTreeMap::new();
-    if let Some(data) = read(storage, &path, 64 * 1024) {
-        let text = String::from_utf8_lossy(&data);
-        for entry in paperpaw_sdk::config::parse(&text).filter_map(Result::ok) {
-            if entry.section == "imported" {
-                out.insert(entry.key.to_string(), entry.value.as_str().into_owned());
+    let data = match storage.size(&path) {
+        Ok(size) if size > 64 * 1024 => return Err(()),
+        Ok(_) => {
+            let data = paperpaw_sdk::read_file(storage, &path, 64 * 1024).map_err(|_| ())?;
+            if data.is_empty() {
+                return Err(());
             }
+            data
+        }
+        Err(_) => return Ok(BTreeMap::new()),
+    };
+    let text = core::str::from_utf8(&data).map_err(|_| ())?;
+    let mut out = BTreeMap::new();
+    for entry in paperpaw_sdk::config::parse(text) {
+        let Ok(entry) = entry else { return Err(()) };
+        if entry.section == "imported" {
+            out.insert(entry.key.to_string(), entry.value.as_str().into_owned());
         }
     }
-    out
+    Ok(out)
 }
 
 /// One of CrossPoint's book folders: where it is, which kind of book it
@@ -404,12 +480,12 @@ fn folders(storage: &dyn Storage) -> Vec<Folder> {
     folders
 }
 
-/// What a book's folder brought: the book to write, where it was left,
-/// and the name of its folder to mark as brought over.
+/// What the folders brought: the books to write, and per folder its
+/// name, the version of the record read, and where the book was left
+/// (so that the mark waits for the position to be kept).
 type Brought = (
     Vec<Book>,
-    Vec<(String, Locator, f32)>,
-    Vec<(String, String)>,
+    Vec<(String, String, Option<(String, Locator, f32)>)>,
 );
 
 /// The books of CrossPoint's folders: which records can be read and
@@ -423,7 +499,6 @@ fn bring_folders(
     report: &mut Report,
 ) -> Brought {
     let mut changed_books = Vec::new();
-    let mut left_at = Vec::new();
     let mut to_mark = Vec::new();
     for (dir, kind, hash) in folders {
         // The record of the book's reading: the newest this knows, or, as
@@ -441,58 +516,115 @@ fn bring_folders(
             report.unmatched += 1;
             continue;
         };
+        let path_storage = path.trim_start_matches('/').to_string();
         let name = dir.rsplit('/').next().unwrap_or_default();
         // The pace is seeded from every record that can be read, whether
         // it was brought over before or not.
         report.seeded.push((path.clone(), record.clone()));
         if done.get(name).map(String::as_str) == Some(version.to_string().as_str()) {
             report.skipped += 1;
-        } else {
-            bring_book(
-                storage,
-                &mut changed_books,
-                *kind,
-                &path,
-                &record,
-                &mut |left| left_at.push(left),
-            );
-            to_mark.push((String::from(name), version.to_string()));
+            continue;
         }
+        let mut left: Option<(String, Locator, f32)> = None;
+        if !bring_book(
+            storage,
+            &mut changed_books,
+            *kind,
+            &path,
+            &record,
+            &mut |at, percent| {
+                left = Some((path_storage.clone(), at, percent));
+            },
+        ) {
+            // The book's file cannot be read: it cannot be told apart
+            // from another, so nothing of it is brought over, and the
+            // folder is not marked, for the next run tries again.
+            continue;
+        }
+        // The folder is marked only once where the book was left has
+        // been kept, or was there already: a failed write is tried
+        // again.
+        to_mark.push((String::from(name), version.to_string(), left));
     }
-    (changed_books, left_at, to_mark)
+    (changed_books, to_mark)
 }
 
 /// The finished books of CrossPoint's index, marked in `changed_books`:
-/// the index names each book by its path hashed with FNV-1a. `None`
-/// where there is nothing to mark.
+/// the index names each book by its path hashed with FNV-1a, and the
+/// book is the one it is by its fingerprint — where that can be read,
+/// which also reaches the books brought over before (a minimal book to
+/// merge changes nothing but the finishing). `Ok(None)` where there is
+/// nothing to mark; the index is marked only once every entry it names
+/// was matched, so that a book whose file was not found on the card is
+/// marked when it is there.
 fn bring_finished_books(
     storage: &dyn Storage,
     paths: &[String],
     done: &BTreeMap<String, String>,
-    changed_books: &mut [Book],
+    changed_books: &mut Vec<Book>,
     report: &mut Report,
-) -> Option<(String, String)> {
-    let data = read(storage, &at("finished_books.bin"), 64 * 1024)
-        .or_else(|| read(storage, &at("finished_books.bin.bak"), 64 * 1024))?;
-    if let xcpt::FinishedRecord::Ok(entries) = xcpt::decode_finished(&data) {
-        if done.get("finished").map(String::as_str) != Some(fingerprint(&data).as_str()) {
-            for entry in entries {
-                let Some(path) = paths
-                    .iter()
-                    .find(|p| fnv1a64(p.as_bytes()) == entry.path_key)
-                else {
-                    continue;
-                };
-                let finished = entry.finished.unix_noon();
-                if finished > 0 && bring_finished(changed_books, path, finished) {
-                    report.finished += 1;
-                }
-            }
-            return Some((String::from("finished"), fingerprint(&data)));
+) -> Result<Option<(String, String)>, No> {
+    // The index itself, and where it cannot be read as one, the copy
+    // beside it.
+    let (data, decoded) = match read(storage, &at("finished_books.bin"), 64 * 1024) {
+        Some(data) => match xcpt::decode_finished(&data) {
+            xcpt::FinishedRecord::Invalid => match backup_finished(storage) {
+                Some(backup) => backup,
+                None => (data, xcpt::FinishedRecord::Invalid),
+            },
+            other => (data, other),
+        },
+        None => match backup_finished(storage) {
+            Some(backup) => backup,
+            None => return Ok(None),
+        },
+    };
+    let xcpt::FinishedRecord::Ok(entries) = decoded else {
+        if matches!(decoded, xcpt::FinishedRecord::Forward) {
+            report.forward += 1;
         }
+        return Ok(None);
+    };
+    let already = done.get("finished").map(String::as_str) == Some(fingerprint(&data).as_str());
+    if already {
         report.skipped += 1;
+        return Ok(None);
     }
-    None
+    let mut all_matched = true;
+    for entry in entries {
+        // The index names the book by its path hashed with FNV-1a, of
+        // the path as the card names it.
+        let Some(path) = paths
+            .iter()
+            .find(|p| fnv1a64(p.as_bytes()) == entry.path_key)
+        else {
+            all_matched = false;
+            continue;
+        };
+        let finished = entry.finished.unix_noon();
+        if finished <= 0 {
+            continue;
+        }
+        // The book's fingerprint, by which it is known; where its file
+        // cannot be read, the finishing waits for the next run.
+        let path_storage = path.trim_start_matches('/');
+        let Some(md5) = md5::partial(storage, path_storage) else {
+            all_matched = false;
+            continue;
+        };
+        changed_books.push(Book {
+            md5,
+            path: String::from(path_storage),
+            finished,
+            ..Book::default()
+        });
+        report.finished += 1;
+    }
+    if all_matched {
+        Ok(Some((String::from("finished"), fingerprint(&data))))
+    } else {
+        Ok(None)
+    }
 }
 
 /// The books to add or change, written in one pass over the books file:
@@ -507,6 +639,10 @@ fn write_books(
     if changed_books.is_empty() {
         return Ok(());
     }
+    // A book that gets no id (the log could not be read, or the ids ran
+    // out) is not brought over: the run says so, and does not mark what
+    // it did not do.
+    let mut unwritten: Vec<Book> = Vec::new();
     let written = store::update_books(storage, |books| {
         let mut changed = false;
         for book in changed_books {
@@ -539,36 +675,52 @@ fn write_books(
                     }
                     changed = true;
                 }
-                None => {
-                    let Ok(id) = store::new_id(storage, books) else {
-                        continue;
-                    };
-                    let mut book = book;
-                    book.id = id;
-                    books.push(book);
-                    changed = true;
-                    report.books += 1;
-                }
+                None => match store::new_id(storage, books) {
+                    Ok(id) => {
+                        let mut book = book;
+                        book.id = id;
+                        books.push(book);
+                        changed = true;
+                        report.books += 1;
+                    }
+                    Err(_) => unwritten.push(book),
+                },
             }
         }
         changed
     });
     // Where the books file cannot be read or written, nothing is, and
     // what was brought over is brought again the next time.
-    written.map(|_| ()).map_err(|_| No::Unwritable)
+    written.map(|_| ()).map_err(|_| No::Unwritable)?;
+    (unwritten.is_empty()).then_some(()).ok_or(No::Unwritable)
 }
 
 /// Where the books were left, kept, each only where none was kept
 /// before (a position that is there but cannot be read is not written
-/// over either).
-fn keep_positions(storage: &dyn Storage, left_at: &[(String, Locator, f32)], report: &mut Report) {
-    for (path, at, percent) in left_at {
+/// over either). The marks of the folders whose position was kept come
+/// back: one whose position could not be kept is left for the next run.
+fn keep_positions(
+    storage: &dyn Storage,
+    folders: Vec<(String, String, Option<(String, Locator, f32)>)>,
+    report: &mut Report,
+) -> Vec<(String, String)> {
+    let mut marks = Vec::new();
+    for (name, version, left) in folders {
+        let Some((path, at, percent)) = left else {
+            // The record said nothing of where the book was left: the
+            // folder is done all the same.
+            marks.push((name, version));
+            continue;
+        };
         let path = path.trim_start_matches('/');
         match positions::load_for_update(storage, path) {
             Ok(None) => {}
             // A position kept already stays as it is; one that is there
             // but cannot be read is not written over either.
-            _ => continue,
+            _ => {
+                marks.push((name, version));
+                continue;
+            }
         }
         let Some(md5) = md5::partial(storage, path) else {
             continue;
@@ -576,55 +728,98 @@ fn keep_positions(storage: &dyn Storage, left_at: &[(String, Locator, f32)], rep
         let size = storage.size(path).unwrap_or(0);
         let fingerprint =
             paperpaw_sdk::library::Fingerprint::parse(&alloc::format!("{size} {md5}"));
-        let position = positions::Position::new(*at, *percent);
+        let position = positions::Position::new(at, percent);
         if positions::save_with_book(storage, path, &position, fingerprint.as_ref()).is_ok() {
             report.positions += 1;
+            marks.push((name, version));
         }
     }
+    marks
+}
+
+/// The copy of the index of finished books beside it, where it can be
+/// read as one: the bytes and what they say.
+fn backup_finished(storage: &dyn Storage) -> Option<(Vec<u8>, xcpt::FinishedRecord)> {
+    let data = read(storage, &at("finished_books.bin.bak"), 64 * 1024)?;
+    let decoded = xcpt::decode_finished(&data);
+    matches!(
+        decoded,
+        xcpt::FinishedRecord::Ok(_) | xcpt::FinishedRecord::Forward
+    )
+    .then_some((data, decoded))
 }
 
 /// The minutes read per day, from the global record, brought into the
-/// days of the statistics; `None` where there is nothing to mark.
+/// days of the statistics. The days are brought over even where they
+/// were before (the days of the log are written anew from the log and
+/// the minutes together, so a log written anew, a merge with KOReader
+/// say, costs nothing that another run does not bring back); what the
+/// mark gates is only what is said of the run. `Ok(None)` where there
+/// is nothing to mark.
 fn bring_minutes(
     storage: &dyn Storage,
     day_of: impl Fn(u32) -> i32,
     done: &BTreeMap<String, String>,
     report: &mut Report,
-) -> Option<(String, String)> {
-    let data = read(storage, &at("global_stats.bin"), 4096)
-        .or_else(|| read(storage, &at("global_stats.bin.bak"), 4096))?;
-    match xcpt::decode_global(&data) {
-        xcpt::GlobalRecord::Ok(global) => {
-            report.global = Some(global.clone());
-            if done.get("global").map(String::as_str) == Some(fingerprint(&data).as_str()) {
-                return None;
-            }
-            let anchor = global.anchor;
-            let minutes = global.minutes_per_day(current_version(&data));
-            let mut days: Vec<(i32, u32)> = Vec::new();
-            for (older, minutes) in minutes.iter().enumerate() {
-                if *minutes == 0 {
-                    continue;
-                }
-                // The first minutes are of the day the history begins,
-                // then ever older days follow.
-                let unix_day = anchor.saturating_sub(older as u32);
-                let day = day_of(unix_day.saturating_mul(86_400));
-                match days.binary_search_by_key(&day, |(d, _)| *d) {
-                    Ok(i) => days[i].1 = days[i].1.saturating_add(u32::from(*minutes) * 60),
-                    Err(i) => days.insert(i, (day, u32::from(*minutes) * 60)),
-                }
-            }
-            report.days = days.len();
-            store::import_days(storage, day_of, &days);
-            Some((String::from("global"), fingerprint(&data)))
-        }
-        xcpt::GlobalRecord::Forward => {
+) -> Result<Option<(String, String)>, No> {
+    // The record itself, and where it cannot be read as one, the copy
+    // beside it (a cut while CrossPoint wrote it is not the end of the
+    // data). One of a newer CrossPoint is left alone, never replaced by
+    // an older copy.
+    let (data, source) = match read(storage, &at("global_stats.bin"), 4096) {
+        Some(data) => match xcpt::decode_global(&data) {
+            xcpt::GlobalRecord::Invalid => match backup_global(storage) {
+                Some(backup) => backup,
+                None => (data, xcpt::GlobalRecord::Invalid),
+            },
+            other => (data, other),
+        },
+        None => match backup_global(storage) {
+            Some(backup) => backup,
+            None => return Ok(None),
+        },
+    };
+    let xcpt::GlobalRecord::Ok(global) = source else {
+        if matches!(source, xcpt::GlobalRecord::Forward) {
             report.forward += 1;
-            None
         }
-        xcpt::GlobalRecord::Invalid => None,
+        return Ok(None);
+    };
+    report.global = Some(global.clone());
+    let anchor = global.anchor;
+    let minutes = global.minutes_per_day(current_version(&data));
+    let mut days: Vec<(u32, u32)> = Vec::new();
+    for (older, minutes) in minutes.iter().enumerate() {
+        if *minutes == 0 {
+            continue;
+        }
+        // The first minutes are of the day the history begins, then
+        // ever older days follow, as the card counted the days.
+        let unix_day = anchor.saturating_sub(older as u32);
+        match days.binary_search_by_key(&unix_day, |(d, _)| *d) {
+            Ok(i) => days[i].1 = days[i].1.saturating_add(u32::from(*minutes) * 60),
+            Err(i) => days.insert(i, (unix_day, u32::from(*minutes) * 60)),
+        }
     }
+    store::import_days(storage, day_of, &days).map_err(|_| No::Unwritable)?;
+    if done.get("global").map(String::as_str) == Some(fingerprint(&data).as_str()) {
+        Ok(None)
+    } else {
+        report.days = days.len();
+        Ok(Some((String::from("global"), fingerprint(&data))))
+    }
+}
+
+/// The copy of the global record beside it, where it can be read as
+/// one: the bytes and what they say.
+fn backup_global(storage: &dyn Storage) -> Option<(Vec<u8>, xcpt::GlobalRecord)> {
+    let data = read(storage, &at("global_stats.bin.bak"), 4096)?;
+    let decoded = xcpt::decode_global(&data);
+    matches!(
+        decoded,
+        xcpt::GlobalRecord::Ok(_) | xcpt::GlobalRecord::Forward
+    )
+    .then_some((data, decoded))
 }
 
 /// Brings CrossPoint's data over. `day_of` turns a moment in Unix
@@ -644,19 +839,24 @@ pub(crate) fn import(storage: &dyn Storage, day_of: impl Fn(u32) -> i32) -> Resu
             .entry(xcpt::std_hash(path))
             .or_insert_with(|| path.clone());
     }
-    let done = marker(storage);
-    let mut to_mark = Vec::new();
-    let (mut changed_books, left_at, folders_marks) =
+    // What was brought over before, by name. Where it cannot be read,
+    // nothing is brought over and nothing is written: the marks say
+    // what was done, and overwriting them would make the next run
+    // bring the same over again without knowing it.
+    let done = marker(storage).map_err(|_| No::Unwritable)?;
+    let mut to_mark: Vec<(String, String)> = Vec::new();
+    let (mut changed_books, brought) =
         bring_folders(storage, &folders(storage), &by_hash, &done, &mut report);
-    to_mark.extend(folders_marks);
+    // Where the books were left, and the folders whose position was
+    // kept (or was there already) marked only then.
+    to_mark.extend(keep_positions(storage, brought, &mut report));
     if let Some(mark) =
-        bring_finished_books(storage, &paths, &done, &mut changed_books, &mut report)
+        bring_finished_books(storage, &paths, &done, &mut changed_books, &mut report)?
     {
         to_mark.push(mark);
     }
     write_books(storage, changed_books, &mut report)?;
-    keep_positions(storage, &left_at, &mut report);
-    if let Some(mark) = bring_minutes(storage, day_of, &done, &mut report) {
+    if let Some(mark) = bring_minutes(storage, day_of, &done, &mut report)? {
         to_mark.push(mark);
     }
     // What was brought over, marked so that it is not brought twice.
@@ -726,8 +926,8 @@ fn bring_book(
     kind: Kind,
     path: &str,
     record: &xcpt::Book,
-    left_at: &mut impl FnMut((String, Locator, f32)),
-) {
+    left_at: &mut impl FnMut(Locator, f32),
+) -> bool {
     // The book's own words of itself, from its folder's cache.
     let dir = xcpt::cache_dir(kind, path);
     let meta = read(storage, &alloc::format!("{DIR}/{dir}/book.bin"), 4096)
@@ -737,6 +937,12 @@ fn bring_book(
         |m| (m.title.clone(), m.author.clone()),
     );
     let path_storage = path.trim_start_matches('/').to_string();
+    // Which book it is, by its content; where the file cannot be read,
+    // it cannot be told apart from another, so nothing of it is brought
+    // over, and the folder is left for the next run.
+    let Some(md5) = md5::partial(storage, &path_storage) else {
+        return false;
+    };
     let file = path_storage.rsplit('/').next().unwrap_or(&path_storage);
     let stem = file.rsplit_once('.').map_or(file, |(stem, _)| stem);
     books.push(Book {
@@ -746,10 +952,7 @@ fn bring_book(
             title
         },
         authors: author,
-        // Which book it is, by its content; where the file cannot be
-        // read, it cannot be told apart from another, so nothing of it
-        // is brought over (the books pass keeps it out by its md5).
-        md5: md5::partial(storage, &path_storage).unwrap_or_default(),
+        md5,
         pages: 0,
         language: meta
             .as_ref()
@@ -763,18 +966,14 @@ fn bring_book(
     // Where the book was left, if its record says so and it can be said
     // how far in it that is.
     let Some(data) = read(storage, &alloc::format!("{DIR}/{dir}/progress.bin"), 64) else {
-        return;
+        return true;
     };
     match xcpt::decode_progress(&data) {
         xcpt::ProgressRecord::Xtc(page) => {
             // The page of an XTC book is the place itself: exact, where
             // it can be said how far in the book it is.
             if record.percent <= 100 {
-                left_at((
-                    path_storage,
-                    Locator::new(page, 0),
-                    f32::from(record.percent),
-                ));
+                left_at(Locator::new(page, 0), f32::from(record.percent));
             }
         }
         xcpt::ProgressRecord::Epub {
@@ -789,12 +988,14 @@ fn bring_book(
             // taken.
             let percent = match record.percent {
                 0..=100 => f32::from(record.percent),
+                // The page is counted from 0: the reading stands at
+                // its start, not past it.
                 _ => meta
                     .as_ref()
                     .filter(|m| m.sections > 0 && pages > 0)
                     .map(|m| {
                         (u32::from(section) as f32
-                            + (u32::from(page) as f32 + 1.0) / u32::from(pages) as f32)
+                            + u32::from(page) as f32 / u32::from(pages) as f32)
                             / (m.sections as f32)
                             * 100.0
                     })
@@ -804,26 +1005,12 @@ fn bring_book(
                 // The page begins where the file of the book does; how
                 // far into it is kept in the percent, for the pages of
                 // another engine do not fit here.
-                left_at((path_storage, Locator::new(u32::from(section), 0), percent));
+                left_at(Locator::new(u32::from(section), 0), percent);
             }
         }
         xcpt::ProgressRecord::None => {}
     }
-}
-
-/// Marks a book as finished in the books to write, where none was
-/// marked: `true` where one was.
-fn bring_finished(books: &mut [Book], path: &str, finished: i64) -> bool {
-    match books
-        .iter_mut()
-        .find(|b| b.path.trim_start_matches('/') == path.trim_start_matches('/'))
-    {
-        Some(book) if book.finished <= 0 => {
-            book.finished = finished;
-            true
-        }
-        _ => false,
-    }
+    true
 }
 
 /// Writes what was brought over, as lines of a file of the plugin's.
@@ -1114,9 +1301,14 @@ mod tests {
             .write(&alloc::format!("{dir}/stats_v9.bin"), &[9u8, 0, 0])
             .unwrap();
         let report = import(&storage, day_of).unwrap();
+        // The record of the newer CrossPoint is left alone: nothing of
+        // it is read, and so not seeded. The book itself comes over by
+        // the index of finished books (a file of its own, and one this
+        // knows whole); where it was left does not.
         assert_eq!(report.forward, 1);
-        assert_eq!(report.books, 0);
+        assert!(report.seeded.is_empty());
         assert_eq!(report.positions, 0);
+        assert_eq!(report.finished, 1);
         assert!(storage.exists(&alloc::format!("{dir}/stats_v9.bin")));
     }
 

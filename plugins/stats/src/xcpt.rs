@@ -148,6 +148,13 @@ pub(crate) struct Book {
 /// version is checked against its own size and version, so a record cut
 /// short is never read as a smaller one.
 pub(crate) fn decode_book(b: &[u8]) -> BookRecord {
+    // A version later than this knows is left alone before anything
+    // else is said of the file — but only where the file is as long as
+    // the smallest record this knows, for a cut-off write's bytes mean
+    // nothing.
+    if b.len() >= BOOK_SIZE_V5 && b[0] > BOOK_V8 {
+        return BookRecord::Forward;
+    }
     let version = match b.len() {
         BOOK_SIZE_V8 => BOOK_V8,
         BOOK_SIZE_V7 => BOOK_V7,
@@ -155,9 +162,6 @@ pub(crate) fn decode_book(b: &[u8]) -> BookRecord {
         BOOK_SIZE_V5 => BOOK_V5,
         _ => return BookRecord::Invalid,
     };
-    if b[0] > BOOK_V8 {
-        return BookRecord::Forward;
-    }
     if b[0] != version {
         return BookRecord::Invalid;
     }
@@ -306,6 +310,11 @@ impl Global {
 /// Reads one of the global records, told by the size and checked against
 /// its own constants.
 pub(crate) fn decode_global(b: &[u8]) -> GlobalRecord {
+    // A version later than this knows is left alone before anything
+    // else is said of the file, from the smallest record's size on.
+    if b.len() >= GLOBAL_SIZE_V3 && b[0] > GLOBAL_V6 {
+        return GlobalRecord::Forward;
+    }
     let version = match b.len() {
         GLOBAL_SIZE_V6 => GLOBAL_V6,
         GLOBAL_SIZE_V5 => GLOBAL_V5,
@@ -313,9 +322,6 @@ pub(crate) fn decode_global(b: &[u8]) -> GlobalRecord {
         GLOBAL_SIZE_V3 => GLOBAL_V3,
         _ => return GlobalRecord::Invalid,
     };
-    if b[0] > GLOBAL_V6 {
-        return GlobalRecord::Forward;
-    }
     if b[0] != version {
         return GlobalRecord::Invalid;
     }
@@ -399,7 +405,7 @@ pub(crate) fn decode_finished(b: &[u8]) -> FinishedRecord {
     let mut at = 8;
     let mut entries = Vec::new();
     for _ in 0..count {
-        if b.len() < at + 22 {
+        if b.len() < at + 20 {
             return FinishedRecord::Invalid;
         }
         let entry = FinishedEntry {
@@ -411,9 +417,13 @@ pub(crate) fn decode_finished(b: &[u8]) -> FinishedRecord {
             author: String::new(),
         };
         at += 20;
-        let (title, next) = read_text(b, at, TITLE_MAX);
+        let Some((title, next)) = read_text(b, at, TITLE_MAX) else {
+            return FinishedRecord::Invalid;
+        };
         at = next;
-        let (author, next) = read_text(b, at, AUTHOR_MAX);
+        let Some((author, next)) = read_text(b, at, AUTHOR_MAX) else {
+            return FinishedRecord::Invalid;
+        };
         at = next;
         if title.is_empty() {
             continue;
@@ -432,18 +442,22 @@ pub(crate) fn decode_finished(b: &[u8]) -> FinishedRecord {
     FinishedRecord::Ok(entries)
 }
 
-/// A text of `limit` bytes at most, its length (u16) before it; where it
-/// goes past the file, the file is no index.
-fn read_text(b: &[u8], at: usize, limit: usize) -> (String, usize) {
+/// A text of `limit` bytes at most, its length (u16) before it. `None`
+/// where the length or the text runs past the file, for a file cut
+/// short is no index, read in no parts.
+fn read_text(b: &[u8], at: usize, limit: usize) -> Option<(String, usize)> {
     if b.len() < at + 2 {
-        return (String::new(), b.len());
+        return None;
     }
-    let len = usize::from(u16_at(b, at)).min(limit);
-    let next = at + 2 + len;
-    if b.len() < next {
-        return (String::new(), b.len());
+    let len = usize::from(u16_at(b, at));
+    // A length past what the index keeps, or past the file: no index.
+    if len > limit || b.len() < at + 2 + len {
+        return None;
     }
-    (String::from_utf8_lossy(&b[at + 2..next]).into_owned(), next)
+    Some((
+        String::from_utf8_lossy(&b[at + 2..at + 2 + len]).into_owned(),
+        at + 2 + len,
+    ))
 }
 
 // Where a book was left, `progress.bin` in a book's folder. A record of

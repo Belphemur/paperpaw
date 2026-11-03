@@ -96,12 +96,31 @@ stand in for how long a session lasts once four of them are known (see
 `pace`). After a restart the windows of CrossPoint are gone — the
 import can be run again (it brings nothing twice) to seed them anew.
 
-## The mark of what was brought over
+## The reading brought over, and the mark of what was done
+
+The minutes read per day are kept in a file of the plugin's own
+(`imported-days.bin`), the day as the card counted it and the seconds
+read on it. The days of the statistics add them wherever they are
+summed anew from the log — after a merge with KOReader, a change of
+time zone or a cut while writing — so what was taken over is not lost
+with the log it is not part of. A later import replaces those minutes
+day by day (it never adds to what it brought before), so running it
+again says the same.
 
 What was taken over is kept in `xerif.ini` in the plugin's folder: one
 line per book folder (its name and the version of the record), and one
 for the index of finished books and one for the global record (their
 size and a hash of their content). A file that changed is brought over
 again; a book folder whose record is of another version than what was
-brought is brought again. Removing the file makes the next run bring
-everything over again, which changes nothing that is already there.
+brought is brought again. A folder whose position could not be kept, a
+book whose file could not be read, and an index that names a book that
+is not on the card are left for the next run. Where the marks
+themselves cannot be read, nothing is brought over and nothing is
+written: they are not overwritten blind. Removing the file makes the
+next run bring everything over again, which changes nothing that is
+already there.
+
+Where CrossPoint's own copy of the global record or of the index of
+finished books cannot be read as one, the copy beside it (`.bak`) is
+read in its place; a copy of a newer CrossPoint is never replaced by an
+older one.

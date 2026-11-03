@@ -48,6 +48,33 @@ pub(crate) fn bucket(hour: u32) -> Bucket {
 /// (see `widget::calendar`): darker the longer one read.
 const SHADES: [u8; 5] = [255, 220, 180, 120, 40];
 
+/// The words a minute and the length of a session, as read here, as a
+/// line, or nothing where neither is known.
+fn pace_line(env: &Env<'_>, pace: &SharedPace) -> Option<String> {
+    let pace = pace.borrow();
+    let wpm = pace.wpm(None);
+    let session = pace.avg_session(env.storage(), None);
+    let i18n = env.i18n();
+    match (wpm, session) {
+        (Some(wpm), Some(session)) => Some(i18n.format(
+            "stats.rhythm.pace",
+            &[
+                (
+                    "wpm",
+                    Arg::Str(&i18n.plural("stats.wpm", i64::from(wpm), &[])),
+                ),
+                ("session", Arg::Str(&fmt::duration(env, u64::from(session)))),
+            ],
+        )),
+        (Some(wpm), None) => Some(i18n.plural("stats.wpm", i64::from(wpm), &[])),
+        (None, Some(session)) => Some(i18n.format(
+            "stats.rhythm.session",
+            &[("session", Arg::Str(&fmt::duration(env, u64::from(session))))],
+        )),
+        (None, None) => None,
+    }
+}
+
 /// The reading of the last days, read when the screen is opened.
 pub(crate) struct Rhythm {
     style: UiStyle,
@@ -55,10 +82,13 @@ pub(crate) struct Rhythm {
     heat: Rect,
     bars: Rect,
     line: Rect,
-    pace: SharedPace,
     days: Vec<Day>,
     /// The seconds read in each part of the day, in the days shown.
     buckets: [u32; 4],
+    /// How fast and how long one reads, read when the screen was opened
+    /// (working it out again reads the log whole, and is not for every
+    /// repaint).
+    pace_line: Option<String>,
     /// Today, if the device knows the time.
     today: Option<i32>,
 }
@@ -95,16 +125,24 @@ impl Rhythm {
         );
         let today = fmt::today(env);
         let days = store::days(env.storage(), |unix| fmt::day_of(env, unix));
-        // The reading of the days shown, in the parts of the day.
+        // The reading of the days shown, in the parts of the day. The
+        // bounds reach a day to either side, for the days of the
+        // statistics are local days and a moment's Unix seconds need
+        // not fall in the day shown from any other zone; what is said
+        // here is the day each stay was read on.
         let mut buckets = [0u32; 4];
         if let Some(today) = today {
             let first = today - DAYS + 1;
+            let near = |day: i32, out: i64| {
+                (fmt::unix_near(day) + out).clamp(0, i64::from(u32::MAX)) as u32
+            };
             store::scan_range(
                 env.storage(),
-                fmt::unix_near(first).clamp(0, i64::from(u32::MAX)) as u32,
-                fmt::unix_near(today + 1).clamp(0, i64::from(u32::MAX)) as u32,
+                near(first, -86_400),
+                near(today + 1, 86_400),
                 |stat| {
-                    if fmt::day_of(env, stat.start) < first {
+                    let day = fmt::day_of(env, stat.start);
+                    if !(first..=today).contains(&day) {
                         return;
                     }
                     buckets[usize::from(bucket(hour_of(env, stat.start)) as u8)] +=
@@ -112,46 +150,27 @@ impl Rhythm {
                 },
             );
         }
+        // How fast and how long one reads, once: drawing says it again
+        // without reading for it.
+        let pace_line = pace_line(env, &pace);
         Self {
             style,
             header,
             heat,
             bars,
             line,
-            pace,
             days,
             buckets,
+            pace_line,
             today,
         }
     }
 
     /// The words a minute and the length of a session, as read here, as
     /// a line, or nothing where neither is known.
-    fn pace_line(&self, env: &Env<'_>) -> Option<String> {
-        let pace = self.pace.borrow();
-        let wpm = pace.wpm(None);
-        let session = pace.avg_session(env.storage(), None);
-        let i18n = env.i18n();
-        match (wpm, session) {
-            (Some(wpm), Some(session)) => Some(i18n.format(
-                "stats.rhythm.pace",
-                &[
-                    (
-                        "wpm",
-                        Arg::Str(&i18n.plural("stats.wpm", i64::from(wpm), &[])),
-                    ),
-                    ("session", Arg::Str(&fmt::duration(env, u64::from(session)))),
-                ],
-            )),
-            (Some(wpm), None) => Some(i18n.plural("stats.wpm", i64::from(wpm), &[])),
-            (None, Some(session)) => Some(i18n.format(
-                "stats.rhythm.session",
-                &[("session", Arg::Str(&fmt::duration(env, u64::from(session))))],
-            )),
-            (None, None) => None,
-        }
+    fn pace_line(&self, _env: &Env<'_>) -> Option<String> {
+        self.pace_line.clone()
     }
-
     /// The reading of one day, shaded the way the widgets shade theirs.
     fn level(&self, env: &Env<'_>, day: i32) -> u8 {
         widget::level(fmt::seconds_on(&self.days, day), widget::goal(env))
@@ -258,10 +277,12 @@ impl Rhythm {
         }
         for index in 0..(weeks as usize) * 7 {
             let day = first + index as i32;
-            if day > today {
+            // A week column holds the seven days of one weekday: the
+            // row is the day of the week, the column the week.
+            if !(first..=today).contains(&day) || day < today - DAYS + 1 {
                 continue;
             }
-            let (row, col) = (index / weeks as usize, index % weeks as usize);
+            let (col, row) = (index / 7, index % 7);
             let pad = (cell / 8).max(1);
             let at = Rect::new(
                 left + col as u16 * cell + pad,

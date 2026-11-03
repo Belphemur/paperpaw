@@ -172,6 +172,7 @@ pub(crate) const SESSION_MAX: u32 = u16::MAX as u32;
 
 /// How long a stretch of reading lasted: the seconds it covers and the
 /// pages turned in it.
+#[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Session {
     pub seconds: u64,
@@ -191,6 +192,9 @@ pub(crate) const SESSION_GAP: u32 = 300;
 /// them, where the clock was set back). A stay begins a new stretch when
 /// it starts [`SESSION_GAP`] seconds or more after the one before ended;
 /// the seconds and the page turns of the stays between are one stretch.
+/// (What the tests go by; [`Sessions`] works the same out as the log is
+/// read, holding no more of it than a session and a window.)
+#[cfg(test)]
 pub(crate) fn sessions(stays: &[Stay]) -> Vec<Session> {
     let mut out: Vec<Session> = Vec::new();
     let mut last_end: Option<u32> = None;
@@ -228,7 +232,10 @@ pub(crate) struct Stay {
 /// The window of the last session lengths, from the sessions in the order
 /// they came: the ones too short or too still to count are left out, and
 /// a longer one than a session is kept counts as long as a session can.
-pub(crate) fn session_window(sessions: &[Session]) -> super::pace::SessionWindow {
+/// (What the tests go by; [`Sessions`] works the same out as the log is
+/// read, holding no more of it than a session and a window.)
+#[cfg(test)]
+pub(crate) fn session_window(sessions: &[Session]) -> SessionWindow {
     let mut window = SessionWindow::default();
     for session in sessions {
         window.record(
@@ -237,6 +244,88 @@ pub(crate) fn session_window(sessions: &[Session]) -> super::pace::SessionWindow
         );
     }
     window
+}
+
+/// The sessions of a log, worked out as it is read: what a session is is
+/// said by [`sessions`]; this holds no more of the log than the session
+/// being read, the window of the last ones and the sums.
+#[derive(Debug, Default)]
+pub(crate) struct Sessions {
+    /// Where the last stay ended, to tell a gap by.
+    last_end: Option<u32>,
+    /// The session being read.
+    seconds: u64,
+    turns: u32,
+    /// The window of the sessions that count, and the sum of the ones
+    /// of a minute and longer, as CrossPoint counted them.
+    window: SessionWindow,
+    legacy_sum: u64,
+    legacy_count: u32,
+}
+
+impl Sessions {
+    /// Takes a stay of the log.
+    pub(crate) fn stay(&mut self, stay: Stay) {
+        if self
+            .last_end
+            .is_some_and(|last| stay.start.saturating_sub(last) >= SESSION_GAP)
+            && self.turns > 0
+        {
+            self.close();
+        }
+        self.seconds = self.seconds.saturating_add(u64::from(stay.duration));
+        self.turns += 1;
+        self.last_end = Some(
+            u32::try_from(u64::from(stay.start) + u64::from(stay.duration)).unwrap_or(u32::MAX),
+        );
+    }
+
+    /// The session being read goes into the window and the sums.
+    fn close(&mut self) {
+        let (seconds, turns) = (self.seconds, self.turns);
+        self.window
+            .record(seconds.min(SESSION_MAX as u64) as u32, turns);
+        if seconds >= u64::from(SESSION_LEGACY) {
+            self.legacy_sum += seconds;
+            self.legacy_count += 1;
+        }
+        (self.seconds, self.turns) = (0, 0);
+    }
+
+    /// The window of the sessions read, and the average over the ones
+    /// that counted, where there were any.
+    pub(crate) fn done(mut self) -> (SessionWindow, Option<u32>) {
+        if self.turns > 0 {
+            self.close();
+        }
+        let mean = (self.legacy_count > 0).then(|| {
+            (self.legacy_sum / u64::from(self.legacy_count)).min(u64::from(u32::MAX)) as u32
+        });
+        (self.window, mean)
+    }
+}
+
+/// The window of the sessions of the log (of one book, or of all of
+/// them), and the average over the ones that counted, read as the log
+/// is (see [`Sessions`]).
+pub(crate) fn session_metric(
+    storage: &dyn paperpaw_sdk::Storage,
+    book: Option<u16>,
+) -> (SessionWindow, Option<u32>) {
+    let mut out = Sessions::default();
+    #[expect(
+        clippy::let_underscore_must_use,
+        reason = "a log that cannot be read to the end counts what could be"
+    )]
+    let _ = crate::store::scan(storage, |stat| {
+        if book.is_none_or(|id| stat.book == id) {
+            out.stay(Stay {
+                start: stat.start,
+                duration: stat.duration,
+            });
+        }
+    });
+    out.done()
 }
 
 /// How long the sessions were, as CrossPoint kept them: a window of
@@ -344,23 +433,6 @@ impl SessionWindow {
 /// minute long).
 pub(crate) const SESSION_LEGACY: u32 = 60;
 
-/// The window of the sessions of `stays`, and the average over all the
-/// sessions that counted before there is a window to show (a minute or
-/// longer, as CrossPoint counted them).
-pub(crate) fn session_metric(stays: &[Stay]) -> (SessionWindow, Option<u32>) {
-    let all = sessions(stays);
-    let window = session_window(&all);
-    let counted: Vec<u64> = all
-        .iter()
-        .filter(|session| session.seconds >= u64::from(SESSION_LEGACY))
-        .map(|session| session.seconds)
-        .collect();
-    let mean = (!counted.is_empty()).then(|| {
-        (counted.iter().sum::<u64>() / counted.len() as u64).min(u64::from(u32::MAX)) as u32
-    });
-    (window, mean)
-}
-
 /// How long a session lasted, from the log and what the import brought:
 /// the window of the last sessions of the log once enough of them are
 /// in, then the window the import brought where it has enough, then the
@@ -382,26 +454,6 @@ pub(crate) fn session_shown(
         return Some(avg);
     }
     own_mean.or(seeded_mean).filter(|mean| *mean > 0)
-}
-
-/// The stays on pages of one book, or of all of them, in the order of
-/// the log. Where the log cannot be read to the end, those that could
-/// be.
-pub(crate) fn stays_of(storage: &dyn paperpaw_sdk::Storage, book: Option<u16>) -> Vec<Stay> {
-    let mut stays = Vec::new();
-    #[expect(
-        clippy::let_underscore_must_use,
-        reason = "a log that cannot be read to the end counts what could be"
-    )]
-    let _ = crate::store::scan(storage, |stat| {
-        if book.is_none_or(|id| stat.book == id) {
-            stays.push(Stay {
-                start: stat.start,
-                duration: stat.duration,
-            });
-        }
-    });
-    stays
 }
 
 /// What a record said of the reading it belongs to, as the import
@@ -566,7 +618,7 @@ impl Pace {
                 .map(|(_, m)| *m),
             None => self.global_mean,
         };
-        let (own, own_mean) = session_metric(&stays_of(storage, book));
+        let (own, own_mean) = session_metric(storage, book);
         session_shown(&own, own_mean, seeded, seeded_mean)
     }
 
@@ -871,15 +923,23 @@ mod tests {
     #[test]
     fn what_came_before_is_the_average_of_the_sessions_that_count() {
         // Two sessions of a minute and longer, one shorter: the two
-        // count, the short one does not.
-        let stays = stays(&[
-            (0, 70),
+        // count, the short one does not. The same as the tests go by
+        // (see `sessions`), worked out as the log is read.
+        let raw = &[
+            (0u32, 70u16),
             (100, 70),
             (100 + 70 + 400, 20),
             (100 + 70 + 400 + 60, 70),
             (100 + 70 + 400 + 60 + 100, 70),
-        ]);
-        let (window, mean) = session_metric(&stays);
+        ];
+        let mut out = Sessions::default();
+        for &(start, duration) in raw {
+            out.stay(Stay { start, duration });
+        }
+        let (window, mean) = out.done();
+        // The streaming says of the window what the list of sessions
+        // says.
+        assert_eq!(window, session_window(&sessions(&stays(raw))));
         // Two sessions came out of the five stays, both long enough to
         // have been recorded in the window.
         assert_eq!(window.count(), 2);
