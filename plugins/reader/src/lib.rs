@@ -113,6 +113,10 @@ pub mod settings {
     /// Holding a page button goes a chapter on or back; off, the page
     /// buttons turn pages as they are pressed rather than let go.
     pub const HOLD_CHAPTERS: Setting<bool> = Setting::new("reader.hold-chapters");
+    /// How wide the bands at the screen's sides that set the front
+    /// light are, in percent of its width (the light's warmth at the
+    /// left, its brightness at the right); 0 turns them off.
+    pub const LIGHT_SWIPE: Setting<i64> = Setting::new("reader.frontlight-swipe");
     /// How fast books are read aloud, in percent of the voice's speed.
     pub const ALOUD_SPEED: Setting<i64> = Setting::new("reader.aloud-speed");
     /// The sentence read aloud is underlined.
@@ -209,6 +213,10 @@ mod extras {
 
     pub(crate) static AUTO_TURN: SettingExtra =
         SettingExtra::new().unit("core.unit.seconds").step(5);
+    pub(crate) static LIGHT_SWIPE: SettingExtra = SettingExtra::new()
+        .unit("core.unit.percent")
+        .step(5)
+        .slider();
     pub(crate) static ALOUD_SPEED: SettingExtra = SettingExtra::new()
         .unit("core.unit.percent")
         .step(10)
@@ -217,7 +225,7 @@ mod extras {
 
 /// The reader's own settings: what it does, and reading aloud (the type
 /// of pages is the kernel's, see `settings`).
-static SETTINGS: [SettingSpec; 8] = [
+static SETTINGS: [SettingSpec; 9] = [
     SettingSpec::switch(
         settings::OPEN_LAST.static_str(),
         "reader.setting.open-last",
@@ -242,6 +250,17 @@ static SETTINGS: [SettingSpec; 8] = [
     )
     .advanced()
     .description("reader.setting.hold-chapters.help"),
+    SettingSpec::number(
+        settings::LIGHT_SWIPE.static_str(),
+        "reader.setting.frontlight-swipe",
+        0,
+        50,
+        20,
+        groups::CONTROLS,
+    )
+    .advanced()
+    .with_extra(&extras::LIGHT_SWIPE)
+    .description("reader.setting.frontlight-swipe.help"),
     SettingSpec::number(
         settings::AUTO_TURN_SECONDS.static_str(),
         "reader.setting.auto-turn-seconds",

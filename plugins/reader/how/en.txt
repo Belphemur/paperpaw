@@ -2,4 +2,6 @@ The reader shows books page by page. Open a book from the library; the last book
 
 Tap the left or right of the screen, or use the page buttons, to turn pages. Tap the middle or press Select for the reading menu: Contents, Search, Go to page, Font and layout, Bookmarks and highlights and more. Down from the top edge opens the quick panel, up from the bottom edge goes home; so does holding Back.
 
+Where the device has a front light, a slide along its sides sets it: along the left edge for its warmth, along the right one for its brightness (sliding up for both to grow). Only the light changes, no page is drawn again; a swipe across in a band still turns the page, and the outermost strip at each side stays the page turns' and the quick panel's. The bands' width is a setting, *Light bands at the sides*; at 0 they are off.
+
 Tap the top right corner for a bookmark. Hold a word to highlight it; with buttons, use Select text under More; Left and Right then move by word, the page buttons by line. Export as Markdown saves your notes.
