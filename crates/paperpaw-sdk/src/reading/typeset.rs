@@ -90,7 +90,17 @@ impl EmbeddedFonts {
             let at = set.add(id, loaded);
             faces.push((font.family, font.bold, font.italic, at));
         }
+        // The choice the fonts' glyphs are drawn in now (`Fonts::hinting`):
+        // a book's own is fitted as the text's is drawn.
+        set.set_hinting(env.fonts().hinting());
         (!faces.is_empty()).then_some(EmbeddedFonts { set, faces })
+    }
+
+    /// Chooses how the book's fonts' glyphs are drawn from now on
+    /// ([`FontSet::set_hinting`]): the pages laid out stay laid out;
+    /// what was drawn is drawn again in the choice.
+    pub fn set_hinting(&mut self, hinting: crate::text::Hinting) {
+        self.set.set_hinting(hinting);
     }
 
     /// The face of `family` closest to `bold` and `italic`.

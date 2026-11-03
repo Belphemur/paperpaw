@@ -229,7 +229,7 @@ impl Fonts {
         self.check_new(&spec.id)?;
         self.entries.push(Entry {
             id: spec.id,
-            font: Some(spec.font),
+            font: Some(sized_hinting(spec.font, self.hinting)),
             family: spec.family,
             weight: if spec.bold { 700 } else { 400 },
             bold: spec.bold,
@@ -394,6 +394,12 @@ impl Fonts {
         }
         // The glyphs drawn so far are of the choice before.
         self.clear_cache();
+    }
+
+    /// How scalable fonts' glyphs are drawn
+    /// ([`text::Hinting`](crate::text::Hinting)).
+    pub fn hinting(&self) -> crate::text::Hinting {
+        self.hinting
     }
 
     /// Chooses the family for reading (`None`: the plugins' proposals).
@@ -794,6 +800,25 @@ impl FontSet {
             kerning: true,
             ligatures: false,
         })
+    }
+
+    /// Chooses how the set's scalable fonts' glyphs are drawn
+    /// ([`Fonts::set_hinting`]): a pack draws exactly as it was drawn, a
+    /// scalable font is fitted in the choice, and the glyphs drawn so
+    /// far are drawn again in it, the pages laid out as they are. A
+    /// call that changes nothing keeps the glyphs kept.
+    pub fn set_hinting(&mut self, hinting: crate::text::Hinting) {
+        if self
+            .fonts
+            .iter()
+            .any(|(_, font)| font.hinting().is_some_and(|kept| kept != hinting))
+        {
+            for (_, font) in self.fonts.iter_mut() {
+                font.set_hinting(hinting);
+            }
+            // The glyphs drawn so far are of the choice before.
+            self.cache.borrow_mut().clear();
+        }
     }
 }
 

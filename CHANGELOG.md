@@ -21,6 +21,15 @@ change the plugin SDK.
   SDK: `text::Hinting`, `Font::set_hinting`, `Fonts::set_hinting`, `builtin::settings::TEXT_HINTING`.
   What a code plugin's file sees changed (the fonts' holding of the choice), so the plugin interface is
   native i5: a code plugin built before must be built again.
+  The choice reaches every scalable font: a book's own (`EmbeddedFonts::load` loads it in, and the
+  reader takes a change made while the book is open) as much as a font a plugin adds directly
+  (`Fonts::add`). New to ask and set it: `Fonts::hinting`, `text::Font::hinting`,
+  `FontSet::set_hinting` (all free of the interface: what a plugin built before does not rely on).
+  A size is met on the quarter-pixel grid its glyphs' fits are kept for, so measuring and drawing
+  agree at a size between the quarters; the screens' snapshots were written anew for it.
+  The setting is offered where glyphs are drawn at runtime only: a pack-only device's are drawn
+  already, the choice cannot move them there. And `PAPERPAW_FONT_HINTING` refuses a value that is
+  none of `light`, `off`, `normal` instead of building light-hinted packs silently.
 
 ### Changed
 

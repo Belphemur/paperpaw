@@ -328,7 +328,8 @@ fn a_plugin_with_code_needs_its_lock_its_sdk_by_version_and_the_right_switch() {
 fn the_sites_rules_are_taken_where_given() {
     let dir = data_repo("data-rules");
     let mut rules = paperpaw_publish::rules::BUILT_IN.to_string();
-    rules = rules.replace("\"look\", ", "");
+    // Either spacing of the JSON (the file is written minified).
+    rules = rules.replace("\"look\", ", "").replace("\"look\",", "");
     write(&dir, "rules.json", rules);
     let file = dir.join("rules.json").display().to_string();
     let problems = check(&dir, &["--rules", &file]);

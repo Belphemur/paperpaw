@@ -5856,6 +5856,7 @@ pub fn paperpaw_sdk::FontSet::get(&self, usize) -> core::option::Option<paperpaw
 pub fn paperpaw_sdk::FontSet::is_empty(&self) -> bool
 pub fn paperpaw_sdk::FontSet::len(&self) -> usize
 pub fn paperpaw_sdk::FontSet::new(usize) -> Self
+pub fn paperpaw_sdk::FontSet::set_hinting(&mut self, paperpaw_text::hinting::Hinting)
 impl core::fmt::Debug for paperpaw_sdk::FontSet
 pub fn paperpaw_sdk::FontSet::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[non_exhaustive] pub struct paperpaw_sdk::FontSpec
@@ -5875,6 +5876,7 @@ pub fn paperpaw_sdk::Fonts::contains(&self, &str) -> bool
 pub fn paperpaw_sdk::Fonts::families(&self) -> alloc::vec::Vec<&str>
 pub fn paperpaw_sdk::Fonts::family(&self) -> core::option::Option<&str>
 pub fn paperpaw_sdk::Fonts::get(&self, &str) -> core::option::Option<paperpaw_sdk::FontHandle<'_>>
+pub fn paperpaw_sdk::Fonts::hinting(&self) -> paperpaw_text::hinting::Hinting
 pub fn paperpaw_sdk::Fonts::ids(&self) -> impl core::iter::traits::iterator::Iterator<Item = &paperpaw_sdk::Id>
 pub fn paperpaw_sdk::Fonts::new(usize) -> Self
 pub fn paperpaw_sdk::Fonts::role(&self, &str) -> core::option::Option<paperpaw_sdk::FontHandle<'_>>

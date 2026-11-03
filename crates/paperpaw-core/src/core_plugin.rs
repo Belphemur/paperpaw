@@ -12,6 +12,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use clean_up::{ask_clean_up, register_clean_up};
 
+use crate::paperpaw_text_outlines;
 use paperpaw_sdk::builtin::{
     actions, events, fonts, group_sections, groups, keymap_presets, menus, params, screens,
     settings, settings_page, slots, status_items,
@@ -1040,7 +1041,7 @@ static IN_APPS: SettingExtra = SettingExtra::new()
     .keeps_unknown();
 
 /// The language, night mode, speech and the edges for swipes.
-static GENERAL: [SettingSpec; 10] = [
+static GENERAL: [SettingSpec; 9] = [
     SettingSpec::switch(
         settings::DEVELOPER.static_str(),
         "core.setting.developer",
@@ -1079,14 +1080,6 @@ static GENERAL: [SettingSpec; 10] = [
         groups::READING_DISPLAY,
     )
     .description("core.setting.mono-text.help"),
-    SettingSpec::choice(
-        settings::TEXT_HINTING.static_str(),
-        "core.setting.text-hinting",
-        settings::TEXT_HINTING_LEVELS,
-        settings::TEXT_HINTING_LEVELS[1],
-        groups::READING_DISPLAY,
-    )
-    .description("core.setting.text-hinting.help"),
     SettingSpec::switch(
         settings::SPEAK_FOCUS.static_str(),
         "core.setting.speak-focus",
@@ -1126,6 +1119,19 @@ static GENERAL: [SettingSpec; 10] = [
     .description("core.setting.edge.help"),
 ];
 
+/// The text fitting: how a scalable font's glyphs are grid-fitted (`Font::set_hinting`).
+/// Registered only where outlines are drawn: a pack-only device's glyphs
+/// are already drawn (a pack's header says how), the choice cannot move
+/// them there, and a change could not but redraw the screen in vain.
+static TEXT_FITTING: [SettingSpec; 1] = [SettingSpec::choice(
+    settings::TEXT_HINTING.static_str(),
+    "core.setting.text-hinting",
+    settings::TEXT_HINTING_LEVELS,
+    settings::TEXT_HINTING_LEVELS[1],
+    groups::READING_DISPLAY,
+)
+.description("core.setting.text-hinting.help")];
+
 /// The library folder, chosen with the folder chooser: the reader's own,
 /// kept when the settings are reset.
 static FOLDER_EDITOR: SettingExtra = SettingExtra::new().editor(screens::FOLDER_EDITOR);
@@ -1142,6 +1148,11 @@ static LIBRARY: [SettingSpec; 1] = [SettingSpec::text(
 fn register_general_settings(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_settings(&GENERAL)?;
     r.add_settings(&LIBRARY)?;
+    // The glyphs' drawing cannot change where outlines are not read
+    // (`Font::set_hinting`), so the choice is theirs alone.
+    if paperpaw_text_outlines() {
+        r.add_settings(&TEXT_FITTING)?;
+    }
     r.set_menu_need(settings::MONO_TEXT, paperpaw_sdk::MenuNeed::BlackAndWhite)?;
     r.set_menu_need(settings::SPEAK_FOCUS, paperpaw_sdk::MenuNeed::Speech)?;
     r.set_menu_need(settings::VOICE, paperpaw_sdk::MenuNeed::Speech)?;

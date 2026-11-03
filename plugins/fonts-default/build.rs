@@ -59,10 +59,14 @@ fn main() {
 
     // How the packs' glyphs are grid-fitted (see `paperpaw_text::Hinting`),
     // light unless it says otherwise: the header of each pack records it.
+    // A value that means nothing fails: where the glyphs cannot be drawn
+    // again at runtime, a mistaken spelling would hold it in the packs.
     let hinting = match std::env::var("PAPERPAW_FONT_HINTING").as_deref() {
+        Ok("light") => paperpaw_text::Hinting::LIGHT,
         Ok("off") => paperpaw_text::Hinting::OFF,
         Ok("normal") => paperpaw_text::Hinting::NORMAL,
-        _ => paperpaw_text::Hinting::LIGHT,
+        Err(_) | Ok("") => paperpaw_text::Hinting::LIGHT,
+        Ok(value) => panic!("PAPERPAW_FONT_HINTING: `{value}` is not light, off or normal"),
     };
     let sizes_text = std::env::var("PAPERPAW_FONT_SIZES").unwrap_or(DEFAULT_SIZES.into());
     let sizes: Vec<f32> = sizes_text

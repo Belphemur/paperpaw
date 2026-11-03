@@ -207,6 +207,7 @@ impl OutlineFont {
     }
 
     pub fn line_metrics(&self, size: f32) -> LineMetrics {
+        let size = quarter_size(size);
         let Some(font) = self.font_ref() else {
             return LineMetrics::fallback(size);
         };
@@ -233,6 +234,7 @@ impl OutlineFont {
     }
 
     pub fn advance(&self, ch: char, size: f32) -> f32 {
+        let size = quarter_size(size);
         let Some(font) = self.font_ref() else {
             return 0.0;
         };
@@ -247,6 +249,7 @@ impl OutlineFont {
     /// ([`OutlineFont::kerning_pairs`]). 0 where either character is
     /// missing.
     pub fn kern(&self, left: char, right: char, size: f32) -> f32 {
+        let size = quarter_size(size);
         let Some(font) = self.font_ref() else {
             return 0.0;
         };
@@ -294,6 +297,7 @@ impl OutlineFont {
 
     /// Rasterizes `ch`; missing characters render as U+FFFD or `.notdef`.
     pub fn rasterize(&self, ch: char, size: f32) -> Glyph {
+        let size = quarter_size(size);
         let Some(font) = self.font_ref() else {
             return Glyph::empty(0.0);
         };
@@ -306,10 +310,17 @@ impl OutlineFont {
         let mut pen = Pen::default();
         if let Some(outline) = font.outline_glyphs().get(id) {
             // A font whose fit cannot be built draws its glyphs as they
-            // are, never failing the page.
-            if let Some(instance) = self.hint_instance(&font, size, self.hinting) {
-                let _ = outline.draw(DrawSettings::hinted(&instance, false), &mut pen);
-            } else {
+            // are, never failing the page; so does a fit that cannot
+            // draw one glyph on its own.
+            let drawn = self
+                .hint_instance(&font, size, self.hinting)
+                .and_then(|instance| {
+                    outline
+                        .draw(DrawSettings::hinted(&instance, false), &mut pen)
+                        .ok()
+                });
+            if drawn.is_none() {
+                pen = Pen::default();
                 let settings = DrawSettings::unhinted(Size::new(size), &self.location);
                 // A broken glyph renders as empty instead of failing the page.
                 let _ = outline.draw(settings, &mut pen);
@@ -354,6 +365,14 @@ impl OutlineFont {
             data,
         }
     }
+}
+
+/// Sizes meet on the quarter-pixel grid the fits are kept for (see
+/// `Hint`): a page's 20.2 is measured and drawn of 20.0, whichever of
+/// the two was asked first, so what a glyph's fit was built for is
+/// what measures it too.
+fn quarter_size(size: f32) -> f32 {
+    f32::from((size * 4.0) as u16) / 4.0
 }
 
 /// The font's units per em; 1000 where it does not say.

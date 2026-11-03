@@ -451,6 +451,14 @@ impl Screen for ReaderScreen {
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         self.unsqueeze(env);
+        // The text fitting chosen while the book is open (`core.text-hinting`)
+        // reaches the fonts of its own the book brought: theirs are drawn
+        // again in it, the pages laid out as they are.
+        if let Ok(book) = &mut self.book
+            && let Some(embedded) = &mut book.embedded
+        {
+            embedded.set_hinting(env.fonts().hinting());
+        }
         self.draw_book(canvas, env);
         // Kept from the first band of a frame to its last only: on the X4
         // a page's words take some 15 KiB.

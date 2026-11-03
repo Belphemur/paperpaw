@@ -23,6 +23,7 @@ impl paperpaw_text::Font
 pub fn paperpaw_text::Font::advance(&self, char, f32) -> f32
 pub fn paperpaw_text::Font::from_data(impl core::convert::Into<alloc::borrow::Cow<'static, [u8]>>, &[(&str, f32)]) -> core::result::Result<paperpaw_text::Font, paperpaw_text::FontError>
 pub fn paperpaw_text::Font::has_char(&self, char) -> bool
+pub fn paperpaw_text::Font::hinting(&self) -> core::option::Option<paperpaw_text::Hinting>
 pub fn paperpaw_text::Font::kern(&self, char, char, f32) -> f32
 pub fn paperpaw_text::Font::largest_size(&self) -> core::option::Option<f32>
 pub fn paperpaw_text::Font::line_metrics(&self, f32) -> paperpaw_text::LineMetrics

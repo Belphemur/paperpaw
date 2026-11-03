@@ -444,7 +444,9 @@ impl Kernel {
             self.framebuffer
                 .set_mono_coverage(mono_coverage(&self.shared.settings));
         }
-        if *id == core_settings::TEXT_HINTING {
+        // The glyphs' drawing cannot change where outlines are not read
+        // (see `core_plugin`), where this setting is hidden.
+        if *id == core_settings::TEXT_HINTING && paperpaw_text_outlines() {
             self.apply_text_hinting();
         }
         if *id == core_settings::KEYMAP_PRESET || self.keys.when.iter().any(|(s, _)| s == id) {
@@ -472,7 +474,7 @@ impl Kernel {
             || *id == core_settings::NIGHT_MODE
             || *id == core_settings::NIGHT_PICTURES
             || *id == core_settings::MONO_TEXT
-            || *id == core_settings::TEXT_HINTING
+            || (*id == core_settings::TEXT_HINTING && paperpaw_text_outlines())
             || *id == core_settings::TEXT_COLOR
             || *id == core_settings::PAPER_COLOR
             || *id == core_settings::TEXT_COLOR_OWN

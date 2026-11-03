@@ -105,6 +105,17 @@ impl Font {
         let _ = hinting;
     }
 
+    /// How this font's glyphs are grid-fitted, where they are fitted
+    /// ([`OutlineFont::hinting`]): `None` for a pack, whose glyphs draw
+    /// exactly as they were drawn.
+    pub fn hinting(&self) -> Option<Hinting> {
+        #[cfg(feature = "outline")]
+        if let Font::Outline(font) = self {
+            return Some(font.hinting());
+        }
+        None
+    }
+
     /// The size `text` is drawn at when asked for `size`: of a pack, the
     /// nearest size that has all its characters, the large ones made for a
     /// few only for a `display` (see [`BitmapFont::size_for`]); else
