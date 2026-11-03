@@ -157,6 +157,10 @@ pub struct Fonts {
     user: VecMap<Id, Id>,
     /// The family chosen for reading.
     family: Option<String>,
+    /// How scalable fonts' glyphs are drawn from now on
+    /// ([`text::Hinting`](crate::text::Hinting)): what outline fonts
+    /// load with, and what loaded ones are set to.
+    hinting: crate::text::Hinting,
     /// What the status lines are in: a value of
     /// [`STATUS_FONT`](crate::builtin::settings::STATUS_FONT).
     status: Option<String>,
@@ -198,6 +202,7 @@ impl Fonts {
             candidates: Vec::new(),
             user: VecMap::new(),
             family: None,
+            hinting: crate::text::Hinting::LIGHT,
             status: None,
             cache: RefCell::new(GlyphCache::new(cache_bytes)),
             describing: core::cell::Cell::new(false),
@@ -370,6 +375,27 @@ impl Fonts {
         self.family.as_deref()
     }
 
+    /// Chooses how scalable fonts' glyphs are grid-fitted
+    /// ([`text::Hinting`](crate::text::Hinting)) from now on: the ones
+    /// loaded already, and the ones that load hereafter (for
+    /// [`Fonts::load`]). The pages laid out stay laid out (advances
+    /// never move); what was drawn is drawn again in the choice.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+    pub fn set_hinting(&mut self, hinting: crate::text::Hinting) {
+        if self.hinting == hinting {
+            return;
+        }
+        self.hinting = hinting;
+        for entry in &mut self.entries {
+            if let Some(font) = entry.font.as_mut() {
+                font.set_hinting(hinting);
+            }
+        }
+        // The glyphs drawn so far are of the choice before.
+        self.clear_cache();
+    }
+
     /// Chooses the family for reading (`None`: the plugins' proposals).
     /// Call [`Fonts::load`] afterwards for font files.
     #[cfg(any(test, feature = "kernel"))]
@@ -437,6 +463,7 @@ impl Fonts {
     #[cfg(any(test, feature = "kernel"))]
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn load(&mut self, storage: &Rc<dyn Storage>) -> Vec<String> {
+        let hinting = self.hinting;
         let mut failed = Vec::new();
         let chosen = self.family.clone();
         let mut wanted: Vec<usize> = chosen
@@ -489,7 +516,8 @@ impl Fonts {
                 // A variable font at its style's weight.
                 let weight = entry.face.then(|| f32::from(entry.weight));
                 read_font(storage.as_ref(), path, weight)
-            };
+            }
+            .map(|font| sized_hinting(font, hinting));
             match font {
                 Some(font) => entry.font = Some(font),
                 None => failed.push(path.clone()),
@@ -675,6 +703,14 @@ impl PackSource for Stored {
         }
         true
     }
+}
+
+/// Draws a font's glyphs as the mode says: a pack is already what it
+/// renders (they were drawn), a scalable font's is set (no other kind
+/// there is).
+fn sized_hinting(mut font: Font, hinting: crate::text::Hinting) -> Font {
+    font.set_hinting(hinting);
+    font
 }
 
 /// Reads a font file into memory.

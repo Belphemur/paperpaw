@@ -792,6 +792,17 @@ pub mod settings {
     pub const STATUS_FONT_UI: &str = "core.status-font.ui";
     /// [`STATUS_FONT`]: as the book.
     pub const STATUS_FONT_BOOK: &str = "core.status-font.book";
+    /// How scalable fonts' glyphs are fitted to the panel's grid
+    /// ([`text::Hinting`](crate::text::Hinting)): one of
+    /// [`TEXT_HINTING_LEVELS`], read only where such fonts are drawn
+    /// ([`text::OUTLINES`](crate::text::OUTLINES)).
+    pub const TEXT_HINTING: Setting<Text> = Setting::new("core.text-hinting");
+    /// [`TEXT_HINTING`]: one of these.
+    pub const TEXT_HINTING_LEVELS: &[&str] = &[
+        "core.text-hinting.off",
+        "core.text-hinting.light",
+        "core.text-hinting.normal",
+    ];
     /// `core.clock.24h` or `core.clock.12h`.
     pub const CLOCK_FORMAT: Setting<Text> = Setting::new("core.clock-format");
     /// The first day of the week, one of

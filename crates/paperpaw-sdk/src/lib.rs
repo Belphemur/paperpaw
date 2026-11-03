@@ -376,9 +376,24 @@ pub mod image {
 }
 
 /// Text and font helpers (see `paperpaw-text`), e.g. reading a font
-/// file's family, or how glyphs are inked ([`ToneCurve`](text::ToneCurve)).
+/// file's family, or how glyphs are inked ([`ToneCurve`](text::ToneCurve))
+/// and grid-fitted ([`Hinting`](text::Hinting)).
 pub mod text {
-    pub use paperpaw_text::{OUTLINES, ToneCurve, sfnt};
+    pub use paperpaw_text::{OUTLINES, Hinting, ToneCurve, sfnt};
+
+    /// The [`Hinting`](Hinting) the setting
+    /// [`TEXT_HINTING`](crate::builtin::settings::TEXT_HINTING) is set to:
+    /// its values, light where the value says none known here.
+    pub fn hinting(value: &str) -> Hinting {
+        use crate::builtin::settings::TEXT_HINTING_LEVELS;
+        if value == TEXT_HINTING_LEVELS[0] {
+            Hinting::OFF
+        } else if value == TEXT_HINTING_LEVELS[2] {
+            Hinting::NORMAL
+        } else {
+            Hinting::LIGHT
+        }
+    }
 }
 
 /// Hyphenation with compiled patterns (see `paperpaw-hyphen`).

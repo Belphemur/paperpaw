@@ -2,6 +2,7 @@ use alloc::borrow::Cow;
 use core::fmt;
 
 use crate::bitmap::BitmapFont;
+use crate::hinting::Hinting;
 #[cfg(feature = "outline")]
 use crate::outline::OutlineFont;
 use crate::stored::StoredPack;
@@ -87,6 +88,21 @@ impl Font {
             let _ = variations;
             Err(FontError::OutlinesNotSupported)
         }
+    }
+
+    /// Chooses how this font's glyphs are grid-fitted from now on: no
+    /// effect on a pack (its glyphs are drawn already), a scalable
+    /// font's is (see [`outline`](crate::OutlineFont) and
+    /// [`Hinting`](crate::Hinting)). The pages laid out stay laid out
+    /// (advances never move); what was drawn is drawn again in the
+    /// choice.
+    pub fn set_hinting(&mut self, hinting: Hinting) {
+        #[cfg(feature = "outline")]
+        if let Font::Outline(font) = self {
+            font.set_hinting(hinting);
+        }
+        #[cfg(not(feature = "outline"))]
+        let _ = hinting;
     }
 
     /// The size `text` is drawn at when asked for `size`: of a pack, the
