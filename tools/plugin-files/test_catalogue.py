@@ -16,6 +16,9 @@ import zipfile
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import catalogue  # noqa: E402
 
+# data.toml's version of the plugin these tests follow (a bump must not break them).
+BI = catalogue.data.plugins()["literata-bold-italic"]["version"]
+
 KEY = bytes(range(32))
 
 
@@ -143,26 +146,26 @@ class DataPlugins(unittest.TestCase):
             self.assertIn('kind = "data"', entry)
             self.assertIn("off_by_default = true", entry)
             self.assertIn('name = "Literata Fett Kursiv"', entry)
-            self.assertIn('url = "https://example.invalid/r/literata-bold-italic-1.0.0.zip"', entry)
+            self.assertIn(f'url = "https://example.invalid/r/literata-bold-italic-{BI}.zip"', entry)
             for word in ["crate", "author_key", "builds"]:
                 self.assertNotIn(word, entry)
-            with zipfile.ZipFile(dist / "literata-bold-italic-1.0.0.zip") as z:
+            with zipfile.ZipFile(dist / f"literata-bold-italic-{BI}.zip") as z:
                 self.assertEqual(z.namelist(), [
                     "plugin.ini", "fonts/literata-bold-italic.ppfp", "i18n/de.ini", "i18n/en.ini"])
                 self.assertTrue(z.read("fonts/literata-bold-italic.ppfp").startswith(b"PPFP"))
-            first = dist.joinpath("literata-bold-italic-1.0.0.zip").read_bytes()
+            first = dist.joinpath(f"literata-bold-italic-{BI}.zip").read_bytes()
             sums = dist.joinpath("SHA256SUMS").read_text(encoding="utf-8")
             self.assertIn("literata-styles-1.0.0.zip", sums)
             # The same bytes again.
             with unittest.mock.patch.object(sys, "argv", argv), contextlib.redirect_stdout(io.StringIO()):
                 catalogue.main()
-            self.assertEqual(dist.joinpath("literata-bold-italic-1.0.0.zip").read_bytes(), first)
+            self.assertEqual(dist.joinpath(f"literata-bold-italic-{BI}.zip").read_bytes(), first)
 
     def test_one_data_plugin_alone_between_releases(self):
         with tempfile.TemporaryDirectory() as dist, tempfile.TemporaryDirectory() as made:
             dist, made = pathlib.Path(dist), pathlib.Path(made)
             self.folders(made)
-            tag = "literata-bold-italic-v1.0.0"
+            tag = f"literata-bold-italic-v{BI}"
             argv = ["catalogue.py", str(dist), "0.5.0-beta.8", f"https://example.invalid/{tag}",
                     "--only", "literata-bold-italic", "--tag", tag, "--data", str(made)]
             with unittest.mock.patch.object(sys, "argv", argv), contextlib.redirect_stdout(io.StringIO()):
@@ -170,10 +173,10 @@ class DataPlugins(unittest.TestCase):
             # Its entry alone, no plugin with code built or needed.
             self.assertEqual([p.name for p in dist.joinpath("catalogue").iterdir()], ["literata-bold-italic.toml"])
             entry = dist.joinpath("catalogue", "literata-bold-italic.toml").read_text(encoding="utf-8")
-            self.assertIn(f'url = "https://example.invalid/{tag}/literata-bold-italic-1.0.0.zip"', entry)
+            self.assertIn(f'url = "https://example.invalid/{tag}/literata-bold-italic-{BI}.zip"', entry)
             sums = dist.joinpath("SHA256SUMS").read_text(encoding="utf-8")
             self.assertEqual(sums.count("\n"), 1)
-            self.assertIn("literata-bold-italic-1.0.0.zip", sums)
+            self.assertIn(f"literata-bold-italic-{BI}.zip", sums)
 
     def test_data_py_builds_one_alone(self):
         listed = catalogue.data.plugins()
@@ -202,7 +205,7 @@ class DataPlugins(unittest.TestCase):
             built(dist)
             self.folders(made)
             ini = made / "literata-bold-italic" / "plugin.ini"
-            ini.write_text(ini.read_text(encoding="utf-8").replace("version = 1.0.0", "version = 0.9.0"))
+            ini.write_text(ini.read_text(encoding="utf-8").replace(f"version = {BI}", "version = 0.9.0"))
             argv = ["catalogue.py", str(dist), "0.5.0-beta.8", "https://example.invalid/r", "--data", str(made)]
             with unittest.mock.patch.object(sys, "argv", argv), contextlib.redirect_stdout(io.StringIO()), \
                     contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
