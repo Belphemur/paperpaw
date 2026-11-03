@@ -96,8 +96,18 @@ fn book_paths(storage: &dyn Storage) -> Vec<String> {
 }
 
 /// The books CrossPoint remembered last reading (`recent.json`): their
-/// paths, titles and authors.
+/// paths, titles and authors. CrossPoint kept ten of them; more than a
+/// file could hold of ten books with their covers is not a recents
+/// list, and is not read.
 fn recents(storage: &dyn Storage) -> Vec<(String, String, String)> {
+    const MOST: usize = 10;
+    const MOST_BYTES: u64 = 256 * 1024;
+    if storage
+        .size(&at("recent.json"))
+        .is_ok_and(|size| size > MOST_BYTES)
+    {
+        return Vec::new();
+    }
     let mut out = Vec::new();
     let mut path = String::new();
     let mut title = String::new();
@@ -112,7 +122,7 @@ fn recents(storage: &dyn Storage) -> Vec<(String, String, String)> {
             }
         }
         json::stream::Event::Close(keys)
-            if keys.len() == 2 && keys[0] == "books" && !path.is_empty() =>
+            if keys.len() == 2 && keys[0] == "books" && !path.is_empty() && out.len() < MOST =>
         {
             out.push((
                 core::mem::take(&mut path),
@@ -507,7 +517,7 @@ fn bring_folders(
         // The record of the book's reading: the newest this knows, or, as
         // a guard, the one of a newer CrossPoint, which is left alone.
         let (record, forward) = book_record(storage, dir);
-        let Some((record, version)) = record else {
+        let Some((record, version, fingerprint)) = record else {
             if forward {
                 report.forward += 1;
             }
@@ -524,7 +534,8 @@ fn bring_folders(
         // The pace is seeded from every record that can be read, whether
         // it was brought over before or not.
         report.seeded.push((path.clone(), record.clone()));
-        if done.get(name).map(String::as_str) == Some(version.to_string().as_str()) {
+        let mark = alloc::format!("{version}{fingerprint}");
+        if done.get(name).map(String::as_str) == Some(mark.as_str()) {
             report.skipped += 1;
             continue;
         }
@@ -547,7 +558,7 @@ fn bring_folders(
         // The folder is marked only once where the book was left has
         // been kept, or was there already: a failed write is tried
         // again.
-        to_mark.push((String::from(name), version.to_string(), left));
+        to_mark.push((String::from(name), mark, left));
     }
     (changed_books, to_mark)
 }
@@ -885,9 +896,10 @@ fn has_book_folders(storage: &dyn Storage) -> bool {
 }
 
 /// The record of a book's reading in its folder: the newest this knows,
-/// with the version it is of; and whether a newer CrossPoint's record is
-/// there (which is left alone, never read).
-fn book_record(storage: &dyn Storage, dir: &str) -> (Option<(xcpt::Book, u8)>, bool) {
+/// with the version it is of and a hash of its bytes (so that a record
+/// changed in its own version is brought again); and whether a newer
+/// CrossPoint's record is there (which is left alone, never read).
+fn book_record(storage: &dyn Storage, dir: &str) -> (Option<(xcpt::Book, u8, String)>, bool) {
     // The record of a newer CrossPoint is recognized only as a guard;
     // where it is there, nothing of the folder is brought over.
     if storage.exists(&alloc::format!("{dir}/stats_v9.bin")) {
@@ -906,7 +918,9 @@ fn book_record(storage: &dyn Storage, dir: &str) -> (Option<(xcpt::Book, u8)>, b
             continue;
         };
         match xcpt::decode_book(&data) {
-            xcpt::BookRecord::Ok(book) => return (Some((book, version)), false),
+            xcpt::BookRecord::Ok(book) => {
+                return (Some((book, version, fingerprint(&data))), false);
+            }
             xcpt::BookRecord::Forward => return (None, true),
             xcpt::BookRecord::Invalid => {}
         }
