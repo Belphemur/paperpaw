@@ -8,6 +8,18 @@ change the plugin SDK.
 
 ### Added
 
+- Statistics: a *Reading rhythm* screen, the last days as a heat map and the reading gathered
+  into morning, afternoon, evening and night, with the words a minute and the length of a session
+  of what was read on this device. The words a minute and the length of a session also show on a
+  book's page. The words a minute is a window of the last pages read, the odd ones trimmed away,
+  with the page's words asked of the reader; a session is what the log of page stays says, grouped
+  by the gaps between them (a pause of five minutes ends one).
+- Statistics: *Take over from CrossPoint*, on the sync page when a card that a CrossPoint reader
+  has written is in the device: the minutes read per day into the days, the books into the books
+  with where they were left and when they were finished, and what CrossPoint knew of the reading
+  speed and the length of a session seeded into the pace. Nothing of CrossPoint's is changed or
+  removed, and what was taken over is marked so that running it again takes nothing twice. What
+  maps and what is left out is in `docs/xerif-import.md`.
 - *End of book*, a new plugin: when the last page of a book is reached, a screen offers the next book of its
   series (or the library), a rating of one to five (`4 / 5`, kept as a book field and shown as a badge on the
   book's row and on its information page) and whether the book counts as finished. Two settings in the reading
