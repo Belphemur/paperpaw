@@ -465,8 +465,23 @@ impl Screen for ReaderScreen {
             book.words.take();
         }
     }
+
+    /// A screen covers the reader: the bands stand down (the kernel
+    /// keeps the finger's capture no more without telling them), the
+    /// tap held back dropped. What the light showed without being kept
+    /// stays until a context can answer (see `on_show`).
+    fn on_hide(&mut self) {
+        self.light_swipe.covered();
+    }
+
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         self.unsqueeze(cx.env());
+        // Back from being covered: the bands stood down while it went
+        // (a finger's drag cannot outlive the finger it followed); what
+        // the light showed without being kept is taken back.
+        if self.light_swipe.covered() {
+            self.light_swipe.let_go(cx);
+        }
         if self.preparing.is_some() {
             // Shown saying so first, then prepared.
             let now = cx.env().now();
@@ -508,6 +523,9 @@ impl Screen for ReaderScreen {
     }
 
     fn on_timer(&mut self, cx: &mut Cx<'_, '_>) {
+        // The light's sides' time first: a long press held back in a
+        // band, a band tap held for its second.
+        self.light_tick(cx);
         let env = *cx.env();
         if self.prepare(cx) {
             return;

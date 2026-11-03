@@ -23,18 +23,31 @@
 //! The light's settings are those the shell puts at the front of the
 //! reader's panel as slider numbers ([`menus::READER_PANEL`]), in
 //! order: the first the brightness, the second the warmth, as the X4
-//! Pro's, the Android's and the emulated device's light are registered.
-//! Where there is no second one, the left band is not taken.
+//! Pro's, the Android's and the emulated device's light are registered
+//! ([the display group's](groups::DISPLAY) sliders, from 0, so no other
+//! number of the panel is mistaken for one). Where there is no second
+//! one, the left band is not taken.
+//!
+//! Where the finger ends without it coming to the light, what runs is
+//! what would run there without a band, as dispatch walks it: the
+//! screen's own gestures, then the key map's where the kernel answers
+//! for it (neither under its own-gestures nor its gestures-off policy),
+//! the ordinary 3×3 zones of the key map (a layer's own needs asking
+//! the kernel for, which no view of the key map does yet), a double tap
+//! of a zone waited for, and a long press fired at its time while the
+//! finger still holds. What a pinch begun in a band makes also rests a
+//! platform's limit: a finger a screen has taken is the screen's, and
+//! the kernel keeps no finger but its own.
 
 use alloc::string::ToString;
 use alloc::vec::Vec;
 
 use super::*;
-use paperpaw_sdk::builtin::settings as core_settings;
 use paperpaw_sdk::builtin::{GLOBAL_KEYMAP_LAYER, menus};
+use paperpaw_sdk::builtin::{groups, settings as core_settings};
 use paperpaw_sdk::{
-    Capability, Direction, Instant, PointerEvent, PointerPhase, Setting, SettingKind, SettingSpec,
-    SettingValue,
+    Capability, Direction, Instant, PointerEvent, PointerPhase, PointerTool, Setting, SettingKind,
+    SettingSpec, SettingValue,
 };
 
 /// How long a swipe in from an edge waits for its second one, on a
@@ -90,9 +103,16 @@ impl Target {
         })
     }
 
-    /// The shell's light-setting `n`: the slider numbers (from `min` 0)
-    /// among the reader's panel's entries, in the order they show, as
-    /// the shells register their light in.
+    /// The shell's light-setting `n`: the slider numbers of the display
+    /// group (from `min` 0) among the reader's panel's entries, in the
+    /// order they show, as the shells register their light in: the first
+    /// the brightness, the second the warmth where the device has one
+    /// (`shells/desktop`, `xteink` and `android` each put their light's
+    /// sliders at the panel's front, in the display group). No other
+    /// slider is a light's: the panel's every number is shown there, and
+    /// the reader's them (the font size, the spacing, the margins) come
+    /// in their reading groups, so a panel the user laid out anew puts
+    /// no non-light slider where a light's is.
     fn shell(env: &Env<'_>, n: usize) -> Option<SettingSpec> {
         let sliders: Vec<SettingSpec> = env
             .menus()
@@ -100,7 +120,9 @@ impl Target {
             .into_iter()
             .filter_map(|item| env.settings().spec(item.id.as_str()).cloned())
             .filter(|spec| {
-                matches!(spec.kind, SettingKind::Int { min: 0, .. }) && { spec.extra().slider }
+                matches!(spec.kind, SettingKind::Int { min: 0, .. })
+                    && spec.group == groups::DISPLAY
+                    && spec.extra().slider
             })
             .collect();
         sliders.get(n).cloned()
@@ -148,11 +170,21 @@ struct Drag {
     from: i64,
     /// The value shown now (`from` until the finger moves).
     value: i64,
+    /// The finger's tool, for the gestures its lift may make.
+    tool: PointerTool,
     /// What the finger is at, from its first move past the dead zone on:
     /// decided once, kept while it moves.
     intent: Option<Intent>,
     /// A value has been shown without being kept meanwhile.
     shown: bool,
+    /// When the long press of a finger held still is due. Kept only
+    /// while nothing else of the touch is decided: the first move past
+    /// the dead zone says what it is (as the kernel's recognizer stops
+    /// waiting for the long press once it moves).
+    hold: Option<Instant>,
+    /// The long press ran at its time, while the finger still held:
+    /// the finger does no more, its lift least (as the kernel's).
+    fired: bool,
 }
 
 /// The light at the screen's sides: a finger held in a band, and a
@@ -164,6 +196,14 @@ pub(super) struct LightSwipe {
     /// A side swipe that awaits its second one, as the kernel's edges
     /// wait for theirs.
     pending: Option<(Direction, Instant)>,
+    /// A band tap held back for its second, where something is bound
+    /// to `double-tap.<zone>`: the input the first tap would run, and
+    /// when it is too late for a second one.
+    tap: Option<(String, Instant)>,
+    /// What a finger's drag is showing without being kept, if it is:
+    /// the command to take the values back is the reader's while
+    /// another screen holds its place (`Screen::on_hide` asks none).
+    shown: bool,
 }
 
 /// The nine tap zones of the 3×3 grid over the screen, as key maps
@@ -268,6 +308,54 @@ impl LightSwipe {
             Target::of(env, 1)
         }
     }
+
+    /// The bands stand down: the finger taken let go, the tap held
+    /// back dropped, and what its light showed without being kept is
+    /// taken back where a context carries that answer.
+    pub(super) fn let_go(&mut self, cx: &mut Cx<'_, '_>) {
+        self.drag = None;
+        self.tap = None;
+        self.pending = None;
+        if self.shown {
+            self.shown = false;
+            cx.command(Command::PreviewSettings(Vec::new()));
+        }
+    }
+
+    /// The bands stand down for a time (another screen covers the
+    /// reader): the finger taken let go, the tap held back dropped.
+    /// Answers the values shown without being kept, for the context
+    /// that asks what is left of them (`Screen::on_show` does).
+    pub(super) fn covered(&mut self) -> bool {
+        self.drag = None;
+        self.tap = None;
+        self.shown
+    }
+}
+
+/// How long a held finger still has to make a long press. The kernel's
+/// thresholds read the setting as it is; the reader panel's editing
+/// keeps it between 100 and 5,000 ms, as a lift classification did.
+fn long_press_ms(env: &Env<'_>) -> u64 {
+    env.settings()
+        .read(&core_settings::LONG_PRESS_MS)
+        .clamp(100, 5_000) as u64
+}
+
+/// How long a tap waits for its second, as the kernel's holds one.
+fn double_ms(env: &Env<'_>) -> u64 {
+    env.settings()
+        .read(&core_settings::DOUBLE_TAP_MS)
+        .clamp(50, 2_000) as u64
+}
+
+/// Whether the key map's gestures answer on this screen now: the
+/// screen's own gestures and the buttons always do; the kernel keeps
+/// the key map's to itself under its own-gestures and gestures-off
+/// policies (see `gestures::Manager::recognized`), and so do the bands.
+fn gestures_standard(cx: &Cx<'_, '_>) -> bool {
+    let off = ["core.gestures.own", "core.gestures.off"];
+    bound(cx, "gestures.policy").is_none_or(|policy| !off.contains(&policy.as_str()))
 }
 
 /// The key map layers that answer for this screen, the most specific
@@ -301,103 +389,132 @@ impl ReaderScreen {
             return Handled::No;
         }
         match event.phase {
-            PointerPhase::Down => {
-                // A second finger is the pinch's; one on text being
-                // chosen or a link being taken stays theirs; a touch
-                // while reading aloud pauses it, as any tap does.
-                if self.light_swipe.drag.is_some()
-                    || self.selection.is_some()
-                    || self.linking.is_some()
-                    || self.aloud.is_some()
-                {
-                    return Handled::No;
-                }
-                let Some(target) = self.light_swipe.takes(&env, event.point) else {
-                    return Handled::No;
-                };
-                let from = target.aligned(target.value(&env));
-                self.light_swipe.drag = Some(Drag {
-                    pointer: event.id,
-                    left: event.point.x < i32::from(env.device().display.width) / 2,
-                    target,
-                    start: event.point,
-                    at: env.now(),
-                    from,
-                    value: from,
-                    intent: None,
-                    shown: false,
-                });
-                self.input_at = Some(env.now());
-                Handled::Yes
-            }
-            PointerPhase::Move => {
-                let holding = self
-                    .light_swipe
-                    .drag
-                    .as_ref()
-                    .is_some_and(|drag| drag.pointer == event.id);
-                if !holding {
-                    return Handled::No;
-                }
-                // How far a finger may wander and still tap: as much
-                // dead zone as a tap may wander, so a touch of a band
-                // (a thumb picked up to turn pages) flicks nothing.
-                let slop = env.metrics().mm(u32::try_from(
-                    env.settings().read(&core_settings::TAP_SLOP).clamp(0, 50),
-                )
-                .unwrap_or(3)) as i32;
-                let slop = slop.max(1);
-                let Some(drag) = self.light_swipe.drag.as_mut() else {
-                    return Handled::No;
-                };
-                let (dx, dy) = (event.point.x - drag.start.x, event.point.y - drag.start.y);
-                if drag.intent.is_none() {
-                    if dx.abs().max(dy.abs()) < slop {
-                        return Handled::Yes;
-                    }
-                    // A slide along the band is the light's work; a move
-                    // across, at least as far, is the page's.
-                    drag.intent = Some(if dy.abs() > dx.abs() {
-                        Intent::Light
-                    } else {
-                        Intent::Turn
-                    });
-                }
-                if drag.intent == Some(Intent::Light) {
-                    let value = drag
-                        .target
-                        .shown(&env, drag.from, drag.start.y - event.point.y);
-                    if value != drag.value {
-                        drag.value = value;
-                        drag.shown = true;
-                        cx.command(Command::PreviewSettings(alloc::vec![(
-                            drag.target.id.clone(),
-                            Some(SettingValue::Int(value)),
-                        )]));
-                    }
-                }
-                Handled::Yes
-            }
-            PointerPhase::Up | PointerPhase::Cancel => {
-                let Some(drag) = self
-                    .light_swipe
-                    .drag
-                    .take()
-                    .filter(|drag| drag.pointer == event.id)
-                else {
-                    return Handled::No;
-                };
-                if event.phase == PointerPhase::Cancel {
-                    // The finger was taken away (the system's): the
-                    // values shown go, nothing is kept, nothing runs.
-                    if drag.shown {
-                        cx.command(Command::PreviewSettings(Vec::new()));
-                    }
-                    return Handled::Yes;
-                }
-                self.lift_of(env, &drag, event, cx)
+            PointerPhase::Down => self.took_of(&env, event, cx),
+            PointerPhase::Move => self.moved_of(&env, event, cx),
+            PointerPhase::Up | PointerPhase::Cancel => self.lifted(&env, event, cx),
+        }
+    }
+
+    /// A finger coming down in a band: taken for the setting it names,
+    /// where the reader has none taken and none elsewhere going.
+    fn took_of(&mut self, env: &Env<'_>, event: &PointerEvent, cx: &mut Cx<'_, '_>) -> Handled {
+        // A second finger is the pinch's; one on text being
+        // chosen or a link being taken stays theirs; a touch
+        // while reading aloud pauses it, as any tap does.
+        if self.light_swipe.drag.is_some()
+            || self.selection.is_some()
+            || self.linking.is_some()
+            || self.aloud.is_some()
+        {
+            return Handled::No;
+        }
+        let Some(target) = self.light_swipe.takes(env, event.point) else {
+            return Handled::No;
+        };
+        let from = target.aligned(target.value(env));
+        // A finger held still: the long press it may make is due when
+        // the kernel's would (no second keeps it waiting).
+        let hold = env.now().add_millis(long_press_ms(env));
+        self.light_swipe.drag = Some(Drag {
+            pointer: event.id,
+            left: event.point.x < i32::from(env.device().display.width) / 2,
+            target,
+            start: event.point,
+            at: env.now(),
+            from,
+            value: from,
+            tool: event.tool,
+            intent: None,
+            shown: false,
+            hold: Some(hold),
+            fired: false,
+        });
+        self.input_at = Some(env.now());
+        cx.wake_at(hold);
+        Handled::Yes
+    }
+
+    /// A finger's move in a band: the slide says which value of the
+    /// light is shown; a move along it is the light's, across the
+    /// page's. The first to decide, the rest to follow.
+    fn moved_of(&mut self, env: &Env<'_>, event: &PointerEvent, cx: &mut Cx<'_, '_>) -> Handled {
+        let Some(drag) = self
+            .light_swipe
+            .drag
+            .as_mut()
+            .filter(|drag| drag.pointer == event.id)
+        else {
+            return Handled::No;
+        };
+        // How far a finger may wander and still tap: as much dead zone
+        // as a tap may wander, so a touch of a band (a thumb picked up
+        // to turn pages) flicks nothing.
+        let slop = env.metrics().mm(u32::try_from(
+            env.settings().read(&core_settings::TAP_SLOP).clamp(0, 50),
+        )
+        .unwrap_or(3)) as i32;
+        let (dx, dy) = (event.point.x - drag.start.x, event.point.y - drag.start.y);
+        if drag.intent.is_none() && dx.abs().max(dy.abs()) < slop.max(1) {
+            return Handled::Yes;
+        }
+        // The long press ran at its time: its lift makes nothing (as
+        // the kernel's), a move least, while the selection is shown.
+        if drag.fired {
+            return Handled::Yes;
+        }
+        if drag.intent.is_none() {
+            // A slide along the band is the light's work; a move
+            // across, at least as far, is the page's. Either way the
+            // finger is on its way: no long press comes.
+            drag.hold = None;
+            drag.intent = Some(if dy.abs() > dx.abs() {
+                Intent::Light
+            } else {
+                Intent::Turn
+            });
+        }
+        if drag.intent == Some(Intent::Light) {
+            let value = drag
+                .target
+                .shown(env, drag.from, drag.start.y - event.point.y);
+            if value != drag.value {
+                drag.value = value;
+                drag.shown = true;
+                self.light_swipe.shown = true;
+                cx.command(Command::PreviewSettings(alloc::vec![(
+                    drag.target.id.clone(),
+                    Some(SettingValue::Int(value)),
+                )]));
             }
         }
+        Handled::Yes
+    }
+
+    /// A finger's end in a band: its lift or its taking-away.
+    fn lifted(&mut self, env: &Env<'_>, event: &PointerEvent, cx: &mut Cx<'_, '_>) -> Handled {
+        let Some(drag) = self
+            .light_swipe
+            .drag
+            .take()
+            .filter(|drag| drag.pointer == event.id)
+        else {
+            return Handled::No;
+        };
+        if event.phase == PointerPhase::Cancel {
+            // The finger was taken away (the system's): the values
+            // shown go, nothing is kept, nothing runs.
+            if drag.shown {
+                self.light_swipe.shown = false;
+                cx.command(Command::PreviewSettings(Vec::new()));
+            }
+            return Handled::Yes;
+        }
+        if drag.fired {
+            // The long press ran while the finger held: it does nothing
+            // more, its lift least, as the kernel's.
+            return Handled::Yes;
+        }
+        self.lift_of(*env, &drag, event, cx)
     }
 
     /// The finger comes to rest: the value kept where the band set one,
@@ -411,6 +528,7 @@ impl ReaderScreen {
         cx: &mut Cx<'_, '_>,
     ) -> Handled {
         if drag.shown {
+            self.light_swipe.shown = false;
             cx.command(Command::PreviewSettings(Vec::new()));
         }
         match drag.intent {
@@ -444,7 +562,6 @@ impl ReaderScreen {
         event: &PointerEvent,
         cx: &mut Cx<'_, '_>,
     ) -> Handled {
-        let display = env.device().display;
         let mm = |setting: &Setting<i64>| -> u32 {
             u32::try_from(env.settings().read(setting).clamp(0, 50)).unwrap_or(0)
         };
@@ -456,62 +573,116 @@ impl ReaderScreen {
         let (dx, dy) = (event.point.x - drag.start.x, event.point.y - drag.start.y);
         if drag.intent == Some(Intent::Turn) {
             // In from the side the finger came down at, and more so than
-            // across: as a swipe in from that side would be.
+            // across: as a swipe in from that side would be. Where it
+            // does not qualify (outward, or askew), a stroke far enough
+            // is a plain swipe, as the band would otherwise be; a
+            // shorter one is nothing (an out-and-back drag is no tap).
             let inward = if drag.left { dx } else { -dx };
             if inward >= swipe_distance && dy.abs() < inward {
                 self.edge_swipe(&env, drag.left, cx);
+                return Handled::Yes;
             }
-            return Handled::Yes;
         }
         if dx * dx + dy * dy >= swipe_distance * swipe_distance {
             // A plain swipe, as the band would otherwise be: the
-            // screen's own gestures answer first (none of the book
-            // screen's), then the key map's.
+            // screen's own gestures answer first, then the key map's
+            // where its gestures are answered on this screen.
             let direction = swipe_direction(drag.start, event.point);
             let gesture = Gesture::new(
                 GestureKind::Swipe(direction),
                 drag.start,
                 event.point,
-                event.tool,
+                drag.tool,
             );
             if self.on_gesture(gesture, cx) == Handled::Yes {
                 return Handled::Yes;
             }
-            let side = self.mirrored_side(direction);
-            if let Some(action) = bound(cx, &alloc::format!("swipe.{}", side.id())) {
-                cx.command(Command::run(action));
+            if gestures_standard(cx) {
+                let side = self.mirrored_side(direction);
+                if let Some(action) = bound(cx, &alloc::format!("swipe.{}", side.id())) {
+                    cx.command(Command::run(action));
+                }
             }
             return Handled::Yes;
         }
-        if dx * dx + dy * dy > slop * slop {
-            // Between a tap and a swipe: nothing, as it is elsewhere.
+        if drag.intent == Some(Intent::Turn) || dx * dx + dy * dy > slop * slop {
+            // A turn's stroke that went nowhere, or between a tap and a
+            // swipe: nothing, as it is elsewhere.
             return Handled::Yes;
         }
         // A tap where it stands: the screen's own answers first (a word
         // at the page's edge, a status line, the corner, the way back),
-        // then what the zone it falls in has bound; held, a word turned
-        // into and the long tap of the zone.
-        let long_ms = env
-            .settings()
-            .read(&core_settings::LONG_PRESS_MS)
-            .clamp(100, 5_000);
-        let (kind, input) = if env.now().since(drag.at) >= long_ms as u64 {
-            (GestureKind::LongPress, "long-tap")
+        // then what the zone it falls in has bound. A held one waited
+        // for nothing: its long press ran at its time while the finger
+        // held (see `light_tick`), so a lift this late cannot be one.
+        let kind = if env.now().since(drag.at) >= long_press_ms(&env) {
+            GestureKind::LongPress
         } else {
-            (GestureKind::Tap, "tap")
+            GestureKind::Tap
         };
-        let gesture = Gesture::new(kind, drag.start, event.point, event.tool);
+        let gesture = Gesture::new(kind, drag.start, event.point, drag.tool);
         if self.on_gesture(gesture, cx) == Handled::Yes {
             return Handled::Yes;
         }
-        let mut zone = zone_of(drag.start, display.width, display.height);
+        self.zone_tap(&env, drag.start, kind == GestureKind::LongPress, cx);
+        Handled::Yes
+    }
+
+    /// What a tap (or long tap) of a band runs on the key map, keeping
+    /// what the kernel keeps of its dispatch: nothing of it under its
+    /// own-gestures and gestures-off policies; the zone of the ordinary
+    /// grid, mirrored where the pages go the other way round; nothing
+    /// where it is bound to nothing.
+    fn zone_tap(&mut self, env: &Env<'_>, at: Point, long: bool, cx: &mut Cx<'_, '_>) {
+        if !gestures_standard(cx) {
+            return;
+        }
+        let display = env.device().display;
+        let mut zone = zone_of(at, display.width, display.height);
         if self.mirrored() {
             zone = other_zone(zone);
         }
-        if let Some(action) = bound(cx, &alloc::format!("{input}.{zone}")) {
-            cx.command(Command::run(action));
+        if long {
+            // No double of a long tap is looked for, as the kernel does
+            // not.
+            if let Some(action) = bound(cx, &alloc::format!("long-tap.{zone}")) {
+                cx.command(Command::run(action));
+            }
+            return;
         }
-        Handled::Yes
+        let single = alloc::format!("tap.{zone}");
+        let double = alloc::format!("double-tap.{zone}");
+        if bound(cx, &double).is_none() {
+            // Nothing waits for a second: it runs now.
+            if let Some(action) = bound(cx, &single) {
+                cx.command(Command::run(action));
+            }
+            return;
+        }
+        // Something is bound to the second tap of the zone: the first is
+        // held back for it ([`double_ms`]), the second makes it, none
+        // makes the single when the time is out, and a first tap of
+        // another zone runs when a new one holds it back — as the
+        // kernel's holds one ([`gestures::Manager::single_or_double`]).
+        let now = env.now();
+        let until = now.add_millis(double_ms(env));
+        match self.light_swipe.tap.take() {
+            Some((held, holding)) if held == single && now < holding => {
+                if let Some(action) = bound(cx, &double) {
+                    cx.command(Command::run(action));
+                }
+            }
+            other => {
+                // The tap held back runs first, as it came first.
+                if let Some((held, _)) = other
+                    && let Some(action) = bound(cx, &held)
+                {
+                    cx.command(Command::run(action));
+                }
+                self.light_swipe.tap = Some((single, until));
+                cx.wake_at(until);
+            }
+        }
     }
 
     /// What a swipe in from a band's side runs, as the kernel reads its
@@ -524,8 +695,18 @@ impl ReaderScreen {
         } else {
             Direction::Right
         };
-        if bound(cx, "gestures.policy").is_some_and(|policy| policy.as_str() == "core.gestures.own")
-        {
+        // Where the screen's gestures are off, the kernel's edges are
+        // none (`gestures::Manager::edge_at` declines them before the
+        // finger is followed), so a band's stroke is none either. Under
+        // the screen's own, a swipe in from an edge needs its second
+        // one within a few seconds, a band's the same; under the
+        // standard one, it is what the edge is bound to.
+        let bound_policy = bound(cx, "gestures.policy");
+        let policy = bound_policy.as_ref().map(|id| id.as_str());
+        if policy == Some("core.gestures.off") {
+            return Handled::Yes;
+        }
+        if policy == Some("core.gestures.own") {
             let again = self
                 .light_swipe
                 .pending
@@ -559,6 +740,57 @@ impl ReaderScreen {
             }
         } else {
             side
+        }
+    }
+
+    /// The time the light's sides ask for, at the reader's own time:
+    /// the long press of a finger held still in a band (the kernel's
+    /// recognizers never saw the finger, so their own time cannot fire
+    /// it), and the single tap of a band held back for its second.
+    pub(super) fn light_tick(&mut self, cx: &mut Cx<'_, '_>) {
+        let env = *cx.env();
+        let now = env.now();
+        // The long press: held still and alone, its time come.
+        let held = self.light_swipe.drag.as_ref().and_then(|drag| {
+            drag.hold
+                .map(|due| (due, drag.start, drag.tool, drag.intent))
+        });
+        if let Some((due, start, tool, intent)) = held {
+            if now < due {
+                cx.wake_at(due);
+            } else if intent.is_none() {
+                // The long press runs at its time, where its finger
+                // never moved: the screen's own answers first (a word
+                // turned into), then the zone's long tap.
+                let drag = self.light_swipe.drag.as_mut();
+                if let Some(drag) = drag {
+                    drag.hold = None;
+                    drag.fired = true;
+                }
+                let gesture = Gesture::new(GestureKind::LongPress, start, start, tool);
+                if self.on_gesture(gesture, cx) != Handled::Yes {
+                    self.zone_tap(&env, start, true, cx);
+                }
+            } else {
+                // It moved while the time ran out: the long press is
+                // off, the lift's work already decided and kept.
+                if let Some(drag) = self.light_swipe.drag.as_mut() {
+                    drag.hold = None;
+                }
+            }
+        }
+        // The single tap of a band held back for its second: none came
+        // in time, so the first is what it was.
+        let tap = self.light_swipe.tap.clone();
+        if let Some((single, until)) = tap {
+            if now < until {
+                cx.wake_at(until);
+            } else {
+                self.light_swipe.tap = None;
+                if let Some(action) = bound(cx, &single) {
+                    cx.command(Command::run(action));
+                }
+            }
         }
     }
 }

@@ -328,6 +328,81 @@ fn a_held_touch_in_a_band_never_moves_the_light() {
 }
 
 #[test]
+fn a_long_press_in_a_band_fires_at_its_time_while_the_finger_holds() {
+    let mut reading = light("", true);
+    // Held still in the left band past the long press: it fires at its
+    // time as the kernel's would — a word turned into, the selection's
+    // — and the finger can do no more: its move adjust no light, and
+    // the taps of the zones turn no page while it is shown.
+    reading.sample(PointerPhase::Down, Point::new(60, 400));
+    let down = reading.now;
+    reading.pass_until(down + 800);
+    reading.sample(PointerPhase::Move, Point::new(60, 320));
+    reading.sample(PointerPhase::Up, Point::new(60, 320));
+    assert_eq!(reading.light_kept(WARMTH_ID), 50);
+    let between = reading.turned();
+    reading.slide(Point::new(420, 400), &[], true);
+    assert_eq!(reading.turned(), between, "the selection keeps the page");
+}
+
+#[test]
+fn a_double_tap_of_a_band_zone_makes_it_when_one_is_bound() {
+    let mut reading = light("[keymap.global]\ndouble-tap.left = core.next-page\n", true);
+    // Not on the first page: the single tap turns a page here.
+    reading.press(actions::NEXT_PAGE);
+    let before = reading.turned();
+    // One tap in the left band: it is held for its second, and the
+    // single tap of the zone comes only when the time is out.
+    reading.sample(PointerPhase::Down, Point::new(60, 400));
+    reading.sample(PointerPhase::Up, Point::new(60, 400));
+    assert_eq!(reading.turned(), before);
+    reading.pass_until(reading.now + 400);
+    assert_eq!(reading.turned(), before + 1, "as tap.left is bound there");
+
+    // Two taps within the time: the double is what they make, once.
+    reading.sample(PointerPhase::Down, Point::new(60, 400));
+    reading.sample(PointerPhase::Up, Point::new(60, 400));
+    let between = reading.turned();
+    reading.sample(PointerPhase::Down, Point::new(60, 400));
+    reading.sample(PointerPhase::Up, Point::new(60, 400));
+    reading.pass_until(reading.now + 400);
+    assert_eq!(reading.turned(), between + 1, "as double-tap.left is bound");
+}
+
+#[test]
+fn the_policies_the_kernel_keeps_the_key_map_also_keep_a_band() {
+    let mut reading = light(
+        "[keymap.global]\ngestures.policy = core.gestures.own\n",
+        true,
+    );
+    let before = reading.turned();
+    // The screen's own: the zone bindings are the kernel's, and none
+    // of them answers for a tap of a band.
+    reading.slide(Point::new(420, 400), &[], true);
+    assert_eq!(reading.turned(), before);
+
+    let mut reading = light(
+        "[keymap.global]\ngestures.policy = core.gestures.off\n",
+        true,
+    );
+    let before = reading.turned();
+    // Gestures off: no edge swipe answers, so a stroke across the band
+    // does nothing, where else it would go back.
+    reading.slide(Point::new(60, 400), &[Point::new(220, 400)], true);
+    assert_eq!(reading.turned(), before);
+}
+
+#[test]
+fn a_swipe_out_of_a_band_turns_pages_as_a_swipe_along_it_would() {
+    let mut reading = light("", true);
+    let before = reading.turned();
+    // Out of the left band, far enough: a plain swipe (the kernel's
+    // edge is gone the other way), which the key map turns pages with.
+    reading.slide(Point::new(90, 400), &[Point::new(5, 400)], true);
+    assert_eq!(reading.turned(), before + 1, "as swipe.left is bound there");
+}
+
+#[test]
 fn the_strips_the_kernel_keeps_at_the_edges_stay_its_own() {
     let mut reading = light("", true);
     let start = reading.shown().at();
@@ -360,11 +435,19 @@ fn at_zero_the_setting_switches_the_bands_off() {
 fn a_light_without_warmth_leaves_the_left_side_as_it_was() {
     let mut reading = light("", false);
     // A slide up in the left band: no warmth to set, so the finger was
-    // never taken; the page turns as any swipe up would bound there.
-    let on = reading.next_page();
+    // never taken; the kernel's recognizer takes it and turns the page
+    // with its own swipe.up bound there.
+    let before = reading.turned();
     reading.slide(Point::new(60, 700), &[Point::new(60, 500)], true);
     assert_eq!(reading.light_kept(BRIGHTNESS_ID), 0);
-    assert_eq!(reading.shown().at(), on, "as swipe.up is bound there");
+    assert_eq!(reading.turned(), before + 1, "as swipe.up is bound there");
+    // Nothing of the panel's other sliders came with it (the reader's
+    // margins are a zero-minimum slider of the same panel): shown as
+    // kept, both what there was.
+    assert_eq!(
+        reading.light_shown("core.margin"),
+        reading.light_kept("core.margin")
+    );
 
     // The right band still works.
     reading.slide(Point::new(420, 700), &[Point::new(420, 500)], true);
