@@ -4,6 +4,7 @@
 mod book;
 mod draw;
 mod hands_free;
+mod light;
 mod linking;
 mod marks;
 mod sample;
@@ -26,7 +27,7 @@ use paperpaw_sdk::status::context as status_context;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, FontHandle, Gesture, GestureKind, Handled, Id, Params,
-    Point, Rect, RefreshMode, Screen,
+    Point, PointerEvent, Rect, RefreshMode, Screen,
 };
 
 use crate::annotations::{self, Annotation, Kind, Mark};
@@ -137,6 +138,9 @@ pub(crate) struct ReaderScreen {
     auto_turn: Option<paperpaw_sdk::Instant>,
     /// Where skimming began, while skimming.
     skim_from: Option<Locator>,
+    /// The front light at the screen's sides (see `light`), the finger
+    /// taken along in a band, when one is.
+    light_swipe: light::LightSwipe,
     /// The book to open once the screen says it is being prepared (the
     /// first opening takes a while).
     preparing: Option<Params>,
@@ -178,6 +182,7 @@ impl ReaderScreen {
             resume: None,
             auto_turn: None,
             skim_from: None,
+            light_swipe: light::LightSwipe::default(),
             squeezed: None,
         }
     }
@@ -845,6 +850,14 @@ impl Screen for ReaderScreen {
             }
             _ => Handled::No,
         }
+    }
+
+    /// A finger along the screen's sides sets the light (see `light`),
+    /// kept from the pages': it only takes a finger that lands in a band
+    /// as the setting says, and lets the kernel's edges and the page
+    /// itself have the rest.
+    fn on_pointer(&mut self, event: &PointerEvent, cx: &mut Cx<'_, '_>) -> Handled {
+        self.on_light_pointer(event, cx)
     }
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
