@@ -381,7 +381,7 @@ pub mod image {
 pub mod text {
     pub use paperpaw_text::{Hinting, OUTLINES, ToneCurve, sfnt};
 
-    /// The [`Hinting`](Hinting) the setting
+    /// The [`Hinting`] the setting
     /// [`TEXT_HINTING`](crate::builtin::settings::TEXT_HINTING) is set to:
     /// its values, light where the value says none known here.
     pub fn hinting(value: &str) -> Hinting {
