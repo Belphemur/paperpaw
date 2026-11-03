@@ -19,6 +19,8 @@ change the plugin SDK.
   record how in their header (`paperpaw-fontgen --hinting`; the `fonts-default` build script runs it for the
   packs a build makes), so a device without runtime font rendering shows the same text as one with.
   SDK: `text::Hinting`, `Font::set_hinting`, `Fonts::set_hinting`, `builtin::settings::TEXT_HINTING`.
+  What a code plugin's file sees changed (the fonts' holding of the choice), so the plugin interface is
+  native i5: a code plugin built before must be built again.
 
 ### Changed
 

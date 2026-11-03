@@ -152,7 +152,7 @@ impl StoredPack {
     }
 
     /// How a pack was rendered (see [`crate::Hinting`]): what its header
-    /// records (see [`BitmapFont::hinting`], same byte).
+    /// records (see [`crate::BitmapFont::hinting`], same byte).
     pub fn hinting(&self) -> Hinting {
         self.hinting
     }
