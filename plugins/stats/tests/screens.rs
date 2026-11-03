@@ -199,6 +199,8 @@ fn buttons_move_through_the_overview() {
     app.press("down");
     assert!(app.shown().contains(">Calendar\n"), "{}", app.shown());
     app.press("down");
+    assert!(app.shown().contains(">Reading rhythm\n"), "{}", app.shown());
+    app.press("down");
     app.press("confirm");
     assert_eq!(app.screen(), "stats.books");
     // The books: the one last opened first, a book never read left out.
@@ -456,4 +458,40 @@ fn many_books_page_through_the_list() {
     app.press("confirm");
     assert_eq!(app.screen(), "stats.book");
     assert!(app.shown().starts_with("Book 40\n"), "{}", app.shown());
+}
+
+#[test]
+fn the_rhythm_shows_the_days_and_the_parts_of_the_day() {
+    for device in [X4, TOUCH] {
+        let mut app = app(device, two_days());
+        app.open("stats.rhythm", Params::new());
+        // And something was drawn.
+        let drawn = app.black();
+        assert!(drawn > 0, "{} black={drawn}", device.id);
+        let shown = app.shown();
+        assert!(shown.contains("Reading rhythm"), "{shown}");
+        // The parts of the day are named (where a bar's label fits; the
+        // narrow ones go).
+        assert!(
+            lines(&shown)
+                .iter()
+                .any(|l| l.contains("Afternoon") || l.contains("Night")),
+            "{shown}"
+        );
+        // How long a session lasted, from the log alone.
+        assert!(shown.contains("a session"), "{shown}");
+    }
+}
+
+#[test]
+fn the_rhythm_without_a_clock_says_why() {
+    for device in [X4, TOUCH] {
+        let mut app = App::new(device, MemoryStorage::new(), None, "", false);
+        app.open("stats.rhythm", Params::new());
+        assert!(
+            app.shown().contains("Statistics need the time of day"),
+            "{}",
+            app.shown()
+        );
+    }
 }
