@@ -38,8 +38,8 @@ mod store;
 mod sync;
 mod totals;
 mod widget;
-mod xerif;
 mod xcpt;
+mod xerif;
 
 #[cfg(test)]
 mod testing;

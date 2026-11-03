@@ -211,12 +211,7 @@ fn the_sync_screen_takes_crosspoint_s_reading_over() {
     let serial = paperpaw_sdk::positions::load(&app.storage, "books/serial.xtc").unwrap();
     assert_eq!(serial.at.section, 41);
     // Nothing of CrossPoint's was changed.
-    assert!(
-        app.storage
-            .0
-            .get(".crosspoint/global_stats.bin")
-            .is_some()
-    );
+    assert!(app.storage.0.get(".crosspoint/global_stats.bin").is_some());
     // And the row is there again, bringing nothing twice.
     app.open("stats.sync", Params::new());
     app.tap_on("Take over from CrossPoint");

@@ -308,11 +308,10 @@ pub(crate) fn bring(env: &Env<'_>, pace: &SharedPace) -> String {
         seconds: global.seconds,
         sessions: global.sessions,
     });
-    pace.borrow_mut()
-        .seed(&seeded, global.as_ref(), |path| {
-            let path = path.trim_start_matches('/');
-            books.iter().find(|b| b.path == path).map(|b| b.id)
-        });
+    pace.borrow_mut().seed(&seeded, global.as_ref(), |path| {
+        let path = path.trim_start_matches('/');
+        books.iter().find(|b| b.path == path).map(|b| b.id)
+    });
     message(env, &report)
 }
 
@@ -407,7 +406,11 @@ fn folders(storage: &dyn Storage) -> Vec<Folder> {
 
 /// What a book's folder brought: the book to write, where it was left,
 /// and the name of its folder to mark as brought over.
-type Brought = (Vec<Book>, Vec<(String, Locator, f32)>, Vec<(String, String)>);
+type Brought = (
+    Vec<Book>,
+    Vec<(String, Locator, f32)>,
+    Vec<(String, String)>,
+);
 
 /// The books of CrossPoint's folders: which records can be read and
 /// which books they belong to (by the paths hashed again), what was
@@ -445,9 +448,14 @@ fn bring_folders(
         if done.get(name).map(String::as_str) == Some(version.to_string().as_str()) {
             report.skipped += 1;
         } else {
-            bring_book(storage, &mut changed_books, *kind, &path, &record, &mut |left| {
-                left_at.push(left)
-            });
+            bring_book(
+                storage,
+                &mut changed_books,
+                *kind,
+                &path,
+                &record,
+                &mut |left| left_at.push(left),
+            );
             to_mark.push((String::from(name), version.to_string()));
         }
     }
@@ -641,7 +649,8 @@ pub(crate) fn import(storage: &dyn Storage, day_of: impl Fn(u32) -> i32) -> Resu
     let (mut changed_books, left_at, folders_marks) =
         bring_folders(storage, &folders(storage), &by_hash, &done, &mut report);
     to_mark.extend(folders_marks);
-    if let Some(mark) = bring_finished_books(storage, &paths, &done, &mut changed_books, &mut report)
+    if let Some(mark) =
+        bring_finished_books(storage, &paths, &done, &mut changed_books, &mut report)
     {
         to_mark.push(mark);
     }
