@@ -90,8 +90,7 @@ fn main() {
         }
         let data = std::fs::read(path).unwrap_or_else(|e| panic!("{path}: {e}"));
         let font = paperpaw_text::OutlineFont::new(data, &[("wght", weight)])
-            .unwrap_or_else(|e| panic!("{path}: {e}"))
-            .with_hinting(hinting);
+            .unwrap_or_else(|e| panic!("{path}: {e}"));
         // Latin, and the ligatures where the font has them.
         let charset = paperpaw_text::charset::chars;
         let ligatures = charset(paperpaw_text::charset::named("ligatures").unwrap_or(&[]))
@@ -103,9 +102,9 @@ fn main() {
             .filter(|size| !lean || *size <= LEAN_READING_MAX)
             .collect();
         let pack = if name == UI {
-            with_display(&font, &sizes, chars)
+            with_display(&font, &sizes, chars, hinting)
         } else {
-            paperpaw_text::build_pack(&font, &reading, chars)
+            paperpaw_text::build_pack_hinted(&font, &reading, chars, hinting)
         };
         write(&out.join(format!("{name}.ppfp")), &pack);
     }
@@ -120,11 +119,13 @@ fn main() {
 }
 
 /// The pack of the UI font: `chars` at `sizes`, and [`DISPLAY_CHARS`] at
-/// [`DISPLAY_SIZES`] too, with the font's kerning of `chars`.
+/// [`DISPLAY_SIZES`] too, with the font's kerning of `chars`, fitted to
+/// the pixel grid as `hinting` says.
 fn with_display(
     font: &paperpaw_text::OutlineFont,
     sizes: &[f32],
     chars: impl Iterator<Item = char> + Clone,
+    hinting: paperpaw_text::Hinting,
 ) -> Vec<u8> {
     let mut builder = paperpaw_text::PackBuilder::new();
     builder.kerning(&font.kerning_pairs(&chars.clone().collect::<Vec<char>>()));
@@ -138,7 +139,8 @@ fn with_display(
                 .map(|&size| (size, DISPLAY_CHARS.chars().collect())),
         );
     for (size, chars) in strikes {
-        let glyphs = font.rasterize_chars(chars.into_iter().filter(|&ch| font.has_char(ch)), size);
+        let chars = chars.into_iter().filter(|&ch| font.has_char(ch));
+        let glyphs = font.rasterize_chars(chars, size, hinting);
         builder.add_strike(size, font.line_metrics(size), glyphs);
     }
     builder.build()

@@ -59,6 +59,15 @@ pub paperpaw_text::FontError::UnsupportedVersion
 impl core::error::Error for paperpaw_text::FontError
 impl core::fmt::Display for paperpaw_text::FontError
 pub fn paperpaw_text::FontError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum paperpaw_text::Hinting
+pub paperpaw_text::Hinting::Light
+pub paperpaw_text::Hinting::Mono
+pub paperpaw_text::Hinting::None
+pub paperpaw_text::Hinting::Normal
+impl paperpaw_text::Hinting
+pub const paperpaw_text::Hinting::ALL: [paperpaw_text::Hinting; 4]
+pub const fn paperpaw_text::Hinting::name(self) -> &'static str
+pub fn paperpaw_text::Hinting::parse(&str) -> core::option::Option<paperpaw_text::Hinting>
 #[non_exhaustive] pub struct paperpaw_text::Around
 pub paperpaw_text::Around::after: core::option::Option<char>
 pub paperpaw_text::Around::base: paperpaw_lang::Direction

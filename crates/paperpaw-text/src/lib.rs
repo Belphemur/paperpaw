@@ -328,6 +328,20 @@ pub fn build_pack(
     sizes: &[f32],
     chars: impl IntoIterator<Item = char> + Clone,
 ) -> alloc::vec::Vec<u8> {
+    build_pack_hinted(font, sizes, chars, Hinting::None)
+}
+
+/// [`build_pack`] with every strike's ink fitted to the pixel grid as
+/// `hinting` says (see [`OutlineFont::rasterize_chars`]): advances,
+/// kerning, anchors and line metrics are the same as unhinted, so a book
+/// is laid out the same with either pack.
+#[cfg(feature = "outline")]
+pub fn build_pack_hinted(
+    font: &OutlineFont,
+    sizes: &[f32],
+    chars: impl IntoIterator<Item = char> + Clone,
+    hinting: Hinting,
+) -> alloc::vec::Vec<u8> {
     let mut builder = PackBuilder::new();
     let kerned: alloc::vec::Vec<char> = chars.clone().into_iter().collect();
     builder.kerning(&font.kerning_pairs(&kerned));
@@ -351,6 +365,7 @@ pub fn build_pack(
         let glyphs = font.rasterize_chars(
             chars.clone().into_iter().filter(|&ch| font.has_char(ch)),
             size,
+            hinting,
         );
         builder.add_strike(size, font.line_metrics(size), glyphs);
     }

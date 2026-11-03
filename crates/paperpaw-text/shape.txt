@@ -45,7 +45,7 @@ struct paperpaw_text::glyph::Glyph { left: i16, top: i16, width: u16, height: u1
 struct paperpaw_text::glyph::GlyphRef<'a> { left: i16, top: i16, width: u16, height: u16, advance: f32, data: &'a [u8], format: u8 }
 struct paperpaw_text::ink::TextInk { tone: paperpaw_text::curve::ToneCurve, flags: u32, dither: paperpaw_graphics::blit::Dither, spare: [u8; 3] }
 struct paperpaw_text::layout::Line { range: core::ops::range::Range<usize>, width: f32, spaces: usize, last: bool, hyphen: bool }
-struct paperpaw_text::outline::OutlineFont { data: alloc::borrow::Cow<'static, [u8]>, location: skrifa::instance::Location, hinting: paperpaw_text::hinting::Hinting }
+struct paperpaw_text::outline::OutlineFont { data: alloc::borrow::Cow<'static, [u8]>, location: skrifa::instance::Location }
 struct paperpaw_text::sfnt::FontInfo { family: alloc::string::String, bold: bool, italic: bool, weight: u16 }
 struct paperpaw_text::stored::PackLimits { index: usize, advances: usize }
 struct paperpaw_text::stored::StoredPack(0: alloc::rcs::rc::Rc<dyn paperpaw_text::stored::Pack>)

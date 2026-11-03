@@ -20,6 +20,7 @@ const paperpaw_text::bitmap::BitmapFont::VERTICAL: usize = 5
 const paperpaw_text::curve::ToneCurve::DARKEST: i8 = 2
 const paperpaw_text::curve::ToneCurve::LIGHTEST: i8 = -1
 const paperpaw_text::curve::ToneCurve::SMOOTH: paperpaw_text::curve::ToneCurve = ToneCurve { alphas: CURVES[1] }
+const paperpaw_text::hinting::Hinting::ALL: [paperpaw_text::hinting::Hinting; 4] = [ Hinting::None, Hinting::Light, Hinting::Normal, Hinting::Mono, ]
 const paperpaw_text::ink::TextInk::DEFAULT: paperpaw_text::ink::TextInk = TextInk { tone: ToneCurve::SMOOTH, flags: 0, dither: Dither::NONE, spare: [0
 const paperpaw_text::ink::TextInk::RIGHT_TO_LEFT: u32 = 1
 const paperpaw_text::layout::MAX_BREAKS: usize = 1_024usize
@@ -28,6 +29,7 @@ const paperpaw_text::stored::PackLimits::LARGE: paperpaw_text::stored::PackLimit
 const paperpaw_text::stored::PackLimits::SMALL: paperpaw_text::stored::PackLimits = PackLimits { index: 8 * 1024, advances: 4 * 1024, }
 enum paperpaw_text::font::Font { Bitmap(0: paperpaw_text::bitmap::BitmapFont), Stored(0: paperpaw_text::stored::StoredPack), Outline(0: paperpaw_text::outline::OutlineFont) }
 enum paperpaw_text::font::FontError { Invalid, NoCharmap, UnsupportedVersion, OutlinesNotSupported, TooLarge, OutOfMemory, Other(0: u16) }
+enum paperpaw_text::hinting::Hinting { None, Light, Normal, Mono }
 struct paperpaw_text::TextStyle<'a> { font: &'a paperpaw_text::font::Font, font_index: u16, size: f32, color: paperpaw_platform::pixel::Color, bolder: u16, curve: paperpaw_text::curve::ToneCurve, based: bool }
 struct paperpaw_text::anchors::Anchor { class: u8, x: i8, y: i8 }
 struct paperpaw_text::anchors::Anchors { list: [paperpaw_text::anchors::Anchor; 12], len: u8 }

@@ -142,8 +142,10 @@ fn an_outline_glyph_bitmap_is_bounded() {
     let size = 32.0;
     // Fitted to the grid or not.
     for hinting in paperpaw_text::Hinting::ALL {
-        let font = font.clone().with_hinting(hinting);
-        let (glyph, largest) = largest_allocation(|| font.rasterize('H', size));
+        let (glyph, largest) = largest_allocation(|| {
+            let mut glyphs = font.rasterize_chars(['H'], size, hinting);
+            glyphs.pop().map(|(_, glyph)| glyph).unwrap()
+        });
         assert!(largest <= 4 * 1024 * 1024, "{hinting:?}: {largest} bytes");
         let side = 8.0 * size;
         assert!(

@@ -141,12 +141,11 @@ fn run(args: Vec<String>) -> Result<(), String> {
 
     let data = std::fs::read(input).map_err(|e| format!("{input}: {e}"))?;
     let variations: Vec<(&str, f32)> = axes.iter().map(|(t, v)| (t.as_str(), *v)).collect();
-    let font = paperpaw_text::OutlineFont::new(data, &variations)
-        .map_err(|e| format!("{input}: {e}"))?
-        .with_hinting(hinting);
+    let font =
+        paperpaw_text::OutlineFont::new(data, &variations).map_err(|e| format!("{input}: {e}"))?;
     let ranges = ranges_of(&sets)?;
     let chars = paperpaw_text::charset::chars(&ranges);
-    let pack = paperpaw_text::build_pack(&font, &sizes, chars);
+    let pack = paperpaw_text::build_pack_hinted(&font, &sizes, chars, hinting);
     std::fs::write(output, &pack).map_err(|e| format!("{output}: {e}"))?;
     println!(
         "{output}: {} sizes, {:.1} KiB",
@@ -221,9 +220,8 @@ fn family_plugin(
         let mut variations = vec![("wght", *weight)];
         variations.extend(axes.iter().map(|(t, v)| (t.as_str(), *v)));
         let font = paperpaw_text::OutlineFont::new(data, &variations)
-            .map_err(|e| format!("{file}: {e} (a TrueType or OpenType font is needed)"))?
-            .with_hinting(hinting);
-        let pack = paperpaw_text::build_pack(&font, sizes, chars.clone());
+            .map_err(|e| format!("{file}: {e} (a TrueType or OpenType font is needed)"))?;
+        let pack = paperpaw_text::build_pack_hinted(&font, sizes, chars.clone(), hinting);
         let path = fonts.join(format!("{style}.ppfp"));
         std::fs::write(&path, &pack).map_err(|e| format!("{}: {e}", path.display()))?;
         ini.push_str(&format!("{style} = {style}.ppfp\n"));

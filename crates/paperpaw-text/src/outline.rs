@@ -25,7 +25,6 @@ use crate::raster::{self, Path, Pt};
 pub struct OutlineFont {
     data: Cow<'static, [u8]>,
     location: Location,
-    hinting: Hinting,
 }
 
 impl fmt::Debug for OutlineFont {
@@ -50,25 +49,7 @@ impl OutlineFont {
             return Err(FontError::NoCharmap);
         }
         let location = font.axes().location(variations.iter().copied());
-        Ok(OutlineFont {
-            data,
-            location,
-            hinting: Hinting::None,
-        })
-    }
-
-    /// This font rasterized with `hinting`: glyph ink fitted to the pixel
-    /// grid (see [`Hinting`]); advances and metrics are not changed.
-    #[must_use]
-    pub fn with_hinting(mut self, hinting: Hinting) -> OutlineFont {
-        self.hinting = hinting;
-        self
-    }
-
-    /// How it is rasterized: [`Hinting::None`] unless
-    /// [`OutlineFont::with_hinting`] said otherwise.
-    pub fn hinting(&self) -> Hinting {
-        self.hinting
+        Ok(OutlineFont { data, location })
     }
 
     fn font_ref(&self) -> Option<FontRef<'_>> {
@@ -184,19 +165,25 @@ impl OutlineFont {
             .collect()
     }
 
-    /// Rasterizes `ch`; missing characters render as U+FFFD or `.notdef`.
+    /// Rasterizes `ch` as the outline is drawn (unhinted); missing
+    /// characters render as U+FFFD or `.notdef`.
     pub fn rasterize(&self, ch: char, size: f32) -> Glyph {
-        self.rasterize_chars([ch], size)
+        self.rasterize_chars([ch], size, Hinting::None)
             .pop()
             .map_or_else(|| Glyph::empty(0.0), |(_, glyph)| glyph)
     }
 
-    /// Rasterizes each of `chars` at `size`, as [`OutlineFont::rasterize`]
-    /// does, but sets the hinter up once for all of them: for packs.
+    /// Rasterizes each of `chars` at `size` as [`OutlineFont::rasterize`]
+    /// does, its ink fitted to the pixel grid as `hinting` says (advances
+    /// and metrics as they are), the hinter set up once for all of them:
+    /// for packs. How a strike is fitted is the job's, not the font's: the
+    /// hinter is made for one size, and the font itself (which plugins
+    /// hand the kernel as [`Font::Outline`](crate::Font)) stays as it is.
     pub fn rasterize_chars(
         &self,
         chars: impl IntoIterator<Item = char>,
         size: f32,
+        hinting: Hinting,
     ) -> Vec<(char, Glyph)> {
         let Some(font) = self.font_ref() else {
             return chars
@@ -207,7 +194,7 @@ impl OutlineFont {
         let outlines = font.outline_glyphs();
         // A hinter that cannot be made for this font or size draws the
         // outline as it is.
-        let hinter = self.hinting.options().and_then(|options| {
+        let hinter = hinting.options().and_then(|options| {
             HintingInstance::new(&outlines, Size::new(size), &self.location, options).ok()
         });
         chars
