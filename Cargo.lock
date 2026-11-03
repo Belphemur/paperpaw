@@ -1634,7 +1634,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-aids"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "paperpaw-i18n",
  "paperpaw-sdk",
@@ -1643,7 +1643,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-battery"
-version = "1.0.3"
+version = "1.0.4"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",
@@ -1665,7 +1665,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-browser"
-version = "1.0.3"
+version = "1.0.4"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",
@@ -1678,7 +1678,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-calibre"
-version = "1.0.4"
+version = "1.0.5"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",
@@ -1691,7 +1691,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-diagnostics"
-version = "1.0.4"
+version = "1.0.5"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",
@@ -1758,7 +1758,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-fonts-browser"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "paperpaw-core",
  "paperpaw-digest",
@@ -1845,7 +1845,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-hyphenation-da"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-hyphen",
  "paperpaw-sdk",
@@ -1853,7 +1853,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-hyphenation-de"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-hyphen",
  "paperpaw-sdk",
@@ -1861,7 +1861,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-hyphenation-es"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-hyphen",
  "paperpaw-sdk",
@@ -1869,7 +1869,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-hyphenation-fr"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-hyphen",
  "paperpaw-sdk",
@@ -1877,7 +1877,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-hyphenation-it"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-hyphen",
  "paperpaw-sdk",
@@ -1885,7 +1885,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-hyphenation-nb"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-hyphen",
  "paperpaw-sdk",
@@ -1893,7 +1893,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-hyphenation-nl"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-hyphen",
  "paperpaw-sdk",
@@ -1901,7 +1901,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-hyphenation-pl"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-hyphen",
  "paperpaw-sdk",
@@ -1909,7 +1909,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-hyphenation-pt"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-hyphen",
  "paperpaw-sdk",
@@ -1917,7 +1917,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-hyphenation-ru"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-hyphen",
  "paperpaw-sdk",
@@ -1925,7 +1925,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-hyphenation-sv"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-hyphen",
  "paperpaw-sdk",
@@ -1933,7 +1933,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-hyphenation-uk"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "paperpaw-hyphen",
  "paperpaw-sdk",
@@ -1941,7 +1941,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-joplin"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",
@@ -1966,7 +1966,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-keys"
-version = "1.0.3"
+version = "1.0.4"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",
@@ -1978,7 +1978,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-koreader"
-version = "1.0.3"
+version = "1.0.4"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",
@@ -1991,7 +1991,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-kosync"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",
@@ -2033,7 +2033,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-menu-editor"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "paperpaw-app",
  "paperpaw-core",
@@ -2046,7 +2046,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-news"
-version = "1.0.5"
+version = "1.0.6"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",
@@ -2092,7 +2092,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-profiles"
-version = "1.0.4"
+version = "1.0.5"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",
@@ -2120,7 +2120,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-reading-goal"
-version = "1.0.3"
+version = "1.0.4"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",
@@ -2134,7 +2134,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-readwise"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",
@@ -2145,7 +2145,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-rules"
-version = "1.0.3"
+version = "1.0.4"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",
@@ -2190,7 +2190,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-stats"
-version = "1.0.4"
+version = "1.0.5"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",
@@ -2238,7 +2238,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-translate"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",
@@ -2277,7 +2277,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-wallabag"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",
@@ -2288,7 +2288,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-weather"
-version = "1.0.2"
+version = "1.0.3"
 dependencies = [
  "paperpaw-app",
  "paperpaw-core",
@@ -2301,7 +2301,7 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-widgets"
-version = "1.0.3"
+version = "1.0.4"
 dependencies = [
  "paperpaw-core",
  "paperpaw-graphics",
