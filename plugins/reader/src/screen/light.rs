@@ -653,7 +653,14 @@ impl ReaderScreen {
         let single = alloc::format!("tap.{zone}");
         let double = alloc::format!("double-tap.{zone}");
         if bound(cx, &double).is_none() {
-            // Nothing waits for a second: it runs now.
+            // Nothing waits for a second: it runs now. A tap held back
+            // for another zone's double runs first, as the kernel's own
+            // dispatch keeps ([`gestures::Manager::route_key_pending`]).
+            if let Some((held, _)) = self.light_swipe.tap.take()
+                && let Some(action) = bound(cx, &held)
+            {
+                cx.command(Command::run(action));
+            }
             if let Some(action) = bound(cx, &single) {
                 cx.command(Command::run(action));
             }
@@ -707,6 +714,18 @@ impl ReaderScreen {
             return Handled::Yes;
         }
         if policy == Some("core.gestures.own") {
+            // As the kernel's own edges (`gestures::Manager::edge_at`)
+            // decline a side nothing is bound to, a band's stroke in
+            // from it is none either: no second one waited for, no
+            // hint of one.
+            if bound(
+                cx,
+                &alloc::format!("edge.{}", self.mirrored_side(side).id()),
+            )
+            .is_none()
+            {
+                return Handled::Yes;
+            }
             let again = self
                 .light_swipe
                 .pending
