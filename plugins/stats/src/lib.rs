@@ -84,16 +84,11 @@ const RHYTHM: Id = Id::new_static("stats.rhythm");
 
 /// The words of the page shown, asked of the reader for the reading
 /// speed.
-const PAGE_WORDS: Event<PageWords> = Event::new("stats.page-words");
+pub(crate) const PAGE_WORDS: Event<PageWords> = Event::new("stats.page-words");
 
 /// Most stays kept while the device does not know the time (about
 /// 4 KiB): an hour or two of reading.
 const UNDATED: usize = 128;
-
-/// The words kept of the last pages, for the reading speed: a page's
-/// words are of no use once the reader has gone a few pages on (the
-/// words of a page read now are asked as it is shown).
-const PAGES_OF_WORDS: usize = 4;
 
 /// The book being read and the page it is on.
 #[derive(Debug, Clone)]
@@ -126,10 +121,6 @@ struct Stay {
 #[derive(Debug, Default)]
 struct State {
     session: Option<Session>,
-    /// The words of the last pages the reader showed, newest last, the
-    /// page they were of with them: what a sample of the reading speed
-    /// is made of (see `pace`).
-    words: Vec<(Rc<str>, Locator, u32)>,
     /// How fast and how long one reads, while this run of the plugin
     /// lasts (see `pace`).
     pace: pace::SharedPace,
@@ -241,12 +232,7 @@ impl State {
         }
         // The words of the page, where the reader said them: a sample of
         // how fast the page was read, of this book's and of all reading.
-        if let Some(words) = self
-            .words
-            .iter()
-            .find(|(said, said_at, _)| **said == *path && *said_at == at)
-            .map(|(_, _, words)| *words)
-        {
+        if let Some(words) = self.pace.borrow().words_of(&path, at) {
             self.pace.borrow_mut().record_wpm(book, duration, words);
         }
         if self.undated.len() < UNDATED && self.undated.try_reserve(1).is_ok() {
@@ -268,24 +254,7 @@ impl State {
             return;
         }
         let count = words.text().split_whitespace().count() as u32;
-        if count == 0 {
-            return;
-        }
-        // A page's words are kept for the page it was of: a few, the
-        // oldest gone where more come.
-        let said = (Rc::from(words.path.as_str()), words.start, count);
-        if let Some(at) = self
-            .words
-            .iter()
-            .position(|(path, at, _)| *path == said.0 && *at == said.1)
-        {
-            self.words[at] = said;
-        } else {
-            if self.words.len() >= PAGES_OF_WORDS {
-                self.words.remove(0);
-            }
-            self.words.push(said);
-        }
+        self.pace.borrow_mut().said(&words.path, words.start, count);
     }
 
     /// Once the device knows the time: records the stays kept until then,
@@ -406,7 +375,7 @@ impl State {
         }
         self.finish_page(env);
         // The words of the pages of another book are of no page now.
-        self.words.clear();
+        self.pace.borrow_mut().forget_words();
         let (page, pages) = page_of(reading);
         self.session = Some(Session {
             book: None,
@@ -603,7 +572,7 @@ impl Plugin for Stats {
             ..State::default()
         }));
         widget::register(r)?;
-        left::register(r)?;
+        left::register(r, pace.clone())?;
         r.add_setting_group({
             static SPEC: paperpaw_sdk::SettingGroupSpec =
                 paperpaw_sdk::SettingGroupSpec::new(GROUP, "stats.group").order(25);

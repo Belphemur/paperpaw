@@ -424,6 +424,16 @@ fn record_mean(record: &FromRecord) -> Option<u32> {
         .filter(|mean| *mean >= SESSION_LEGACY)
 }
 
+/// The words kept of the last pages the reader showed, for the reading
+/// speed and the time it still takes: a page's words are of no use once
+/// the reader has gone a few pages on (the words of a page read now are
+/// asked as it is shown).
+pub(crate) const PAGES_OF_WORDS: usize = 4;
+
+/// As many words as a page is taken to have, where the page shown has
+/// none to count (a picture, say), as CrossPoint calibrated it.
+pub(crate) const CALIBRATED_WORDS_PER_PAGE: u32 = 220;
+
 /// The pace the plugin keeps while it runs: the words a minute of the
 /// pages read (which the log alone cannot say, for it does not keep how
 /// many words a page has), and what the import of CrossPoint's data
@@ -436,6 +446,9 @@ pub(crate) struct Pace {
     books_session: Vec<(u16, SessionWindow)>,
     global_mean: Option<u32>,
     books_mean: Vec<(u16, u32)>,
+    /// The words of the last pages the reader showed, oldest last, the
+    /// page they were of with them (see [`PAGES_OF_WORDS`]).
+    words: Vec<(Rc<str>, paperpaw_sdk::document::Locator, u32)>,
 }
 
 impl Pace {
@@ -464,6 +477,70 @@ impl Pace {
                 .and_then(|(_, window)| window.value()),
             None => self.global_wpm.value(),
         }
+    }
+
+    /// The words a minute of a book, or of all books, where its window
+    /// is full: the only state of it that a time left may go by, for a
+    /// window still filling says nothing of the pace to come.
+    pub(crate) fn full_wpm(&self, book: Option<u16>) -> Option<u16> {
+        let window = match book {
+            Some(id) => self
+                .books_wpm
+                .iter()
+                .find(|(b, _)| *b == id)
+                .map(|(_, window)| window),
+            None => Some(&self.global_wpm),
+        };
+        window
+            .filter(|window| usize::from(window.count()) == WPM_WINDOW)
+            .and_then(WpmWindow::value)
+    }
+
+    /// The words of the page the reader showed, for the reading speed of
+    /// the pages to come: kept for the page it was of, a few, the oldest
+    /// gone where more come.
+    pub(crate) fn said(&mut self, path: &str, at: paperpaw_sdk::document::Locator, count: u32) {
+        if count == 0 {
+            return;
+        }
+        let said = (Rc::from(path), at, count);
+        if let Some(at) = self
+            .words
+            .iter()
+            .position(|(said_path, said_at, _)| **said_path == *path && *said_at == at)
+        {
+            self.words[at] = said;
+        } else {
+            if self.words.len() >= PAGES_OF_WORDS {
+                self.words.remove(0);
+            }
+            self.words.push(said);
+        }
+    }
+
+    /// How many words the page that began at `at` had, where the reader
+    /// said.
+    pub(crate) fn words_of(&self, path: &str, at: paperpaw_sdk::document::Locator) -> Option<u32> {
+        self.words
+            .iter()
+            .find(|(said, said_at, _)| **said == *path && *said_at == at)
+            .map(|(_, _, words)| *words)
+    }
+
+    /// How many words the page of `path` shown last had, where the
+    /// reader said.
+    pub(crate) fn page_words(&self, path: &str) -> Option<u32> {
+        self.words
+            .iter()
+            .rev()
+            .find(|(said, _, _)| **said == *path)
+            .map(|(_, _, words)| *words)
+    }
+
+    /// The words of the pages before are of no page now (another book
+    /// is shown).
+    pub(crate) fn forget_words(&mut self) {
+        self.words.clear();
     }
 
     /// How long a session lasted, of a book or of all books (see
@@ -704,6 +781,53 @@ mod tests {
         // The average is worked out again, never taken from the file.
         let w = SessionWindow::from_wire(7, 1, &samples, 0);
         assert_eq!(w.avg(), 100);
+    }
+
+    #[test]
+    fn the_words_of_pages_are_kept_for_their_place() {
+        use paperpaw_sdk::document::Locator;
+        let mut pace = Pace::default();
+        pace.said("books/a.epub", Locator::new(3, 0), 200);
+        pace.said("books/a.epub", Locator::new(3, 500), 180);
+        assert_eq!(
+            pace.words_of("books/a.epub", Locator::new(3, 500)),
+            Some(180)
+        );
+        assert_eq!(pace.words_of("books/a.epub", Locator::new(3, 0)), Some(200));
+        assert_eq!(pace.words_of("books/b.epub", Locator::new(3, 0)), None);
+        // The page shown last, whatever its place.
+        assert_eq!(pace.page_words("books/a.epub"), Some(180));
+        // Another book's words are of no page now.
+        pace.forget_words();
+        assert_eq!(pace.page_words("books/a.epub"), None);
+        // A page without words is no page to keep, and only a few are.
+        pace.said("books/a.epub", Locator::new(4, 0), 0);
+        assert_eq!(pace.page_words("books/a.epub"), None);
+        for page in 0..10u32 {
+            pace.said("books/a.epub", Locator::new(page, 0), 100 + page);
+        }
+        assert_eq!(pace.words.len(), PAGES_OF_WORDS);
+        assert_eq!(pace.page_words("books/a.epub"), Some(109));
+    }
+
+    #[test]
+    fn the_words_a_minute_shown_only_where_the_window_is_full() {
+        let mut pace = Pace::default();
+        for _ in 0..15 {
+            pace.record_wpm(Some(1), 60, 300);
+        }
+        // The book's window is full: it is the one to go by.
+        assert_eq!(pace.full_wpm(Some(1)), Some(300));
+        assert_eq!(pace.full_wpm(None), Some(300));
+        // A book never read: nothing of its own, and not all books'
+        // window asked for in its place.
+        assert_eq!(pace.full_wpm(Some(2)), None);
+        // A window still filling says nothing.
+        let mut pace = Pace::default();
+        for _ in 0..14 {
+            pace.record_wpm(None, 60, 300);
+        }
+        assert_eq!(pace.full_wpm(None), None);
     }
 
     #[test]
