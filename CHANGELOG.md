@@ -86,6 +86,10 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   (the default, drawn as before) or *Sharp*. Soft draws letters a step lighter (smooth where the screen shows grays),
   sharp a step darker and without grays on every screen; each book may have its own. A tone curve set by a theme
   (`core.text-curve`) still takes its place.
+- **Sharper letters** (#122). The font packs of the default fonts are built with their letters fitted to the pixel grid
+  (x-height, baseline and stems on whole pixels), so text looks even and crisp on the e-ink screen. Letter widths and
+  line metrics are as before, so a book breaks into the same pages. Packs on the card (Literata styles, scripts) are
+  not changed.
 - **Secure connections for plugins** (#81). Plugins can open HTTPS, IMAP and SMTP connections: the X4 does the encryption
   itself (one connection at a time), the emulator and the Android app use rustls. A server whose certificate no authority
   vouches for is shown and trusted only after you say so, and then only that certificate or key. The X4 just after a
@@ -121,6 +125,12 @@ This is a beta. Keep a copy of your books. The details for plugin authors follow
   faces move the contrast of `TEXT_CONTRAST` a step lighter (soft) or darker and without grays (sharp); normal and a
   value it does not know draw as before, and `TEXT_CURVE` takes its place. New constants, no change of what plugins
   built before see.
+- Text: `paperpaw_text::Hinting` (none, light, normal, mono; `ALL`, `parse`, `name`) and, with the `outline` feature,
+  `OutlineFont::rasterize_chars(chars, size, hinting)` and `build_pack_hinted(font, sizes, chars, hinting)` (#122): packs
+  made on a computer with their letters fitted to the pixel grid; advances, kerning and line metrics as unhinted, so
+  books lay out the same. `build_pack` and `rasterize` stay unhinted. `paperpaw-fontgen --hinting <none|light|normal|mono>`
+  (unhinted unless asked); the default fonts are built light (`PAPERPAW_FONT_HINT` to compare). New items, no change of
+  what plugins built before see.
 - UI: focus moves that follow *Arrow keys stay on the page* (`builtin::settings::ARROWS_STAY_ON_PAGE`,
   `core.arrows-stay-on-page`, #112): `ListView::navigate_in` and `move_focus_in`, `Rows::step_in`,
   `Sections::step_in` and `ui::step_focus_in` (for a focus of a screen's own over pages of `page` things) take the
