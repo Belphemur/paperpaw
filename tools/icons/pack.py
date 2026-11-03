@@ -48,7 +48,8 @@ def main():
         icon_font(source, [codes[name] for name in names]).save(ttf)
         chars = ",".join(f"U+{codes[name]:X}" for name in names)
         subprocess.run([str(FONTGEN), str(ttf), str(out / "fonts" / "icons.ppfp"),
-                        "--chars", chars, "--sizes", SIZES], check=True)
+                        "--chars", chars, "--sizes", SIZES, "--hinting", "none"],
+                       check=True)
     (out / "plugin.ini").write_text(
         "[plugin]\n"
         f"id = {id}\n"

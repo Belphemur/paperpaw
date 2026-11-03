@@ -43,6 +43,8 @@ pub mod fuzz;
 mod glyph;
 mod hangul;
 pub use hangul::has_jamo;
+mod hinting;
+pub use hinting::Hinting;
 mod ink;
 mod kern_table;
 #[cfg(feature = "outline")]
@@ -346,12 +348,10 @@ pub fn build_pack(
         builder.table(BitmapFont::ANCHORS, 1, &anchors::build(&anchored));
     }
     for &size in sizes {
-        let glyphs = chars
-            .clone()
-            .into_iter()
-            .filter(|&ch| font.has_char(ch))
-            .map(|ch| (ch, font.rasterize(ch, size)))
-            .collect();
+        let glyphs = font.rasterize_chars(
+            chars.clone().into_iter().filter(|&ch| font.has_char(ch)),
+            size,
+        );
         builder.add_strike(size, font.line_metrics(size), glyphs);
     }
     builder.build()

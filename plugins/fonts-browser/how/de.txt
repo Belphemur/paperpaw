@@ -17,3 +17,5 @@ paperpaw-fontgen --family "Meine Schrift" --regular Meine-Normal.ttf --bold Mein
 Das erzeugt den Ordner plugins/font-meine-schrift. Kopiere ihn in den Ordner plugins auf der Speicherkarte, starte neu und wähle Meine Schrift bei Schriftart. Ein Paket mit einem Schnitt hat für lateinische Buchstaben etwa ein halbes Megabyte; Schnitte, die du weglässt, werden in Normal gezeichnet. Das Werkzeug sagt, wie viele der verlangten Zeichen die Schrift hat (--chars latin,cyrillic,greek fügt Schriften hinzu): Eine Schrift ohne die Buchstaben deines Buches kann sie nicht zeigen, such also eine, die deren Schrift abdeckt.
 
 Schriften aus Mehr Schriften funktionieren genauso und brauchen keinen Computer.
+
+Für schärfere kleine Schrift auf dem E-Ink-Display füge --hinting light zum Befehl hinzu: Es passt die Buchstaben ans Pixelraster an, so wie die mitgelieferten Schriften gemacht sind. Ohne das werden die Buchstaben gezeichnet, wie die Schrift sie entworfen hat; --hinting normal und --hinting mono passen sie stärker an. Schriften mit Zeichen über oder unter den Buchstaben, wie Arabisch oder Devanagari, lässt man besser ohne.

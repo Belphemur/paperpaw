@@ -47,7 +47,8 @@ FACES = [
 
 def pack(file, weight, sizes, out):
     subprocess.run([str(FONTGEN), str(FONTS / file), str(out), "--sizes", sizes,
-                    "--chars", "latin,ligatures", "--axis", f"wght={weight}"], check=True)
+                    "--chars", "latin,ligatures", "--hinting", "none",
+                    "--axis", f"wght={weight}"], check=True)
 
 
 def plugin(out, id, sections):

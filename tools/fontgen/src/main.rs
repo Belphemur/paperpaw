@@ -22,6 +22,14 @@ card. Then choose it in Settings, under Reading, as Font.
 OPTIONS:
     --sizes <px,...>      Pixel sizes to render (default: 20,24,28,32,36,40,48)
     --axis <tag=value>    Set a variation axis, e.g. --axis wght=700 (repeatable)
+    --hinting <mode>      Fit the letters to the pixel grid: none (default:
+                          the outline as drawn), light (even, crisp letters
+                          at about the unfitted weight: the look of the
+                          default fonts), normal (stems on whole pixels:
+                          heavier) or mono (one pixel stems: the crispest,
+                          the lightest). Only the ink changes: a book breaks
+                          into the same pages. Letters with marks (Arabic,
+                          Devanagari ...) are best left at none.
     --chars <set,...>     Character sets (default: latin,ligatures; the names
                           are listed below), code points: U+EA01, U+EA01-EA0F
                           (e.g. icons), or @FILE: code points listed in a file
@@ -67,6 +75,9 @@ fn run(args: Vec<String>) -> Result<(), String> {
     let mut sizes = vec![20.0, 24.0, 28.0, 32.0, 36.0, 40.0, 48.0];
     let mut axes: Vec<(String, f32)> = Vec::new();
     let mut sets = vec![String::from("latin"), String::from("ligatures")];
+    // Unhinted unless asked: a pack made by a script (marks, other scripts)
+    // keeps the outline as drawn. The default fonts are made light.
+    let mut hinting = paperpaw_text::Hinting::None;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -84,6 +95,11 @@ fn run(args: Vec<String>) -> Result<(), String> {
                             .map_err(|_| format!("invalid size `{s}`"))
                     })
                     .collect::<Result<_, _>>()?;
+            }
+            "--hinting" => {
+                let mode = args.next().ok_or("--hinting requires a value")?;
+                hinting = paperpaw_text::Hinting::parse(&mode)
+                    .ok_or_else(|| format!("--hinting: `{mode}` is none, light, normal or mono"))?;
             }
             "--family" => family = Some(args.next().ok_or("--family requires a name")?),
             "--regular" | "--bold" | "--italic" | "--bold-italic" => {
@@ -114,7 +130,7 @@ fn run(args: Vec<String>) -> Result<(), String> {
             return Err(format!("expected one output folder\n\n{}", usage()));
         };
         let ranges = ranges_of(&sets)?;
-        return family_plugin(&name, &faces, folder, &sizes, &ranges, &axes);
+        return family_plugin(&name, &faces, folder, &sizes, &ranges, &axes, hinting);
     }
     let [input, output] = positional.as_slice() else {
         return Err(format!(
@@ -125,8 +141,9 @@ fn run(args: Vec<String>) -> Result<(), String> {
 
     let data = std::fs::read(input).map_err(|e| format!("{input}: {e}"))?;
     let variations: Vec<(&str, f32)> = axes.iter().map(|(t, v)| (t.as_str(), *v)).collect();
-    let font =
-        paperpaw_text::OutlineFont::new(data, &variations).map_err(|e| format!("{input}: {e}"))?;
+    let font = paperpaw_text::OutlineFont::new(data, &variations)
+        .map_err(|e| format!("{input}: {e}"))?
+        .with_hinting(hinting);
     let ranges = ranges_of(&sets)?;
     let chars = paperpaw_text::charset::chars(&ranges);
     let pack = paperpaw_text::build_pack(&font, &sizes, chars);
@@ -177,6 +194,7 @@ fn family_plugin(
     sizes: &[f32],
     ranges: &[std::ops::RangeInclusive<char>],
     axes: &[(String, f32)],
+    hinting: paperpaw_text::Hinting,
 ) -> Result<(), String> {
     let id = slug(name);
     if id.is_empty() || name.contains(['\n', '\r']) {
@@ -203,7 +221,8 @@ fn family_plugin(
         let mut variations = vec![("wght", *weight)];
         variations.extend(axes.iter().map(|(t, v)| (t.as_str(), *v)));
         let font = paperpaw_text::OutlineFont::new(data, &variations)
-            .map_err(|e| format!("{file}: {e} (a TrueType or OpenType font is needed)"))?;
+            .map_err(|e| format!("{file}: {e} (a TrueType or OpenType font is needed)"))?
+            .with_hinting(hinting);
         let pack = paperpaw_text::build_pack(&font, sizes, chars.clone());
         let path = fonts.join(format!("{style}.ppfp"));
         std::fs::write(&path, &pack).map_err(|e| format!("{}: {e}", path.display()))?;
@@ -303,6 +322,54 @@ mod tests {
         assert!(dir.join("fonts/bold.ppfp").is_file());
         assert!(!dir.join("fonts/italic.ppfp").exists());
         std::fs::remove_dir_all(out).ok();
+    }
+
+    /// Packs are unhinted unless `--hinting` asks (#122): the scripts that
+    /// make the script, Literata-style and icon packs rely on it, and say
+    /// so themselves.
+    #[test]
+    fn packs_are_unhinted_unless_asked() {
+        let font = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../plugins/fonts-default/fonts/Literata.ttf"
+        );
+        let out = std::env::temp_dir().join(format!("fontgen-hinting-{}", std::process::id()));
+        let make = |name: &str, extra: &[&str]| {
+            let file = out.join(format!("{name}.ppfp"));
+            let mut args: Vec<String> = [
+                font,
+                file.to_str().unwrap(),
+                "--sizes",
+                "20",
+                "--chars",
+                "latin",
+            ]
+            .map(String::from)
+            .into();
+            args.extend(extra.iter().map(|a| (*a).to_string()));
+            run(args).unwrap();
+            std::fs::read(file).unwrap()
+        };
+        std::fs::create_dir_all(&out).unwrap();
+        let default = make("default", &[]);
+        assert_eq!(default, make("none", &["--hinting", "none"]));
+        assert_ne!(default, make("light", &["--hinting", "light"]));
+        std::fs::remove_dir_all(out).ok();
+    }
+
+    /// The scripts that rebuild released packs name the unhinted mode, so
+    /// that a changed default cannot turn their bytes under the same
+    /// versions.
+    #[test]
+    fn the_pack_scripts_say_none() {
+        for script in ["script-pack.py", "literata-packs.py", "icons/pack.py"] {
+            let path = format!("{}/../{script}", env!("CARGO_MANIFEST_DIR"));
+            let text = std::fs::read_to_string(&path).unwrap();
+            assert!(
+                text.contains("\"--hinting\", \"none\""),
+                "{script} makes packs without saying `--hinting none`"
+            );
+        }
     }
 
     /// The Korean letters come in two packs (#61): `hangul-ks.txt` for the
