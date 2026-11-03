@@ -1172,12 +1172,30 @@ fn headers_are_centred_by_their_capitals() {
                 failures.push(format!("{profile} screen {n}: no ink in the title"));
                 continue;
             };
-            let rows: Vec<u32> = (y..end)
-                .filter(|row| (start..stop).any(|col| gray[(row * width + col) as usize] < 128))
-                .collect();
-            let (first, last) = (rows[0], rows[rows.len() - 1]);
+            // The capital's extents. Its top is the run's first row with
+            // ink; its bottom is the last row where one of the columns inked
+            // at that top row still draws. A run may have taken the next
+            // letter in, now that the glyphs are grid-fitted ("By tag"):
+            // that letter's tail hangs below the first letter's bottom, but
+            // no column of it draws at the first letter's top row, so it
+            // stays out.
+            let ink_at = |row: u32, col: u32| gray[(row * width + col) as usize] < 128;
+            let first = (y..end).find(|row| (start..stop).any(|col| ink_at(*row, col)));
+            let last = first.and_then(|top_row| {
+                (top_row..end)
+                    .rev()
+                    .find(|row| (start..stop).any(|col| ink_at(top_row, col) && ink_at(*row, col)))
+            });
+            let (first, last) = match (first, last) {
+                (Some(first), Some(last)) => (first, last),
+                _ => {
+                    failures.push(format!("{profile} screen {n}: no ink in the title"));
+                    continue;
+                }
+            };
             let above = first - y;
             let below = end - last - 1;
+
             if above.abs_diff(below) > 1 {
                 failures.push(format!(
                     "{profile} screen {n} ({script}): {above} px above the capital, {below} below"
