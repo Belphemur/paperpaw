@@ -10,6 +10,7 @@ use paperpaw_sdk::{
     Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, Screen,
 };
 
+use crate::pace::SharedPace;
 use crate::store::{self, Book};
 use crate::totals::{self, BookTotals};
 use crate::{books, chart, fmt};
@@ -22,22 +23,27 @@ pub(crate) struct BookView {
     header: ui::Header,
     book: Option<Book>,
     totals: BookTotals,
+    /// How fast the book was read and how long a stretch of reading
+    /// lasted, read when the screen was opened.
+    pace: Vec<(String, String)>,
 }
 
 impl BookView {
-    pub(crate) fn new(env: &Env<'_>, params: &Params) -> Self {
+    pub(crate) fn new(env: &Env<'_>, params: &Params, pace: SharedPace) -> Self {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let id = params.get(params::ID).and_then(|id| id.parse::<u16>().ok());
-        let book = id.and_then(|id| store::books(env.storage()).into_iter().find(|b| b.id == id));
-        let totals = book.as_ref().map_or_else(BookTotals::default, |book| {
+        let found = id.and_then(|id| store::books(env.storage()).into_iter().find(|b| b.id == id));
+        let totals = found.as_ref().map_or_else(BookTotals::default, |book| {
             totals::of_book(env.storage(), book, |unix| fmt::day_of(env, unix))
         });
+        let pace = pace_rows(env, found.as_ref(), &pace);
         Self {
             style,
             header,
-            book,
+            book: found,
             totals,
+            pace,
         }
     }
 
@@ -93,6 +99,29 @@ impl BookView {
     }
 }
 
+/// How fast the book was read and how long a stretch of reading lasted,
+/// as far as there is to say of it, as rows of what and its value.
+fn pace_rows(env: &Env<'_>, book: Option<&Book>, pace: &SharedPace) -> Vec<(String, String)> {
+    let Some(book) = book else {
+        return Vec::new();
+    };
+    let pace = pace.borrow();
+    let mut rows = Vec::new();
+    if let Some(wpm) = pace.wpm(Some(book.id)) {
+        rows.push((
+            env.i18n().tr("stats.reading-speed").to_string(),
+            env.i18n().plural("stats.wpm", i64::from(wpm), &[]),
+        ));
+    }
+    if let Some(session) = pace.avg_session(env.storage(), Some(book.id)) {
+        rows.push((
+            env.i18n().tr("stats.session-avg").to_string(),
+            fmt::duration(env, u64::from(session)),
+        ));
+    }
+    rows
+}
+
 impl Screen for BookView {
     fn hint(&self, action: &Id, _: &Env<'_>) -> paperpaw_sdk::Hint {
         // Only back does anything here.
@@ -112,7 +141,12 @@ impl Screen for BookView {
             return;
         };
         let row = style.row() * 4 / 5;
-        let rows = self.rows(env, book);
+        let mut rows = self.rows(env, book);
+        rows.extend(
+            self.pace
+                .iter()
+                .map(|(what, value)| (what.clone(), value.clone())),
+        );
         for (n, (label, value)) in rows.iter().enumerate() {
             let rect = Rect::new(0, top + row * n as u16, display.width, row);
             ui::Row::value(label, value).draw(&mut ui, rect);

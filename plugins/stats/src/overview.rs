@@ -15,7 +15,7 @@ use paperpaw_sdk::{
 };
 
 use crate::store::{self, Day};
-use crate::{BOOK, BOOKS, CALENDAR, chart, fmt, totals};
+use crate::{BOOK, BOOKS, CALENDAR, RHYTHM, chart, fmt, totals};
 
 /// Days in the chart.
 const CHART_DAYS: i32 = 14;
@@ -24,6 +24,7 @@ const CHART_DAYS: i32 = 14;
 enum Row {
     ThisBook(u16),
     Calendar,
+    Rhythm,
     Books,
     Sync,
 }
@@ -69,7 +70,7 @@ impl Overview {
         if let Some(book) = current {
             rows.push(Row::ThisBook(book));
         }
-        rows.extend([Row::Calendar, Row::Books, Row::Sync]);
+        rows.extend([Row::Calendar, Row::Rhythm, Row::Books, Row::Sync]);
         let row = style.row();
         let gap = style.gap();
         let list_height = row * rows.len() as u16;
@@ -267,6 +268,7 @@ impl Overview {
                 Command::OpenScreen(BOOK, Params::new().with(params::ID, format!("{book}")))
             }
             Row::Calendar => Command::OpenScreen(CALENDAR, Params::new()),
+            Row::Rhythm => Command::OpenScreen(RHYTHM, Params::new()),
             Row::Books => Command::OpenScreen(BOOKS, Params::new()),
             Row::Sync => Command::OpenScreen(crate::sync::SCREEN, Params::new()),
         });
@@ -407,6 +409,7 @@ fn draw_way(ui: &mut ui::Ui<'_>, rect: Rect, focused: bool, row: Row) {
     let key = match row {
         Row::ThisBook(_) => "stats.this-book",
         Row::Calendar => "stats.calendar",
+        Row::Rhythm => "stats.rhythm",
         Row::Books => "stats.books",
         Row::Sync => "stats.sync.title",
     };

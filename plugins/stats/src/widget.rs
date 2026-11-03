@@ -393,7 +393,7 @@ fn days(env: &Env<'_>) -> Option<(i32, Vec<Day>)> {
 }
 
 /// The first letter of a weekday's short name (0 being Sunday).
-fn initial<'a>(env: &Env<'a>, weekday: u8) -> &'a str {
+pub(crate) fn initial<'a>(env: &Env<'a>, weekday: u8) -> &'a str {
     let name = fmt::weekday_short(env, weekday);
     name.char_indices()
         .nth(1)

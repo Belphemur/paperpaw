@@ -32,10 +32,14 @@ mod koreader;
 mod left;
 mod merge;
 mod overview;
+mod pace;
+mod rhythm;
 mod store;
 mod sync;
 mod totals;
 mod widget;
+mod xcpt;
+mod xerif;
 
 #[cfg(test)]
 mod testing;
@@ -50,6 +54,8 @@ use core::cell::RefCell;
 use paperpaw_sdk::builtin::{events, menus, params};
 use paperpaw_sdk::digest::md5;
 use paperpaw_sdk::document::Locator;
+use paperpaw_sdk::event::Event;
+use paperpaw_sdk::reading::{self, PageWords};
 use paperpaw_sdk::{
     ActionSpec, Command, Commands, Env, FixedScreen, Id, Instant, Manifest, MenuEntry, Params,
     Plugin, RegisterError, Registrar, SettingSpec, StorageError, time,
@@ -73,6 +79,12 @@ const OVERVIEW: Id = Id::new_static("stats.overview");
 const CALENDAR: Id = Id::new_static("stats.calendar");
 const BOOKS: Id = Id::new_static("stats.books");
 const BOOK: Id = Id::new_static("stats.book");
+/// The rhythm of reading: the days and the times of day.
+const RHYTHM: Id = Id::new_static("stats.rhythm");
+
+/// The words of the page shown, asked of the reader for the reading
+/// speed.
+pub(crate) const PAGE_WORDS: Event<PageWords> = Event::new("stats.page-words");
 
 /// Most stays kept while the device does not know the time (about
 /// 4 KiB): an hour or two of reading.
@@ -109,6 +121,9 @@ struct Stay {
 #[derive(Debug, Default)]
 struct State {
     session: Option<Session>,
+    /// How fast and how long one reads, while this run of the plugin
+    /// lasts (see `pace`).
+    pace: pace::SharedPace,
     /// Stays read while the device did not know the time (or not written
     /// yet), oldest first, at most [`UNDATED`]; gone if the device is
     /// switched off before.
@@ -210,19 +225,37 @@ impl State {
         let max = env.settings().read(&MAX_SECONDS);
         let seconds = i64::try_from(env.now().since(since) / 1000).unwrap_or(i64::MAX);
         let duration = counted(seconds, min, max);
+        let (book, at) = (session.book, session.at);
+        let (path, page, pages) = (session.path.clone(), session.page, session.pages);
         if duration == 0 || !enabled(env) {
             return;
         }
+        // The words of the page, where the reader said them: a sample of
+        // how fast the page was read, of this book's and of all reading.
+        let words = self.pace.borrow().words_of(&path, at);
+        if let Some(words) = words {
+            self.pace.borrow_mut().record_wpm(book, duration, words);
+        }
         if self.undated.len() < UNDATED && self.undated.try_reserve(1).is_ok() {
             self.undated.push(Stay {
-                path: session.path.clone(),
-                page: session.page,
-                pages: session.pages,
+                path,
+                page,
+                pages,
                 start: since,
                 duration,
             });
         }
         self.date(env);
+    }
+
+    /// The words of the page the reader showed, for the reading speed of
+    /// the pages to come.
+    fn said(&mut self, env: &Env<'_>, words: &PageWords) {
+        if !enabled(env) {
+            return;
+        }
+        let count = words.text().split_whitespace().count() as u32;
+        self.pace.borrow_mut().said(&words.path, words.start, count);
     }
 
     /// Once the device knows the time: records the stays kept until then,
@@ -294,7 +327,7 @@ impl State {
     }
 
     /// The reader shows the page of `reading`.
-    fn turn(&mut self, env: &Env<'_>, reading: &events::Reading) {
+    fn turn(&mut self, env: &Env<'_>, reading: &events::Reading, out: &mut Commands) {
         let ((page, pages), at) = (page_of(reading), reading.at());
         let unchanged = self
             .session
@@ -327,18 +360,23 @@ impl State {
             });
             self.wrote(result);
         }
+        // The words of the page now shown, for the reading speed when it
+        // is turned.
+        out.push(reading::ask_page_words(&PAGE_WORDS));
     }
 
     /// A book is shown: the same one again (after a menu), or another.
-    fn open(&mut self, env: &Env<'_>, reading: &events::Reading) {
+    fn open(&mut self, env: &Env<'_>, reading: &events::Reading, out: &mut Commands) {
         if self
             .session
             .as_ref()
             .is_some_and(|s| *s.path == *reading.path)
         {
-            return self.turn(env, reading);
+            return self.turn(env, reading, out);
         }
         self.finish_page(env);
+        // The words of the pages of another book are of no page now.
+        self.pace.borrow_mut().forget_words();
         let (page, pages) = page_of(reading);
         self.session = Some(Session {
             book: None,
@@ -349,6 +387,7 @@ impl State {
             since: Some(env.now()),
         });
         self.date(env);
+        out.push(reading::ask_page_words(&PAGE_WORDS));
     }
 
     /// The book at `path` was closed: its page ends, and nothing is read
@@ -495,7 +534,7 @@ static ENTRIES: [MenuEntry; 2] = [
 ];
 static ICONS: [(Id, &str); 2] = [(GROUP, "chart-bar"), (OPEN, "chart-bar")];
 
-static SCREENS: [FixedScreen; 4] = [
+static SCREENS: [FixedScreen; 3] = [
     FixedScreen::new(OVERVIEW, "stats.title", |env, params| {
         Box::new(overview::Overview::new(env, params))
     }),
@@ -504,9 +543,6 @@ static SCREENS: [FixedScreen; 4] = [
     }),
     FixedScreen::new(BOOKS, "stats.books", |env, _| {
         Box::new(books::BookList::new(env))
-    }),
-    FixedScreen::new(BOOK, "stats.title", |env, params| {
-        Box::new(book::BookView::new(env, params))
     }),
 ];
 
@@ -529,9 +565,15 @@ impl Plugin for Stats {
         reason = "longer than the limit from before it was set; split it when it is next changed"
     )]
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        let state: Shared = Rc::new(RefCell::new(State::default()));
+        // The pace is shared with the screens that show it and with the
+        // import that seeds it.
+        let pace: pace::SharedPace = Rc::default();
+        let state: Shared = Rc::new(RefCell::new(State {
+            pace: pace.clone(),
+            ..State::default()
+        }));
         widget::register(r)?;
-        left::register(r)?;
+        left::register(r, pace.clone())?;
         r.add_setting_group({
             static SPEC: paperpaw_sdk::SettingGroupSpec =
                 paperpaw_sdk::SettingGroupSpec::new(GROUP, "stats.group").order(25);
@@ -545,7 +587,7 @@ impl Plugin for Stats {
         r.on(events::BOOK_OPENED, move |env, reading, out| {
             let mut state = s.borrow_mut();
             if enabled(env) {
-                state.open(env, reading);
+                state.open(env, reading, out);
             }
             state.tell(env, out);
         })?;
@@ -557,9 +599,14 @@ impl Plugin for Stats {
                 .as_ref()
                 .is_some_and(|session| *session.path == *reading.path);
             if same && enabled(env) {
-                state.turn(env, reading);
+                state.turn(env, reading, out);
             }
             state.tell(env, out);
+        })?;
+        // The words of the page shown, asked for with every page turned.
+        let s = state.clone();
+        r.on(PAGE_WORDS, move |env, words, _| {
+            s.borrow_mut().said(env, words);
         })?;
         let s = state.clone();
         r.on(events::BOOK_CLOSED, move |env, reading, out| {
@@ -616,11 +663,32 @@ impl Plugin for Stats {
             state.tell(env, out);
         })?;
 
-        // Sharing with KOReader.
-        sync::register(r, Rc::new(RefCell::new(sync::Sync::default())))?;
+        // Sharing with KOReader, and bringing CrossPoint's reading over.
+        sync::register(
+            r,
+            Rc::new(RefCell::new(sync::Sync::default())),
+            pace.clone(),
+        )?;
 
-        // The views.
+        // The views. The book's and the rhythm's read the pace.
         r.add_screens(&SCREENS)?;
+        use paperpaw_sdk::ScreenSpec;
+        let p = pace.clone();
+        r.add_screen(ScreenSpec::new(
+            BOOK,
+            "stats.title",
+            alloc::boxed::Box::new(move |env, params| {
+                alloc::boxed::Box::new(book::BookView::new(env, params, p.clone()))
+            }),
+        ))?;
+        let p = pace.clone();
+        r.add_screen(ScreenSpec::new(
+            RHYTHM,
+            "stats.rhythm",
+            alloc::boxed::Box::new(move |env, _| {
+                alloc::boxed::Box::new(rhythm::Rhythm::new(env, p.clone()))
+            }),
+        ))?;
         let s = state;
         r.add_action(ActionSpec::new(OPEN, "stats.title").handler(
             move |env: &Env<'_>, _, out: &mut Commands| {

@@ -559,6 +559,11 @@ pub(crate) fn days(storage: &dyn Storage, day_of: impl Fn(u32) -> i32) -> Vec<Da
     if covered + RECORD as u64 > size {
         return days;
     }
+    // The days summed anew (the log written anew, the time zone
+    // changed, or no days yet) take the reading brought over in again;
+    // where the days of before are kept and only new stays come, that
+    // reading is already in them.
+    let anew = covered == 0;
     let mut chunk = [0u8; RECORD * 64];
     let mut at = covered;
     while let Ok(n) = storage.read_at(&log, at, &mut chunk) {
@@ -587,6 +592,22 @@ pub(crate) fn days(storage: &dyn Storage, day_of: impl Fn(u32) -> i32) -> Vec<Da
             break;
         }
     }
+    if anew {
+        for day in imported_days(storage) {
+            let local = day_of(day.day.saturating_mul(86_400));
+            match days.binary_search_by_key(&local, |d| d.day) {
+                Ok(i) => days[i].seconds = days[i].seconds.saturating_add(day.seconds),
+                Err(i) => days.insert(
+                    i,
+                    Day {
+                        day: local,
+                        seconds: day.seconds,
+                        stays: 0,
+                    },
+                ),
+            }
+        }
+    }
     let summed = Summed {
         covered: at,
         zone,
@@ -604,6 +625,158 @@ pub(crate) fn days(storage: &dyn Storage, day_of: impl Fn(u32) -> i32) -> Vec<Da
     )]
     let _ = storage.write(&file, &out);
     days
+}
+
+/// Reading brought over from another device's statistics, kept on its
+/// own: the days in `days.bin` are derived from the log, and a log
+/// written anew (a merge with KOReader, say), a change of time zone or
+/// a cut while writing would take them away. A day in days since
+/// 1970-01-01 (as the other device counted them, without a time zone)
+/// and the seconds read on it; which local day that was is worked out
+/// as they are used, so a change of time zone moves them where it
+/// should.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ImportedDay {
+    /// In days since 1970-01-01.
+    pub day: u32,
+    pub seconds: u32,
+}
+
+impl ImportedDay {
+    fn encode(&self) -> [u8; 8] {
+        let mut out = [0u8; 8];
+        out[0..4].copy_from_slice(&self.day.to_le_bytes());
+        out[4..8].copy_from_slice(&self.seconds.to_le_bytes());
+        out
+    }
+
+    fn decode(b: &[u8]) -> Self {
+        Self {
+            day: u32::from_le_bytes([b[0], b[1], b[2], b[3]]),
+            seconds: u32::from_le_bytes([b[4], b[5], b[6], b[7]]),
+        }
+    }
+}
+
+/// The reading brought over, oldest last; none where there is none.
+/// What cannot be read is none: it is written anew by the next import.
+pub(crate) fn imported_days(storage: &dyn Storage) -> Vec<ImportedDay> {
+    let data =
+        paperpaw_sdk::read_file(storage, &path("imported-days.bin"), 8 * 4096).unwrap_or_default();
+    data.as_chunks::<8>()
+        .0
+        .iter()
+        .map(|b| ImportedDay::decode(b))
+        .filter(|day| day.seconds > 0)
+        .collect()
+}
+
+/// Keeps the reading brought over, in the order of their days.
+fn save_imported_days(storage: &dyn Storage, days: &[ImportedDay]) -> Result<(), StorageError> {
+    let mut out = Vec::with_capacity(days.len() * 8);
+    for day in days {
+        out.extend_from_slice(&day.encode());
+    }
+    storage.write(&path("imported-days.bin"), &out)
+}
+
+/// Brings the days read on another device into the statistics, so that
+/// they are there however the log of this device changes:
+///
+/// - the seconds read on them are kept in a file of their own (see
+///   [`ImportedDay`]), which [`days`] adds to what the log says
+///   wherever it sums the days anew, and which a later import of the
+///   same reading replaces day by day (never adds to again, so that
+///   running this says the same);
+/// - and they are put into `days.bin` with what the log says, so that
+///   the views see them at once, until the days are summed anew.
+///
+/// Where the log cannot be read whole, or nothing can be written,
+/// nothing is: an error comes back, with the days as they were.
+pub(crate) fn import_days(
+    storage: &dyn Storage,
+    day_of: impl Fn(u32) -> i32,
+    imported: &[(u32, u32)],
+) -> Result<(), StorageError> {
+    // The reading brought over before, with these days in place of the
+    // ones they say again (a changed source replaces, never adds to).
+    let mut kept = imported_days(storage);
+    for (day, seconds) in imported {
+        match kept.iter_mut().find(|kept| kept.day == *day) {
+            Some(kept) => kept.seconds = *seconds,
+            None => kept.push(ImportedDay {
+                day: *day,
+                seconds: *seconds,
+            }),
+        }
+    }
+    kept.retain(|day| day.seconds > 0);
+    kept.sort_by_key(|day| day.day);
+    save_imported_days(storage, &kept)?;
+    // What the log itself says of each day, without what is in days.bin
+    // already (that is written anew here).
+    let log = path("pages.bin");
+    let size = storage.size(&log).unwrap_or(0);
+    let mut first = [0u8; RECORD];
+    if storage.read_at(&log, 0, &mut first).ok() != Some(RECORD) {
+        first = [0; RECORD];
+    }
+    let mut days: Vec<Day> = Vec::new();
+    scan(storage, |stat| {
+        let day = day_of(stat.start);
+        match days.binary_search_by_key(&day, |d| d.day) {
+            Ok(i) => {
+                days[i].seconds = days[i].seconds.saturating_add(u32::from(stat.duration));
+                days[i].stays = days[i].stays.saturating_add(1);
+            }
+            Err(i) => days.insert(
+                i,
+                Day {
+                    day,
+                    seconds: u32::from(stat.duration),
+                    stays: 1,
+                },
+            ),
+        }
+    })?;
+    for day in &kept {
+        let local = day_of(day.day.saturating_mul(86_400));
+        match days.binary_search_by_key(&local, |d| d.day) {
+            Ok(i) => days[i].seconds = days[i].seconds.saturating_add(day.seconds),
+            Err(i) => days.insert(
+                i,
+                Day {
+                    day: local,
+                    seconds: day.seconds,
+                    stays: 0,
+                },
+            ),
+        }
+    }
+    write_days(storage, &days, size - size % RECORD as u64, first, &day_of)
+}
+
+/// Writes `days.bin` with the days summed, saying what of the log they
+/// cover: the bytes the log had when they were summed, the time zone
+/// and the log's first stay.
+fn write_days(
+    storage: &dyn Storage,
+    days: &[Day],
+    covered: u64,
+    first: [u8; RECORD],
+    day_of: &impl Fn(u32) -> i32,
+) -> Result<(), StorageError> {
+    let summed = Summed {
+        covered,
+        zone: zone(day_of),
+        first,
+    };
+    let mut out = Vec::with_capacity(HEADER + days.len() * DAY);
+    out.extend_from_slice(&summed.encode());
+    for d in days {
+        out.extend_from_slice(&d.encode());
+    }
+    storage.write(&path("days.bin"), &out)
 }
 
 /// Calls `visit` for every stay, oldest first. A read error ends the
