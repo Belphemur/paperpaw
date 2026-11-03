@@ -114,7 +114,7 @@ struct Making {
     /// ([`first_generation`]).
     first: u64,
     /// Where there was no catalog when it began: the books found so far
-    /// put into one at checkpoints ([`super::publish`]).
+    /// put into one at checkpoints (`super::publish`).
     publish: Option<Publish>,
 }
 
@@ -728,7 +728,7 @@ impl Walk {
 
     /// Whether, since this was asked last, the walk put the books it
     /// found so far into the catalog, there being none when it began
-    /// ([`super::publish`]): views are to hear of it (their sorted books
+    /// (`super::publish`): views are to hear of it (their sorted books
     /// made anew first), as of a catalog made anew.
     pub fn published(&mut self) -> bool {
         self.making.publish.as_mut().is_some_and(Publish::take_news)

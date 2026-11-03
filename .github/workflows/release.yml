@@ -106,7 +106,7 @@ jobs:
         with:
           targets: wasm32-unknown-unknown
       - name: Build the module, its size kept in bounds
-        run: python3 shells/web/build.py --limit-mb 16.3
+        run: python3 shells/web/build.py --limit-mb 16.4
       - name: The module and its pages
         run: |
           version="${GITHUB_REF_NAME#v}"

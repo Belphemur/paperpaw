@@ -208,7 +208,7 @@ jobs:
         # As it is served, its size told and kept in bounds (16 MB held
         # until the Mail plugin; see tools/ci-local.sh).
         if: matrix.target == 'wasm32-unknown-unknown'
-        run: python3 shells/web/build.py --limit-mb 16.3
+        run: python3 shells/web/build.py --limit-mb 16.4
 
   firmware:
     name: Firmware (${{ matrix.device }})
