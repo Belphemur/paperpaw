@@ -606,6 +606,78 @@ pub(crate) fn days(storage: &dyn Storage, day_of: impl Fn(u32) -> i32) -> Vec<Da
     days
 }
 
+/// Brings the days brought over from another device's statistics into
+/// `days.bin`: the seconds read on them are added to what the log says
+/// (never the other way round: what the log says stands), and the days
+/// are written anew from the log and those seconds together, so that
+/// running this again says the same, and a log written anew (a merge,
+/// say) only costs what was brought over, which another run brings
+/// back. Nothing is added where it cannot be read or written.
+pub(crate) fn import_days(
+    storage: &dyn Storage,
+    day_of: impl Fn(u32) -> i32,
+    imported: &[(i32, u32)],
+) {
+    if imported.is_empty() {
+        return;
+    }
+    let log = path("pages.bin");
+    let size = storage.size(&log).unwrap_or(0);
+    let mut first = [0u8; RECORD];
+    if storage.read_at(&log, 0, &mut first).ok() != Some(RECORD) {
+        first = [0; RECORD];
+    }
+    // What the log itself says of each day, without what is in days.bin
+    // already (that is written anew here).
+    let mut days: Vec<Day> = Vec::new();
+    scan(storage, |stat| {
+        let day = day_of(stat.start);
+        match days.binary_search_by_key(&day, |d| d.day) {
+            Ok(i) => {
+                days[i].seconds = days[i].seconds.saturating_add(u32::from(stat.duration));
+                days[i].stays = days[i].stays.saturating_add(1);
+            }
+            Err(i) => days.insert(
+                i,
+                Day {
+                    day,
+                    seconds: u32::from(stat.duration),
+                    stays: 1,
+                },
+            ),
+        }
+    })
+    .ok();
+    for (day, seconds) in imported {
+        match days.binary_search_by_key(day, |d| d.day) {
+            Ok(i) => days[i].seconds = days[i].seconds.saturating_add(*seconds),
+            Err(i) => days.insert(
+                i,
+                Day {
+                    day: *day,
+                    seconds: *seconds,
+                    stays: 0,
+                },
+            ),
+        }
+    }
+    let summed = Summed {
+        covered: size - size % RECORD as u64,
+        zone: zone(&day_of),
+        first,
+    };
+    let mut out = Vec::with_capacity(HEADER + days.len() * DAY);
+    out.extend_from_slice(&summed.encode());
+    for d in &days {
+        out.extend_from_slice(&d.encode());
+    }
+    #[expect(
+        clippy::let_underscore_must_use,
+        reason = "what cannot be written is summed anew from the log and brought over again"
+    )]
+    let _ = storage.write(&path("days.bin"), &out);
+}
+
 /// Calls `visit` for every stay, oldest first. A read error ends the
 /// stays and is returned: then those visited are not all there are.
 pub(crate) fn scan(

@@ -38,6 +38,7 @@ use paperpaw_sdk::{
 use paperpaw_sdk::secrets::SecretChange;
 
 use crate::merge::{self, Failure, Outcome};
+use crate::pace::SharedPace;
 use paperpaw_sdk::setting::{Setting, Text};
 
 /// The folder (its address) and the user; the password is kept with the
@@ -500,6 +501,7 @@ fn import(env: &Env<'_>) -> String {
 pub(crate) fn register(
     r: &mut paperpaw_sdk::Registrar,
     sync: SharedSync,
+    pace: SharedPace,
 ) -> Result<(), paperpaw_sdk::RegisterError> {
     use paperpaw_sdk::ScreenSpec;
     r.on(paperpaw_sdk::builtin::events::STARTED, |env, (), out| {
@@ -523,7 +525,7 @@ pub(crate) fn register(
             SCREEN,
             "stats.sync.title",
             alloc::boxed::Box::new(move |env, _| {
-                alloc::boxed::Box::new(SyncScreen::new(env, sync.clone()))
+                alloc::boxed::Box::new(SyncScreen::new(env, sync.clone(), pace.clone()))
             }),
         )
         .instances(paperpaw_sdk::Instances::SINGLE),
@@ -537,6 +539,8 @@ enum Row {
     Password,
     SyncNow,
     Import,
+    /// CrossPoint's reading data, on the same card.
+    Xerif,
     /// The message whole, in a dialog, where it does not fit below.
     More,
 }
@@ -550,17 +554,22 @@ pub(crate) struct SyncScreen {
     note: Rect,
     rows: Vec<Row>,
     sync: SharedSync,
+    /// The pace, for what the import of CrossPoint's data seeds.
+    pace: SharedPace,
     message: String,
 }
 
 impl SyncScreen {
-    fn new(env: &Env<'_>, sync: SharedSync) -> Self {
+    fn new(env: &Env<'_>, sync: SharedSync, pace: SharedPace) -> Self {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device().display;
         let mut rows = Vec::from([Row::Folder, Row::User, Row::Password, Row::SyncNow]);
         if koreader_file(env).is_some() {
             rows.push(Row::Import);
+        }
+        if crate::xerif::present(env.storage()) {
+            rows.push(Row::Xerif);
         }
         let top = header.area().height + style.gap();
         let mut screen = Self {
@@ -572,6 +581,7 @@ impl SyncScreen {
             note: Rect::default(),
             rows,
             sync,
+            pace,
             message: env.i18n().tr("stats.sync.help").to_string(),
             style,
             header,
@@ -673,6 +683,10 @@ impl SyncScreen {
                 let message = import(&env);
                 self.show(message, cx);
             }
+            Row::Xerif => {
+                let message = crate::xerif::bring(&env, &self.pace);
+                self.show(message, cx);
+            }
             Row::More => cx.command(
                 paperpaw_sdk::ask::confirm(env.i18n().tr("stats.sync.title"), &READ)
                     .text(self.message.clone())
@@ -710,6 +724,7 @@ impl Screen for SyncScreen {
                     ),
                     Row::SyncNow => ("stats.sync.now", String::from("›")),
                     Row::Import => ("stats.import", String::from("›")),
+                    Row::Xerif => ("stats.xerif.import", String::from("›")),
                     Row::More => ("stats.sync.more", String::from("›")),
                 };
                 ui::Row::value(env.i18n().tr(title), &value)

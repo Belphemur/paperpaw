@@ -38,6 +38,8 @@ mod store;
 mod sync;
 mod totals;
 mod widget;
+mod xerif;
+mod xcpt;
 
 #[cfg(test)]
 mod testing;
@@ -692,7 +694,11 @@ impl Plugin for Stats {
         })?;
 
         // Sharing with KOReader, and bringing CrossPoint's reading over.
-        sync::register(r, Rc::new(RefCell::new(sync::Sync::default())))?;
+        sync::register(
+            r,
+            Rc::new(RefCell::new(sync::Sync::default())),
+            pace.clone(),
+        )?;
 
         // The views. The book's and the rhythm's read the pace.
         r.add_screens(&SCREENS)?;
