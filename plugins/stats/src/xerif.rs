@@ -130,6 +130,10 @@ fn recents(storage: &dyn Storage) -> Vec<(String, String, String)> {
 /// header, its folders, a record a book, and, at the end, the names.
 /// Read in place, a little at a time, for an index of a full card is
 /// more than a device holds at once.
+#[expect(
+    clippy::too_many_lines,
+    reason = "one reading of the index, its offsets beside the bytes they are of; splitting it would pass them all through three functions' hands"
+)]
 fn library_index(storage: &dyn Storage) -> Vec<(String, String, String)> {
     const MAGIC: &[u8; 4] = b"CLX1";
     const VERSION: u8 = 2;
@@ -483,10 +487,9 @@ fn folders(storage: &dyn Storage) -> Vec<Folder> {
 /// What the folders brought: the books to write, and per folder its
 /// name, the version of the record read, and where the book was left
 /// (so that the mark waits for the position to be kept).
-type Brought = (
-    Vec<Book>,
-    Vec<(String, String, Option<(String, Locator, f32)>)>,
-);
+type Kept = Vec<(String, String, Option<(String, Locator, f32)>)>;
+
+type Brought = (Vec<Book>, Kept);
 
 /// The books of CrossPoint's folders: which records can be read and
 /// which books they belong to (by the paths hashed again), what was
@@ -701,7 +704,7 @@ fn write_books(
 /// back: one whose position could not be kept is left for the next run.
 fn keep_positions(
     storage: &dyn Storage,
-    folders: Vec<(String, String, Option<(String, Locator, f32)>)>,
+    folders: Kept,
     report: &mut Report,
 ) -> Vec<(String, String)> {
     let mut marks = Vec::new();

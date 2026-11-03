@@ -232,7 +232,8 @@ impl State {
         }
         // The words of the page, where the reader said them: a sample of
         // how fast the page was read, of this book's and of all reading.
-        if let Some(words) = self.pace.borrow().words_of(&path, at) {
+        let words = self.pace.borrow().words_of(&path, at);
+        if let Some(words) = words {
             self.pace.borrow_mut().record_wpm(book, duration, words);
         }
         if self.undated.len() < UNDATED && self.undated.try_reserve(1).is_ok() {
