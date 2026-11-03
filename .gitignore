@@ -38,3 +38,6 @@ Thumbs.db
 
 # Python caches (tools)
 __pycache__/
+
+# pi agent task-store and session state (local only)
+.pi/
