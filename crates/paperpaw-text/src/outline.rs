@@ -1,28 +1,74 @@
 //! Runtime rendering of OpenType/TrueType fonts via `skrifa`.
+//!
+//! Glyphs are drawn to the panel's pixel grid as [`Hinting`] says, a
+//! font's own choice unless turned. The grid-fitting is work done once
+//! for a size, so an instance of it is kept for a font and reused for
+//! every glyph of that size: the advances and shapes seen on a page
+//! come from one fit, not from a re-run for each glyph.
 
 use alloc::borrow::Cow;
 use alloc::vec::Vec;
+use core::cell::RefCell;
 use core::fmt;
 
 use skrifa::instance::{Location, Size};
-use skrifa::outline::{DrawSettings, OutlinePen};
+use skrifa::outline::{
+    DrawSettings, Engine, HintingInstance, HintingOptions, OutlinePen, SmoothMode, Target,
+};
 use skrifa::{FontRef, GlyphId, MetadataProvider};
 
 use crate::font::{FontError, LineMetrics};
 use crate::glyph::{self, Glyph, pack_coverage};
+use crate::hinting::Hinting;
 use crate::kerning::Kerning;
 use crate::raster::{self, Path, Pt};
 
 /// A scalable font, optionally at a fixed position of its variation axes
 /// (e.g. weight 700 of a variable font).
 ///
-/// The font data is borrowed for built-in fonts or owned for fonts loaded at
-/// runtime.
-#[derive(Clone)]
+/// The font data is borrowed for built-in fonts or owned for fonts loaded
+/// at runtime. A clone comes with no grid-fitting kept: it builds its own
+/// as it draws.
 pub struct OutlineFont {
     data: Cow<'static, [u8]>,
     location: Location,
+    hinting: Hinting,
+    /// Grid-fitting instances, one per size and mode, and how many have
+    /// been built (tests watch the count: a glyph drawn again of a size
+    /// already drawn must build no new one).
+    hints: RefCell<HintCache>,
 }
+
+impl Clone for OutlineFont {
+    fn clone(&self) -> Self {
+        Self {
+            data: self.data.clone(),
+            location: self.location.clone(),
+            hinting: self.hinting,
+            hints: RefCell::default(),
+        }
+    }
+}
+
+/// An instance kept for a size's quarter pixel and a mode.
+struct Hint {
+    /// Size in quarter pixels.
+    quarters: u16,
+    mode: Hinting,
+    instance: HintingInstance,
+}
+
+/// The instances kept, and how many have been built in all.
+#[derive(Default)]
+struct HintCache {
+    built: u32,
+    valid: Vec<Hint>,
+}
+
+/// Sizes a font's instances are kept for at once. A page draws at a size
+/// or two, and a book turns at mostly one; past once of that the block
+/// rids the fits it made, and builds again for a size asked later.
+const KEPT_HINTS: usize = 6;
 
 impl fmt::Debug for OutlineFont {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -46,7 +92,113 @@ impl OutlineFont {
             return Err(FontError::NoCharmap);
         }
         let location = font.axes().location(variations.iter().copied());
-        Ok(OutlineFont { data, location })
+        Ok(OutlineFont {
+            data,
+            location,
+            hinting: Hinting::LIGHT,
+            hints: RefCell::new(HintCache::default()),
+        })
+    }
+
+    /// How this font's glyphs are grid-fitted.
+    pub fn hinting(&self) -> Hinting {
+        self.hinting
+    }
+
+    /// Chooses how this font's glyphs are grid-fitted from now on. The
+    /// pages already laid out stay laid out (advances never move): what
+    /// was drawn from this font's glyphs so far is drawn again in the
+    /// choice, on a screen drawn anew. Kept grid-fittings of another
+    /// mode give room for the new one.
+    pub fn set_hinting(&mut self, hinting: Hinting) {
+        if self.hinting == hinting {
+            return;
+        }
+        self.hints.borrow_mut().valid.clear();
+        self.hinting = hinting;
+    }
+
+    /// How many grid-fittings have been built, built or kept again.
+    #[cfg(test)]
+    pub(crate) fn hinting_builds(&self) -> u32 {
+        self.hints.borrow().built
+    }
+
+    /// The grid-fitting of `mode` at `size`, kept or built. Where it
+    /// cannot be built (a font left over, memory short), the glyphs draw
+    /// without fitting rather than failing the page.
+    fn hint_instance(
+        &self,
+        font: &FontRef<'_>,
+        size: f32,
+        mode: Hinting,
+    ) -> Option<core::cell::Ref<'_, HintingInstance>> {
+        use core::cell::Ref;
+        let quarters = (size * 4.0) as u16;
+        let kept = self
+            .hints
+            .borrow()
+            .valid
+            .iter()
+            .position(|kept| kept.quarters == quarters && kept.mode == mode);
+        let index = match kept {
+            Some(index) => index,
+            None => {
+                // What FreeType shows on antialiased panels, with the
+                // automatic hinter forced: a font's own instructions are
+                // not read (they differ per font and some do nothing —
+                // the shipped ones' tables are stubs), every glyph
+                // instead is fitted the same way. ClearType's Double
+                // shown as it is (FreeType has it always on), and the
+                // font's measured advances kept (see `Hinting`).
+                let target = match mode {
+                    Hinting::OFF => return None,
+                    Hinting::LIGHT => Target::Smooth {
+                        mode: SmoothMode::Light,
+                        symmetric_rendering: true,
+                        preserve_linear_metrics: true,
+                    },
+                    Hinting::NORMAL => Target::Smooth {
+                        mode: SmoothMode::Normal,
+                        symmetric_rendering: true,
+                        preserve_linear_metrics: true,
+                    },
+                };
+                let instance = HintingInstance::new(
+                    &font.outline_glyphs(),
+                    Size::new(size),
+                    &self.location,
+                    HintingOptions {
+                        engine: Engine::Auto(None),
+                        target,
+                    },
+                )
+                // A font whose fit cannot be built draws as its glyphs
+                // are, never failing the page.
+                .ok()?;
+                // Past what is kept the block starts anew: a turn of
+                // pages draws at one or two sizes, and what a font drew
+                // last is drawn again as it is needed.
+                let mut cache = self.hints.borrow_mut();
+                let index = if cache.valid.len() >= KEPT_HINTS {
+                    cache.valid.clear();
+                    0
+                } else {
+                    cache.valid.len()
+                };
+                cache.built += 1;
+                cache.valid.push(Hint {
+                    quarters,
+                    mode,
+                    instance,
+                });
+                drop(cache);
+                index
+            }
+        };
+        Some(Ref::map(self.hints.borrow(), |cache| {
+            &cache.valid[index].instance
+        }))
     }
 
     fn font_ref(&self) -> Option<FontRef<'_>> {
@@ -153,9 +305,15 @@ impl OutlineFont {
             .max(0.0);
         let mut pen = Pen::default();
         if let Some(outline) = font.outline_glyphs().get(id) {
-            let settings = DrawSettings::unhinted(Size::new(size), &self.location);
-            // A broken glyph renders as empty instead of failing the page.
-            let _ = outline.draw(settings, &mut pen);
+            // A font whose fit cannot be built draws its glyphs as they
+            // are, never failing the page.
+            if let Some(instance) = self.hint_instance(&font, size, self.hinting) {
+                let _ = outline.draw(DrawSettings::hinted(&instance, false), &mut pen);
+            } else {
+                let settings = DrawSettings::unhinted(Size::new(size), &self.location);
+                // A broken glyph renders as empty instead of failing the page.
+                let _ = outline.draw(settings, &mut pen);
+            }
         }
         pen.0.close();
 
@@ -234,5 +392,92 @@ impl OutlinePen for Pen {
 
     fn close(&mut self) {
         self.0.close();
+    }
+}
+
+#[cfg(all(test, feature = "outline"))]
+mod tests {
+    use super::*;
+
+    const FONT: &[u8] = include_bytes!("../../../plugins/fonts-default/fonts/SourceSans3.ttf");
+
+    /// Some text of a page, enough characters for the modes to differ on.
+    const TEXT: &str = "How reads a page of PaperPaw, fitted or not?";
+
+    #[test]
+    fn a_new_font_draws_light() {
+        let font = OutlineFont::new(FONT, &[("wght", 400.0)]).unwrap();
+        assert_eq!(font.hinting(), Hinting::LIGHT);
+        font.rasterize('A', 32.0);
+        assert_eq!(font.hinting_builds(), 1);
+    }
+
+    #[test]
+    fn a_page_draws_from_the_fit_it_kept() {
+        let font = OutlineFont::new(FONT, &[("wght", 400.0)]).unwrap();
+        for ch in TEXT.chars() {
+            font.rasterize(ch, 32.0);
+        }
+        assert_eq!(font.hinting_builds(), 1, "the page's size is kept");
+        for ch in TEXT.chars() {
+            font.rasterize(ch, 36.0);
+        }
+        assert_eq!(font.hinting_builds(), 2, "another size, one fit more");
+    }
+
+    #[test]
+    fn a_mode_change_draws_fits_of_its_own() {
+        let mut font = OutlineFont::new(FONT, &[("wght", 400.0)]).unwrap();
+        font.rasterize('A', 32.0);
+        font.set_hinting(Hinting::NORMAL);
+        font.rasterize('A', 32.0);
+        assert_eq!(font.hinting_builds(), 2, "a fit of one serves no other");
+        font.set_hinting(Hinting::OFF);
+        font.rasterize('A', 32.0);
+        assert_eq!(font.hinting_builds(), 2, "off builds no fit");
+    }
+
+    #[test]
+    fn fits_past_the_kept_ones_are_dropped() {
+        let font = OutlineFont::new(FONT, &[("wght", 400.0)]).unwrap();
+        for size in (20..28).map(|px| f32::from(u8::try_from(px).unwrap_or(20))) {
+            font.rasterize('A', size);
+        }
+        assert!(
+            font.hinting_builds() as usize > KEPT_HINTS,
+            "builds go on, least the block hold every size ever asked"
+        );
+    }
+
+    #[test]
+    fn advances_stay_the_fonts_own() {
+        let font = OutlineFont::new(FONT, &[("wght", 400.0)]).unwrap();
+        for size in [20.0, 21.5, 32.0, 48.0] {
+            let advances = |mode: Hinting| -> Vec<f32> {
+                let mut fitted = font.clone();
+                fitted.set_hinting(mode);
+                fitted.rasterize('A', size);
+                TEXT.chars().map(|ch| fitted.advance(ch, size)).collect()
+            };
+            let expected = advances(Hinting::OFF);
+            for mode in [Hinting::OFF, Hinting::LIGHT, Hinting::NORMAL] {
+                assert_eq!(advances(mode), expected, "mode {mode:?} at {size}");
+            }
+        }
+    }
+
+    #[test]
+    fn light_grid_fitting_changes_small_text() {
+        let font = OutlineFont::new(FONT, &[("wght", 400.0)]).unwrap();
+        let off = {
+            let mut font = font.clone();
+            font.set_hinting(Hinting::OFF);
+            font.rasterize('e', 24.0)
+        };
+        let light = font.rasterize('e', 24.0);
+        assert_ne!(
+            off.data, light.data,
+            "grid-fitting moves points at small sizes on this font"
+        );
     }
 }

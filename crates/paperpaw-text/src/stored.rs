@@ -16,6 +16,7 @@ use core::fmt;
 
 use crate::font::{FontError, LineMetrics};
 use crate::glyph::{self, Glyph, zeroed};
+use crate::hinting::Hinting;
 
 const MAGIC: &[u8; 4] = b"PPFP";
 /// Packs made before PaperPaw had its name (the same format): still read.
@@ -54,6 +55,9 @@ pub struct StoredPack {
     chars: Vec<char>,
     /// Each strike's advances in 1/16 px, once it was used.
     advances: RefCell<Vec<Option<Vec<u16>>>>,
+    /// How the pack was rendered (see [`crate::Hinting`]): what its
+    /// header records, for what reads a pack's making.
+    hinting: Hinting,
 }
 
 impl fmt::Debug for StoredPack {
@@ -105,6 +109,7 @@ impl StoredPack {
         }
         let mut strikes = Vec::with_capacity(count);
         let mut glyphs = None;
+        let hinting = Hinting::from_byte(header[7]);
         for s in table.as_chunks::<STRIKE>().0 {
             let n = u32_le(s, 16) as usize;
             // The same characters in every strike.
@@ -142,7 +147,14 @@ impl StoredPack {
             advances: RefCell::new(alloc::vec![None; strikes.len()]),
             strikes,
             chars,
+            hinting,
         })
+    }
+
+    /// How a pack was rendered (see [`crate::Hinting`]): what its header
+    /// records (see [`BitmapFont::hinting`], same byte).
+    pub fn hinting(&self) -> Hinting {
+        self.hinting
     }
 
     /// The largest size it has, in pixels (every strike has every

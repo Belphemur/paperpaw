@@ -18,6 +18,9 @@ OPTIONS:
     --chars <set,...>     Character sets: latin and ligatures (default),
                           cyrillic, greek, or code points: U+EA01,
                           U+EA01-EA0F (e.g. icons)
+    --hinting <mode>      How glyphs are fitted to the grid (see
+                          paperpaw_text::Hinting): off, light (default)
+                          or normal. What the pack header records.
     -h, --help            Show this help
 ";
 
@@ -36,6 +39,7 @@ fn run(args: Vec<String>) -> Result<(), String> {
     let mut sizes = vec![20.0, 24.0, 28.0, 32.0, 36.0, 40.0, 48.0];
     let mut axes: Vec<(String, f32)> = Vec::new();
     let mut sets = vec![String::from("latin"), String::from("ligatures")];
+    let mut hinting = paperpaw_text::Hinting::LIGHT;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -58,6 +62,19 @@ fn run(args: Vec<String>) -> Result<(), String> {
                 let list = args.next().ok_or("--chars requires a value")?;
                 sets = list.split(',').map(|s| s.trim().to_string()).collect();
             }
+            "--hinting" => {
+                let mode = args.next().ok_or("--hinting requires a value")?;
+                hinting = match mode.as_str() {
+                    "off" => paperpaw_text::Hinting::OFF,
+                    "light" => paperpaw_text::Hinting::LIGHT,
+                    "normal" => paperpaw_text::Hinting::NORMAL,
+                    _ => {
+                        return Err(format!(
+                            "unknown hinting mode `{mode}` (off, light, normal)"
+                        ));
+                    }
+                };
+            }
             "--axis" => {
                 let axis = args.next().ok_or("--axis requires a value")?;
                 let (tag, value) = axis
@@ -78,8 +95,9 @@ fn run(args: Vec<String>) -> Result<(), String> {
 
     let data = std::fs::read(input).map_err(|e| format!("{input}: {e}"))?;
     let variations: Vec<(&str, f32)> = axes.iter().map(|(t, v)| (t.as_str(), *v)).collect();
-    let font =
+    let mut font =
         paperpaw_text::OutlineFont::new(data, &variations).map_err(|e| format!("{input}: {e}"))?;
+    font.set_hinting(hinting);
     let mut ranges = Vec::new();
     for set in &sets {
         if let Some(named) = paperpaw_text::charset::named(set) {
@@ -94,9 +112,10 @@ fn run(args: Vec<String>) -> Result<(), String> {
     let pack = paperpaw_text::build_pack(&font, &sizes, chars);
     std::fs::write(output, &pack).map_err(|e| format!("{output}: {e}"))?;
     println!(
-        "{output}: {} sizes, {:.1} KiB",
+        "{output}: {} sizes, {:.1} KiB, hinting {:?}",
         sizes.len(),
-        pack.len() as f64 / 1024.0
+        pack.len() as f64 / 1024.0,
+        hinting
     );
     Ok(())
 }

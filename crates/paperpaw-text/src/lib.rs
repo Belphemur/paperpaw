@@ -29,6 +29,7 @@ pub mod charset;
 mod curve;
 mod font;
 mod glyph;
+mod hinting;
 mod kern_table;
 #[cfg(feature = "outline")]
 mod kerning;
@@ -50,6 +51,7 @@ pub use bitmap::{BitmapFont, PackBuilder};
 pub use cache::GlyphCache;
 pub use curve::ToneCurve;
 pub use font::{Font, FontError, LineMetrics};
+pub use hinting::Hinting;
 pub use stored::{PackSource, StoredPack};
 
 /// Whether this build renders scalable (OpenType/TrueType) fonts.
@@ -249,7 +251,7 @@ pub fn build_pack(
     sizes: &[f32],
     chars: impl IntoIterator<Item = char> + Clone,
 ) -> alloc::vec::Vec<u8> {
-    let mut builder = PackBuilder::new();
+    let mut builder = PackBuilder::new().hinting(font.hinting());
     let kerned: alloc::vec::Vec<char> = chars.clone().into_iter().collect();
     builder.kerning(&font.kerning_pairs(&kerned));
     for &size in sizes {
@@ -272,8 +274,13 @@ mod tests {
 
     #[test]
     fn packs_render_exactly_like_runtime_rasterization() {
+        // Both sides draw with the font's current mode (the default,
+        // light, as a pack is built): the pack's glyphs and its header's
+        // byte are what a runtime font of it keeps.
         let outline = OutlineFont::new(FONT, &[("wght", 400.0)]).unwrap();
-        let pack = BitmapFont::new(build_pack(&outline, &[24.0], "Agü€?".chars())).unwrap();
+        let pack = build_pack(&outline, &[24.0], "Agü€?".chars());
+        assert_eq!(pack[7], outline.hinting().to_byte());
+        let pack = BitmapFont::new(pack).unwrap();
         // Pixels are identical; advances are stored in 1/64 px.
         let same = |packed: GlyphRef<'_>, runtime: GlyphRef<'_>| {
             let advance = raster::abs(packed.advance - runtime.advance) <= 1.0 / 128.0;

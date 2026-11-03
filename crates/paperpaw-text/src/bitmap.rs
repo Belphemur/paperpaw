@@ -7,7 +7,11 @@
 //! # Format (version 1, little endian)
 //!
 //! ```text
-//! header   12 bytes  "PPFP", version u8, 3 reserved, strike count u16, reserved u16
+//! header   12 bytes  "PPFP", version u8, 2 reserved, hinting u8,
+//!                   strike count u16, reserved u16
+//!
+//! The hinting byte is how the pack was rendered (see [`crate::Hinting`]):
+//! no reader needs it, packs made before it read as built.
 //! strikes  32 bytes  size (1/4 px) u16, reserved u16, ascent, descent,
 //!   each             line height (all i32, 1/64 px), glyph count u32,
 //!                    glyph table offset u32, bitmap offset u32, reserved u32
@@ -29,6 +33,7 @@ use core::fmt;
 
 use crate::font::{FontError, LineMetrics};
 use crate::glyph::{Glyph, GlyphRef};
+use crate::hinting::Hinting;
 use crate::kern_table;
 
 const MAGIC: &[u8; 4] = b"PPFP";
@@ -70,6 +75,18 @@ struct Strike {
 impl BitmapFont {
     pub fn is_pack(data: &[u8]) -> bool {
         data.starts_with(MAGIC) || data.starts_with(OLD_MAGIC)
+    }
+
+    /// How a pack is rendered (see [`crate::Hinting`]): the mode its
+    /// header records, or [`Hinting::OFF`] where it says none known here
+    /// (a pack of a newer build).
+    pub fn hinting(&self) -> Hinting {
+        // The header was read whole (checked in `new`): the byte is
+        // there.
+        match self.data.get(7) {
+            Some(&byte) => Hinting::from_byte(byte),
+            None => Hinting::OFF,
+        }
     }
 
     /// Validates the pack's structure.
@@ -363,6 +380,9 @@ pub struct PackBuilder {
     strikes: Vec<StrikeData>,
     /// The kerning table, if any (see [`PackBuilder::kerning`]).
     kerning: Vec<u8>,
+    /// How the glyphs it holds were rasterized (see [`crate::Hinting`]);
+    /// recorded in the header (see the format above).
+    hinting: Hinting,
 }
 
 #[derive(Debug)]
@@ -375,6 +395,16 @@ struct StrikeData {
 impl PackBuilder {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Says how the glyphs were rasterized, recorded in the header (see
+    /// [`crate::Hinting`]). The same mode the glyphs were drawn with, and
+    /// the reader's `Hinting` only for another way of the pack's build to
+    /// compare (e.g. the pack's rasterizations against a runtime font's):
+    /// nothing is drawn from it.
+    pub fn hinting(mut self, hinting: Hinting) -> Self {
+        self.hinting = hinting;
+        self
     }
 
     /// Adds a strike; glyphs may come in any order.
@@ -400,7 +430,7 @@ impl PackBuilder {
     pub fn build(&self) -> Vec<u8> {
         let mut out = Vec::new();
         out.extend_from_slice(MAGIC);
-        out.extend_from_slice(&[VERSION, 0, 0, 0]);
+        out.extend_from_slice(&[VERSION, 0, 0, self.hinting.to_byte()]);
         out.extend_from_slice(&(self.strikes.len() as u16).to_le_bytes());
         out.extend_from_slice(&[0, 0]);
 
@@ -504,6 +534,23 @@ mod tests {
         let digits = "12:".chars().map(|c| (c, glyph(2, 255, 40.0))).collect();
         builder.add_strike(80.0, metrics(80.0), digits);
         BitmapFont::new(builder.build()).unwrap()
+    }
+
+    #[test]
+    fn the_header_says_how_the_glyphs_were_rasterized() {
+        for mode in [Hinting::OFF, Hinting::LIGHT, Hinting::NORMAL] {
+            let mut builder = PackBuilder::new().hinting(mode);
+            let glyphs = alloc::vec![('a', glyph(2, 255, 1.0))];
+            builder.add_strike(10.0, LineMetrics::fallback(10.0), glyphs);
+            let font = BitmapFont::new(builder.build()).unwrap();
+            assert_eq!(font.hinting(), mode);
+        }
+        // Old packs (before kerning, before the byte) drew unhinted.
+        let mut data = alloc::vec![0u8; HEADER + STRIKE];
+        data[..4].copy_from_slice(MAGIC);
+        data[4] = VERSION;
+        data[8..10].copy_from_slice(&1u16.to_le_bytes());
+        assert_eq!(BitmapFont::new(data).unwrap().hinting(), Hinting::OFF);
     }
 
     #[test]

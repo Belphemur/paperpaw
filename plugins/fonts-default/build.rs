@@ -42,6 +42,7 @@ fn main() {
     println!("cargo::rerun-if-changed=fonts");
     println!("cargo::rerun-if-env-changed=PAPERPAW_FONT_SIZES");
     println!("cargo::rerun-if-env-changed=PAPERPAW_FONT_LEAN");
+    println!("cargo::rerun-if-env-changed=PAPERPAW_FONT_HINTING");
     println!("cargo::rustc-check-cfg=cfg(paperpaw_lean_fonts)");
     // Lean (the firmware): no Literata Bold Italic, which few books use
     // (bold stands in for it), and the reading faces without their
@@ -56,6 +57,13 @@ fn main() {
         return;
     }
 
+    // How the packs' glyphs are grid-fitted (see `paperpaw_text::Hinting`),
+    // light unless it says otherwise: the header of each pack records it.
+    let hinting = match std::env::var("PAPERPAW_FONT_HINTING").as_deref() {
+        Ok("off") => paperpaw_text::Hinting::OFF,
+        Ok("normal") => paperpaw_text::Hinting::NORMAL,
+        _ => paperpaw_text::Hinting::LIGHT,
+    };
     let sizes_text = std::env::var("PAPERPAW_FONT_SIZES").unwrap_or(DEFAULT_SIZES.into());
     let sizes: Vec<f32> = sizes_text
         .split(',')
@@ -74,8 +82,9 @@ fn main() {
             continue;
         }
         let data = std::fs::read(path).unwrap_or_else(|e| panic!("{path}: {e}"));
-        let font = paperpaw_text::OutlineFont::new(data, &[("wght", weight)])
+        let mut font = paperpaw_text::OutlineFont::new(data, &[("wght", weight)])
             .unwrap_or_else(|e| panic!("{path}: {e}"));
+        font.set_hinting(hinting);
         // Latin, and the ligatures where the font has them.
         let charset = paperpaw_text::charset::chars;
         let ligatures = charset(paperpaw_text::charset::LIGATURES).filter(|ch| font.has_char(*ch));
@@ -96,7 +105,9 @@ fn main() {
     // (`tag`) past U+FFFF.
     let path = "fonts/PaperPawIcons.ttf";
     let data = std::fs::read(path).unwrap_or_else(|e| panic!("{path}: {e}"));
-    let font = paperpaw_text::OutlineFont::new(data, &[]).unwrap_or_else(|e| panic!("{path}: {e}"));
+    let mut font =
+        paperpaw_text::OutlineFont::new(data, &[]).unwrap_or_else(|e| panic!("{path}: {e}"));
+    font.set_hinting(hinting);
     let chars = ('\u{e000}'..=char::MAX).filter(|ch| font.has_char(*ch));
     let pack = paperpaw_text::build_pack(&font, &sizes, chars);
     write(&out.join("icons.ppfp"), &pack);
@@ -109,7 +120,8 @@ fn with_display(
     sizes: &[f32],
     chars: impl Iterator<Item = char> + Clone,
 ) -> Vec<u8> {
-    let mut builder = paperpaw_text::PackBuilder::new();
+    // The header says what the glyphs were drawn with, as elsewhere.
+    let mut builder = paperpaw_text::PackBuilder::new().hinting(font.hinting());
     builder.kerning(&font.kerning_pairs(&chars.clone().collect::<Vec<char>>()));
     let strikes = sizes
         .iter()

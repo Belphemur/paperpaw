@@ -23,7 +23,9 @@ fn glyph(advance: f32, left: i16, top: i16, width: u16, height: u16, data: &[u8]
 
 #[test]
 fn the_builder_writes_version_1_as_documented() {
-    let mut builder = PackBuilder::new();
+    // The fixture was written from the format's tables, drawn without
+    // grid-fitting: the header's byte says so (see `Hinting::OFF`).
+    let mut builder = PackBuilder::new().hinting(Hinting::OFF);
     // Glyphs in any order and twice: sorted and deduplicated.
     builder.add_strike(
         12.0,
