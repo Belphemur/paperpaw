@@ -11,6 +11,7 @@
 /// unfitted ones in every mode, so a book is laid out and broken into
 /// pages the same whichever one made its pack.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Hinting {
     /// The outline as drawn: stems at any sub-pixel position.
     #[default]

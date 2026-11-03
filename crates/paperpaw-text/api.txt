@@ -59,7 +59,7 @@ pub paperpaw_text::FontError::UnsupportedVersion
 impl core::error::Error for paperpaw_text::FontError
 impl core::fmt::Display for paperpaw_text::FontError
 pub fn paperpaw_text::FontError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub enum paperpaw_text::Hinting
+#[non_exhaustive] pub enum paperpaw_text::Hinting
 pub paperpaw_text::Hinting::Light
 pub paperpaw_text::Hinting::Mono
 pub paperpaw_text::Hinting::None
