@@ -13,9 +13,10 @@ const paperpaw_text::curve::ToneCurve::SMOOTH: paperpaw_text::curve::ToneCurve =
 const paperpaw_text::layout::MAX_BREAKS: usize = 1_024usize
 enum paperpaw_text::font::Font { Bitmap(0: paperpaw_text::bitmap::BitmapFont), Stored(0: paperpaw_text::stored::StoredPack), Outline(0: paperpaw_text::outline::OutlineFont) }
 enum paperpaw_text::font::FontError { Invalid, NoCharmap, UnsupportedVersion, OutlinesNotSupported }
+enum paperpaw_text::hinting::Hinting { OFF, LIGHT, NORMAL }
 struct paperpaw_text::TextStyle<'a> { font: &'a paperpaw_text::font::Font, font_index: u16, size: f32, color: paperpaw_platform::pixel::Color, bolder: u16, curve: paperpaw_text::curve::ToneCurve, based: bool }
 struct paperpaw_text::bitmap::BitmapFont { data: alloc::borrow::Cow<'static, [u8]>, strikes: u16 }
-struct paperpaw_text::bitmap::PackBuilder { strikes: alloc::vec::Vec<paperpaw_text::bitmap::StrikeData>, kerning: alloc::vec::Vec<u8> }
+struct paperpaw_text::bitmap::PackBuilder { strikes: alloc::vec::Vec<paperpaw_text::bitmap::StrikeData>, kerning: alloc::vec::Vec<u8>, hinting: paperpaw_text::hinting::Hinting }
 struct paperpaw_text::bitmap::StrikeData { size: f32, metrics: paperpaw_text::font::LineMetrics, glyphs: alloc::vec::Vec<(char, paperpaw_text::glyph::Glyph)> }
 struct paperpaw_text::cache::Entry { key: paperpaw_text::cache::Key, glyph: paperpaw_text::glyph::Glyph, last_used: u32 }
 struct paperpaw_text::cache::GlyphCache { entries: alloc::vec::Vec<paperpaw_text::cache::Entry>, bytes: usize, capacity: usize, clock: u32 }
@@ -25,8 +26,10 @@ struct paperpaw_text::font::LineMetrics { ascent: f32, descent: f32, line_height
 struct paperpaw_text::glyph::Glyph { left: i16, top: i16, width: u16, height: u16, advance: f32, data: alloc::vec::Vec<u8> }
 struct paperpaw_text::glyph::GlyphRef<'a> { left: i16, top: i16, width: u16, height: u16, advance: f32, data: &'a [u8] }
 struct paperpaw_text::layout::Line { range: core::ops::range::Range<usize>, width: f32, spaces: usize, last: bool, hyphen: bool }
-struct paperpaw_text::outline::OutlineFont { data: alloc::borrow::Cow<'static, [u8]>, location: skrifa::instance::Location }
+struct paperpaw_text::outline::Hint { quarters: u16, mode: paperpaw_text::hinting::Hinting, instance: skrifa::outline::hint::HintingInstance }
+struct paperpaw_text::outline::HintCache { built: u32, valid: alloc::vec::Vec<paperpaw_text::outline::Hint> }
+struct paperpaw_text::outline::OutlineFont { data: alloc::borrow::Cow<'static, [u8]>, location: skrifa::instance::Location, hinting: paperpaw_text::hinting::Hinting, hints: core::cell::RefCell<paperpaw_text::outline::HintCache> }
 struct paperpaw_text::sfnt::FontInfo { family: alloc::string::String, bold: bool, italic: bool, weight: u16 }
-struct paperpaw_text::stored::StoredPack { source: alloc::rcs::rc::Rc<dyn paperpaw_text::stored::PackSource>, strikes: alloc::vec::Vec<paperpaw_text::stored::Strike>, chars: alloc::vec::Vec<char>, advances: core::cell::RefCell<alloc::vec::Vec<core::option::Option<alloc::vec::Vec<u16>>>> }
+struct paperpaw_text::stored::StoredPack { source: alloc::rcs::rc::Rc<dyn paperpaw_text::stored::PackSource>, strikes: alloc::vec::Vec<paperpaw_text::stored::Strike>, chars: alloc::vec::Vec<char>, advances: core::cell::RefCell<alloc::vec::Vec<core::option::Option<alloc::vec::Vec<u16>>>>, hinting: paperpaw_text::hinting::Hinting }
 struct paperpaw_text::stored::Strike { size: u16, metrics: paperpaw_text::font::LineMetrics, glyph_table: u64, bitmaps: u64 }
 trait paperpaw_text::stored::PackSource { function read_at }

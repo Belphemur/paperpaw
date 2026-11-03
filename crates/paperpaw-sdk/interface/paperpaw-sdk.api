@@ -1083,6 +1083,8 @@ pub const paperpaw_sdk::builtin::settings::TEXT_COLORS: &[&str]
 pub const paperpaw_sdk::builtin::settings::TEXT_COLOR_OWN: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::TEXT_CONTRAST: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::TEXT_CONTRAST_LEVELS: &[&str]
+pub const paperpaw_sdk::builtin::settings::TEXT_HINTING: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
+pub const paperpaw_sdk::builtin::settings::TEXT_HINTING_LEVELS: &[&str]
 pub const paperpaw_sdk::builtin::settings::TIME_ZONE: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::TIME_ZONE_RULE: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::UI_CONTRAST: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
@@ -3659,9 +3661,11 @@ pub type paperpaw_sdk::status::StatusLineFn = alloc::boxed::Box<dyn core::ops::f
 pub type paperpaw_sdk::status::StatusSignatureFn = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params) -> u64>
 pub type paperpaw_sdk::status::StatusTargetsFn = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::status::StatusFrame<'_>) -> alloc::vec::Vec<paperpaw_sdk::status::StatusTarget>>
 pub mod paperpaw_sdk::text
+pub use paperpaw_sdk::text::Hinting
 pub use paperpaw_sdk::text::OUTLINES
 pub use paperpaw_sdk::text::ToneCurve
 pub use paperpaw_sdk::text::sfnt
+pub fn paperpaw_sdk::text::hinting(&str) -> paperpaw_text::hinting::Hinting
 pub mod paperpaw_sdk::time
 pub struct paperpaw_sdk::time::Clock
 impl paperpaw_sdk::time::Clock

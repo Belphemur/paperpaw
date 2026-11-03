@@ -26,6 +26,7 @@ pub fn paperpaw_text::Font::has_char(&self, char) -> bool
 pub fn paperpaw_text::Font::kern(&self, char, char, f32) -> f32
 pub fn paperpaw_text::Font::largest_size(&self) -> core::option::Option<f32>
 pub fn paperpaw_text::Font::line_metrics(&self, f32) -> paperpaw_text::LineMetrics
+pub fn paperpaw_text::Font::set_hinting(&mut self, paperpaw_text::Hinting)
 pub fn paperpaw_text::Font::shown(&self, char) -> char
 pub fn paperpaw_text::Font::size_for(&self, f32, &str, bool) -> f32
 #[non_exhaustive] pub enum paperpaw_text::FontError
@@ -36,11 +37,19 @@ pub paperpaw_text::FontError::UnsupportedVersion
 impl core::error::Error for paperpaw_text::FontError
 impl core::fmt::Display for paperpaw_text::FontError
 pub fn paperpaw_text::FontError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum paperpaw_text::Hinting
+pub paperpaw_text::Hinting::LIGHT
+pub paperpaw_text::Hinting::NORMAL
+pub paperpaw_text::Hinting::OFF
+impl paperpaw_text::Hinting
+pub fn paperpaw_text::Hinting::from_byte(u8) -> paperpaw_text::Hinting
+pub fn paperpaw_text::Hinting::to_byte(self) -> u8
 pub struct paperpaw_text::BitmapFont
 impl paperpaw_text::BitmapFont
 pub fn paperpaw_text::BitmapFont::advance(&self, char, f32) -> f32
 pub fn paperpaw_text::BitmapFont::glyph(&self, char, f32) -> paperpaw_text::GlyphRef<'_>
 pub fn paperpaw_text::BitmapFont::has_char(&self, char) -> bool
+pub fn paperpaw_text::BitmapFont::hinting(&self) -> paperpaw_text::Hinting
 pub fn paperpaw_text::BitmapFont::is_pack(&[u8]) -> bool
 pub fn paperpaw_text::BitmapFont::kern(&self, char, char, f32) -> f32
 pub fn paperpaw_text::BitmapFont::largest_size(&self) -> core::option::Option<f32>
@@ -91,12 +100,14 @@ pub struct paperpaw_text::PackBuilder
 impl paperpaw_text::PackBuilder
 pub fn paperpaw_text::PackBuilder::add_strike(&mut self, f32, paperpaw_text::LineMetrics, alloc::vec::Vec<(char, paperpaw_text::Glyph)>)
 pub fn paperpaw_text::PackBuilder::build(&self) -> alloc::vec::Vec<u8>
+pub fn paperpaw_text::PackBuilder::hinting(self, paperpaw_text::Hinting) -> Self
 pub fn paperpaw_text::PackBuilder::kerning(&mut self, &[(char, char, f32)])
 pub fn paperpaw_text::PackBuilder::new() -> Self
 pub struct paperpaw_text::StoredPack
 impl paperpaw_text::StoredPack
 pub fn paperpaw_text::StoredPack::advance(&self, char, f32) -> f32
 pub fn paperpaw_text::StoredPack::has_char(&self, char) -> bool
+pub fn paperpaw_text::StoredPack::hinting(&self) -> paperpaw_text::Hinting
 pub fn paperpaw_text::StoredPack::largest_size(&self) -> core::option::Option<f32>
 pub fn paperpaw_text::StoredPack::line_metrics(&self, f32) -> paperpaw_text::LineMetrics
 pub fn paperpaw_text::StoredPack::open(alloc::rcs::rc::Rc<dyn paperpaw_text::PackSource>) -> core::result::Result<paperpaw_text::StoredPack, paperpaw_text::FontError>

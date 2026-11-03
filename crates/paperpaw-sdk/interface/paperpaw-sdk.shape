@@ -289,6 +289,8 @@ const paperpaw_sdk::builtin::settings::TEXT_COLORS: &[&str] = &[ "core.color.bla
 const paperpaw_sdk::builtin::settings::TEXT_COLOR_OWN: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text> = Setting::new("core.text-color-own")
 const paperpaw_sdk::builtin::settings::TEXT_CONTRAST: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text> = Setting::new("core.text-contrast")
 const paperpaw_sdk::builtin::settings::TEXT_CONTRAST_LEVELS: &[&str] = &[ "core.text-contrast.lighter", "core.text-contrast.normal", "core.text-contrast.darker", "core.text-contrast.darkest", ]
+const paperpaw_sdk::builtin::settings::TEXT_HINTING: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text> = Setting::new("core.text-hinting")
+const paperpaw_sdk::builtin::settings::TEXT_HINTING_LEVELS: &[&str] = &[ "core.text-hinting.off", "core.text-hinting.light", "core.text-hinting.normal", ]
 const paperpaw_sdk::builtin::settings::TIME_ZONE: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text> = Setting::new("core.time-zone")
 const paperpaw_sdk::builtin::settings::TIME_ZONE_RULE: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text> = Setting::new("core.time-zone-rule")
 const paperpaw_sdk::builtin::settings::UI_CONTRAST: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text> = Setting::new("core.ui-contrast")
@@ -458,7 +460,7 @@ const paperpaw_sdk::native::CODE_FILES: &[&str] = &[ "code.ppn", "code.so", "cod
 const paperpaw_sdk::native::CROSSING_CRATES: &[&str] = &[ "paperpaw_sdk", "paperpaw_platform", "paperpaw_graphics", "paperpaw_i18n", "paperpaw_config", "paperpaw_text", "paperpaw_document", "paperpaw_layout", "paperpaw_xml", "paperpaw_zip", "paperpaw_hyphen", "paperpaw_image", "paperpaw_update", "paperpaw_digest", "paperpaw_json", "paperpaw_qr", "paperpaw_native", ]
 const paperpaw_sdk::native::FINGERPRINT: paperpaw_sdk::native::Fingerprint = Fingerprint::of(INTERFACE, { let mut hash = layout::Fnv::new()
 const paperpaw_sdk::native::INTERFACE: u16 = 4u16
-const paperpaw_sdk::native::LAYOUT: u64 = 12_617_970_397_501_798_835u64
+const paperpaw_sdk::native::LAYOUT: u64 = 3_770_978_110_134_191_043u64
 const paperpaw_sdk::native::TOOLCHAIN: &str = if cfg!(target_arch = "riscv32") { "rustc 1.99.0, riscv32imc-unknown-none-elf" } else if cfg!(target_arch = "xtensa") { "esp 1.97.0.0, xtensa-esp32s3-none-elf" } else { "the compiler of PaperPaw's release, for this computer" }
 const paperpaw_sdk::numbers::DECIMAL_MARK: &str = "core.decimal"
 const paperpaw_sdk::pattern::MAX_PATTERN: usize = 256usize
@@ -836,7 +838,7 @@ struct paperpaw_sdk::fonts::FontFace { id: paperpaw_sdk::id::Id, path: alloc::st
 struct paperpaw_sdk::fonts::FontHandle<'a> { id: &'a paperpaw_sdk::id::Id, font: &'a paperpaw_text::font::Font, cache: &'a core::cell::RefCell<paperpaw_text::cache::GlyphCache>, describing: &'a core::cell::Cell<bool>, index: u16, others: [core::option::Option<(&'a paperpaw_text::font::Font, u16)>; 4], larger: core::option::Option<(&'a paperpaw_text::font::Font, u16)>, display: bool, kerning: bool, ligatures: bool }
 struct paperpaw_sdk::fonts::FontSet { fonts: alloc::vec::Vec<(paperpaw_sdk::id::Id, paperpaw_text::font::Font)>, cache: core::cell::RefCell<paperpaw_text::cache::GlyphCache>, describing: core::cell::Cell<bool> }
 struct paperpaw_sdk::fonts::FontSpec { id: paperpaw_sdk::id::Id, font: paperpaw_text::font::Font, family: core::option::Option<alloc::borrow::Cow<'static, str>>, bold: bool, italic: bool }
-struct paperpaw_sdk::fonts::Fonts { entries: alloc::vec::Vec<paperpaw_sdk::fonts::Entry>, candidates: alloc::vec::Vec<(paperpaw_sdk::id::Id, paperpaw_sdk::id::Id, paperpaw_sdk::plugin::Priority)>, user: paperpaw_sdk::collections::VecMap<paperpaw_sdk::id::Id, paperpaw_sdk::id::Id>, family: core::option::Option<alloc::string::String>, status: core::option::Option<alloc::string::String>, cache: core::cell::RefCell<paperpaw_text::cache::GlyphCache>, describing: core::cell::Cell<bool> }
+struct paperpaw_sdk::fonts::Fonts { entries: alloc::vec::Vec<paperpaw_sdk::fonts::Entry>, candidates: alloc::vec::Vec<(paperpaw_sdk::id::Id, paperpaw_sdk::id::Id, paperpaw_sdk::plugin::Priority)>, user: paperpaw_sdk::collections::VecMap<paperpaw_sdk::id::Id, paperpaw_sdk::id::Id>, family: core::option::Option<alloc::string::String>, hinting: paperpaw_text::hinting::Hinting, status: core::option::Option<alloc::string::String>, cache: core::cell::RefCell<paperpaw_text::cache::GlyphCache>, describing: core::cell::Cell<bool> }
 struct paperpaw_sdk::formats::FormatSpec { id: paperpaw_sdk::id::Id, title: alloc::borrow::Cow<'static, str>, extensions: alloc::vec::Vec<alloc::borrow::Cow<'static, str>>, open: paperpaw_sdk::formats::FormatOpener, prepared: core::option::Option<paperpaw_sdk::formats::FormatPrepared>, sniff: core::option::Option<alloc::boxed::Box<dyn core::ops::function::Fn(&[u8]) -> bool>> }
 struct paperpaw_sdk::formats::Formats { specs: alloc::vec::Vec<paperpaw_sdk::formats::FormatSpec>, color: bool, image_fit: core::option::Option<paperpaw_image::Fit>, sniffed: core::cell::RefCell<alloc::vec::Vec<(u64, u64, core::option::Option<usize>)>> }
 struct paperpaw_sdk::formats::OpenOptions { publisher_styles: bool, css: alloc::string::String, color: bool, image_fit: paperpaw_image::Fit, cover_fit: paperpaw_image::Fit, settings: alloc::vec::Vec<(alloc::string::String, alloc::string::String)> }
