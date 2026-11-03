@@ -20,6 +20,7 @@ const paperpaw_text::bitmap::BitmapFont::VERTICAL: usize = 5
 const paperpaw_text::curve::ToneCurve::DARKEST: i8 = 2
 const paperpaw_text::curve::ToneCurve::LIGHTEST: i8 = -1
 const paperpaw_text::curve::ToneCurve::SMOOTH: paperpaw_text::curve::ToneCurve = ToneCurve { alphas: CURVES[1] }
+const paperpaw_text::hinting::Hinting::ALL: [paperpaw_text::hinting::Hinting; 4] = [ Hinting::None, Hinting::Light, Hinting::Normal, Hinting::Mono, ]
 const paperpaw_text::ink::TextInk::DEFAULT: paperpaw_text::ink::TextInk = TextInk { tone: ToneCurve::SMOOTH, flags: 0, dither: Dither::NONE, spare: [0
 const paperpaw_text::ink::TextInk::RIGHT_TO_LEFT: u32 = 1
 const paperpaw_text::layout::MAX_BREAKS: usize = 1_024usize
@@ -28,6 +29,7 @@ const paperpaw_text::stored::PackLimits::LARGE: paperpaw_text::stored::PackLimit
 const paperpaw_text::stored::PackLimits::SMALL: paperpaw_text::stored::PackLimits = PackLimits { index: 8 * 1024, advances: 4 * 1024, }
 enum paperpaw_text::font::Font { Bitmap(0: paperpaw_text::bitmap::BitmapFont), Stored(0: paperpaw_text::stored::StoredPack), Outline(0: paperpaw_text::outline::OutlineFont) }
 enum paperpaw_text::font::FontError { Invalid, NoCharmap, UnsupportedVersion, OutlinesNotSupported, TooLarge, OutOfMemory, Other(0: u16) }
+enum paperpaw_text::hinting::Hinting { None, Light, Normal, Mono }
 struct paperpaw_text::TextStyle<'a> { font: &'a paperpaw_text::font::Font, font_index: u16, size: f32, color: paperpaw_platform::pixel::Color, bolder: u16, curve: paperpaw_text::curve::ToneCurve, based: bool }
 struct paperpaw_text::anchors::Anchor { class: u8, x: i8, y: i8 }
 struct paperpaw_text::anchors::Anchors { list: [paperpaw_text::anchors::Anchor; 12], len: u8 }
@@ -43,7 +45,7 @@ struct paperpaw_text::glyph::Glyph { left: i16, top: i16, width: u16, height: u1
 struct paperpaw_text::glyph::GlyphRef<'a> { left: i16, top: i16, width: u16, height: u16, advance: f32, data: &'a [u8], format: u8 }
 struct paperpaw_text::ink::TextInk { tone: paperpaw_text::curve::ToneCurve, flags: u32, dither: paperpaw_graphics::blit::Dither, spare: [u8; 3] }
 struct paperpaw_text::layout::Line { range: core::ops::range::Range<usize>, width: f32, spaces: usize, last: bool, hyphen: bool }
-struct paperpaw_text::outline::OutlineFont { data: alloc::borrow::Cow<'static, [u8]>, location: skrifa::instance::Location }
+struct paperpaw_text::outline::OutlineFont { data: alloc::borrow::Cow<'static, [u8]>, location: skrifa::instance::Location, hinting: paperpaw_text::hinting::Hinting }
 struct paperpaw_text::sfnt::FontInfo { family: alloc::string::String, bold: bool, italic: bool, weight: u16 }
 struct paperpaw_text::stored::PackLimits { index: usize, advances: usize }
 struct paperpaw_text::stored::StoredPack(0: alloc::rcs::rc::Rc<dyn paperpaw_text::stored::Pack>)

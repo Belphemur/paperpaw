@@ -37,7 +37,7 @@ de.name = "Literata, größere Schriftgrade"
 de.description = "Buchtext in Literata größer als in der Firmware."
 
 [literata-bold-italic]
-version = "1.0.0"
+version = "1.0.1"
 group = "look"
 licence = "OFL-1.1"
 devices = ["x4", "x4-pro", "x4-classic"]
