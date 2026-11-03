@@ -1040,7 +1040,7 @@ static IN_APPS: SettingExtra = SettingExtra::new()
     .keeps_unknown();
 
 /// The language, night mode, speech and the edges for swipes.
-static GENERAL: [SettingSpec; 9] = [
+static GENERAL: [SettingSpec; 10] = [
     SettingSpec::switch(
         settings::DEVELOPER.static_str(),
         "core.setting.developer",
@@ -1079,6 +1079,14 @@ static GENERAL: [SettingSpec; 9] = [
         groups::READING_DISPLAY,
     )
     .description("core.setting.mono-text.help"),
+    SettingSpec::choice(
+        settings::TEXT_HINTING.static_str(),
+        "core.setting.text-hinting",
+        settings::TEXT_HINTING_LEVELS,
+        settings::TEXT_HINTING_LEVELS[1],
+        groups::READING_DISPLAY,
+    )
+    .description("core.setting.text-hinting.help"),
     SettingSpec::switch(
         settings::SPEAK_FOCUS.static_str(),
         "core.setting.speak-focus",

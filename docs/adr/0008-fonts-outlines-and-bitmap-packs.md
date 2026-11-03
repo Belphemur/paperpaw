@@ -2,7 +2,9 @@
 
 - Status: Accepted; the default UI font is Source Sans 3 since 2026-10-19,
   not Atkinson Hyperlegible Next; text is kerned and has ligatures since
-  2026-10-25 ([ADR 0029](0029-kerning-and-ligatures.md))
+  2026-10-25 ([ADR 0029](0029-kerning-and-ligatures.md)); glyphs are
+  grid-fitted (hinted), `light` by default, since 2026-11-02 (a
+  `core.text-hinting` setting chooses it, and packs record their mode)
 - Date: 2026-10-14
 
 ## Context
@@ -26,6 +28,14 @@ maintained (RUSTSEC-2026-0192).
 - Packs are produced by `paperpaw-fontgen` (and by the `fonts-default`
   build script) with the *same* rasterizer, so text renders pixel-identical
   on both paths; a test enforces this.
+- Glyphs are grid-fitted to the screen's pixels (2026-11-02). A scalable
+  font is fitted when drawn: a `HintingInstance` kept per size and mode,
+  the fitting never moves an advance (`preserve_linear_metrics`), so lines
+  and pages stay what they were — the same output re-inked. `light` comes
+  default (a setting, `core.text-hinting`, may turn it off or make it
+  `normal`); a pack keeps how it was drawn, and the header says which
+  (the 2 reserved bytes then the hinting byte; packs made before the
+  change have 0 there, which reads as `off` — the version stays 1).
 - Fonts are contributions (`FontSpec`) bound to roles (`core.font-ui`,
   `core.font-reading`) like screens to slots; users rebind roles in
   `[fonts]`.

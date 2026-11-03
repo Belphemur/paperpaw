@@ -463,6 +463,8 @@ impl BuilderParts {
         }
         // The power mode worn before, over the reader's settings.
         kernel.restore_power();
+        // Before the fonts load: they open with the mode chosen.
+        kernel.apply_text_hinting();
         kernel.apply_reading_font();
         kernel.apply_status_font();
         kernel.validate();

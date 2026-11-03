@@ -589,6 +589,20 @@ impl Kernel {
         self.fit_font_size();
     }
 
+    /// How scalable fonts are drawn, from `core.text-hinting`: applies
+    /// it to the fonts loaded already and to the ones loading from now
+    /// on.
+    pub(crate) fn apply_text_hinting(&mut self) {
+        let value = self
+            .shared
+            .settings
+            .text(core_settings::TEXT_HINTING.as_str())
+            .to_string();
+        self.shared
+            .fonts
+            .set_hinting(paperpaw_sdk::text::hinting(&value));
+    }
+
     /// The sizes of book text offered as far as the reading font has them:
     /// a font pack's largest (built into the firmware, kept small) bounds
     /// them, a scalable font has every size. A size chosen past it gives

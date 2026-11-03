@@ -379,7 +379,7 @@ pub mod image {
 /// file's family, or how glyphs are inked ([`ToneCurve`](text::ToneCurve))
 /// and grid-fitted ([`Hinting`](text::Hinting)).
 pub mod text {
-    pub use paperpaw_text::{OUTLINES, Hinting, ToneCurve, sfnt};
+    pub use paperpaw_text::{Hinting, OUTLINES, ToneCurve, sfnt};
 
     /// The [`Hinting`](Hinting) the setting
     /// [`TEXT_HINTING`](crate::builtin::settings::TEXT_HINTING) is set to:

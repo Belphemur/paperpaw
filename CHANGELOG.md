@@ -12,6 +12,13 @@ change the plugin SDK.
   series (or the library), a rating of one to five (`4 / 5`, kept as a book field and shown as a badge on the
   book's row and on its information page) and whether the book counts as finished. Two settings in the reading
   group: *Show a screen at the end of a book* and *Mark the book as finished* (both on). It needs no SDK change.
+- Scalable fonts are hinted: glyphs are fitted to the screen's pixel grid (strokes reach whole pixels at the
+  small sizes), `light` where the choice is not set. A new setting *Text hinting* (`core.text-hinting`, off,
+  light or normal) says how; the pages laid out stay laid out — the fitting never moves a letter, line or page
+  turn. The pages are not re-inked where such fonts are not drawn. Bitmap packs are drawn the same way and
+  record how in their header (`paperpaw-fontgen --hinting`; the `fonts-default` build script runs it for the
+  packs a build makes), so a device without runtime font rendering shows the same text as one with.
+  SDK: `text::Hinting`, `Font::set_hinting`, `Fonts::set_hinting`, `builtin::settings::TEXT_HINTING`.
 
 ### Changed
 
